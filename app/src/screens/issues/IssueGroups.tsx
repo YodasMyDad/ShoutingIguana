@@ -658,8 +658,8 @@ export function IssueGroups({
             <span
               className={
                 images
-                  ? 'si-group-facts max-w-1/2 min-w-0 shrink-3 truncate text-text-muted'
-                  : 'si-group-facts min-w-0 flex-1 truncate text-text-muted'
+                  ? 'max-w-1/2 min-w-0 shrink-3 truncate text-text-muted'
+                  : 'min-w-0 flex-1 truncate text-text-muted'
               }
               title={facts}
             >
@@ -1088,7 +1088,7 @@ function WhereCell({
       const place = linkPlaceWords(where.link);
       const follow = followWords(where.link);
       return (
-        <span className="si-where-row flex min-w-0 items-center gap-3" data-where="source">
+        <span className="flex min-w-0 items-center gap-3" data-where="source">
           <span className="shrink-0 text-text-muted">Linked from</span>
           <Url
             url={where.link.url}
@@ -1110,7 +1110,7 @@ function WhereCell({
       // The check's facts where it says them (evidence), else where on the page the link is.
       const place = where.facts ?? linkPlaceWords(where.target);
       return (
-        <span className="si-where-row flex min-w-0 items-center gap-3" data-where="target">
+        <span className="flex min-w-0 items-center gap-3" data-where="target">
           <span className="shrink-0 text-text-muted">Names</span>
           <Url
             url={where.target.url}
@@ -1130,7 +1130,7 @@ function WhereCell({
     }
     case 'sitemap':
       return (
-        <span className="si-where-row flex min-w-0 items-center gap-3" data-where="sitemap">
+        <span className="flex min-w-0 items-center gap-3" data-where="sitemap">
           <span className="shrink-0 text-text-muted">Listed in the sitemap</span>
           <Url
             url={where.sitemap.url}
@@ -1143,13 +1143,13 @@ function WhereCell({
       );
     case 'start':
       return (
-        <span className="si-where-row text-text-muted" data-where="start">
+        <span className="text-text-muted" data-where="start">
           The URL the crawl started from
         </span>
       );
     case 'all':
       return (
-        <span className="si-where-row flex min-w-0 items-center" data-where="all">
+        <span className="flex min-w-0 items-center" data-where="all">
           {where.of === 'links' ? (
             <TextLink
               to="/crawls/$crawl/links"
@@ -1166,7 +1166,7 @@ function WhereCell({
       );
     case 'nothing':
       return (
-        <span className="si-where-row text-text-muted" data-where="nothing">
+        <span className="text-text-muted" data-where="nothing">
           {where.words}
         </span>
       );

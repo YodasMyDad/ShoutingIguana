@@ -42,7 +42,7 @@ export function WhereFoundLine({
       data-where-found={where.pending ? 'pending' : 'read'}
       title={words ?? undefined}
     >
-      {words ?? <span className="si-where-line__pending">Finding where it’s linked…</span>}
+      {words ?? 'Finding where it’s linked…'}
     </span>
   );
 }

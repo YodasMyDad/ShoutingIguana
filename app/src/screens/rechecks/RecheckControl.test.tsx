@@ -27,11 +27,13 @@ function show({
   plan = recheckPlan(),
   group,
   selection,
+  actions,
 }: {
   check?: Check;
   plan?: RecheckPlan;
   group?: { detail: string | null; relatedUrlId: number | null; urls: number } | undefined;
   selection?: number[] | undefined;
+  actions?: React.ReactNode;
 } = {}): FakeSidecar {
   const sidecar = fakeSidecar(recheckRoutes({ plan }));
   setTransport(sidecar);
@@ -39,7 +41,7 @@ function show({
   render(
     <QueryClientProvider client={createQueryClientWithoutBackoff()}>
       <RouterContextProvider router={router}>
-        <RecheckControl crawlId={TEST_CRAWL_ID} check={check} group={group} selection={selection} />
+        <RecheckControl crawlId={TEST_CRAWL_ID} check={check} group={group} selection={selection} actions={actions} />
       </RouterContextProvider>
     </QueryClientProvider>,
   );
@@ -111,6 +113,37 @@ describe('Recheck in a check’s head (Advanced)', () => {
         'Fetches 1,000 URLs again (about 9 minutes). Other URLs stay as crawled. 3,000 past the cap stay as crawled.',
       ),
     ).toBeVisible();
+  });
+
+  // The head's other actions share Recheck's row, so a long line never pushes them onto a second: it goes beneath.
+  const OTHERS = (
+    <>
+      <button type="button">Copy URLs</button>
+      <button type="button">Hide this check</button>
+    </>
+  );
+  const oneRow = (lead: HTMLElement, line: HTMLElement) => {
+    const row = screen.getByRole('button', { name: 'Copy URLs' }).parentElement!;
+    expect(row).toContainElement(lead);
+    expect(row).toContainElement(screen.getByRole('button', { name: 'Hide this check' }));
+    expect(row).not.toContainElement(line);
+    expect(row.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  };
+
+  it('keeps the head’s other actions on its row, its line beneath them describing Recheck', async () => {
+    show({ actions: OTHERS });
+    const recheck = await screen.findByRole('button', { name: 'Recheck 5 URLs' });
+    const line = screen.getByText('Fetches 8 URLs again (about 20 seconds). Other URLs stay as crawled.');
+    expect(recheck).toHaveAccessibleDescription(line.textContent);
+    oneRow(recheck, line);
+  });
+
+  it('keeps them on Check the site again’s row too, its line beneath them', async () => {
+    show({ check: { ...CHECK, recheck: [] }, actions: OTHERS });
+    const again = await screen.findByRole('link', { name: 'Check the site again' });
+    const line = screen.getByText('Only checking the whole site again can show whether this is fixed.');
+    expect(again).toHaveAccessibleDescription(line.textContent);
+    oneRow(again, line);
   });
 
   // Every check of the catalog a recheck can't settle (its `recheck` is empty): Check the site again in its place.

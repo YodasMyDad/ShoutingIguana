@@ -136,7 +136,7 @@ export function SiteRow({ item, earlier = [], nested = false }: SiteRowProps) {
         className={clsx(
           ROW_GRID,
           'relative min-h-(--row-height-tall) border-b border-border-subtle py-3 hover:bg-surface-hover',
-          nested && 'pl-14',
+          nested && 'pl-(--site-row-nested)',
         )}
       >
         <div className="flex min-w-0 items-center gap-3">

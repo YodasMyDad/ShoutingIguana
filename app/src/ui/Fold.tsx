@@ -62,7 +62,7 @@ export function Fold({
           ) : null}
         </button>
       </Heading>
-      <div id={bodyId} hidden={!open} className="pl-11 px-4 pt-1 pb-4">
+      <div id={bodyId} hidden={!open} className="px-4 pt-1 pb-4 pl-(--fold-indent)">
         {children}
       </div>
     </section>

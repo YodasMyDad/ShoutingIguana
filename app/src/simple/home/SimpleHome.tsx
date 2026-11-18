@@ -170,7 +170,7 @@ function YourSites({
       >
         Your sites
         {count !== null ? (
-          <span className="figures font-normal text-14 text-text-muted">{formatCount(count)}</span>
+          <span className="figures text-14 font-regular text-text-muted">{formatCount(count)}</span>
         ) : null}
       </h2>
       <Card className="@container/sites relative min-w-0 overflow-hidden">

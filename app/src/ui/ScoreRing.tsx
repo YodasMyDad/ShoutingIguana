@@ -93,7 +93,7 @@ export function ScoreRing({
       <span className={clsx('figures relative text-center leading-none text-text', VALUE_CLASS[size])}>
         {none ? '–' : clamped}
         {caption ? (
-          <span className="font-normal mt-1.5 block text-12 tracking-normal text-text-muted">{under}</span>
+          <span className="mt-1.5 block text-12 font-regular tracking-normal text-text-muted">{under}</span>
         ) : null}
       </span>
     </span>

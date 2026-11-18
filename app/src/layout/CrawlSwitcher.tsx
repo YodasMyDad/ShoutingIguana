@@ -86,7 +86,7 @@ function SwitcherRow({ item, mode }: { item: CrawlListItem; mode: Mode }) {
     <span className="flex min-w-0 flex-1 items-center gap-2.5">
       <CrawlFavicon item={item} size="md" />
       <span className="flex min-w-0 flex-1 flex-col">
-        <span className="si-switcher-menu__name truncate">{siteName(item)}</span>
+        <span className="truncate">{siteName(item)}</span>
         {date || state ? (
           <span className="si-switcher-menu__date truncate">
             {date}

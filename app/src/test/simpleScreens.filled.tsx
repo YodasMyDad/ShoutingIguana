@@ -11,7 +11,7 @@ function stub(name: string): SimpleScreen {
     const { check } = useParams({ strict: false });
     return (
       <div className="flex flex-col gap-2 px-(--page-gutter) py-6" data-stub-screen={name}>
-        <h1 className="text-24 font-semibold">{name}</h1>
+        <h1 className="text-21 font-semibold">{name}</h1>
         {check ? <p>{check}</p> : null}
       </div>
     );
