@@ -35,7 +35,10 @@ public sealed record SyntheticSiteExpectations(
 {
     public const string SLOW_RESPONSE = "slow-response";
 
-    /// <summary>Of <see cref="NofollowOnly"/>, the URLs that are files (images) rather than HTML pages.</summary>
+    /// <summary>
+    /// Of <see cref="NofollowOnly"/>, the URLs that aren't the site's HTML pages: files (images), and over HTTPS the private
+    /// address a nofollow link names.
+    /// </summary>
     public int NofollowOnlyFiles { get; init; }
 
     /// <summary>The partner site's URLs its own robots.txt keeps the crawler from: robots-disallowed, but not the site's.</summary>

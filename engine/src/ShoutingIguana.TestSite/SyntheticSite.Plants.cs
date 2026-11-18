@@ -30,6 +30,9 @@ public sealed partial class SyntheticSite
     /// <summary>Files only nofollow links point to, so never fetched: the full-size photo behind a gallery lightbox.</summary>
     private static readonly string[] NOFOLLOW_ONLY_FILES = ["/img/5.jpg?width=1400"];
 
+    /// <summary>The private address the HTTPS site links with nofollow, so never fetched (links-to-localhost).</summary>
+    private const string PRIVATE_ADDRESS = "http://192.168.0.10:3000/shop";
+
     private static readonly byte[] LARGE_IMAGE_BYTES = BuildImage(300 * 1024, LARGE_IMAGE_WIDTH, LARGE_IMAGE_HEIGHT);
 
     /// <summary>A 1,200 × 800 PNG of 4 KB, shown without srcset: image-no-srcset.</summary>
@@ -982,6 +985,14 @@ public sealed partial class SyntheticSite
             });
             Other("downgrade", 301, linked: true, ["redirect-downgrade"], () => Redirect(301, $"{_external}/ext/plain-http"));
         }
+
+            // A development copy's address left in content: private, and not the crawl's own machine (the site is on
+            // loopback). The crawl started on a private address, so it may ask private ones: the link is nofollow so that it
+            // never does, and it's planted over HTTPS only, as one crawl of the plain-HTTP site follows nofollow links.
+            Page("private-address-link", "Link to a private address", ["links-to-localhost"], page => page with
+            {
+                Content = page.Content + $"<p><a href=\"{PRIVATE_ADDRESS}\" rel=\"nofollow\">The development shop</a></p>"
+            });
 
         // The hub links to redirects, and to the unreachable URL, the redirect loop and the redirect to a 404, which are
         // all broken, so it carries those link issues itself.

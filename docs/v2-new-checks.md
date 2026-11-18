@@ -399,15 +399,16 @@ Links · **Warning**: every visitor gets a dead link; it's a development address
 
 - **Simple:** "Links to a test copy that only works for whoever built it"
 - **Rule:** a page linking (any kind) to a host that is `localhost`, ends `.localhost`, or is a loopback (127.0.0.0/8, ::1)
-  or private (10/8, 172.16/12, 192.168/16, fc00::/7) address. Skipped, saying why, when the start URL's own host is one:
-  a crawl of a development copy can't tell. Detail: `2 links, such as http://localhost:3000/shop`.
+  or private (10/8, 172.16/12, 192.168/16, fc00::/7) address. On a crawl that started at such an address, that machine's
+  own addresses (its host, or loopback for loopback) aren't counted. Detail: `2 links, such as http://localhost:3000/shop`.
 - **Standard:** none needed.
 - **Data:** `Links`, the target's URL text (`readUrl`, for external targets only).
 - **Evidence:** target facts `statusCode`, `text`, `position`.
-- **Plant:** none: the synthetic site and its partner are on 127.0.0.1, so the rule skips there. A rule test with a page
-  on `https://example.com` linking `http://localhost:3000/` proves it; the whole-table test proves the skip. Expected
-  **0**. *For the crawler, not this check:* a link to a private address makes the crawler ask the user's own machine or
-  network; whether it should fetch such links at all is worth deciding.
+- **Plant (HTTPS site only):** `private-address-link`: `<a href="http://192.168.0.10:3000/shop" rel="nofollow">`.
+  The site and its partner are on 127.0.0.1, so loopback addresses are the crawl's own machine; a private address
+  elsewhere counts, but a crawl started on a private address asks private ones, so the link is nofollow to keep the
+  crawler from asking the test machine's network, and planted over HTTPS only, as one crawl of the plain-HTTP site
+  follows nofollow links (`OptionsChangeWhatIsFollowed`). Expected **1** on HTTPS, **0** on HTTP.
 - **From:** Screaming Frog Links "Outlinks To Localhost".
 
 #### 17. `few-internal-outlinks`: Page with few or no internal links

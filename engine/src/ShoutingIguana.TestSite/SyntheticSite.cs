@@ -564,7 +564,8 @@ public sealed partial class SyntheticSite
             // Over HTTPS, revision 1's plain-HTTP home page, which the crawler probes as another version of the site, redirects.
             Redirects: redirects.Count + _plants.Count(plant => plant.Status is >= 300 and < 400) + (IsHttps && Revision >= 1 ? 1 : 0),
             RobotsDisallowed: disallowed.Count + _plants.Count(plant => plant is { Status: Plant.REFUSED, OnPartnerSite: false }),
-            NofollowOnly: hidden.Count + NOFOLLOW_ONLY_FILES.Length,
+            // Over HTTPS, a nofollow link names a private address too.
+            NofollowOnly: hidden.Count + NOFOLLOW_ONLY_FILES.Length + (IsHttps ? 1 : 0),
             ExternalOk: externalOk.Count,
             ExternalMissing: externalMissing.Count + _plants.Count(plant => plant is { Status: 404, OnPartnerSite: true }),
             Images: images.Count,
@@ -575,7 +576,7 @@ public sealed partial class SyntheticSite
             ImagesMissingAlt: Count(issues, "image-missing-alt") - _plants.Count(plant => plant.Issues.Contains("image-missing-alt")),
             IssueUrls: issues.ToDictionary(pair => pair.Key, IReadOnlySet<string> (pair) => pair.Value, StringComparer.Ordinal))
         {
-            NofollowOnlyFiles = NOFOLLOW_ONLY_FILES.Length,
+            NofollowOnlyFiles = NOFOLLOW_ONLY_FILES.Length + (IsHttps ? 1 : 0),
             PartnerRobotsDisallowed = _plants.Count(plant => plant is { Status: Plant.REFUSED, OnPartnerSite: true }),
             Unreachable = _plants.Count(plant => plant is { Status: 0, OnPartnerSite: false }),
             NotChecked = _options is { DeadTwin: true, Sitemaps: true } ? DEAD_TWIN_UNCHECKED : 0,

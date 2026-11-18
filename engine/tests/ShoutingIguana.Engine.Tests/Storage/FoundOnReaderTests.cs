@@ -268,10 +268,11 @@ public sealed class FoundOnReaderTests(GridCrawl crawl)
         Assert.Equal(FoundOnReader.ReadFoundOn(crawl.Path, [broken]).Single().Links, FoundOnReader.ReadFoundOn(neverAnalysed, [broken]).Single().Links);
     }
 
-    /// <summary>Checks the synthetic site plants only when served over HTTPS (a linked redirect to http, a page loading http resources).</summary>
     /// <summary>
-    /// Checks the synthetic site can't plant: the HTTPS ones (it's served over HTTP here), and links to private addresses, as
-    /// the site and its partner are both on 127.0.0.1, one machine's addresses.
+    /// Checks the synthetic site doesn't plant here. Most it plants only when served over HTTPS (it's served over HTTP here):
+    /// a linked redirect to http, a page loading http resources, and a nofollow link to a private address, planted there
+    /// only as the plain-HTTP site is crawled once following nofollow links, which would ask the test machine's network.
+    /// The partner site is on 127.0.0.1 too, a private address like the crawl's own, so its images aren't judged hotlinked.
     /// </summary>
     private static bool NotOnTheSyntheticSite(string check) => check is "redirect-downgrade" or "mixed-content" or "http-page" or "links-to-localhost" or "image-hotlinked";
 
