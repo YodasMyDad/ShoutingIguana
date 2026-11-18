@@ -14,6 +14,7 @@ import type {
 import type { CheckReferences, CheckSubject } from '../api/types';
 import { formatCount, formatCountOf, formatList } from '../lib/format';
 import type { ChangeCounts, ChangeMode } from './changes';
+import { shopifyRefusalOf } from '../shopify/refusals';
 
 // ---------------------------------------------------------------------------------------------------------- Dates
 
@@ -375,6 +376,10 @@ export function notCheckedWords(reason: NotCheckedReason | null, mode: ChangeMod
     case 'blocked':
       return 'The site’s protection stopped the check reading it.';
     case 'rateLimited':
+      if (shopifyRefusalOf(reason.text) === 'unsigned')
+        return 'Shopify turns away checks without a signature, so it wasn’t read.';
+      if (shopifyRefusalOf(reason.text) === 'signed')
+        return 'Shopify turned the check away even with the signature, so it wasn’t read.';
       return 'The site asked the check to slow down, so it wasn’t read.';
     case 'robots':
       return 'The site’s rules file now asks search engines not to read it.';

@@ -12,7 +12,7 @@ import { createAppRouter } from '../app/router';
 import { liveStore } from '../live/liveStore';
 import { updateSettings } from '../settings/settingsStore';
 import { setDirectConnection } from '../shell/connection';
-import { TEST_CRAWL_ID, fakeSidecar, json } from '../test/fakeSidecar';
+import { TEST_CRAWL_ID, fakeSidecar, json, type FakeRoute } from '../test/fakeSidecar';
 import { ISSUES_ANALYSIS, ISSUES_CHECKS } from '../test/issuesSidecar';
 import {
   DEAD_TWIN,
@@ -28,6 +28,7 @@ import {
   type CrawlScript,
   type OverviewSidecarOptions,
 } from '../test/overviewSidecar';
+import { SHOPIFY_STORE, shopifyRoute } from '../test/shopifySidecar';
 
 const meta = { title: 'Screens/Overview' } satisfies Meta;
 export default meta;
@@ -48,9 +49,9 @@ function fresh() {
 }
 
 /** A sidecar of the story's own, for the states the design fixtures can't show. */
-function own(options: OverviewSidecarOptions = {}) {
+function own(options: OverviewSidecarOptions = {}, extra: FakeRoute[] = []) {
   fresh();
-  setTransport(fakeSidecar(overviewRoutes(options)));
+  setTransport(fakeSidecar([...extra, ...overviewRoutes(options)]));
   connect();
 }
 
@@ -554,6 +555,27 @@ export const LiveNotChecked: Story = {
   render: () => <OverviewApp />,
 };
 
+/**
+ * A Shopify store refusing the crawl as it runs (lane shopify): one alert, said again as its count grew, in plain words
+ * with the fix in Shopify's own button names and Add a Shopify signature, which opens the crawl's settings on it.
+ */
+export const LiveShopifyRefusing: Story = {
+  loaders: [
+    () => {
+      running(1_346, POLITE);
+      for (const [id, count, at] of [
+        [5, 1, '2026-11-01T10:30:42.000Z'],
+        [6, 6, '2026-11-01T10:31:12.000Z'],
+      ] as const) {
+        liveStore.ingest(
+          message('alert', alert({ id, code: 'shopify-unsigned', at, data: { host: 'shop.example.com', count } })),
+        );
+      }
+    },
+  ],
+  render: () => <OverviewApp />,
+};
+
 /** Trouble: the site blocks the crawl, its robots.txt can't be read, and requests are held back. Each says what to do. */
 export const LiveWithAlerts: Story = {
   loaders: [
@@ -727,6 +749,26 @@ export const NotChecked: Story = {
         notChecked: DEAD_TWIN.notChecked,
         stats: { ...OVERVIEW_STATS, ...DEAD_TWIN.stats },
       }),
+  ],
+  render: () => <OverviewApp />,
+};
+
+/**
+ * A Shopify store's crawl (lane shopify): 8 product pages refused for want of a signature, said above the crawl's
+ * figures with why and Add a Shopify signature, as not checked, never broken.
+ */
+export const ShopifyStore: Story = {
+  loaders: [
+    () =>
+      own(
+        {
+          item: DEAD_TWIN.item,
+          facets: { status: DEAD_TWIN.status },
+          notChecked: 8,
+          stats: { ...OVERVIEW_STATS, ...DEAD_TWIN.stats },
+        },
+        [shopifyRoute(SHOPIFY_STORE)],
+      ),
   ],
   render: () => <OverviewApp />,
 };

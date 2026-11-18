@@ -84,6 +84,7 @@ import type {
   ValidationResult,
   StartUrlChoice,
   ProxyTestResult,
+  ShopifyAccess,
 } from './types';
 
 type Signal = AbortSignal | undefined;
@@ -254,6 +255,11 @@ export const api = {
    * token, so show it from an object URL of the blob: an `<img src>` can't ask for it.
    */
   favicon: (id: string, signal?: Signal) => callBytes({ method: 'GET', path: `${crawl(id)}/favicon`, signal }),
+  /**
+   * Lane shopify: a Shopify store's crawl, as far as its crawler access goes (how many of its pages Shopify refused, with
+   * and without a signature, and their ids for "Recheck these pages"). Null for any other site.
+   */
+  shopifyAccess: (id: string, signal?: Signal) => get<ShopifyAccess | null>(`${crawl(id)}/shopify`, signal),
   /** Adds a crawl file from anywhere: an absolute path ending in `.sicrawl`. */
   openCrawl: (path: string) => post<CrawlListItem>('/api/crawls/open', { path }),
   /**

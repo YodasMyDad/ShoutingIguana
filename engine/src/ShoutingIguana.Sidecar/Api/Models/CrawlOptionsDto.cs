@@ -23,6 +23,12 @@ internal sealed record CrawlOptionsDto
     /// <summary>Header name to value. Stored crawls and saved defaults keep the names with empty values.</summary>
     public IReadOnlyDictionary<string, string>? ExtraHeaders { get; init; }
 
+    /// <summary>
+    /// Shopify crawler signatures, by the host each was made for. Taken in requests only: a response never gives one back,
+    /// and stored crawls and saved defaults keep none.
+    /// </summary>
+    public IReadOnlyDictionary<string, CrawlSignatureDto>? Signatures { get; init; }
+
     public bool? RespectRobotsTxt { get; init; }
     public bool? RespectCrawlDelay { get; init; }
     public bool? CheckResources { get; init; }
@@ -57,6 +63,8 @@ internal sealed record CrawlOptionsDto
         CustomUserAgent = options.CustomUserAgent,
         AcceptLanguage = options.AcceptLanguage,
         ExtraHeaders = new Dictionary<string, string>(options.ExtraHeaders, StringComparer.OrdinalIgnoreCase),
+        // Never a signature's values in a response: an empty object, as the engine's default reads.
+        Signatures = new Dictionary<string, CrawlSignatureDto>(),
         RespectRobotsTxt = options.RespectRobotsTxt,
         RespectCrawlDelay = options.RespectCrawlDelay,
         CheckResources = options.CheckResources,
@@ -97,6 +105,7 @@ internal sealed record CrawlOptionsDto
             CustomUserAgent = CustomUserAgent ?? defaults.CustomUserAgent,
             AcceptLanguage = AcceptLanguage ?? defaults.AcceptLanguage,
             ExtraHeaders = headers,
+            Signatures = CrawlSignatureDto.ToEngine(Signatures),
             RespectRobotsTxt = RespectRobotsTxt ?? defaults.RespectRobotsTxt,
             RespectCrawlDelay = RespectCrawlDelay ?? defaults.RespectCrawlDelay,
             CheckResources = CheckResources ?? defaults.CheckResources,

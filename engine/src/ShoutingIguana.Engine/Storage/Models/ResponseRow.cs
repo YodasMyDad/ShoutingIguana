@@ -30,6 +30,13 @@ internal sealed record ResponseRow
     public string? HttpVersion { get; init; }
     public string? BlockReason { get; init; }
     public string? Error { get; init; }
+
+    /// <summary>
+    /// For a URL the site refused with 429: what the crawl's signature had to do with it, in the words that end its error
+    /// (<c>Fetching.ShopifySignals.Explain</c>), or null when it had nothing to do with one. Not stored apart: the writer
+    /// says it at the end of the error.
+    /// </summary>
+    public string? RefusalNote { get; init; }
     public bool IsHtml { get; init; }
     public string? Title { get; init; }
     public int TitleCount { get; init; }

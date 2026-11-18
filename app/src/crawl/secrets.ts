@@ -11,7 +11,7 @@
 //
 // In a browser (development, the end-to-end tests) there's no credential store: secrets live only while the page
 // does, ticked or not.
-import type { ContinueCrawlRequest, CrawlOptions } from '../api/types';
+import type { ContinueCrawlRequest, CrawlOptions, CrawlSignature } from '../api/types';
 import { isTauri } from '../lib/platform';
 
 export interface CrawlSecrets {
@@ -19,6 +19,8 @@ export interface CrawlSecrets {
   proxyUrl?: string;
   /** Header values by name. */
   headers?: Record<string, string>;
+  /** Shopify crawler signatures by the host each is for. */
+  signatures?: Record<string, CrawlSignature>;
 }
 
 /** What the secrets are for: the crawl defaults, or one crawl. */
@@ -65,18 +67,40 @@ const credentialsIn = (proxyUrl: string | null | undefined): boolean => {
   }
 };
 
-/** The secrets in a crawl's options: its proxy, when it has a user name, and its headers that have values. */
-export function secretsOf(options: Pick<CrawlOptions, 'proxyUrl' | 'extraHeaders'>): CrawlSecrets {
+/** The signatures of options or kept secrets that have both values: the only ones worth keeping or sending. */
+function wholeSignatures(given: unknown): Record<string, CrawlSignature> {
+  if (typeof given !== 'object' || given === null) return {};
+  return Object.fromEntries(
+    Object.entries(given).flatMap(([host, value]): [string, CrawlSignature][] => {
+      if (typeof value !== 'object' || value === null) return [];
+      const { signatureInput, signature } = value as Record<string, unknown>;
+      return typeof signatureInput === 'string' &&
+        typeof signature === 'string' &&
+        signatureInput !== '' &&
+        signature !== ''
+        ? [[host, { signatureInput, signature }]]
+        : [];
+    }),
+  );
+}
+
+/**
+ * The secrets in a crawl's options: its proxy, when it has a user name, its headers that have values, and its Shopify
+ * signatures.
+ */
+export function secretsOf(options: Pick<CrawlOptions, 'proxyUrl' | 'extraHeaders' | 'signatures'>): CrawlSecrets {
   const secrets: CrawlSecrets = {};
   if (options.proxyUrl && credentialsIn(options.proxyUrl)) secrets.proxyUrl = options.proxyUrl;
   const headers = Object.fromEntries(
     Object.entries(options.extraHeaders ?? {}).filter(([, value]) => typeof value === 'string' && value !== ''),
   );
   if (Object.keys(headers).length > 0) secrets.headers = headers;
+  const signatures = wholeSignatures(options.signatures);
+  if (Object.keys(signatures).length > 0) secrets.signatures = signatures;
   return secrets;
 }
 
-const isEmpty = (secrets: CrawlSecrets) => !secrets.proxyUrl && !secrets.headers;
+const isEmpty = (secrets: CrawlSecrets) => !secrets.proxyUrl && !secrets.headers && !secrets.signatures;
 
 /**
  * Keeps the secrets for `key`, or forgets what was kept when there are none. `remember`, the user's consent: in the
@@ -124,7 +148,7 @@ export async function keptSecrets(key: SecretsKey): Promise<CrawlSecrets | null>
     if (!text) return null;
     const value = JSON.parse(text) as unknown;
     if (typeof value !== 'object' || value === null) return null;
-    const { proxyUrl, headers } = value as Record<string, unknown>;
+    const { proxyUrl, headers, signatures } = value as Record<string, unknown>;
     const secrets: CrawlSecrets = {};
     if (typeof proxyUrl === 'string') secrets.proxyUrl = proxyUrl;
     if (typeof headers === 'object' && headers !== null) {
@@ -132,6 +156,8 @@ export async function keptSecrets(key: SecretsKey): Promise<CrawlSecrets | null>
         Object.entries(headers).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
       );
     }
+    const kept = wholeSignatures(signatures);
+    if (Object.keys(kept).length > 0) secrets.signatures = kept;
     return secrets;
   } catch (error) {
     console.warn(`The credential store didn't give the secrets for ${key}`, error);
@@ -173,6 +199,10 @@ export function withSecrets(options: CrawlOptions, secrets: CrawlSecrets | null)
       ]),
     );
   }
+  // A crawl file keeps no signature at all: the kept ones come back whole.
+  if (secrets.signatures && Object.keys(wholeSignatures(options.signatures)).length === 0) {
+    next.signatures = secrets.signatures;
+  }
   return next;
 }
 
@@ -186,6 +216,7 @@ export function continueWithSecrets(request: ContinueCrawlRequest, secrets: Craw
   if (next.proxyUrl === undefined && secrets.proxyUrl) next.proxyUrl = secrets.proxyUrl;
   if (next.extraHeaders === undefined && secrets.headers && !next.skipMissingHeaders)
     next.extraHeaders = secrets.headers;
+  if (next.signatures === undefined && secrets.signatures) next.signatures = secrets.signatures;
   return next;
 }
 
@@ -195,7 +226,7 @@ export function continueWithSecrets(request: ContinueCrawlRequest, secrets: Craw
  */
 export async function keepCrawlSecrets(
   crawlId: string,
-  options: Pick<CrawlOptions, 'proxyUrl' | 'extraHeaders'>,
+  options: Pick<CrawlOptions, 'proxyUrl' | 'extraHeaders' | 'signatures'>,
   remember?: boolean,
 ): Promise<void> {
   const secrets = secretsOf(options);

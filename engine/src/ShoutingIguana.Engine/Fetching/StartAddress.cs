@@ -61,11 +61,13 @@ public static partial class StartAddress
     /// <summary>Whether the site gives any HTTP status of its own. The crawl's proxy, user agent and certificate apply; its extra headers don't.</summary>
     private static async Task<bool> AnswersAsync(Uri uri, CrawlOptions options, CancellationToken cancellationToken)
     {
-        // Extra headers can carry a firewall's secret, never sent on a guess (over plain http, anyone could read them).
+        // Extra headers can carry a firewall's secret, never sent on a guess (over plain http, anyone could read them), and
+        // a crawler signature is as much a secret.
         var asked = options with
         {
             StartUrl = uri.AbsoluteUri,
             ExtraHeaders = new Dictionary<string, string>(),
+            Signatures = new Dictionary<string, CrawlSignature>(),
             RequestTimeoutSeconds = Math.Min(options.RequestTimeoutSeconds, MAX_WAIT_SECONDS)
         };
 

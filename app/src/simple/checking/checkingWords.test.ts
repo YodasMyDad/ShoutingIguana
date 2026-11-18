@@ -53,6 +53,35 @@ describe('what’s in the way', () => {
     expect(entries[2]?.actions).toEqual([{ kind: 'stop', label: 'Stop' }]);
   });
 
+  it('says a Shopify shop turns away checks without a signature, in plain words, once', () => {
+    const entries = inTheWay({
+      ...base,
+      alerts: [
+        alert('shopify-unsigned', '2026-11-01T10:00:00Z', { host: 'shop.example', count: 1 }, 1),
+        alert('shopify-unsigned', '2026-11-01T10:00:30Z', { host: 'shop.example', count: 4 }, 2),
+      ],
+    });
+
+    expect(entries.map((entry) => entry.text)).toEqual([
+      'This site runs on Shopify, and Shopify is turning some pages away because the check isn’t signed: 4 pages so far. They’ll be marked not checked, not broken.',
+    ]);
+    expect(entries[0]?.shopifySteps).toBe(true);
+    expect(entries[0]?.actions).toEqual([
+      { kind: 'crawlSettings', label: 'Add a Shopify signature, in Advanced', focus: 'shopify' },
+    ]);
+    const expired = inTheWay({
+      ...base,
+      alerts: [
+        alert('shopify-unsigned', '2026-11-01T10:00:00Z', {
+          host: 'shop.example',
+          count: 2,
+          reason: 'the signature for shop.example expired on 1 March 2027',
+        }),
+      ],
+    });
+    expect(expired[0]?.text).toContain('The signature ended on 1 March 2027. Make a new one in Shopify.');
+  });
+
   it('says the slowdown and the Crawl-delay, from the waits, with nothing to do', () => {
     const entries = inTheWay({
       ...base,

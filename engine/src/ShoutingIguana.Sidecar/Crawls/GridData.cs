@@ -318,6 +318,14 @@ internal sealed class GridData(CrawlManager crawls, ReadCache cache, ReadSlots s
     /// The site's icon as the crawl kept it, or null when it has none. The engine gives out nothing but an image it told
     /// by its bytes as it read the file, with the media type those bytes are.
     /// </summary>
+    /// <summary>A Shopify store's crawler access (<see cref="ShopifyAccessReader"/>): null for any other site.</summary>
+    public async Task<ShopifyAccessDto?> ShopifyAsync(string id, CancellationToken cancellationToken)
+    {
+        var path = crawls.PathOf(id);
+        var access = await ReadAsync(token => ShopifyAccessReader.Read(path, token), cancellationToken).ConfigureAwait(false);
+        return access is null ? null : ShopifyAccessDto.From(access);
+    }
+
     public Task<CrawlFavicon?> FaviconAsync(string id, CancellationToken cancellationToken)
     {
         var path = crawls.PathOf(id);

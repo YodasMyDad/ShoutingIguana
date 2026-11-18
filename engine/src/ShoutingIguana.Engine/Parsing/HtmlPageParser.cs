@@ -118,6 +118,7 @@ public static class HtmlPageParser
             TotalWordCount = fingerprint.WordCount + walker.TemplateWordCount,
             AnchorIds = walker.AnchorIds,
             Icons = walker.Icons,
+            ShopifyMarkup = walker.ShopifyMarkup,
             MetaRefresh = refresh,
             Robots = RobotsMetaParser.Parse(walker.RobotsMetaContents, signals.RobotsTagValues, robotsToken),
             Language = walker.Language,

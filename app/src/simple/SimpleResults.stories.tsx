@@ -16,6 +16,7 @@ import {
   problemRoutes,
   simpleRoutes,
 } from '../test/simpleSidecar';
+import { SHOPIFY_STORE, shopifyRoute } from '../test/shopifySidecar';
 
 const meta = { title: 'Screens/Simple results' } satisfies Meta;
 export default meta;
@@ -48,6 +49,17 @@ const scored = (changes: Partial<Score>, analysis: Analysis = GARDEN_ANALYSIS): 
 });
 
 // ---------------------------------------------------------------------------------------------------- The Summary
+
+/**
+ * A Shopify store's check (lane shopify): 8 pages Shopify turned away for want of a signature, said plainly with Add a
+ * Shopify signature, Shopify's buttons named exactly.
+ */
+export const SummaryShopifyStore: Story = story(SUMMARY, GARDEN_ANALYSIS, gardenItem(), [shopifyRoute(SHOPIFY_STORE)]);
+
+/** A problem's page of a Shopify store's check: the pages it couldn't read are said there too. */
+export const ProblemShopifyStore: Story = story(`${FIX}/broken-internal-links`, GARDEN_ANALYSIS, gardenItem(), [
+  shopifyRoute(SHOPIFY_STORE),
+]);
 
 /** The garden crawl, as today's engine scores it: 87, Good; 2 serious, 3 worth fixing, 14 worth a look. */
 export const Summary: Story = story(SUMMARY, GARDEN_ANALYSIS);

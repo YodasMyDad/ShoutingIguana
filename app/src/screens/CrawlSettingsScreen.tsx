@@ -20,6 +20,8 @@ import {
   type FormSection,
 } from '../crawl/options/form';
 import { ProxyTest } from '../crawl/options/ProxyTest';
+import { ShopifyAccessFields } from '../crawl/options/ShopifyAccessFields';
+import { signaturesOf } from '../crawl/options/shopifySignature';
 import { formErrors, useValidation, type FormErrors } from '../crawl/options/useValidation';
 import { FIELD_WORDS, settingValue, speedTitle, speedWords } from '../crawl/options/words';
 import { crawlControls, effectiveStatus } from '../crawl/status';
@@ -50,6 +52,7 @@ const LISTED: Record<Exclude<FormSection, 'start'>, CrawlFormField[]> = {
   limits: ['maxUrls', 'maxDepth', 'maxHtmlMb'],
   robots: ['respectRobotsTxt', 'respectCrawlDelay', 'discoverSitemaps', 'extraSitemaps'],
   network: ['userAgent', 'customUserAgent', 'acceptLanguage', 'headers', 'proxyUrl', 'useCookies'],
+  shopify: ['signatures'],
   advanced: [
     'requestTimeoutSeconds',
     'maxRetries',
@@ -216,7 +219,7 @@ function ContinuePanel({
   };
 
   useEffect(() => {
-    if (focus !== 'speed' && focus !== 'headers' && focus !== 'proxy') return;
+    if (focus !== 'speed' && focus !== 'headers' && focus !== 'proxy' && focus !== 'shopify') return;
     requestAnimationFrame(() => {
       if (!canContinue && !running) {
         document.querySelector<HTMLElement>('[data-crawl-again]')?.focus();
@@ -229,8 +232,10 @@ function ContinuePanel({
             root?.querySelector<HTMLElement>('input[type="radio"]'))
           : focus === 'proxy'
             ? root?.querySelector<HTMLElement>('[data-setting="proxyUrl"]')
-            : (root?.querySelector<HTMLElement>('[data-header-name]') ??
-              root?.querySelector<HTMLElement>('[data-add-header]'));
+            : focus === 'shopify'
+              ? root?.querySelector<HTMLElement>('[data-setting="signatures"] input')
+              : (root?.querySelector<HTMLElement>('[data-header-name]') ??
+                root?.querySelector<HTMLElement>('[data-add-header]'));
       target?.focus();
     });
     // Once, as the screen opens.
@@ -250,9 +255,12 @@ function ContinuePanel({
       requestTimeoutSeconds: number(form.requestTimeoutSeconds),
       ...(Object.keys(headers).length > 0 ? { extraHeaders: headers } : {}),
       ...(form.proxyUrl.trim() !== '' ? { proxyUrl: form.proxyUrl.trim() } : {}),
+      ...(Object.keys(signatures).length > 0 ? { signatures } : {}),
       ...(skipMissingHeaders ? { skipMissingHeaders: true } : {}),
     };
   };
+  // A signature given here goes with the crawl from where it stopped: the pages Shopify refused are asked again, signed.
+  const signatures = signaturesOf(form.signatures, stored.startUrl ?? '');
 
   const continueCrawl = async (skipMissingHeaders = false) => {
     if (busy) return;
@@ -305,7 +313,10 @@ function ContinuePanel({
   const message = (field: CrawlFormField) =>
     errors[field]?.[0] ?? (CONTINUED.has(field) ? checked[field]?.[0] : null) ?? null;
   const fieldsWithErrors = (Object.keys(errors) as CrawlFormField[]).filter(
-    (field) => !['concurrency', 'maxRequestsPerSecond', 'requestTimeoutSeconds', 'headers', 'proxyUrl'].includes(field),
+    (field) =>
+      !['concurrency', 'maxRequestsPerSecond', 'requestTimeoutSeconds', 'headers', 'proxyUrl', 'signatures'].includes(
+        field,
+      ),
   );
 
   return (
@@ -390,6 +401,18 @@ function ContinuePanel({
             onChange={(event) => change({ ...form, proxyUrl: event.target.value })}
           />
           <ProxyTest proxyUrl={form.proxyUrl} startUrl={stored.startUrl} />
+          <section aria-labelledby="continue-shopify-title" className="flex flex-col gap-3">
+            <h3 id="continue-shopify-title" className="si-field-label">
+              {FIELD_WORDS.signatures.label}
+            </h3>
+            <ShopifyAccessFields
+              value={form.signatures}
+              onChange={(signatures) => change({ ...form, signatures })}
+              startUrl={stored.startUrl ?? ''}
+              error={message('signatures')}
+              mode="advanced"
+            />
+          </section>
           {missing ? (
             <Callout tone="warning" title="Some settings must be given again" role="alert">
               {missing.headers.length > 0 ? (
@@ -442,6 +465,7 @@ const CONTINUED: ReadonlySet<CrawlFormField> = new Set<CrawlFormField>([
   'requestTimeoutSeconds',
   'headers',
   'proxyUrl',
+  'signatures',
 ]);
 
 /** What Continue sends as numbers, each that isn't one: a message beside it. */

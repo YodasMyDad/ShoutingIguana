@@ -7,6 +7,7 @@
 import type { CrawlOptions, SpeedPreset, UserAgentPreset } from '../../api/types';
 import type { SettingFocus } from '../../routing/search';
 import { ENGINE_DEFAULTS } from './engineDefaults';
+import { signatureFormOf, signaturesOf, type ShopifySignatureForm } from './shopifySignature';
 
 /** A header to send: its value is a secret, kept only while the app runs (never in defaults or a crawl file). */
 export interface HeaderRow {
@@ -46,6 +47,8 @@ export interface CrawlForm {
   useCookies: boolean;
   /** With its user name and password when it has them: a secret, as header values are. */
   proxyUrl: string;
+  /** Shopify crawler access: one signature, for one domain. A secret, as the proxy's password is. */
+  signatures: ShopifySignatureForm;
   requestTimeoutSeconds: string;
   maxRetries: string;
 }
@@ -105,6 +108,7 @@ export function formFromOptions(options: CrawlOptions, startUrl = ''): CrawlForm
     storeHtml: options.storeHtml ?? defaults.storeHtml,
     useCookies: options.useCookies ?? defaults.useCookies,
     proxyUrl: options.hasRedactedProxyCredentials ? '' : proxy,
+    signatures: signatureFormOf(options.signatures, startUrl || (options.startUrl ?? '')),
     requestTimeoutSeconds: numberText(options.requestTimeoutSeconds, defaults.requestTimeoutSeconds),
     maxRetries: numberText(options.maxRetries, defaults.maxRetries),
   };
@@ -172,6 +176,7 @@ export function optionsFromForm(form: CrawlForm, { secrets = true }: { secrets?:
     storeHtml: form.storeHtml,
     useCookies: form.useCookies,
     proxyUrl: form.proxyUrl.trim() === '' ? null : secrets ? form.proxyUrl.trim() : withoutCredentials(form.proxyUrl),
+    signatures: secrets ? signaturesOf(form.signatures, withScheme(form.startUrl)) : {},
     requestTimeoutSeconds: typed(form.requestTimeoutSeconds),
     maxRetries: typed(form.maxRetries),
   };
@@ -190,9 +195,14 @@ export function withoutCredentials(proxyUrl: string): string {
 }
 
 /** Whether a proxy address carries a user name or password. */
-/** The form holds a secret: a proxy with a user name or password, or a header with a value. */
-export function formHasSecrets(form: Pick<CrawlForm, 'proxyUrl' | 'headers'>): boolean {
-  return hasCredentials(form.proxyUrl) || form.headers.some((row) => row.value !== '');
+/** The form holds a secret: a proxy with a user name or password, a header with a value, or a Shopify signature. */
+export function formHasSecrets(form: Pick<CrawlForm, 'proxyUrl' | 'headers' | 'signatures'>): boolean {
+  return (
+    hasCredentials(form.proxyUrl) ||
+    form.headers.some((row) => row.value !== '') ||
+    form.signatures.signatureInput.trim() !== '' ||
+    form.signatures.signature.trim() !== ''
+  );
 }
 
 /**
@@ -243,7 +253,7 @@ export function withSpeed(form: CrawlForm, preset: SpeedPreset): CrawlForm {
 // ------------------------------------------------------------------------------------------- What's changed
 
 /** The form's sections, in order: where each setting lives in Advanced. */
-export type FormSection = 'start' | 'scope' | 'limits' | 'robots' | 'network' | 'advanced';
+export type FormSection = 'start' | 'scope' | 'limits' | 'robots' | 'network' | 'shopify' | 'advanced';
 
 export const SECTION_TITLES: Record<FormSection, string> = {
   start: 'Start',
@@ -251,6 +261,7 @@ export const SECTION_TITLES: Record<FormSection, string> = {
   limits: 'Limits',
   robots: 'Robots and sitemaps',
   network: 'Headers and network',
+  shopify: 'Shopify crawler access',
   advanced: 'Advanced',
 };
 
@@ -276,6 +287,7 @@ export const FIELD_SECTIONS: Record<CrawlFormField, FormSection> = {
   headers: 'network',
   proxyUrl: 'network',
   useCookies: 'network',
+  signatures: 'shopify',
   requestTimeoutSeconds: 'advanced',
   maxRetries: 'advanced',
   concurrency: 'advanced',
@@ -294,6 +306,7 @@ export const SIMPLE_FIELDS: ReadonlySet<CrawlFormField> = new Set<CrawlFormField
   'maxUrls',
   'checkExternalLinks',
   'checkResources',
+  'signatures',
 ]);
 
 /** Which of the form's settings differ from these defaults: by field, with the start URL left out. */
@@ -301,6 +314,7 @@ export function changedFields(form: CrawlForm, defaults: CrawlForm): CrawlFormFi
   return (Object.keys(FIELD_SECTIONS) as CrawlFormField[]).filter((field) => {
     if (field === 'startUrl') return false;
     if (field === 'headers') return Object.keys(headersOf(form.headers, false)).length > 0;
+    if (field === 'signatures') return Object.keys(signaturesOf(form.signatures, withScheme(form.startUrl))).length > 0;
     if (field === 'customUserAgent') return form.userAgent === 'custom' && form[field] !== defaults[field];
     const a = form[field];
     const b = defaults[field];
@@ -340,6 +354,7 @@ export const FOCUS_TARGETS: Record<SettingFocus, { section: FormSection; field: 
   proxy: { section: 'network', field: 'proxyUrl' },
   userAgent: { section: 'network', field: 'userAgent' },
   robots: { section: 'robots', field: 'respectRobotsTxt' },
+  shopify: { section: 'shopify', field: 'signatures' },
 };
 
 /** A bare host typed ("www.example.co.uk") is the site's https:// address, as Home takes it. */

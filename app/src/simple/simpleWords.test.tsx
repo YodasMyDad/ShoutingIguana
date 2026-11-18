@@ -57,13 +57,15 @@ function wordsShown(root: ParentNode = document.body, exempt: Element | null = n
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     const parent = node.parentElement;
     if (parent && exempt?.contains(parent)) continue;
-    // The site's own addresses and titles are the site's words, not the app's.
-    if (parent?.closest('script, style, iframe, [data-site-text], .font-mono, .si-url')) continue;
+    // The site's own addresses and titles are the site's words, not the app's; and Shopify's names for its own menus
+    // and buttons ("Online Store › Preferences › Crawler access") are Shopify's, quoted exactly so the owner can follow
+    // them (lane shopify).
+    if (parent?.closest('script, style, iframe, [data-site-text], [data-shopify-words], .font-mono, .si-url')) continue;
     if (node.textContent?.trim()) texts.push(node.textContent.trim());
   }
   for (const element of root.querySelectorAll('*')) {
     if (exempt?.contains(element)) continue;
-    if (element.closest('[data-site-text], .font-mono, .si-url')) continue;
+    if (element.closest('[data-site-text], [data-shopify-words], .font-mono, .si-url')) continue;
     for (const name of ['aria-label', 'title', 'placeholder', 'aria-description', 'aria-valuetext', 'alt']) {
       const value = element.getAttribute(name);
       if (value?.trim()) texts.push(value.trim());

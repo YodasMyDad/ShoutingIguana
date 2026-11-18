@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using ShoutingIguana.Engine.Fetching;
@@ -55,6 +56,13 @@ public sealed record CrawlOptions
     /// <summary>Sent with every request to the site being crawled (never to other sites), e.g. a secret header its firewall allowlists.</summary>
     public IReadOnlyDictionary<string, string> ExtraHeaders { get; init; } = new Dictionary<string, string>();
 
+    /// <summary>
+    /// Crawler signatures (Shopify's crawler access), each keyed by the host it was made for: <c>shop.example</c>, or
+    /// <c>host:port</c> off the default port. Sent to that host alone, over https, never to another host, a subdomain or
+    /// the www twin without one of its own (<see cref="SignatureBook"/>). A crawl file never keeps them.
+    /// </summary>
+    public IReadOnlyDictionary<string, CrawlSignature> Signatures { get; init; } = new Dictionary<string, CrawlSignature>();
+
     public bool RespectRobotsTxt { get; init; } = true;
     public bool RespectCrawlDelay { get; init; }
     public bool CheckResources { get; init; } = true;
@@ -81,12 +89,14 @@ public sealed record CrawlOptions
     internal X509Certificate2? TrustedCertificate { get; init; }
 
     /// <summary>
-    /// What a crawl file stores, since people share them: header names without their values, and the proxy without
-    /// its credentials (<see cref="REDACTED"/> takes their place). Whoever resumes the crawl supplies them again.
+    /// What a crawl file stores, since people share them: header names without their values, the proxy without its
+    /// credentials (<see cref="REDACTED"/> takes their place), and no crawler signature at all, not even the host it was
+    /// for. Whoever resumes the crawl supplies them again.
     /// </summary>
     public CrawlOptions WithoutSecrets() => this with
     {
         ExtraHeaders = ExtraHeaders.ToDictionary(header => header.Key, _ => string.Empty, StringComparer.OrdinalIgnoreCase),
+        Signatures = new Dictionary<string, CrawlSignature>(),
         ProxyUrl = ProxyUrl is not null && Uri.TryCreate(ProxyUrl, UriKind.Absolute, out var proxy) && proxy.UserInfo.Length > 0
             ? new UriBuilder(proxy) { UserName = REDACTED, Password = string.Empty }.Uri.AbsoluteUri
             : ProxyUrl
@@ -118,6 +128,7 @@ public sealed record CrawlOptions
             MaxRequestsPerSecond = changes.MaxRequestsPerSecond ?? MaxRequestsPerSecond,
             RequestTimeoutSeconds = changes.RequestTimeoutSeconds ?? RequestTimeoutSeconds,
             ExtraHeaders = headers,
+            Signatures = changes.Signatures.Count > 0 ? changes.Signatures : Signatures,
             ProxyUrl = proxyUrl ?? ProxyUrl
         };
 
@@ -227,6 +238,11 @@ public sealed record CrawlOptions
             }
         }
 
+        foreach (var problem in SignatureProblems())
+        {
+            yield return (Field(nameof(Signatures)), problem);
+        }
+
         foreach (var sitemap in ExtraSitemaps)
         {
             if (!UrlNormalizer.TryNormalize(sitemap, out _))
@@ -236,6 +252,40 @@ public sealed record CrawlOptions
             else if (HasUserInfo(sitemap))
             {
                 yield return (Field(nameof(ExtraSitemaps)), $"Sitemap '{WithoutUserInfo(sitemap)}' can't include a user name or password. {CREDENTIALS_ADVICE}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Each crawler signature must be for a host, one per host, in the form Shopify gives, and not expired: an expired one
+    /// is refused rather than sent, since Shopify would only refuse the crawler. No problem repeats a value.
+    /// </summary>
+    private IEnumerable<string> SignatureProblems()
+    {
+        HashSet<string> hosts = new(StringComparer.Ordinal);
+        foreach (var (host, signature) in Signatures)
+        {
+            if (!WebBotSignature.TryNormalizeHost(host, out var authority))
+            {
+                yield return $"A Shopify signature is for '{host}', which isn't a domain.";
+                continue;
+            }
+
+            if (!hosts.Add(authority))
+            {
+                yield return $"There are two Shopify signatures for {authority}: keep one.";
+                continue;
+            }
+
+            var reading = WebBotSignature.Read(signature?.SignatureInput, signature?.Signature);
+            if (reading.Problem is { } problem)
+            {
+                yield return $"The Shopify signature for {authority}: {problem}";
+            }
+            else if (reading is { Expires: { } expires } && reading.HasExpired(DateTimeOffset.UtcNow))
+            {
+                yield return $"The Shopify signature for {authority} expired on {expires.UtcDateTime.ToString("d MMMM yyyy", CultureInfo.InvariantCulture)}. " +
+                             "Create a new one in Shopify admin: Online Store › Preferences › Crawler access.";
             }
         }
     }
