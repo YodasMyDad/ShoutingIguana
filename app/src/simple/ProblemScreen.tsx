@@ -337,11 +337,11 @@ function FoundProblem({
   // An oversized image: the size its pages show it at, against the file's.
   const templateShownAt = useGroupShownAt(crawlId, check, template);
   const shared = useSharedSource(crawlId, check);
+  const counted = analysis.counts.find((candidate) => candidate.checkId === check.id);
   // X4: a site-wide check about the rules file or a sitemap names its files where its home page's row would be.
-  const files = filesOf(
-    check,
-    analysis.counts.find((candidate) => candidate.checkId === check.id),
-  );
+  const files = filesOf(check, counted);
+  // What only the site's platform can change (the Shopify lane, phase B): its reason, as given, in place of a fix.
+  const owner = counted?.platform ?? null;
   const context = {
     crawlId,
     check,
@@ -349,6 +349,7 @@ function FoundProblem({
     checkedAt: item.finishedAt ?? item.startedAt,
     share: share.text,
     files,
+    platform: owner,
   };
   const copyList = () => void copyProblemList(context);
   const saveSheet = () => saveCheckSheet(item, check);
@@ -371,7 +372,7 @@ function FoundProblem({
         run: saveSheet,
       },
     ],
-    [crawlId, check.id, share.text, item, files],
+    [crawlId, check.id, share.text, item, files, owner],
   );
   const noun = (check.subject ?? 'page') === 'page' ? 'pages' : 'addresses';
   const what = check.plainWhat ?? [check.description];
@@ -398,34 +399,50 @@ function FoundProblem({
                 )}
               </Fact>
             ) : null}
-            {fixer ? <Fact icon={UserRound}>{fixer}</Fact> : null}
+            {fixer && !owner ? <Fact icon={UserRound}>{fixer}</Fact> : null}
           </>
         }
-        after={related ? <AlsoFixes crawlId={crawlId} related={related} /> : null}
+        after={
+          owner ? (
+            <p className="mt-3 max-w-(--measure-text) text-16 text-text">{owner.reason}</p>
+          ) : related ? (
+            <AlsoFixes crawlId={crawlId} related={related} />
+          ) : null
+        }
       />
-      <Card className="si-explain2 @max-split:grid-cols-1">
-        <section aria-labelledby="problem-what" className="si-explain2__col">
+      {owner ? (
+        // Nothing to fix: what was found, in its first sentence alone (the others say why it matters, and who'd fix it).
+        <Card as="section" aria-labelledby="problem-what" className="px-7 py-6">
           <h2 id="problem-what" className="mb-2 text-14 font-semibold">
-            What’s wrong, and why it matters
+            What was found
           </h2>
-          {what.map((sentence, index) => (
-            <p key={index} className={index === 0 ? 'text-16 text-text' : 'mt-2.5 text-16 text-text-secondary'}>
-              {sentence}
-            </p>
-          ))}
-        </section>
-        <section aria-labelledby="problem-fix" className="si-explain2__col">
-          <h2 id="problem-fix" className="mb-2 text-14 font-semibold">
-            How to fix it
-          </h2>
-          <ol className="si-steps text-16">
-            {steps.map((step, index) => (
-              <li key={index}>{step}</li>
+          <p className="text-16 text-text">{what[0]}</p>
+        </Card>
+      ) : (
+        <Card className="si-explain2 @max-split:grid-cols-1">
+          <section aria-labelledby="problem-what" className="si-explain2__col">
+            <h2 id="problem-what" className="mb-2 text-14 font-semibold">
+              What’s wrong, and why it matters
+            </h2>
+            {what.map((sentence, index) => (
+              <p key={index} className={index === 0 ? 'text-16 text-text' : 'mt-2.5 text-16 text-text-secondary'}>
+                {sentence}
+              </p>
             ))}
-          </ol>
-        </section>
-      </Card>
-      {template ? (
+          </section>
+          <section aria-labelledby="problem-fix" className="si-explain2__col">
+            <h2 id="problem-fix" className="mb-2 text-14 font-semibold">
+              How to fix it
+            </h2>
+            <ol className="si-steps text-16">
+              {steps.map((step, index) => (
+                <li key={index}>{step}</li>
+              ))}
+            </ol>
+          </section>
+        </Card>
+      )}
+      {owner ? null : template ? (
         <Callout className="mt-4" title={oneFixTitle(template.urls ?? template.pages, count, noun)}>
           <OneFixWords
             check={check}
@@ -462,8 +479,8 @@ function FoundProblem({
         changes={changes}
         files={files}
       />
-      {/* The fix loop: Fixed it? is a recheck of these pages (./RecheckCard). */}
-      <RecheckCard crawlId={crawlId} item={item} check={check} />
+      {/* The fix loop: Fixed it? is a recheck of these pages (./RecheckCard); none for what the owner can't change. */}
+      {owner ? null : <RecheckCard crawlId={crawlId} item={item} check={check} />}
     </>
   );
 }

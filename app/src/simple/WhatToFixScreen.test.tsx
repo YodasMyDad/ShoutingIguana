@@ -16,6 +16,7 @@ import { TEST_CRAWL_ID, fakeSidecar, json, problem as problemResponse, type Fake
 import { createQueryClientWithoutBackoff } from '../test/queryClient';
 import { TABLE_STUBBED } from './tableStubbed';
 import { GARDEN_ANALYSIS, gardenItem, groupPage, rowsPage, simpleRoutes } from '../test/simpleSidecar';
+import { SHOPIFY_OWNER, platformOwned } from '../test/platformSidecar';
 
 const CRAWL = `/crawls/${TEST_CRAWL_ID}`;
 const FIX = `${CRAWL}/issues`;
@@ -237,6 +238,50 @@ describe.skipIf(TABLE_STUBBED)('What to fix', () => {
       "- Pages or files that can't be found: 9 addresses, 6 points back. Some addresses on your site answer with an error",
     );
     expect(writes[0]).toContain('  - Fixed along with it: Links that lead to broken pages, 5 pages.\n');
+  });
+});
+
+// The Shopify lane, phase B: what only Shopify can change is listed apart, with Shopify's reason, never as a thing to fix.
+describe.skipIf(TABLE_STUBBED)('What to fix, with what the site’s platform sets', () => {
+  it('lists what Shopify sets apart, each with its reason as given, out of the counts and the parts to fix', async () => {
+    await open(FIX, platformOwned(GARDEN_ANALYSIS));
+    await whatToFix();
+    expect(
+      main().getByText(/^6 problems to fix and 19 more worth a look on gardenfurnituresets\.co\.uk/),
+    ).toBeVisible();
+    expect(main().getByRole('heading', { level: 2, name: 'Worth a look 19' })).toBeVisible();
+    const shopify = within(main().getByRole('region', { name: 'Set by Shopify 3' }));
+    expect(shopify.getAllByRole('link').map((row) => row.getAttribute('href'))).toEqual(
+      ['cookies-insecure', 'security-headers-missing', 'security-headers-weak'].map((id) => `${FIX}/${id}`),
+    );
+    expect(shopify.getAllByText(SHOPIFY_OWNER.reason)).toHaveLength(3);
+    expect(shopify.getByText(/^Nothing for you to change/)).toBeVisible();
+    expect(shopify.queryByText(/points? back/)).toBeNull();
+    fireEvent.click(main().getByRole('button', { name: 'Show all 19 things worth a look' }));
+    const looks = within(main().getByRole('region', { name: 'Worth a look 19' }));
+    expect(looks.getAllByRole('link')).toHaveLength(19);
+    expect(looks.queryByRole('link', { name: /security settings|Cookies your site/ })).toBeNull();
+  });
+
+  it('copies what Shopify sets apart, with its reason', async () => {
+    const writes: string[] = [];
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: (text: string) => {
+          writes.push(text);
+          return Promise.resolve();
+        },
+      },
+    });
+    await open(FIX, platformOwned(GARDEN_ANALYSIS));
+    await whatToFix();
+    fireEvent.click(main().getByRole('button', { name: 'Copy this list' }));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0]).toContain('Worth a look (19)');
+    expect(writes[0]).toContain(
+      `Set by Shopify (3)\n- Cookies your site sets without basic protection: 2 pages. ${SHOPIFY_OWNER.reason}\n`,
+    );
   });
 });
 

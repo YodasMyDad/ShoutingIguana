@@ -12,6 +12,7 @@ import { commands, installKeyboard } from '../keyboard/registry';
 import { liveStore } from '../live/liveStore';
 import { replaceSettings, updateSettings } from '../settings/settingsStore';
 import { TEST_CRAWL_ID, fakeSidecar, json, type FakeRoute } from '../test/fakeSidecar';
+import { SHOPIFY_OWNER, platformOwned } from '../test/platformSidecar';
 import { createQueryClientWithoutBackoff } from '../test/queryClient';
 import { TABLE_STUBBED } from './tableStubbed';
 import {
@@ -241,6 +242,28 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
     const list = within(main().getByRole('region', { name: 'Fix these first' }));
     expect(list.getByText(/Nothing to fix among the checks you show\./)).toBeVisible();
     expect(list.getByText(/6 checks are hidden\./)).toBeVisible();
+  });
+
+  // The Shopify lane, phase B: what only Shopify can change keeps its count, but isn't among the things to fix.
+  it('leaves what Shopify sets out of its counts, with one quiet line that there’s nothing to change', async () => {
+    await open(platformOwned(GARDEN_ANALYSIS));
+    await site();
+    const tally = within(main().getByRole('list', { name: 'What the checks found' }));
+    expect(tally.getByRole('link', { name: '19 Things worth a look' })).toBeVisible();
+    expect(main().getByText('3 set by Shopify: nothing for you to change.')).toBeVisible();
+    expect(
+      main().getByText(/Your site is in good shape\. There are 2 serious problems and 4 problems worth fixing\./),
+    ).toBeVisible();
+    // Never a thing to fix: not among the five, and not listed for a fix.
+    const list = within(main().getByRole('region', { name: 'Fix these first' }));
+    expect(list.queryByRole('link', { name: /security settings|Cookies/ })).toBeNull();
+    expect(main().queryByText(SHOPIFY_OWNER.reason)).toBeNull();
+  });
+
+  it('says nothing of a platform for an analysis that names none', async () => {
+    await open(GARDEN_ANALYSIS);
+    await site();
+    expect(main().queryByText(/set by Shopify/)).toBeNull();
   });
 
   it('leaves hidden checks out of the counts, and says nothing of five fixed that aren’t the engine’s five', async () => {

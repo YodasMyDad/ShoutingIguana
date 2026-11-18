@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router';
 import { ChevronRight, CircleCheck, CircleDashed, Download, FileText } from 'lucide-react';
-import type { Score, Severity } from '../api/types';
+import type { PlatformOwner, Score, Severity } from '../api/types';
 import type { ReactNode } from 'react';
 import { formatCount } from '../lib/format';
 import { Button } from '../ui/Button';
@@ -29,6 +29,7 @@ import {
 import { FIX_FIRST_COUNT, siteWideLead, type PlainResults } from './results';
 import { ScoreRing } from '../ui/ScoreRing';
 import { openedHereState } from './scoreHistory';
+import { platformLines } from './summaryWords';
 import { useOneFix } from './useOneFix';
 import type { CheckEntry } from '../screens/issues/checkList';
 
@@ -84,6 +85,12 @@ export function ScoreHero({
           <p className="mt-2 max-w-(--measure-explain) text-18 text-text">{sentence}</p>
           {change}
           <p className="mt-3 text-14 leading-body text-text-secondary">{coverageSentences(score.covers).join(' ')}</p>
+          {/* What only the site's platform can change: out of the counts beside it, so said apart, once, quietly. */}
+          {platformLines(results.platform.map(({ owner }) => owner.name)).map((line) => (
+            <p key={line} className="mt-1.5 text-14 leading-body text-text-secondary">
+              {line}
+            </p>
+          ))}
           <p className="mt-2 text-14">
             <Link
               to="/crawls/$crawl/overview"
@@ -150,6 +157,7 @@ export function ProblemRow({
   points,
   nested = false,
   change,
+  platform = null,
   ref,
   ...rest
 }: {
@@ -165,20 +173,25 @@ export function ProblemRow({
   nested?: boolean | undefined;
   /** The fix loop: its change since the site's last check, under its count ("9 on 3 Nov"); left out or null, none. */
   change?: string | null | undefined;
+  /**
+   * Who sets what it found, where the owner can't change it (the Shopify lane, phase B): its reason, as given, is the
+   * row's line, and it gives no points back.
+   */
+  platform?: PlatformOwner | null | undefined;
   ref?: React.Ref<HTMLAnchorElement> | undefined;
 } & Omit<React.HTMLAttributes<HTMLAnchorElement>, 'title' | 'results'>) {
   const share = rowCountWords(entry.check, entry.count ?? 0);
-  const back = rowPointsWords(points);
+  const back = platform ? null : rowPointsWords(points);
   return (
     <PlainCheckRow
       asChild
       outcome={entry.outcome}
       number={number}
       oneFix={oneFix}
-      quiet={nested || entry.outcome === 'notice'}
+      quiet={nested || platform !== null || entry.outcome === 'notice'}
       className={nested ? 'si-plain-row--nested' : undefined}
       title={plainTitle(entry.check)}
-      summary={nested ? 'Fixed along with the problem above.' : plainSummary(entry.check)}
+      summary={platform ? platform.reason : nested ? 'Fixed along with the problem above.' : plainSummary(entry.check)}
       count={
         <>
           {share.count === null ? (

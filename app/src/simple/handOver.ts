@@ -6,7 +6,7 @@
 import { api } from '../api/client';
 import { isAbort } from '../api/errors';
 import type { CheckGroupRef, IssueGroup, IssueRow, RelatedFacts } from '../api/grids';
-import type { Check, CrawlListItem } from '../api/types';
+import type { Check, CrawlListItem, PlatformOwner } from '../api/types';
 import { announce } from '../feedback/announce';
 import { notifyError, notifyProgress, notifyResult } from '../feedback/notify';
 import { copyText } from '../lib/clipboard';
@@ -39,6 +39,11 @@ export interface ProblemListContext {
    * page's address would be; null or left out hands on the row.
    */
   files?: readonly { url: string; sitemapId: number | null }[] | null | undefined;
+  /**
+   * Who sets what it found, where the owner can't change it (the Shopify lane, phase B): its reason is handed on in
+   * place of how to fix it. Null or left out: the steps.
+   */
+  platform?: PlatformOwner | null | undefined;
 }
 
 /** A cause of a check that groups its issues, with the rows of the addresses it's on, as Copy the list hands it on. */
@@ -98,7 +103,8 @@ export function problemListText(
   ];
   const steps = (check.plainFix ?? []).map((step, index) => `${index + 1}. ${step}`);
   const lines = [...head, ''];
-  if (steps.length > 0) lines.push('How to fix it:', ...steps, '');
+  if (context.platform) lines.push(context.platform.reason, '');
+  else if (steps.length > 0) lines.push('How to fix it:', ...steps, '');
   lines.push('Where it is:');
   // X4: a check about a file names its files, then what was found, never the home page its issue is on.
   const files = filesOf(check, context);

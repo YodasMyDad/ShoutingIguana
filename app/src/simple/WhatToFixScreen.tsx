@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams, useRouterState } from '@tanstack/react-router';
-import { ArrowDownWideNarrow, ChevronDown, Copy, FileText } from 'lucide-react';
+import { ArrowDownWideNarrow, ChevronDown, Copy, FileText, Store } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { analysisQuery, checksQuery, crawlQuery, rechecksQuery } from '../api/queries';
 import type { Recheck } from '../api/fixLoop';
@@ -9,7 +9,7 @@ import { fixedGroupTitle } from '../changes/changeWords';
 import { FixedSince } from './FixedSince';
 import { FIXED_SECTION, clearedByRechecks, fixedSinceEntries, type FixedEntry } from './fixedSinceEntries';
 import { useSimpleChanges, type SimpleChanges } from './useSimpleChanges';
-import { isCrawling, type Analysis, type Check, type Severity } from '../api/types';
+import { isCrawling, type Analysis, type Check, type PlatformOwner, type Severity } from '../api/types';
 import { crawlName, crawlControls, effectiveStatus } from '../crawl/status';
 import { announce } from '../feedback/announce';
 import { ErrorState } from '../feedback/ErrorState';
@@ -26,6 +26,7 @@ import { useAnalysisAnswer } from '../screens/issues/useAnalysisAnswer';
 import { useAnalysisControl } from '../screens/issues/useAnalysisControl';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
+import { Icon } from '../ui/Icon';
 import { Select } from '../ui/Select';
 import { PlainCheckList, PlainCheckRow } from '../ui/PlainCheckRow';
 import { SeverityWord } from '../ui/SeverityWord';
@@ -42,7 +43,7 @@ import {
 } from './plainWords';
 import { ProblemScreen } from './ProblemScreen';
 import { useKeepsPlace } from './scrollPlace';
-import { plainResults, type PlainResults } from './results';
+import { plainResults, type PlainResults, type PlatformEntry } from './results';
 import { ProblemRow } from './SummaryParts';
 import { useOneFix } from './useOneFix';
 import { showAllHidden, useHiddenChecks } from '../settings/hiddenChecks';
@@ -347,7 +348,11 @@ function FixLists({
   const parts = partsOf(results, analysis, sort);
   const looks = nothingAbove || allLooks ? parts.notice : parts.notice.slice(0, LOOK_FIRST);
   // Every problem the keys move through, a folded one after the one it's folded under.
-  const shown = [...parts.error, ...parts.warning, ...looks].flatMap((row) => [row.entry, ...row.nested]);
+  const shown = [
+    ...[...parts.error, ...parts.warning, ...looks].flatMap((row) => [row.entry, ...row.nested]),
+    // What the site's platform sets, listed apart after them.
+    ...results.platform.map(({ entry }) => entry),
+  ];
   const oneFix = useOneFix(crawlId, shown);
 
   // J and K: the problem the keys are on, and its link, which Enter opens.
@@ -391,15 +396,22 @@ function FixLists({
     link?.focus({ preventScroll: true });
   }, [landedOnNew, firstNew, hash]);
 
-  const rowFor = (entry: CheckEntry, index: number, points: number | null, nested = false) => (
+  const rowFor = (
+    entry: CheckEntry,
+    index: number,
+    points: number | null,
+    nested = false,
+    platform: PlatformOwner | null = null,
+  ) => (
     <li key={entry.check.id} className={nested ? 'si-plain-list__nested' : undefined}>
       <ProblemRow
         crawlId={crawlId}
         entry={entry}
         results={results}
-        oneFix={oneFix.has(entry.check.id)}
+        oneFix={!platform && oneFix.has(entry.check.id)}
         points={points}
         nested={nested}
+        platform={platform}
         change={changes.wordsOf(entry.check.id)}
         ref={(element: HTMLAnchorElement | null) => {
           links.current[index] = element;
@@ -481,6 +493,25 @@ function FixLists({
           </Card>
         </section>
       ) : null}
+      {platformParts(results.platform).map(({ name, entries }) => (
+        // Apart from the problems: what only the site's platform can change, each with its reason, never to fix.
+        <section key={name} aria-labelledby={platformSection(name)} className="mb-6">
+          <h2 id={platformSection(name)} tabIndex={-1} className="si-simple-h2 scroll-mt-4">
+            <Icon icon={Store} className="text-text-muted" />
+            Set by {name} <span className="si-simple-h2__count">{formatCount(entries.length)}</span>
+          </h2>
+          <p className="mt-1.5 mb-3 max-w-(--measure-text) text-14 text-text-secondary">
+            {entries.length === 1
+              ? 'Nothing for you to change, and it doesn’t change the score.'
+              : 'Nothing for you to change, and they don’t change the score.'}
+          </p>
+          <Card className="overflow-hidden">
+            <PlainCheckList>
+              {entries.map(({ entry, owner }) => rowFor(entry, index++, null, false, owner))}
+            </PlainCheckList>
+          </Card>
+        </section>
+      ))}
       {fixed ? (
         <FixedSince
           crawlId={crawlId}
@@ -561,6 +592,16 @@ function FixLists({
   );
 }
 
+/** What the site's platform sets, a part a platform ("Shopify"), in the list's order. */
+function platformParts(platform: readonly PlatformEntry[]): { name: string; entries: PlatformEntry[] }[] {
+  const parts = new Map<string, PlatformEntry[]>();
+  for (const each of platform) parts.set(each.owner.name, [...(parts.get(each.owner.name) ?? []), each]);
+  return [...parts].map(([name, entries]) => ({ name, entries }));
+}
+
+/** The id of a platform's part: "set-by-shopify". */
+const platformSection = (name: string) => `set-by-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+
 /** A part's mark beside its heading: decorative, as the heading's words say it. */
 function OutcomeMark({ outcome }: { outcome: CheckOutcome }) {
   return (
@@ -595,6 +636,16 @@ async function copyWhatToFix(
           `  - Fixed along with it: ${plainTitle(nested.check)}, ${rowCountWords(nested.check, nested.count ?? 0).text}${changeOf(nested.check.id)}.`,
         );
       }
+    }
+    lines.push('');
+  }
+  // Apart from the problems: what the site's platform sets, with its reason, as the list shows it.
+  for (const { name, entries } of platformParts(results.platform)) {
+    lines.push(`Set by ${name} (${formatCount(entries.length)})`);
+    for (const { entry, owner } of entries) {
+      lines.push(
+        `- ${plainTitle(entry.check)}: ${rowCountWords(entry.check, entry.count ?? 0).text}${changeOf(entry.check.id)}. ${owner.reason}`,
+      );
     }
     lines.push('');
   }

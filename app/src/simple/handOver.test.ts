@@ -5,6 +5,7 @@ import { onAnnounce } from '../feedback/announce';
 import { closeExportDialog, defaultFileName, getExportDialog } from '../export/exportFlow';
 import { liveStore } from '../live/liveStore';
 import { TEST_CRAWL_ID, fakeSidecar, testCrawlItem } from '../test/fakeSidecar';
+import { SHOPIFY_OWNER } from '../test/platformSidecar';
 import { SIMPLE_CHECKS } from '../test/simpleSidecar';
 import type { TransportRequest } from '../api/transport';
 import { json } from '../test/fakeSidecar';
@@ -134,6 +135,15 @@ describe('Copy the list', () => {
       'Your rules file (robots.txt): https://example.com/robots.txt',
       'What was found: There’s no rules file at https://example.com/robots.txt (404 Not Found)',
     ]);
+  });
+
+  // The Shopify lane, phase B: what only Shopify can change is handed on with who sets it, never steps to fix it.
+  it('hands on who sets it and why in place of how to fix it', () => {
+    const text = problemListText({ ...context, check: check('cookies-insecure'), platform: SHOPIFY_OWNER }, [
+      { id: 1, url: 'https://example.com/', detail: null },
+    ]);
+    expect(text).toContain(`\n\n${SHOPIFY_OWNER.reason}\n\nWhere it is:\nhttps://example.com/`);
+    expect(text).not.toContain('How to fix it:');
   });
 
   it('says it copied the files, not an address', async () => {
