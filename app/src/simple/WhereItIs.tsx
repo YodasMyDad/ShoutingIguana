@@ -24,6 +24,7 @@ import { fileLabelOf } from '../ui/urlText';
 import { isBrokenImage } from '../ui/imageFacts';
 import { plainDetail, plainEvidence, plainImageInsight, plainRelated } from './plainEvidence';
 import { TargetWords } from './TargetWords';
+import { oneFixTitle } from './oneFixWords';
 import { causeName, causeWords, causesWords, pathOrigin, shownWords } from './whereWords';
 
 /** Causes (or pages, for a check that doesn't group) shown at a time. */
@@ -262,6 +263,7 @@ export function WhereItIs({
                     crawlId={crawlId}
                     check={check}
                     group={group}
+                    total={total}
                     origin={origin}
                     noun={noun}
                     since={since}
@@ -324,6 +326,7 @@ function GroupRow({
   crawlId,
   check,
   group,
+  total,
   origin,
   noun,
   since,
@@ -331,6 +334,8 @@ function GroupRow({
   crawlId: string;
   check: Check;
   group: IssueGroup;
+  /** The check's count: One fix clears the problem only where the cause is on all of them. */
+  total: number;
   origin: string | null;
   noun: (count: number) => string;
   /** The fix loop: when the site's last check was, for the cause's "Still there since 3 Nov". */
@@ -418,7 +423,13 @@ function GroupRow({
         {many ? (
           <span className="mb-1 flex flex-wrap items-center gap-2 font-medium">
             {formatCount(count)} {noun(count)}
-            {group.likelyTemplate ? <OneFixTag /> : null}
+            {/* One fix, where it clears the whole problem; else how much of it one fix covers. */}
+            {group.likelyTemplate && count >= total ? <OneFixTag /> : null}
+            {group.likelyTemplate && count < total ? (
+              <span className="font-normal text-13 text-text-secondary">
+                {oneFixTitle(count, total, (check.subject ?? 'page') === 'page' ? 'pages' : 'addresses')}
+              </span>
+            ) : null}
           </span>
         ) : null}
         {many && !open && perPage ? (

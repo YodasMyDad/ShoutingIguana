@@ -122,6 +122,33 @@ describe.skipIf(TABLE_STUBBED)('Where it is, in Simple', () => {
     expect(where.getByRole('columnheader', { name: 'Later pages that point Google at it' })).toBeVisible();
   });
 
+  // The fixit audit's item 8: "One fix" showed where the shared image covered only 195 of 225 pages.
+  it('says how many pages One fix covers when it doesn’t cover them all', async () => {
+    const where = await open('image-too-large', evidenceRoutes());
+    expect(await screen.findByText('One fix covers 12 of 14 pages', { selector: '.si-callout__title' })).toBeVisible();
+    expect(await where.findByText('One fix covers 12 of 14 pages')).toBeVisible();
+    expect(where.queryByText('One fix')).toBeNull();
+    expect(screen.queryByText(/One fix clears/)).toBeNull();
+  });
+
+  it('says One fix clears them all when the shared cause is on every page', async () => {
+    const pages = [1, 2, 3, 4].map((id) => page(id, `/product-${id}/`, { group: 9 }));
+    const where = await open(
+      'image-missing-alt',
+      catalogRoutes(
+        'image-missing-alt',
+        4,
+        [group({ relatedUrlId: 9, relatedUrl: `${SITE}/img/logo.png`, pages: 4, share: 1, likelyTemplate: true })],
+        pages,
+      ),
+    );
+    expect(
+      await screen.findByText('One fix clears all 4 of these pages', { selector: '.si-callout__title' }),
+    ).toBeVisible();
+    expect(await where.findByText('One fix')).toBeVisible();
+    expect(screen.queryByText(/One fix covers/)).toBeNull();
+  });
+
   it('heads a language version that doesn’t link back with where the return link goes', async () => {
     const where = await open(
       'hreflang-missing-return',

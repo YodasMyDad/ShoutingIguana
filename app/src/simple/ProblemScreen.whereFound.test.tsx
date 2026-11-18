@@ -72,12 +72,15 @@ describe.skipIf(TABLE_STUBBED)('where to fix a broken address, in Simple', () =>
 
   it('says where on every page a shared link is, in its One fix', async () => {
     await open(`${FIX}/empty-anchor-text`);
-    expect(await main().findByText('One fix clears 264 of these 265 pages')).toBeVisible();
+    expect(
+      await main().findByText('One fix covers 264 of 265 pages', { selector: '.si-callout__title' }),
+    ).toBeVisible();
     // What the pages share, exactly, then the one change that fixes them all.
-    const callout = (await main().findByText('One fix clears 264 of these 265 pages')).parentElement!;
+    const callout = (await main().findByText('One fix covers 264 of 265 pages', { selector: '.si-callout__title' }))
+      .parentElement!;
     await waitFor(() =>
       expect(callout).toHaveTextContent(
-        /^One fix clears 264 of these 265 pagesThe same link, to your home page, is in the header on 264 of these 265 pages\. .*Give it some words once there and all 264 are fixed\.$/,
+        /^One fix covers 264 of 265 pagesThe same link, to your home page, is in the header on 264 of these 265 pages\. .*Give it some words once there and all 264 are fixed\.$/,
       ),
     );
   });

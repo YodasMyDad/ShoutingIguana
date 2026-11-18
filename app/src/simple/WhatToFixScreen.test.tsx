@@ -150,7 +150,13 @@ describe.skipIf(TABLE_STUBBED)('What to fix', () => {
   });
 
   it('shows three things worth a look while anything needs fixing, then all of them; Nothing wrong is folded', async () => {
-    await open(FIX);
+    // The logo's link on every one of the 265 pages: One fix (one on 264 of them isn't: useOneFix.test.tsx).
+    const everyPage: FakeRoute = [
+      'POST',
+      /\/issues\/empty-anchor-text\/groups$/,
+      () => json(groupPage('empty-anchor-text', [{ ...HOME_GROUP, pages: 265, urls: 265, share: 1 }], 265)),
+    ];
+    await open(FIX, GARDEN_ANALYSIS, [], [everyPage]);
     await whatToFix();
     const looks = () => within(main().getByRole('region', { name: 'Worth a look 22' }));
     expect(looks().getAllByRole('link')).toHaveLength(3);
@@ -291,7 +297,9 @@ describe.skipIf(TABLE_STUBBED)('one problem', () => {
     expect(main().getByText('Doesn’t change the score')).toBeVisible();
     expect(main().getByText('Usually fixed by you or your developer')).toBeVisible();
     expect(main().getByRole('heading', { name: 'How to fix it' })).toBeVisible();
-    expect(await main().findByText('One fix clears 264 of these 265 pages')).toBeVisible();
+    expect(
+      await main().findByText('One fix covers 264 of 265 pages', { selector: '.si-callout__title' }),
+    ).toBeVisible();
     expect(main().getByText(/almost certainly your logo/)).toBeVisible();
   });
 

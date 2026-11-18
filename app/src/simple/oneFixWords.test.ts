@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { flatOneFixSentences, oneFixSentences, type OneFixCause } from './oneFixWords';
+import { flatOneFixSentences, oneFixSentences, oneFixTitle, type OneFixCause } from './oneFixWords';
 
 const cause = (overrides: Partial<OneFixCause>): OneFixCause => ({
   check: { id: 'image-too-large', evidence: [] },
@@ -14,6 +14,13 @@ const cause = (overrides: Partial<OneFixCause>): OneFixCause => ({
 });
 
 describe('the One fix, in plain words', () => {
+  // The fixit audit: a shared image on 195 of 225 pages was "One fix", as if one change cleared the problem.
+  it('says One fix clears them all only when the cause is on every page, else how many it covers', () => {
+    expect(oneFixTitle(14, 14, 'pages')).toBe('One fix clears all 14 of these pages');
+    expect(oneFixTitle(195, 225, 'pages')).toBe('One fix covers 195 of 225 pages');
+    expect(oneFixTitle(1_200, 1_250, 'addresses')).toBe('One fix covers 1,200 of 1,250 addresses');
+  });
+
   it('says exactly what the pages share and on how many, then the one change', () => {
     expect(oneFixSentences(cause({}))).toEqual({
       lead: 'The same image, /img/hero.jpg, is on 12 of these 14 pages.',

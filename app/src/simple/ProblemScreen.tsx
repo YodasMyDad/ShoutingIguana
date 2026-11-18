@@ -35,7 +35,7 @@ import {
   wholesOf,
   type ShareWords,
 } from './plainWords';
-import { flatOneFixSentences, oneFixSentences } from './oneFixWords';
+import { flatOneFixSentences, oneFixSentences, oneFixTitle } from './oneFixWords';
 import { plainImageInsight, plainRelated } from './plainEvidence';
 import { saysShownAt, useGroupShownAt } from '../screens/issues/useShownAt';
 import { WhereItIs } from './WhereItIs';
@@ -419,10 +419,7 @@ function FoundProblem({
         </section>
       </Card>
       {template ? (
-        <Callout
-          className="mt-4"
-          title={`One fix clears ${(template.urls ?? template.pages).toLocaleString('en-GB')} of these ${count.toLocaleString('en-GB')} ${noun}`}
-        >
+        <Callout className="mt-4" title={oneFixTitle(template.urls ?? template.pages, count, noun)}>
           <OneFixWords
             check={check}
             item={item}
@@ -434,7 +431,7 @@ function FoundProblem({
           />
         </Callout>
       ) : flatTemplate ? (
-        <Callout className="mt-4" title={`One fix clears all ${count.toLocaleString('en-GB')} of these ${noun}`}>
+        <Callout className="mt-4" title={oneFixTitle(count, count, noun)}>
           {flatOneFixSentences(count, analysis.pagesAnalyzed).lead}{' '}
           {check.plainOneFix ?? 'That’s almost certainly in the part of the site every page shares.'}{' '}
           {flatOneFixSentences(count, analysis.pagesAnalyzed).fix}
