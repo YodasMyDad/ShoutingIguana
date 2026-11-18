@@ -74,6 +74,30 @@ internal sealed class SectionPace(string folder)
         }
     }
 
+    /// <summary>When the section's last page started, if one has.</summary>
+    public DateTimeOffset? LastTurn
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _lastTurn;
+            }
+        }
+    }
+
+    /// <summary>
+    /// When the section's next page may start, brought forward to <paramref name="notAfter"/> when it would come later: the
+    /// last moment the crawl still asks the section, whose last try comes then rather than never.
+    /// </summary>
+    public DateTimeOffset NextDueBy(DateTimeOffset? notAfter)
+    {
+        lock (_sync)
+        {
+            return notAfter is { } last && last < _nextDue ? last : _nextDue;
+        }
+    }
+
     /// <summary>
     /// Several 429s in a row for pages tried at the slowest pace already: the section isn't letting anything through, and
     /// the pages still waiting are given up on.
@@ -87,11 +111,12 @@ internal sealed class SectionPace(string folder)
     }
 
     /// <summary>A page of the section may start now: if its turn has come, the turn is taken.</summary>
-    public bool TryStart(DateTimeOffset now)
+    /// <param name="notAfter">The last moment the crawl still asks the section: its turn comes then at the latest (<see cref="NextDueBy"/>).</param>
+    public bool TryStart(DateTimeOffset now, DateTimeOffset? notAfter = null)
     {
         lock (_sync)
         {
-            if (now < _nextDue)
+            if (now < (notAfter is { } last && last < _nextDue ? last : _nextDue))
             {
                 return false;
             }

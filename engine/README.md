@@ -152,8 +152,9 @@ curl -H "Authorization: Bearer <token>" http://127.0.0.1:53123/api/health
      the last tries), and shortens by a tenth each time a page gets through. The rest of the host keeps its pace. Only 429s
      from three sections within ten minutes are the host's own limit and slow the whole host, as below. Nothing is given
      up while pages get through: a section is given up on after three 429s in a row at its slowest (one page every 20
-     minutes), and every section 20 minutes after the rest of the crawl is over; what is left is not checked. Progress
-     says how many are left and when the next is tried.
+     minutes), and every section 20 minutes after the rest of the crawl is over, its last try coming then if the next was
+     due later; what is left is not checked. Progress says how many are left and when the next is tried, never later than
+     that.
    - A host that asks to slow down as a whole (429s from three sections, or 503 with Retry-After) is paused, all of it, for its Retry-After (or 10 s,
      doubling while it keeps asking, up to two minutes), then resumes one request at a time at half the pace that
      tripped it (never below one every five seconds), so nothing queued bursts out after the pause. 429s to requests sent before that slowdown don't slow

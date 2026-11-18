@@ -14,7 +14,9 @@ namespace ShoutingIguana.Engine.Crawling;
 /// One answered 429 again goes back to the front of its section's line; nothing is given up while pages still get
 /// through. A section is given up on after <see cref="GIVE_UP_FAILURES"/> 429s in a row at its slowest pace (one page
 /// every <see cref="SectionPace.MAX_INTERVAL"/>, which the cap leaves no room for), and every
-/// section <see cref="GIVE_UP_AFTER"/> after the rest of the crawl is over: what is left is stored as not checked.
+/// section <see cref="GIVE_UP_AFTER"/> after the rest of the crawl is over: what is left is stored as not checked. A try
+/// that would come after that comes as the time runs out instead, so each section has its last try then, and no wait
+/// says a try comes later than that.
 /// </summary>
 internal sealed class SectionTrickle(
     HostGateRegistry gates,
@@ -25,7 +27,7 @@ internal sealed class SectionTrickle(
     TimeProvider timeProvider,
     ILogger logger)
 {
-    /// <summary>How long the held-back sections may go on once the rest of the crawl is over.</summary>
+    /// <summary>How long the held-back sections may go on once the rest of the crawl is over: each has its last try as it ends.</summary>
     public static readonly TimeSpan GIVE_UP_AFTER = TimeSpan.FromMinutes(20);
 
     /// <summary>429s in a row, at a section's slowest pace, that give it up.</summary>
@@ -100,11 +102,12 @@ internal sealed class SectionTrickle(
         var now = timeProvider.GetUtcNow();
         lock (_sync)
         {
+            var timeRunsOut = TimeRunsOutAt();
             return
             [
-                .. _lines.Where(line => line.Value.Waiting.Count > 0).Select(line =>
-                    new CrawlWait(CrawlWaitReason.SectionLimited, line.Value.Host, Urls: line.Value.Waiting.Count,
-                        Duration: line.Key.NextDue > now ? line.Key.NextDue - now : TimeSpan.Zero, Section: line.Key.Path))
+                .. _lines.Where(line => line.Value.Waiting.Count > 0).Select(line => (Line: line.Value, Section: line.Key, Due: line.Key.NextDueBy(timeRunsOut)))
+                    .Select(line => new CrawlWait(CrawlWaitReason.SectionLimited, line.Line.Host, Urls: line.Line.Waiting.Count,
+                        Duration: line.Due > now ? line.Due - now : TimeSpan.Zero, Section: line.Section.Path))
             ];
         }
     }
@@ -150,14 +153,15 @@ internal sealed class SectionTrickle(
         }
     }
 
-    /// <summary>A URL whose turn has come, taken from the front of its section's line.</summary>
+    /// <summary>A URL whose turn has come, taken from the front of its section's line: at the latest as the time runs out.</summary>
     private (SectionPace Section, FrontierItem Item, PageRecord? Last)? Take(DateTimeOffset now)
     {
         lock (_sync)
         {
+            var timeRunsOut = TimeRunsOutAt();
             foreach (var (section, line) in _lines)
             {
-                if (line.Waiting.First is { } first && section.TryStart(now))
+                if (line.Waiting.First is { } first && section.TryStart(now, timeRunsOut))
                 {
                     line.Waiting.RemoveFirst();
                     Count(first.Value.Item, -1);
@@ -180,17 +184,20 @@ internal sealed class SectionTrickle(
 
     /// <summary>
     /// The URLs of sections that refuse everything at their slowest pace, and of every section once the rest of the crawl
-    /// has been over for <see cref="GIVE_UP_AFTER"/>: not checked, the site having asked the crawler to slow down.
+    /// has been over for <see cref="GIVE_UP_AFTER"/> and it has had its last try: not checked, the site having asked the
+    /// crawler to slow down.
     /// </summary>
     private List<PageRecord> GiveUp(DateTimeOffset now)
     {
         List<PageRecord> givenUp = [];
         lock (_sync)
         {
-            var atTheCap = _restOverAt is { } over && now - over >= GIVE_UP_AFTER;
+            var timeRunsOut = TimeRunsOutAt();
             foreach (var (section, line) in _lines.Where(line => line.Value.Waiting.Count > 0))
             {
-                if (!atTheCap && !section.IsRefusingEverything(GIVE_UP_FAILURES))
+                // As the time runs out, a section's last try comes first: it is given up on once that try has started.
+                var timeRanOut = now >= timeRunsOut && section.LastTurn >= timeRunsOut;
+                if (!timeRanOut && !section.IsRefusingEverything(GIVE_UP_FAILURES))
                 {
                     continue;
                 }
@@ -217,7 +224,8 @@ internal sealed class SectionTrickle(
     {
         lock (_sync)
         {
-            var next = _lines.Where(line => line.Value.Waiting.Count > 0).Select(line => line.Key.NextDue).DefaultIfEmpty(DateTimeOffset.MaxValue).Min();
+            var timeRunsOut = TimeRunsOutAt();
+            var next = _lines.Where(line => line.Value.Waiting.Count > 0).Select(line => line.Key.NextDueBy(timeRunsOut)).DefaultIfEmpty(DateTimeOffset.MaxValue).Min();
             if (next == DateTimeOffset.MaxValue)
             {
                 return IDLE;
@@ -227,6 +235,9 @@ internal sealed class SectionTrickle(
             return wait <= TimeSpan.Zero ? TimeSpan.FromMilliseconds(1) : wait < LONGEST_SLEEP ? TimeSpan.FromMilliseconds(Math.Ceiling(wait.TotalMilliseconds)) : LONGEST_SLEEP;
         }
     }
+
+    /// <summary>When the held-back sections' time runs out, once the rest of the crawl is over. Called under the lock.</summary>
+    private DateTimeOffset? TimeRunsOutAt() => _restOverAt + GIVE_UP_AFTER;
 
     private void Count(FrontierItem item, int change)
     {
