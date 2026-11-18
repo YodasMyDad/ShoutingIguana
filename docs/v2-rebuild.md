@@ -441,9 +441,13 @@ machine):
     answer wiped the sitemap entries and said "fixed". It is now "not checked", and the crawl's data is kept.
   - Checks: engine all passed (one new pace test was timing-sensitive under load and is being made deterministic);
     Sidecar 325, Cli 36; bench flat (210 → 183 MB); Vitest 4,701; e2e fix loop and inspector 26.
-  - **Round 2 on the same branch, under way:** a check whose column an upgrade added but the crawl never filled
-    reports "not run", not 0; a robots.txt or sitemap recheck reads only the site's own origins (it asked
-    instant.page); the B5 test made deterministic.
+  - **Round 2, merged 9ae271a8 (64db26d):**
+    - A check whose column an upgrade added but the crawl never filled reports "not run", not 0. The table
+      `uncollected_facts` lists each sitemap whose `lastmod` was never read, and a recheck that reads it clears it.
+    - A robots.txt or sitemap recheck reads only the site's own origins that the check's issues name (it had asked
+      instant.page).
+    - The B5 test can't fail under load.
+    - Checks: engine 2,227, Sidecar 325, Cli 36, all passed; bench flat; readbench met every gate.
   - **For phase B:** paused time still counts toward the 20-minute cap.
 - **Jitsunami, crawl 5, at the owner's word (2026-11-18, `-c 1 --rate 1 --no-external`):** 46 URLs, 9 pages, the same 8
   not checked, 20:47. Shopify refused the products from about 35 s in, after roughly 25 requests, and for the whole
@@ -470,8 +474,7 @@ machine):
 
 Next:
 
-- Merge round 2 of `ui/3b-recheck-fixes`, then `ui/3b-shopify`, then phase B (with paused time not counting toward
-  the cap).
+- Merge `ui/3b-shopify`, then phase B (with paused time not counting toward the cap).
 - **Then the "can I fix it from this?" pass (the owner, 2026-11-18):** every check that fires on copies of the real
   crawls and on the synthetic site, opened in the app in both modes and judged as a site owner. Does it show where
   the problem is (the URL, the element or snippet, the page linking to it), the value against the limit, and what to
