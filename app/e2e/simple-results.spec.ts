@@ -13,7 +13,7 @@ test.use({ storageState: { cookies: [], origins: [] } });
 interface Analysis {
   pagesAnalyzed: number;
   crawledUrlCount: number | null;
-  counts: { checkId: string; count: number }[];
+  counts: { checkId: string; count: number; clears?: { checkId: string; all: boolean }[] }[];
   skipped: { checkId: string }[];
   fixFirst: string[];
   score: {
@@ -88,7 +88,7 @@ async function shoot(page: Page, name: string) {
 }
 
 test('the Summary says the engine’s score, word and counts, and passes axe in both themes', async ({ page }) => {
-  const { crawl, analysis, found } = await facts();
+  const { crawl, analysis, byId, found } = await facts();
   test.skip(analysis.score === null, 'The crawl has no score');
   const score = analysis.score!;
   await page.setViewportSize({ width: 1280, height: 720 });
@@ -106,7 +106,11 @@ test('the Summary says the engine’s score, word and counts, and passes axe in 
     expect(score.value).toBe(85);
     expect(score.band).toBe('good');
     expect([found('error'), found('warning'), found('notice')]).toEqual([2, 4, 13]);
-    await expect(main(page).getByText('Fixing these five takes the score from 85 to 98.')).toBeVisible();
+    // The sentence counts the jobs: a problem another's fix clears is folded under it.
+    const five = analysis.fixFirst.filter((id) => byId.get(id)?.severity !== 'notice').slice(0, 5);
+    const numbered = fixFirstJobs(five, analysis, byId).filter((job) => !job.nested).length;
+    const these = ['this one', 'these two', 'these three', 'these four', 'these five'][numbered - 1] ?? '';
+    await expect(main(page).getByText(`Fixing ${these} takes the score from 85 to 98.`)).toBeVisible();
   }
   await expectNoViolations(page);
   await shoot(page, 'summary-light');
@@ -143,6 +147,42 @@ test('the score’s breakdown: the engine’s lines add up to its score, and Esc
 });
 
 /** The rows a list shows, with each one's link and count. */
+/**
+ * The five to fix first as the Summary lists them, as What to fix has them (simple/fixRows.ts): a check a fix of another
+ * of the five of its severity clears entirely (the analysis's `clears[].all`) under that one, which carries the points
+ * of both. The rows in order, each with the points it says.
+ */
+function fixFirstJobs(
+  five: readonly string[],
+  analysis: Analysis,
+  byId: ReadonlyMap<string, Check>,
+): { id: string; points: number; nested: boolean }[] {
+  const pointsOf = (id: string) => analysis.score?.lines.find((line) => line.checkId === id)?.points ?? 0;
+  const under = new Map<string, string[]>();
+  const folded = new Set<string>();
+  for (const severity of ['error', 'warning'] as const) {
+    const part = five.filter((id) => byId.get(id)?.severity === severity);
+    for (const id of part) {
+      if (folded.has(id)) continue;
+      for (const cleared of analysis.counts.find((count) => count.checkId === id)?.clears ?? []) {
+        const other = cleared.checkId;
+        if (!cleared.all || !part.includes(other) || other === id || folded.has(other) || under.has(other)) continue;
+        folded.add(other);
+        under.set(id, [...(under.get(id) ?? []), other]);
+      }
+    }
+  }
+  return five
+    .filter((id) => !folded.has(id))
+    .flatMap((id) => {
+      const nested = under.get(id) ?? [];
+      return [
+        { id, points: [id, ...nested].reduce((sum, each) => sum + pointsOf(each), 0), nested: false },
+        ...nested.map((each) => ({ id: each, points: 0, nested: true })),
+      ];
+    });
+}
+
 async function rowsOf(list: Locator) {
   return list.getByRole('link').evaluateAll((links) =>
     links.map((link) => ({
@@ -190,16 +230,17 @@ test('the sweep: every figure of the Summary, What to fix and one problem lands 
     followed++;
   }
 
-  // Fix these first: the engine's first five errors and warnings, in its order, each count the engine's.
+  // Fix these first: the engine's first five errors and warnings, in its order, each count the engine's; a problem
+  // another's fix clears entirely is folded under it, as What to fix folds it, the points of both on the row above.
   await openSummary(page, crawl.id);
   const fixFirst = analysis.fixFirst.filter((id) => byId.get(id)?.severity !== 'notice').slice(0, 5);
+  const jobs = fixFirstJobs(fixFirst, analysis, byId);
   const firstRows = await rowsOf(main(page).getByRole('region', { name: 'Fix these first' }).getByRole('list'));
-  expect(firstRows.map((row) => row.href.split('/').pop())).toEqual(fixFirst);
-  for (const row of firstRows) {
+  expect(firstRows.map((row) => row.href.split('/').pop())).toEqual(jobs.map((job) => job.id));
+  for (const [index, row] of firstRows.entries()) {
     const id = row.href.split('/').pop() ?? '';
     const check = byId.get(id)!;
-    const points = analysis.score?.lines.find((line) => line.checkId === id)?.points ?? 0;
-    expect(row.count).toBe(rowWords(check, counts.get(id) ?? 0, points));
+    expect(row.count).toBe(rowWords(check, counts.get(id) ?? 0, jobs[index]?.points ?? 0));
   }
 
   // What to fix: every problem's count is the engine's, and its page says the same and lists exactly that many.
