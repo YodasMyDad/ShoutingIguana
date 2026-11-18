@@ -136,6 +136,27 @@ export const InTheWay: Story = {
   render: () => <ScreenApp path={OVERVIEW} mode="simple" />,
 };
 
+/** A Shopify shop turning away a check without a signature (lane shopify): said plainly as it happens. */
+export const ShopifyTurnsAway: Story = {
+  loaders: [
+    () => {
+      running(1_346, POLITE);
+      liveStore.ingest(
+        message(
+          'alert',
+          alert({
+            id: 7,
+            code: 'shopify-unsigned',
+            at: '2026-11-01T10:15:02.000Z',
+            data: { host: 'example.com', reason: '429 Too Many Requests' },
+          }),
+        ),
+      );
+    },
+  ],
+  render: () => <ScreenApp path={OVERVIEW} mode="simple" />,
+};
+
 /** Working out the results: the second step, with the analysis's phase, its progress and Cancel; the figures stay. */
 export const WorkingOutTheResults: Story = {
   loaders: [

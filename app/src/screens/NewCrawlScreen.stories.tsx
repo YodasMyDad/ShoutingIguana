@@ -138,6 +138,12 @@ export const Simple = at('/new?url=https://www.example.co.uk/', 'simple');
 /** Advanced: the start URL and the presets, and five folded sections, each with its values in a line. */
 export const Advanced = at('/new?url=https://www.example.co.uk/', 'advanced');
 /** A section opened on the setting a link asked for: Headers and network, on the user agent. */
+/** Shopify crawler access, open (lane shopify): Shopify's steps, the two fields and the fixed Signature-Agent. */
+export const AdvancedShopify = at('/new?url=https://shop.example.com/&focus=shopify', 'advanced');
+
+/** The same in Simple, under Options. */
+export const SimpleShopify = at('/new?url=https://shop.example.com/&focus=shopify', 'simple');
+
 export const AdvancedOnASetting = at(`/new?from=${TEST_CRAWL_ID}&focus=userAgent`, 'advanced');
 /** "Crawl again with these": the crawl's own settings, and what its file didn't keep, to give again. */
 export const CrawlAgain = at(`/new?from=${TEST_CRAWL_ID}`, 'advanced');

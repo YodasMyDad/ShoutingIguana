@@ -71,6 +71,16 @@ and the first page of what the biggest check no longer flags, each held to 300 m
 allowlisting; they are only sent to the site being crawled, and never over plain HTTP when it starts on HTTPS),
 proxy, depth and URL limits, robots.txt, subdomains, start-folder scope, nofollow, stored HTML, and `--no-analyze`.
 
+A Shopify store limits crawlers that don't send a signature: its product pages answer 429 and stay refused. The
+sanctioned way through is the store's crawler signature (Web Bot Auth), which its owner creates in Shopify admin
+(Online Store > Preferences > Crawler access > Create signature). `--signature-file <file>` (crawl and recheck,
+repeatable, one file a domain) reads one as the admin gives it to copy: the `Signature-Input` and `Signature` values, a
+line each, bare or as header lines, with an optional `Domain:` line (else the start URL's host). The crawler adds
+`Signature-Agent: "https://shopify.com"` and sends the three to that host only, over https, until the signature expires;
+it never prints the values or keeps them in the crawl file. A store refusal is "not checked", with Shopify's reason, never
+broken. Test against the synthetic site's Shopify mode only (`SyntheticSiteOptions.Shopify`), never a real
+store.
+
 The start URL and any `--sitemap` can't carry a user name or password (`https://user:pass@host/`): the crawler never
 sends them, and the URL is stored in the crawl file, listed and logged as it is, so they would leak. Send credentials
 in an `Authorization` header (`--header`), whose value a crawl file doesn't keep. A `--proxy` may carry credentials.

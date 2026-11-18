@@ -12,7 +12,7 @@ import { createAppRouter } from '../app/router';
 import { liveStore } from '../live/liveStore';
 import { updateSettings } from '../settings/settingsStore';
 import { setDirectConnection } from '../shell/connection';
-import { TEST_CRAWL_ID, fakeSidecar, json } from '../test/fakeSidecar';
+import { TEST_CRAWL_ID, fakeSidecar, json, type FakeRoute } from '../test/fakeSidecar';
 import { ISSUES_ANALYSIS, ISSUES_CHECKS } from '../test/issuesSidecar';
 import {
   DEAD_TWIN,
@@ -28,6 +28,7 @@ import {
   type CrawlScript,
   type OverviewSidecarOptions,
 } from '../test/overviewSidecar';
+import { SHOPIFY_STORE, shopifyRoute } from '../test/shopifySidecar';
 
 const meta = { title: 'Screens/Overview' } satisfies Meta;
 export default meta;
@@ -48,9 +49,9 @@ function fresh() {
 }
 
 /** A sidecar of the story's own, for the states the design fixtures can't show. */
-function own(options: OverviewSidecarOptions = {}) {
+function own(options: OverviewSidecarOptions = {}, extra: FakeRoute[] = []) {
   fresh();
-  setTransport(fakeSidecar(overviewRoutes(options)));
+  setTransport(fakeSidecar([...extra, ...overviewRoutes(options)]));
   connect();
 }
 
@@ -727,6 +728,26 @@ export const NotChecked: Story = {
         notChecked: DEAD_TWIN.notChecked,
         stats: { ...OVERVIEW_STATS, ...DEAD_TWIN.stats },
       }),
+  ],
+  render: () => <OverviewApp />,
+};
+
+/**
+ * A Shopify store's crawl (lane shopify): 8 product pages refused for want of a signature, said above the crawl's
+ * figures with why and Add a Shopify signature, as not checked, never broken.
+ */
+export const ShopifyStore: Story = {
+  loaders: [
+    () =>
+      own(
+        {
+          item: DEAD_TWIN.item,
+          facets: { status: DEAD_TWIN.status },
+          notChecked: 8,
+          stats: { ...OVERVIEW_STATS, ...DEAD_TWIN.stats },
+        },
+        [shopifyRoute(SHOPIFY_STORE)],
+      ),
   ],
   render: () => <OverviewApp />,
 };
