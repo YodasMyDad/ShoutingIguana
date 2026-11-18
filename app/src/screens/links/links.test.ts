@@ -17,6 +17,8 @@ import {
   linkFollowWords,
   linkGridColumns,
   linkQueryColumns,
+  fittedLinkWidths,
+  linkColumnNeeds,
   sharedUrlWidth,
   shownLinkColumns,
 } from './linkColumns';
@@ -615,6 +617,57 @@ describe('the links’ columns', () => {
     expect(sharedUrlWidth(DEFAULT_LINK_COLUMNS, LINK_COLUMNS, 600)).toBe(160);
     // The default view fits a 1280 px window beside the sidebar.
     expect(sharedUrlWidth(DEFAULT_LINK_COLUMNS, LINK_COLUMNS, 980)).toBeGreaterThanOrEqual(160);
+  });
+
+  it('gives the URLs and the anchor the room their values in view take, before cutting any URL in the middle', () => {
+    // The garden crawl's broken link at 1,440 px: two paths of about 30 characters, a short anchor, and the room the
+    // grid has beside the sidebar.
+    const shown = DEFAULT_LINK_COLUMNS;
+    const page: LinkRow[] = [
+      {
+        id: 1,
+        'from.url': 'https://www.example.co.uk/blog/best-rattan-patio-sets/',
+        'to.url': 'https://www.example.co.uk/3-pieces-patio-furniture-set/',
+        kind: 'hyperlink',
+        text: 'Buy Now',
+      },
+    ];
+    // A character of a URL as 7.25 px, of text as 7 px: the grid's fonts, near enough.
+    const measure = (text: string, face: 'url' | 'text') => text.length * (face === 'url' ? 7.25 : 7);
+    const needs = linkColumnNeeds(page, shown, 'https://www.example.co.uk', measure);
+    const widths = fittedLinkWidths(shown, LINK_COLUMNS, 1_116, {}, needs)!;
+    // Each URL whole, with its cell's padding and the open button's room.
+    expect(widths['from.url']).toBeGreaterThanOrEqual(needs['from.url']!);
+    expect(widths['to.url']).toBeGreaterThanOrEqual(needs['to.url']!);
+    // "Buy Now" doesn't take 176 px the paths could use; and the columns fill the grid, no more.
+    expect(widths.text).toBeLessThan(176);
+    const columns = linkGridColumns(shown, LINK_COLUMNS, {
+      siteOrigin: null,
+      onOpen: () => undefined,
+      sort: [],
+      widths,
+    });
+    const used = columns.reduce((sum, column) => sum + column.width, 0);
+    expect(used).toBeLessThanOrEqual(1_116);
+    expect(used).toBeGreaterThan(1_110);
+
+    // Short of room, each URL is cut in proportion to what it wants past its least, never under it.
+    const long: LinkRow[] = [{ ...page[0]!, 'to.url': `https://www.example.co.uk/${'very-long-path/'.repeat(12)}` }];
+    const squeezed = fittedLinkWidths(
+      shown,
+      LINK_COLUMNS,
+      1_000,
+      {},
+      linkColumnNeeds(long, shown, 'https://www.example.co.uk', measure),
+    )!;
+    expect(squeezed['to.url']).toBeGreaterThan(squeezed['from.url']!);
+    expect(squeezed['from.url']).toBeGreaterThanOrEqual(160);
+    // A width the user gave a column is theirs; with nothing in view, the URLs share the room as they did.
+    expect(fittedLinkWidths(shown, LINK_COLUMNS, 1_116, { 'from.url': 400 }, needs)!['from.url']).toBeUndefined();
+    expect(fittedLinkWidths(DEFAULT_LINK_COLUMNS, LINK_COLUMNS, 1_600, {}, {})!['to.url']).toBe(
+      sharedUrlWidth(DEFAULT_LINK_COLUMNS, LINK_COLUMNS, 1_600),
+    );
+    expect(fittedLinkWidths(DEFAULT_LINK_COLUMNS, LINK_COLUMNS, null, {}, needs)).toBeUndefined();
   });
 
   it('offers every column to show, grouped, the follow column in place of the flags it shows', () => {
