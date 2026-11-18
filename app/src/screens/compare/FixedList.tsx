@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, PanelRight } from 'lucide-react';
 import { useId, useState } from 'react';
 import { api } from '../../api/client';
 import type { ClearedGroup, ClearedIssue, FixedQuery } from '../../api/fixLoop';
@@ -9,6 +9,7 @@ import { clearedWords } from '../../changes/changeWords';
 import { formatCount } from '../../lib/format';
 import { Button } from '../../ui/Button';
 import { Icon } from '../../ui/Icon';
+import { IconButton } from '../../ui/IconButton';
 import { OpenUrlButton } from '../../ui/OpenUrlButton';
 import { Url } from '../../ui/Url';
 import { periodLabel, type ComparedPeriod } from './changeCell';
@@ -136,20 +137,19 @@ function FixedRow({
   return (
     <tr>
       <td className={`${CELL} max-w-0`}>
+        {/* The URL, then the inspector for one the crawl still has, and the browser: side by side, never nested. */}
         <span className="flex min-w-0 items-center gap-1">
-          {row.urlId === null ? (
-            <Url url={row.url} siteOrigin={siteOrigin} copyable={false} className="min-w-0 flex-1" />
-          ) : (
-            <button
-              type="button"
-              className="si-link min-w-0 flex-1 truncate text-left"
-              title={`Inspect ${row.url}`}
+          <Url url={row.url} siteOrigin={siteOrigin} copyable={false} className="min-w-0 flex-1" />
+          {row.urlId === null ? null : (
+            <IconButton
+              label={`Inspect ${row.url}`}
+              tooltip="Inspect"
+              icon={PanelRight}
+              size="xs"
               onClick={() => {
                 if (row.urlId !== null) onInspect(row.urlId);
               }}
-            >
-              <Url url={row.url} siteOrigin={siteOrigin} copyable={false} tabbable={false} />
-            </button>
+            />
           )}
           <OpenUrlButton url={row.url} />
         </span>

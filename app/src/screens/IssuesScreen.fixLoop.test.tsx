@@ -287,7 +287,7 @@ describe('a check’s detail compared with the previous crawl (Advanced)', () =>
         name: /500 Internal Server Error.*2 URLs then.*1 fixed · 1 not checked this time/,
       }),
     );
-    expect(await detail.findByTitle('Inspect https://example.com/fixed/')).toBeVisible();
+    expect(await detail.findByRole('button', { name: 'Inspect https://example.com/fixed/' })).toBeVisible();
     expect(detail.getByText('Not checked this time')).toBeVisible();
     expect(detail.getByText(/No answer within 30 s/)).toBeVisible();
   });
@@ -298,7 +298,7 @@ describe('a check’s detail compared with the previous crawl (Advanced)', () =>
     expect(await detail.findByText('Fixed since 17 Oct')).toBeVisible();
     expect(detail.getByText('It flagged 4 URLs then, and flags none now.')).toBeVisible();
     await userEvent.click(await detail.findByRole('button', { name: /500 Internal Server Error/ }));
-    expect(await detail.findByTitle('Inspect https://example.com/fixed/')).toBeVisible();
+    expect(await detail.findByRole('button', { name: 'Inspect https://example.com/fixed/' })).toBeVisible();
     expect(detail.queryByRole('button', { name: /^Recheck/ })).toBeNull();
   });
 });
