@@ -431,3 +431,63 @@ describe('remembering a proxy password and header values (step 3b: consent)', ()
     expect(remember()).toBeChecked();
   });
 });
+
+describe('a Shopify signature remembered for the store (lane shopify, phase B)', () => {
+  // Made up for tests, as Shopify's admin shows a signature: no real store takes these. Ends 1 January 2100.
+  const SAVED = {
+    signatureInput: 'sig1=("@authority" "signature-agent");created=1767225600;expires=4102444800;keyid="FAKETESTONLY"',
+    signature: 'sig1=:FAKETESTONLYAAAA:',
+  };
+  let kept: Map<string, string>;
+  const store: SecretsStore = {
+    read: (key) => Promise.resolve(kept.get(key) ?? null),
+    write: (key, secrets) => {
+      if (secrets === null) kept.delete(key);
+      else kept.set(key, secrets);
+      return Promise.resolve();
+    },
+  };
+  beforeEach(() => {
+    kept = new Map([['shopify:shop.example', JSON.stringify(SAVED)]]);
+    setSecretsStore(store);
+  });
+  afterEach(() => setSecretsStore(null));
+
+  const remember = () => screen.getByRole('checkbox', { name: 'Remember in Windows Credential Manager' });
+  const signatures = (transport: ReturnType<typeof sidecar>) =>
+    (sent(transport, 'POST', /^\/api\/crawls$/) as { options: CrawlOptions } | undefined)?.options.signatures;
+
+  it('fills in the next crawl of the store, says so, and starts with it, still remembered', async () => {
+    const transport = sidecar();
+    await open('/new?url=https://shop.example/&focus=shopify', 'advanced');
+
+    expect(await screen.findByText('Using your saved Shopify signature, ends 1 January 2100')).toBeVisible();
+    expect(screen.getByRole('textbox', { name: 'Signature' })).toHaveValue(SAVED.signature);
+    expect(remember()).toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: /^Start crawl/ }));
+
+    await waitFor(() => expect(signatures(transport)).toEqual({ 'shop.example': SAVED }));
+    expect(JSON.parse(kept.get('shopify:shop.example') ?? '{}')).toEqual(SAVED);
+  });
+
+  it('is forgotten when Remember is unticked for the crawl that uses it', async () => {
+    const transport = sidecar();
+    await open('/new?url=https://shop.example/&focus=shopify', 'advanced');
+    expect(await screen.findByText('Using your saved Shopify signature, ends 1 January 2100')).toBeVisible();
+    fireEvent.click(remember());
+    fireEvent.click(screen.getByRole('button', { name: /^Start crawl/ }));
+
+    await waitFor(() => expect(signatures(transport)).toEqual({ 'shop.example': SAVED }));
+    await waitFor(() => expect(kept.has('shopify:shop.example')).toBe(false));
+  });
+
+  it('fills in nothing for another site', async () => {
+    const transport = sidecar();
+    await open('/new?url=https://other.example/&focus=shopify', 'advanced');
+    expect(await screen.findByRole('textbox', { name: 'Signature' })).toHaveValue('');
+    expect(screen.queryByText(/Using your saved Shopify signature/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /^Start crawl/ }));
+    await waitFor(() => expect(sent(transport, 'POST', /^\/api\/crawls$/)).toBeDefined());
+    expect(signatures(transport) ?? {}).toEqual({});
+  });
+});

@@ -67,7 +67,7 @@ describe('what’s in the way', () => {
     ]);
     expect(entries[0]?.shopifySteps).toBe(true);
     expect(entries[0]?.actions).toEqual([
-      { kind: 'crawlSettings', label: 'Add a Shopify signature, in Advanced', focus: 'shopify' },
+      { kind: 'shopifySign', label: 'Add a Shopify signature', host: 'shop.example' },
     ]);
     const expired = inTheWay({
       ...base,
@@ -80,6 +80,13 @@ describe('what’s in the way', () => {
       ],
     });
     expect(expired[0]?.text).toContain('The signature ended on 1 March 2027. Make a new one in Shopify.');
+
+    // Turned away even with one: changed the same way, in Simple.
+    const refused = inTheWay({
+      ...base,
+      alerts: [alert('shopify-signature-refused', '2026-11-01T10:00:00Z', { host: 'shop.example', count: 3 })],
+    });
+    expect(refused[0]?.actions).toEqual([{ kind: 'shopifySign', label: 'Change the signature', host: 'shop.example' }]);
   });
 
   it('says the slowdown and the Crawl-delay, from the waits, with nothing to do', () => {

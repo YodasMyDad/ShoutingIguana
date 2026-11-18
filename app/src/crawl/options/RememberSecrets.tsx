@@ -7,14 +7,16 @@ export interface RememberSecretsProps {
   onCheckedChange: (checked: boolean) => void;
   /** Whose words: Simple's are plain. Settings shows the full form in both modes, with each mode's words here. */
   mode: 'simple' | 'advanced';
+  /** What is remembered: the crawl's secrets, or a Shopify signature alone (said of it). */
+  subject?: 'secrets' | 'signature' | undefined;
 }
 
 /**
  * The option to remember the secrets a crawl is given (docs/v2-ui-architecture.md, "Secrets"): off until the user
  * ticks it, and saying what happens either way: kept in Windows Credential Manager, or for this session only.
  */
-export function RememberSecrets({ checked, onCheckedChange, mode }: RememberSecretsProps) {
-  const words = rememberWords(mode, checked);
+export function RememberSecrets({ checked, onCheckedChange, mode, subject }: RememberSecretsProps) {
+  const words = rememberWords(mode, checked, subject);
   return (
     <div data-setting="rememberSecrets">
       <Checkbox label={words.label} description={words.help} checked={checked} onCheckedChange={onCheckedChange} />

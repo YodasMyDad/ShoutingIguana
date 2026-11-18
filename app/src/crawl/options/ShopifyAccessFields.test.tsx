@@ -50,6 +50,38 @@ describe('the form’s Shopify crawler access', () => {
     expect(screen.getByText('Last time Shopify refused 8 pages. Add a signature before you start.')).toBeVisible();
   });
 
+  it('says the signature remembered for this shop is used, and when it ends, in place of last time’s refusals', () => {
+    const saved = { signatureInput: input(new Date(Date.UTC(2026, 8, 1))), signature: SIGNATURE };
+    const { rerender } = render(
+      <ShopifyAccessFields
+        value={{ domain: '', ...saved }}
+        onChange={() => undefined}
+        startUrl="https://shop.example/"
+        mode="simple"
+        now={NOW}
+        lastRefused={8}
+        saved={saved}
+      />,
+    );
+    expect(screen.getByText('Using your saved Shopify signature, ends 1 September 2026')).toBeVisible();
+    expect(screen.queryByText(/Last time Shopify refused/)).toBeNull();
+
+    // Another one pasted over it is no longer the saved one.
+    rerender(
+      <ShopifyAccessFields
+        value={{ domain: '', ...saved, signature: 'sig1=:FAKETESTONLYBBBB:' }}
+        onChange={() => undefined}
+        startUrl="https://shop.example/"
+        mode="simple"
+        now={NOW}
+        lastRefused={8}
+        saved={saved}
+      />,
+    );
+    expect(screen.queryByText(/Using your saved Shopify signature/)).toBeNull();
+    expect(screen.getByText('Last time Shopify refused 8 pages. Add a signature before you start.')).toBeVisible();
+  });
+
   it('warns in the signature’s last week, and refuses it once it has ended', () => {
     renderFields({ signatureInput: input(new Date(Date.UTC(2026, 5, 4))), signature: SIGNATURE });
     expect(screen.getByText('This signature ends in 3 days, on 4 June 2026')).toBeVisible();

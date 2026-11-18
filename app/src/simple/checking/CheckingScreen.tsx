@@ -7,6 +7,7 @@ import type { AnalysisEvent, CrawlListItem, CrawlStatus } from '../../api/types'
 import { continueCrawl, pauseOrResume, stopCrawl } from '../../crawl/actions';
 import { ShopifySteps } from '../../crawl/options/ShopifyAccessFields';
 import { crawlName } from '../../crawl/status';
+import { SignAndContinue } from '../../shopify/SignAndContinue';
 import { useElementWidth } from '../../grid/useElementWidth';
 import { announce } from '../../feedback/announce';
 import { copyText } from '../../lib/clipboard';
@@ -463,6 +464,8 @@ function ObstacleAction({
       );
     case 'copy':
       return <CopyButton label={action.label} text={action.text} />;
+    case 'shopifySign':
+      return <SignAndContinue crawlId={crawlId} host={action.host} label={action.label} />;
     case 'stop':
       return (
         <Button size="sm" icon={Square} command="crawl.stop" onClick={onStop}>

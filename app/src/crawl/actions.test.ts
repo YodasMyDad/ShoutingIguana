@@ -1,12 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api/client';
 import { setTransport } from '../api/transport';
+import type { CrawlOptions } from '../api/types';
 import type * as NotifyModule from '../feedback/notify';
 import { notifyError, notifyResult } from '../feedback/notify';
 import { getMode } from '../mode/mode';
 import { updateSettings } from '../settings/settingsStore';
 import { fakeSidecar, json, problem, testCrawlItem } from '../test/fakeSidecar';
-import { analyseCrawl, continueCrawl, pauseOrResume, saidWhileAnalysing, stopCrawl } from './actions';
+import { analyseCrawl, continueCrawl, pauseOrResume, saidWhileAnalysing, startCrawl, stopCrawl } from './actions';
+import { setSecretsStore } from './secrets';
 
 vi.mock('../feedback/notify', async (importOriginal) => ({
   ...(await importOriginal<typeof NotifyModule>()),
@@ -60,6 +62,36 @@ describe('the crawl actions’ failures', () => {
       id: `crawl:${ID}:analyse`,
       retry: expect.any(Function) as unknown,
     });
+  });
+});
+
+describe('a quick start of a Shopify store whose signature is remembered (lane shopify, phase B)', () => {
+  afterEach(() => setSecretsStore(null));
+
+  it('sends the signature remembered for its host, and none to any other site', async () => {
+    const signature = {
+      signatureInput:
+        'sig1=("@authority" "signature-agent");created=1767225600;expires=4102444800;keyid="fake-test-key"',
+      signature: 'sig1=:FAKETESTONLYAAAA:',
+    };
+    const kept = new Map([['shopify:shop.example', JSON.stringify(signature)]]);
+    setSecretsStore({ read: (key) => Promise.resolve(kept.get(key) ?? null), write: () => Promise.resolve() });
+    const sidecar = fakeSidecar([
+      ['GET', /^\/api\/crawl-options\/defaults$/, () => json({ options: { maxUrls: 500 }, speedPresets: [] })],
+      ['POST', /^\/api\/crawls$/, () => json(testCrawlItem())],
+    ]);
+    setTransport(sidecar);
+
+    await startCrawl('https://shop.example/collections/all');
+    await startCrawl('https://www.shop.example/');
+
+    const sent = sidecar.requests
+      .filter((request) => request.method === 'POST')
+      .map((request) => (request.body as { options: CrawlOptions }).options);
+    expect(sent[0]?.signatures).toEqual({ 'shop.example': signature });
+    expect(sent[0]?.maxUrls).toBe(500);
+    // www and the bare domain each have a signature of their own.
+    expect(sent[1]?.signatures ?? null).toBeNull();
   });
 });
 

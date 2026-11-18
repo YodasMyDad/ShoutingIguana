@@ -11,8 +11,12 @@
 //
 // In a browser (development, the end-to-end tests) there's no credential store: secrets live only while the page
 // does, ticked or not.
+//
+// A Shopify signature the user ticked Remember for is also kept for its store, by host (`shopify:<host>`, lane
+// shopify): the next crawl of that store fills it in until it ends, and then it's forgotten.
 import type { ContinueCrawlRequest, CrawlOptions, CrawlSignature } from '../api/types';
 import { isTauri } from '../lib/platform';
+import { signatureState } from './options/shopifySignature';
 
 export interface CrawlSecrets {
   /** The proxy's address with its user name and password. */
@@ -23,8 +27,14 @@ export interface CrawlSecrets {
   signatures?: Record<string, CrawlSignature>;
 }
 
-/** What the secrets are for: the crawl defaults, or one crawl. */
-export type SecretsKey = 'defaults' | `crawl:${string}`;
+/** What the secrets are for: the crawl defaults, one crawl, or a Shopify store's signature (by its host). */
+export type SecretsKey = 'defaults' | `crawl:${string}` | `shopify:${string}`;
+
+/** A Shopify signature remembered for its store, with when it ends (null when it doesn't say). */
+export interface SavedShopifySignature {
+  signature: CrawlSignature;
+  expires: Date | null;
+}
 
 export interface SecretsStore {
   read: (key: SecretsKey) => Promise<string | null>;
@@ -233,6 +243,53 @@ export async function keepCrawlSecrets(
   if (isEmpty(secrets)) return;
   const key: SecretsKey = `crawl:${crawlId}`;
   await keepSecrets(key, secrets, { remember: remember ?? (await isRemembered(key)) });
+}
+
+/**
+ * Remembers a Shopify signature for the host it's for (`shop.example`, as the engine keys signatures), so the next
+ * crawl of that store fills it in until it ends: in the credential store only, with the user's consent (Remember
+ * ticked), never in this session's memory, as one not remembered is the crawl's alone. Null forgets the host's.
+ * Never throws: a store that refuses is logged.
+ */
+export async function rememberShopifySignature(host: string, signature: CrawlSignature | null): Promise<void> {
+  if (!store) return;
+  try {
+    await store.write(`shopify:${host}`, signature ? JSON.stringify(signature) : null);
+  } catch (error) {
+    console.warn(`The credential store didn't keep the signature for ${host}`, error);
+  }
+}
+
+/**
+ * The signature remembered for a store's host, with when it ends; null when there's none (always, in a browser), or
+ * what's kept isn't a whole signature. One that has ended is forgotten, and null.
+ */
+export async function savedShopifySignature(host: string, now: Date): Promise<SavedShopifySignature | null> {
+  if (!store) return null;
+  try {
+    const text = await store.read(`shopify:${host}`);
+    if (!text) return null;
+    const signature = wholeSignatures({ [host]: JSON.parse(text) as unknown })[host];
+    if (!signature) return null;
+    const state = signatureState(signature, now);
+    if (state.kind === 'expired') {
+      await rememberShopifySignature(host, null);
+      return null;
+    }
+    return state.kind === 'ok' || state.kind === 'ending' ? { signature, expires: state.expires } : null;
+  } catch (error) {
+    console.warn(`The credential store didn't give the signature for ${host}`, error);
+    return null;
+  }
+}
+
+/** The signature remembered for a store's host, as a query: the new-crawl form fills it in. */
+export function savedShopifySignatureQuery(host: string | null) {
+  return {
+    queryKey: ['secrets', 'shopify', host] as const,
+    queryFn: () => (host === null ? Promise.resolve(null) : savedShopifySignature(host, new Date())),
+    staleTime: 0,
+  };
 }
 
 /**
