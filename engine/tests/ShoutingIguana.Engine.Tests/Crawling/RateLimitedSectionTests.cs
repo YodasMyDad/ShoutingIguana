@@ -71,6 +71,24 @@ public sealed class RateLimitedSectionTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// Paused time is no part of the 20 minutes a limited section may go on once the rest of the crawl is over: a crawl
+    /// paused for half an hour then, and resumed, still gives the section its 20 minutes of crawling, its last try as they
+    /// end, not at once on resuming.
+    /// </summary>
+    [Fact]
+    public async Task PausedTimeIsNoPartOfASectionsTwentyMinutes()
+    {
+        var pausedFor = TimeSpan.FromMinutes(30);
+        var run = await CrawlAShopWhoseProductsAreAlwaysRefusedAsync(products: 1, pauseOnceTheRestIsOver: pausedFor);
+
+        Assert.Equal(CrawlStatus.Completed, run.Summary.Status);
+        var restOverBy = run.Observer.FirstAt(progress => progress.Phase == CrawlPhase.Retrying);
+        var lastTry = run.Asked["/products/1"].Max();
+        Assert.True(lastTry >= restOverBy + pausedFor + SectionTrickle.GIVE_UP_AFTER - SLACK,
+            $"The last try came {lastTry - restOverBy} after the rest of the crawl, of which {pausedFor} was paused.");
+    }
+
+    /// <summary>
     /// One worker reads the shop: its first product page is refused, which limits the section, so the others wait their
     /// turn there and the first is asked again and again. None of the others is ever asked: each is stored as never asked,
     /// told apart from the one refused, and the notice says which is which, and how often the refused one was asked.
@@ -168,7 +186,8 @@ public sealed class RateLimitedSectionTests : IAsyncLifetime
     /// A shop whose product pages, linked from its home page, answer every request with 429 and a minute's Retry-After,
     /// read by one worker, so the first product page limits the section before any other is asked.
     /// </summary>
-    private async Task<ShopRun> CrawlAShopWhoseProductsAreAlwaysRefusedAsync(int products)
+    /// <param name="pauseOnceTheRestIsOver">Pauses the crawl for this long, on the fake clock, as only the section is left.</param>
+    private async Task<ShopRun> CrawlAShopWhoseProductsAreAlwaysRefusedAsync(int products, TimeSpan? pauseOnceTheRestIsOver = null)
     {
         var time = new FakeTimeProvider();
         ConcurrentDictionary<string, ConcurrentQueue<DateTimeOffset>> asked = new();
@@ -201,6 +220,24 @@ public sealed class RateLimitedSectionTests : IAsyncLifetime
         CrawlSummary summary;
         await using (var job = new CrawlEngine(NullLoggerFactory.Instance, time).Start(new CrawlRequest(Options(_server), path), observer))
         {
+            if (pauseOnceTheRestIsOver is { } paused)
+            {
+                await FakeClock.PumpUntilAsync(time, () => job.Progress.Phase == CrawlPhase.Retrying);
+                job.Pause();
+                await FakeClock.PumpUntilAsync(time, () => job.IsPaused);
+
+                // The run's clock stops as the session takes the pause in, a moment on: the first minute in seconds, so the
+                // fake clock doesn't run a minute past that moment in one step.
+                for (var waited = TimeSpan.Zero; waited < paused; waited += waited < TimeSpan.FromMinutes(1) ? TimeSpan.FromSeconds(1) : TimeSpan.FromMinutes(1))
+                {
+                    var step = waited < TimeSpan.FromMinutes(1) ? TimeSpan.FromSeconds(1) : TimeSpan.FromMinutes(1);
+                    time.Advance(step);
+                    await Task.Delay(waited < TimeSpan.FromMinutes(1) ? 1 : 5);
+                }
+
+                job.Resume();
+            }
+
             summary = await FakeClock.PumpAsync(time, job.Completion, TimeSpan.FromSeconds(1), realLimit: TimeSpan.FromMinutes(3));
         }
 

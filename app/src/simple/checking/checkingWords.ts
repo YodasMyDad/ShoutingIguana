@@ -17,6 +17,8 @@ export type SimpleAlertAction =
   | { kind: 'copy'; label: string; text: string }
   /** The top bar's Stop, here too. */
   | { kind: 'stop'; label: string }
+  /** A Shopify signature, added in Simple: the check stops, takes it, and continues (lane shopify). */
+  | { kind: 'shopifySign'; label: string; host: string }
   | { kind: 'continue'; label: string };
 
 export interface SimpleAlert {
@@ -111,7 +113,7 @@ function alertWords(
         ]
           .filter(Boolean)
           .join(' '),
-        actions: [{ kind: 'crawlSettings', label: 'Add a Shopify signature, in Advanced', focus: 'shopify' }],
+        actions: [{ kind: 'shopifySign', label: 'Add a Shopify signature', host: alert.data?.host ?? site }],
         shopifySteps: true,
       };
     }
@@ -120,7 +122,7 @@ function alertWords(
         kind: 'shopify',
         level: 'warning',
         text: `Shopify turned the check away even with the signature. ${simpleReason(alert.data?.reason ?? '')} They’ll be marked not checked, not broken.`,
-        actions: [{ kind: 'crawlSettings', label: 'Change the signature, in Advanced', focus: 'shopify' }],
+        actions: [{ kind: 'shopifySign', label: 'Change the signature', host: alert.data?.host ?? site }],
         shopifySteps: true,
       };
     case 'start-redirects-away': {

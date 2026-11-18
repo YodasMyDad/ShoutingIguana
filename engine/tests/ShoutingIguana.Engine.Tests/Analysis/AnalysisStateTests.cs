@@ -104,6 +104,8 @@ public sealed class AnalysisStateTests : IAsyncLifetime
             ALTER TABLE analysis DROP COLUMN score;
             ALTER TABLE analysis DROP COLUMN score_partial;
             ALTER TABLE analysis DROP COLUMN score_json;
+            ALTER TABLE issue_types DROP COLUMN platform;
+            ALTER TABLE issue_types DROP COLUMN platform_reason;
             DROP TABLE url_summary;
             DROP TABLE skipped_checks;
             """);
@@ -129,6 +131,7 @@ public sealed class AnalysisStateTests : IAsyncLifetime
         Assert.Equal(((SiteScore?)null, (NoScoreReason?)NoScoreReason.NotScored), (results.Score, results.NoScoreReason));
         Assert.Equal(FixFirstOrder.Of(counts), results.FixFirst);
         Assert.NotEmpty(results.FixFirst);
+        Assert.Empty(results.PlatformOwned);
 
         // Analysed by this engine, it gets what it lacked, and stands.
         var analysis = await AnalyseAsync(path);

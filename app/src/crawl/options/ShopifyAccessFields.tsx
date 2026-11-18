@@ -7,9 +7,11 @@ import { Callout } from '../../ui/Callout';
 import { TextField } from '../../ui/TextField';
 import {
   SHOPIFY_AGENT,
+  cleanPasted,
   endsOn,
   lastRefusedWords,
   hostOf,
+  savedSignatureWords,
   signatureHost,
   signatureState,
   startHostOf,
@@ -29,6 +31,8 @@ export interface ShopifyAccessFieldsProps {
   now?: Date | undefined;
   /** How many pages Shopify refused on the site's last crawl: said first, so a signature goes in before the start. */
   lastRefused?: number | null | undefined;
+  /** The signature remembered for the store: while the form holds it, that's said in place of last time's refusals. */
+  saved?: { signatureInput: string; signature: string } | null | undefined;
 }
 
 /** Shopify's way to a signature, in its own words: shown in both modes, and in the results' prompt. */
@@ -59,6 +63,7 @@ export function ShopifyAccessFields({
   onTouch,
   now,
   lastRefused,
+  saved,
 }: ShopifyAccessFieldsProps) {
   const id = useId();
   const state = signatureState(value, now ?? new Date());
@@ -70,10 +75,17 @@ export function ShopifyAccessFields({
   const fieldError = (field: 'signatureInput' | 'signature') =>
     state.kind === 'malformed' && state.field === field ? state.message : null;
   const simple = mode === 'simple';
+  const usingSaved =
+    saved?.signatureInput === cleanPasted(value.signatureInput, 'Signature-Input') &&
+    saved.signature === cleanPasted(value.signature, 'Signature');
 
   return (
     <div className="flex flex-col gap-4" data-setting="signatures">
-      {lastRefused ? (
+      {usingSaved ? (
+        <p className="text-13 text-text-secondary" data-saved-signature="">
+          {savedSignatureWords(state.kind === 'ok' || state.kind === 'ending' ? state.expires : null)}
+        </p>
+      ) : lastRefused ? (
         <Callout tone="warning" title={lastRefusedWords(lastRefused)}>
           {simple
             ? 'This site runs on Shopify, which turns away checks without a signature.'

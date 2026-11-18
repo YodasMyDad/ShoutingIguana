@@ -26,7 +26,8 @@ import {
 } from '../crawl/options/form';
 import { formErrors, useValidation, type FormErrors } from '../crawl/options/useValidation';
 import { listOf, savedDefaultsWords, secretsAgainWords } from '../crawl/options/words';
-import { rememberedSecretsQuery } from '../crawl/secrets';
+import { EMPTY_SIGNATURE, signaturesOf, startHostOf } from '../crawl/options/shopifySignature';
+import { rememberedSecretsQuery, rememberShopifySignature, savedShopifySignatureQuery } from '../crawl/secrets';
 import { ErrorState } from '../feedback/ErrorState';
 import { notifyError, notifyResult } from '../feedback/notify';
 import { useCommands } from '../keyboard/registry';
@@ -187,6 +188,32 @@ function NewCrawlForm({
     setStartErrors(null);
   };
 
+  // A signature remembered for the store (lane shopify): the form fills it in, ticked to remember, while it's for the
+  // address being checked, and says so in place of last time's refusals. Once per store: a cleared one stays cleared.
+  const startHost = startHostOf(withScheme(form.startUrl));
+  const saved = useQuery(savedShopifySignatureQuery(startHost)).data ?? null;
+  const [filled, setFilled] = useState<{ host: string; signatureInput: string; signature: string } | null>(null);
+  // Followed as the render goes, as React has state follow what it comes from (no effect, no extra render).
+  const holdsFilled =
+    filled?.signatureInput === form.signatures.signatureInput &&
+    filled.signature === form.signatures.signature &&
+    form.signatures.domain === '';
+  if (filled && filled.host !== startHost && holdsFilled) {
+    // Filled for another address: taken out again, as it's for that store only.
+    setForm({ ...form, signatures: EMPTY_SIGNATURE });
+    setFilled(null);
+  } else if (
+    saved &&
+    startHost !== null &&
+    filled?.host !== startHost &&
+    form.signatures.signatureInput === '' &&
+    form.signatures.signature === ''
+  ) {
+    setForm({ ...form, signatures: { domain: '', ...saved.signature } });
+    setFilled({ host: startHost, ...saved.signature });
+    setRemember(true);
+  }
+
   // The site's last crawl was a Shopify store that refused pages: its Shopify part opens by itself, and says so,
   // until it's folded.
   const lastRefused = useLastShopifyRefusal(form.startUrl);
@@ -222,6 +249,10 @@ function NewCrawlForm({
         { options: { ...options, startUrl: await startUrlFor(form.startUrl, options) } },
         { remember },
       );
+      // Remembered for its store too, so the next crawl of it fills it in; unticked, the store's is forgotten.
+      for (const [host, signature] of Object.entries(signaturesOf(form.signatures, withScheme(form.startUrl)))) {
+        await rememberShopifySignature(host, remember ? signature : null);
+      }
       void queryClient.invalidateQueries({ queryKey: ['secrets', 'remembered'] });
       // "Use these choices every time": once they've started a crawl, so a start the engine refuses changes nothing.
       if (mode === 'simple' && everyTime) {
@@ -379,6 +410,7 @@ function NewCrawlForm({
         autoFocusStart={!focus}
         remember={{ checked: remember, onCheckedChange: setRemember, mode }}
         shopifyLastRefused={lastRefused}
+        shopifySaved={saved?.signature ?? null}
       />
 
       {mode === 'simple' && hiddenErrors.length > 0 ? (

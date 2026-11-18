@@ -386,7 +386,8 @@ internal static class CrawlSchema
     /// <summary>
     /// Analysis results, created on first analysis and replaced as a whole by every later one. Severity and
     /// category are stored as text so the file explains itself in any SQLite browser. A file analysed by an earlier
-    /// engine gets what it lacks on its next analysis: new tables here, new columns from <see cref="ANALYSIS_COLUMNS"/>.
+    /// engine gets what it lacks on its next analysis: new tables here, new columns from <see cref="ANALYSIS_COLUMNS"/> and
+    /// <see cref="ISSUE_TYPES_COLUMNS"/>.
     /// </summary>
     public const string ANALYSIS = """
         -- Which engine ran the last analysis, and against what: the crawl's updated_at as it stood, the engine's analysis
@@ -426,7 +427,9 @@ internal static class CrawlSchema
         ) WITHOUT ROWID;
 
         -- Every check that ran, with how many URLs it flagged (0 = checked and clean). Checks the crawl can't
-        -- support, such as orphans on a depth-limited crawl, are left out.
+        -- support, such as orphans on a depth-limited crawl, are left out. platform and platform_reason name the platform
+        -- that set everything a check found, which the site's owner can't change, and why ("Shopify", "Set by Shopify..."):
+        -- null for a check of the site's own, and in every row an earlier engine wrote.
         CREATE TABLE IF NOT EXISTS issue_types (
             id TEXT PRIMARY KEY,
             category TEXT NOT NULL,
@@ -434,7 +437,9 @@ internal static class CrawlSchema
             title TEXT NOT NULL,
             description TEXT NOT NULL,
             fix TEXT NOT NULL,
-            url_count INTEGER NOT NULL
+            url_count INTEGER NOT NULL,
+            platform TEXT,
+            platform_reason TEXT
         ) WITHOUT ROWID;
 
         -- One row per flagged URL and issue. related_url_id is the other URL involved, when there is one: the broken link
@@ -608,6 +613,9 @@ internal static class CrawlSchema
     /// a read goes by the file's.
     /// </summary>
     public const int LINK_BLOCK_SHIFT = 14;
+
+    /// <summary>The <c>issue_types</c> columns added since the table was first created, which files analysed earlier lack.</summary>
+    public static readonly (string Name, string Type)[] ISSUE_TYPES_COLUMNS = [("platform", "TEXT"), ("platform_reason", "TEXT")];
 
     /// <summary>The <c>analysis</c> columns added since the table was first created, which files analysed earlier lack.</summary>
     public static readonly (string Name, string Type)[] ANALYSIS_COLUMNS =

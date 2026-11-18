@@ -49,7 +49,7 @@ public sealed class AnalysisFreshnessTests
     [Fact]
     public void AnAnalysisFromBeforeTheNewChecksIsOutOfDate()
     {
-        Assert.Equal(16, AnalysisFreshness.VERSION);
+        Assert.Equal(17, AnalysisFreshness.VERSION);
         Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 12 }, CRAWLED, new AnalysisSettings()));
     }
 
@@ -84,7 +84,17 @@ public sealed class AnalysisFreshnessTests
     public void AnAnalysisFromBeforeTheFilesAndRulesWereNamedIsOutOfDate()
     {
         Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 15 }, CRAWLED, new AnalysisSettings()));
-        Assert.Empty(AnalysisFreshness.Check(Current() with { AnalysisVersion = 16 }, CRAWLED, new AnalysisSettings()));
+    }
+
+    /// <summary>
+    /// Version 17 marks the checks of what a Shopify store's platform sets as Shopify's, out of the score and Fix first, and
+    /// says Shopify's reason and the fix in the note for the pages a store refused. An analysis 16 stored is out of date.
+    /// </summary>
+    [Fact]
+    public void AnAnalysisFromBeforeWhatShopifySetsIsOutOfDate()
+    {
+        Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 16 }, CRAWLED, new AnalysisSettings()));
+        Assert.Empty(AnalysisFreshness.Check(Current() with { AnalysisVersion = 17 }, CRAWLED, new AnalysisSettings()));
     }
 
     [Fact]

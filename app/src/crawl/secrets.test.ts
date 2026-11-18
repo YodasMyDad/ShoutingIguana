@@ -7,7 +7,9 @@ import {
   isRemembered,
   keepSecrets,
   keptSecrets,
+  rememberShopifySignature,
   resetSessionSecretsForTests,
+  savedShopifySignature,
   secretsOf,
   setSecretsStore,
   withSecrets,
@@ -144,6 +146,51 @@ describe('the secrets a crawl is given (gap 18: the credential store)', () => {
     // A store that can't be read remembers nothing it can show.
     setSecretsStore({ read: () => Promise.reject(new Error('locked')), write: () => Promise.resolve() });
     expect(await isRemembered('defaults')).toBe(false);
+  });
+});
+
+describe('a Shopify signature remembered for its store (lane shopify, phase B)', () => {
+  /** 1 January 2100, as the fake signature says it ends. */
+  const ENDS = 4_102_444_800;
+  const NOW = new Date('2026-11-18T12:00:00Z');
+  const signature = {
+    signatureInput: `sig1=("@authority" "signature-agent");created=1767225600;expires=${ENDS};keyid="fake-test-key";alg="ed25519";tag="web-bot-auth"`,
+    signature: 'sig1=:FAKETESTONLYAAAA:',
+  };
+
+  afterEach(() => {
+    setSecretsStore(null);
+    resetSessionSecretsForTests();
+  });
+
+  it('is kept by its host in the credential store, given back with when it ends, and forgotten when asked', async () => {
+    const store = memoryStore();
+    setSecretsStore(store);
+
+    await rememberShopifySignature('shop.example', signature);
+
+    expect([...store.kept.keys()]).toEqual(['shopify:shop.example']);
+    expect(await savedShopifySignature('shop.example', NOW)).toEqual({ signature, expires: new Date(ENDS * 1000) });
+    expect(await savedShopifySignature('other.example', NOW)).toBeNull();
+    await rememberShopifySignature('shop.example', null);
+    expect(store.kept.size).toBe(0);
+    expect(await savedShopifySignature('shop.example', NOW)).toBeNull();
+  });
+
+  it('is forgotten once it has ended, and gives back nothing it can’t read as a signature', async () => {
+    const store = memoryStore();
+    setSecretsStore(store);
+    await rememberShopifySignature('shop.example', signature);
+
+    expect(await savedShopifySignature('shop.example', new Date((ENDS + 1) * 1000))).toBeNull();
+    expect(store.kept.size).toBe(0);
+    store.kept.set('shopify:shop.example', JSON.stringify({ signatureInput: 'sig1=(', signature: 7 }));
+    expect(await savedShopifySignature('shop.example', NOW)).toBeNull();
+  });
+
+  it('is kept nowhere in a browser, which has no credential store: not even for this session', async () => {
+    await rememberShopifySignature('shop.example', signature);
+    expect(await savedShopifySignature('shop.example', NOW)).toBeNull();
   });
 });
 
