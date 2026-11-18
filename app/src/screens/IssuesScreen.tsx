@@ -65,6 +65,8 @@ import type { ChangeFilterSearch } from '../routing/search';
 import { periodLabel, type ComparedPeriod } from './compare/changeCell';
 import { useComparison } from './compare/useComparison';
 import type { CheckCompare } from './issues/CheckDetail';
+import { useThingsMoved } from './compare/useThingsMoved';
+import { thingsMovedWords } from './compare/thingsMoved';
 
 const ROUTE = '/crawls/$crawl/issues/{-$check}';
 
@@ -161,6 +163,7 @@ export function IssuesScreen() {
     return { ...tally, changed: tally.new + tally.fixed + tally.fewer + tally.more };
   }, [compared, hidden]);
   const listSort = checkSort === 'change' && !changes ? 'fixFirst' : checkSort;
+  const things = useThingsMoved(crawlId, comparison);
 
   const entries = useMemo(
     () => (checks.data && analysis.data ? checkEntries(checks.data, analysis.data, hidden) : null),
@@ -576,10 +579,19 @@ export function IssuesScreen() {
   const skeleton = useDelayedLoading(loading);
 
   const hiddenNote = hiddenChecks ? hiddenWords(hiddenChecks) : null;
+  const movedLine = things && period ? thingsMovedWords(things) : null;
   const subtitle = totals ? (
     <>
       <AnswerHeadline totals={totals} />
       {hiddenNote ? ` ${hiddenNote.count}${hiddenNote.rest}` : ''}
+      {/* The fix loop: what moved since the crawl compared with, in the headline's unit. */}
+      {movedLine && period ? (
+        <span className="mt-1 block">
+          <span className="text-text-secondary">{periodLabel(period)}: </span>
+          {movedLine.charAt(0).toLowerCase()}
+          {movedLine.slice(1)}
+        </span>
+      ) : null}
     </>
   ) : neverAnalysed ? (
     'No issues to show yet.'

@@ -24,6 +24,7 @@ import { CompareWithMenu } from './CompareWithMenu';
 import { periodWords } from './comparing';
 import { comparisonFigures, figureWords, type ComparisonFigures } from './comparisonFigures';
 import type { AdvancedComparison } from './useComparison';
+import { thingsMovedWords, type ThingsMoved } from './thingsMoved';
 
 /** The states a figure of the card can lead to: Issues narrowed to the checks in it. */
 export type ChangeFilter = Extract<CheckChangeState, 'new' | 'fixed' | 'fewer' | 'more'>;
@@ -46,9 +47,15 @@ export function ComparisonCard({
   linkTo = plain,
   pickerOpen,
   onPickerOpenChange,
+  things = null,
 }: {
   crawlId: string;
   comparison: AdvancedComparison;
+  /**
+   * What moved in the headline's unit (things to fix, things worth a look), from both analyses: the card then counts
+   * in it, as Overview's headline does. Null, it counts checks and issues (an analysis without its things counted).
+   */
+  things?: ThingsMoved | null | undefined;
   linkTo?: ChangeLink | undefined;
   pickerOpen?: boolean | undefined;
   onPickerOpenChange?: ((open: boolean) => void) | undefined;
@@ -112,6 +119,7 @@ export function ComparisonCard({
           comparison={shown}
           linkTo={linkTo}
           needsAnalysis={stage.kind === 'needsAnalysis'}
+          things={stage.kind === 'shown' ? things : null}
         />
       </CardBody>
     </Card>
@@ -123,11 +131,13 @@ function ComparisonBody({
   comparison,
   linkTo,
   needsAnalysis,
+  things,
 }: {
   crawlId: string;
   comparison: CrawlComparison;
   linkTo: ChangeLink;
   needsAnalysis: boolean;
+  things: ThingsMoved | null;
 }) {
   const hiddenIds = useHiddenChecks(crawlId);
   const catalog = useQuery(checksQuery()).data;
@@ -136,9 +146,20 @@ function ComparisonBody({
   const countsOnly = comparison.comparable === 'countsOnly';
   return (
     <>
-      <FigureRow figures={figures} />
+      <FigureRow figures={figures} things={things} />
+      {things ? (
+        <p className="text-14 font-medium text-text">
+          {thingsMovedWords(things) ?? 'Nothing moved among the things to fix or worth a look.'}
+        </p>
+      ) : null}
       <ChecksLine figures={figures} linkTo={linkTo} />
-      {figures.issues && !countsOnly ? <IssuesLine split={figures.issues} /> : null}
+      {figures.issues && !countsOnly ? (
+        things ? (
+          <NotCheckedLine count={figures.issues.notChecked} />
+        ) : (
+          <IssuesLine split={figures.issues} />
+        )
+      ) : null}
       {needsAnalysis ? (
         <AnalyseAgain
           otherId={comparison.with.id}
@@ -151,7 +172,7 @@ function ComparisonBody({
 }
 
 /** "Score 71 → 85 ▲14 │ Errors 3 → 2 ▼1 │ …": each its words for a screen reader, its glyph for the eye. */
-function FigureRow({ figures }: { figures: ComparisonFigures }) {
+function FigureRow({ figures, things }: { figures: ComparisonFigures; things: ThingsMoved | null }) {
   const items: { key: string; label: ReactNode; words: ReturnType<typeof figureWords>; note?: string }[] = [];
   if (figures.score) {
     items.push({
@@ -161,7 +182,14 @@ function FigureRow({ figures }: { figures: ComparisonFigures }) {
       ...(figures.score.partial ? { note: 'so far' } : {}),
     });
   }
-  for (const figure of figures.severities) {
+  // In the headline's unit when both analyses counted their things; else the checks of each severity.
+  if (things) {
+    items.push(
+      { key: 'fix', label: 'Things to fix', words: figureWords('Things to fix', things.fixThen, things.fixNow) },
+      { key: 'look', label: 'Worth a look', words: figureWords('Worth a look', things.lookThen, things.lookNow) },
+    );
+  }
+  for (const figure of things ? [] : figures.severities) {
     const word = `${outcomeWord(figure.severity)}s`;
     items.push({
       key: figure.severity,
@@ -238,6 +266,16 @@ function IssuesLine({ split }: { split: NonNullable<ComparisonFigures['issues']>
     <p className="text-13 text-text">
       <span className="text-text-secondary">Issues: </span>
       {parts.length === 0 ? 'none moved' : parts.map((part) => `${formatCount(part.count)} ${part.words}`).join(' · ')}
+    </p>
+  );
+}
+
+/** URLs flagged then this crawl couldn't judge: said apart, as never fixed. Nothing when there are none. */
+function NotCheckedLine({ count }: { count: number }) {
+  if (count === 0) return null;
+  return (
+    <p className="text-13 text-text-secondary">
+      {`${formatCountOf(count, 'URL')} flagged then ${count === 1 ? 'wasn’t' : 'weren’t'} checked this time: never counted as fixed.`}
     </p>
   );
 }

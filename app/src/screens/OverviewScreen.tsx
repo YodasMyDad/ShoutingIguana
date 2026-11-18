@@ -70,6 +70,7 @@ import { ComparisonCard, type ChangeLink } from './compare/ComparisonCard';
 import { CompareWithMenu } from './compare/CompareWithMenu';
 import { useComparison } from './compare/useComparison';
 import { RechecksCard } from './rechecks/RechecksCard';
+import { useThingsMoved } from './compare/useThingsMoved';
 
 const ROUTE = '/crawls/$crawl/overview';
 
@@ -123,6 +124,8 @@ export function OverviewScreen() {
 
   // The fix loop: what this crawl is compared with, and the comparison (docs/v2-fix-loop.md, Advanced, "Overview").
   const comparison = useComparison(crawlId);
+  // What moved, in the headline's unit (things), when both analyses counted theirs.
+  const things = useThingsMoved(crawlId, comparison);
   const shownComparison =
     comparison.stage.kind === 'shown' || comparison.stage.kind === 'needsAnalysis' ? comparison.stage.comparison : null;
   const changeOf = useCallback(
@@ -264,6 +267,7 @@ export function OverviewScreen() {
             linkTo={compareLink}
             pickerOpen={pickerOpen || askedToCompare}
             onPickerOpenChange={onPickerOpenChange}
+            things={things}
           />
         )}
         {analysing && !neverAnalysed ? (

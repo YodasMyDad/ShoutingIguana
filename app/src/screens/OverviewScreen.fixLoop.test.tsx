@@ -17,6 +17,8 @@ import { updateSettings } from '../settings/settingsStore';
 import { TEST_CRAWL_ID, fakeSidecar, json, testCrawlItem, type FakeRoute } from '../test/fakeSidecar';
 import { changesRoute, gardenComparison, recheckRecord, recheckRoutes } from '../test/fixLoopSidecar';
 import { overviewRoutes } from '../test/overviewSidecar';
+import { ISSUES_ANALYSIS } from '../test/issuesSidecar';
+import type { Analysis } from '../api/types';
 
 const EARLIER = 'a1b2c3d4e5f60718';
 const EARLIER_ITEM = testCrawlItem({ id: EARLIER, startedAt: '2026-10-17T09:00:00Z', score: null });
@@ -146,6 +148,45 @@ describe('Overview’s comparison (Advanced)', () => {
     );
     const menu = await screen.findByRole('menu');
     expect(within(menu).getByText('Compare with')).toBeVisible();
+  });
+});
+
+/**
+ * Both analyses with their things counted (the headline's unit): then 6 things for 4xx and 4 for 5xx (10 to fix) and 3
+ * worth a look; now 2 for 4xx (2 to fix), 6 worth a look. So about 8 things fixed, about 3 more worth a look.
+ */
+function thingsRoutes(): FakeRoute[] {
+  const withCauses = (causes: Record<string, number>): Analysis => ({
+    ...ISSUES_ANALYSIS,
+    counts: ISSUES_ANALYSIS.counts.map((entry) => ({ ...entry, causes: causes[entry.checkId] ?? 0 })),
+  });
+  const now = withCauses({ 'internal-client-error': 2, 'empty-anchor-text': 3, 'title-too-long': 3 });
+  const then: Analysis = {
+    ...withCauses({ 'internal-client-error': 6, 'internal-server-error': 4, 'title-too-long': 3 }),
+    counts: [
+      { checkId: 'internal-client-error', count: 9, causes: 6 },
+      { checkId: 'internal-server-error', count: 4, causes: 4 },
+      { checkId: 'empty-anchor-text', count: 0, causes: 0 },
+      { checkId: 'title-too-long', count: 3, causes: 3 },
+    ],
+  };
+  return [
+    ['GET', new RegExp(`^/api/crawls/${TEST_CRAWL_ID}/analysis$`), () => json(now)],
+    ['GET', new RegExp(`^/api/crawls/${EARLIER}/analysis$`), () => json(then)],
+  ];
+}
+
+describe('Overview’s comparison in the headline’s unit (Advanced)', () => {
+  it('counts what moved in things, as the headline does: things to fix and worth a look then and now', async () => {
+    await open({ previous: PREVIOUS }, [...thingsRoutes(), changesRoute(comparison()), ...recheckRoutes()]);
+    const card = within(await main().findByRole('region', { name: /^Since 17 Oct/ }));
+    expect(await card.findByText('About 8 things fixed · about 3 more worth a look')).toBeVisible();
+    expect(card.getByText('Things to fix: 10 then, 2 now, down 8')).toBeInTheDocument();
+    expect(card.getByText('Worth a look: 3 then, 6 now, up 3')).toBeInTheDocument();
+    // Not checks of each severity beside it: one unit.
+    expect(card.queryByText(/^Errors:/)).toBeNull();
+    // The checks' moves still lead to Issues.
+    expect(card.getByRole('link', { name: '1 fixed' })).toBeVisible();
   });
 });
 
