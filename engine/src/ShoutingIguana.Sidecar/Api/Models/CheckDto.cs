@@ -71,6 +71,12 @@ internal sealed record CheckDto(
     /// </summary>
     public IssueAbout? About { get; init; }
 
+    /// <summary>
+    /// The order the check's rows come in when none is asked for: importance (the most linked, or the most used, first) or
+    /// fewestLinksFirst (the pages links lead to least first: pages missing from the sitemaps).
+    /// </summary>
+    public IssueRowOrder RowOrder { get; init; }
+
     /// <param name="settings">The thresholds the plain words' limits are filled from.</param>
     public static CheckDto From(IssueDefinition check, AnalysisSettings settings)
     {
@@ -79,7 +85,7 @@ internal sealed record CheckDto(
             GridRequests.Grouping(check.Grouping), check.Subject, check.References, check.SiteWide, check.ReportedOnce,
             plain?.Title, plain?.What, plain?.Fix, plain?.Fixer, plain?.Passed, plain?.OneFix, plain?.LooksFor, check.Evidence, check.TargetFacts, check.Clears, check.Recheck)
         {
-            About = check.About
+            About = check.About, RowOrder = check.RowOrder
         };
     }
 }

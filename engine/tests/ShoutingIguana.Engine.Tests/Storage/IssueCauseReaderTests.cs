@@ -98,7 +98,11 @@ public sealed class IssueCauseReaderTests(GridCrawl crawl)
             List<ClearedCheck> expected = [];
             foreach (var other in IssueCatalog.Find(check)!.Clears.Where(Checks().Contains))
             {
-                var pages = Flagged(other).Count(issue => crawl.Reference.Targets[(other, issue.Url)].All(fixedUrls.Contains));
+                // A check of the URL itself (a sitemap entry that fails) clears where it's the fixed URL; one of the pages
+                // naming targets, where every target it names is fixed.
+                var pages = IssueCatalog.Find(other)!.References == IssueReferences.Targets
+                    ? Flagged(other).Count(issue => crawl.Reference.Targets[(other, issue.Url)].All(fixedUrls.Contains))
+                    : Flagged(other).Count(issue => fixedUrls.Contains(issue.Url));
                 if (pages > 0)
                 {
                     expected.Add(new ClearedCheck(other, pages, pages == Flagged(other).Count));
@@ -114,6 +118,26 @@ public sealed class IssueCauseReaderTests(GridCrawl crawl)
         Assert.Contains(causes["internal-client-error"].Clears, cleared => cleared.CheckId == "broken-internal-links");
         Assert.Contains(causes["internal-client-error"].Clears, cleared => cleared.CheckId == "social-image-broken" && cleared.Pages == 1);
         Assert.True(related > 0);
+    }
+
+    /// <summary>
+    /// The "can I fix it from this?" pass: a sitemap entry that fails with a server error is one job with the error, as
+    /// fixing the error makes the entry a working page again ("Fixed along with the problem above").
+    /// </summary>
+    [Fact]
+    public void FixingAServerErrorClearsTheSitemapEntryOfTheSameUrl()
+    {
+        Assert.Contains("sitemap-non-indexable", IssueCatalog.INTERNAL_SERVER_ERROR.Clears);
+        var copy = crawl.Copy();
+        Change(copy, """
+            INSERT OR IGNORE INTO issues (issue, url_id, detail, related_url_id)
+            SELECT 'internal-server-error', url_id, '500 Internal Server Error', NULL FROM issues WHERE issue = 'sitemap-non-indexable';
+            UPDATE issue_types SET url_count = (SELECT COUNT(*) FROM issues WHERE issue = 'internal-server-error') WHERE id = 'internal-server-error';
+            """);
+
+        var listed = Flagged("sitemap-non-indexable").Count;
+        var cleared = Assert.Single(IssueCauseReader.Read(copy)!.Checks["internal-server-error"].Clears, check => check.CheckId == "sitemap-non-indexable");
+        Assert.Equal(new ClearedCheck("sitemap-non-indexable", listed, All: true), cleared);
     }
 
     [Fact]

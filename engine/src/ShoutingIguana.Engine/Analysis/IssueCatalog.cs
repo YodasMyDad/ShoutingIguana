@@ -42,7 +42,7 @@ public static class IssueCatalog
         Recheck = [RecheckKind.Urls],
         Grouping = IssueGrouping.ResponseDetail,
         Evidence = ["type", "responseMs"],
-        Clears = BROKEN_TARGETS
+        Clears = [.. BROKEN_TARGETS, "sitemap-non-indexable"]
     };
 
     public static readonly IssueDefinition INTERNAL_UNREACHABLE = new("internal-unreachable", IssueCategory.ResponseCodes, IssueSeverity.Error,
@@ -920,7 +920,8 @@ public static class IssueCatalog
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/sitemaps/overview#do-i-need-a-sitemap",
         Subject = IssueSubject.Page,
         Recheck = [RecheckKind.Urls, RecheckKind.Sitemaps],
-        Grouping = IssueGrouping.None
+        Grouping = IssueGrouping.None,
+        Evidence = ["title", "depth"], RowOrder = IssueRowOrder.FewestLinksFirst
     };
 
     public static readonly IssueDefinition SITEMAP_ERROR = new("sitemap-error", IssueCategory.Sitemaps, IssueSeverity.Warning,

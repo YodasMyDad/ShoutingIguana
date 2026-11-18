@@ -61,8 +61,9 @@ public sealed record IssueDefinition(
     /// <summary>
     /// The checks a fix of this one also clears, by id: this check flags the URLs others refer to (<see cref="References"/>
     /// is <see cref="IssueReferences.Sources"/>: a 404, a redirect chain), and each of those flags the pages that refer to
-    /// them (<see cref="IssueReferences.Targets"/>: links to broken URLs, links to redirects). A fix of the URL, or of its
-    /// references as the fix says, clears the pages whose every target is one of this check's URLs; how many that is on a
+    /// them (<see cref="IssueReferences.Targets"/>: links to broken URLs, links to redirects), or flags the URL itself for
+    /// another reason (a sitemap entry that fails with a server error). A fix of the URL, or of its references as the fix
+    /// says, clears the pages whose every target is one of this check's URLs, and the URLs that are; how many that is on a
     /// crawl is counted from its issues (<c>Storage.IssueCauseReader</c>), never assumed. Only how the check is shown: it
     /// isn't stored with an analysis, nor part of <see cref="AnalysisFreshness.ChecksFingerprint"/>.
     /// </summary>
@@ -102,6 +103,9 @@ public sealed record IssueDefinition(
     /// (<see cref="IssueHit.Files"/>); null for a check of pages or URLs. Only how the check is shown.
     /// </summary>
     public IssueAbout? About { get; init; }
+
+    /// <summary>The order the check's rows come in when none is asked for. Only how the check is shown.</summary>
+    public IssueRowOrder RowOrder { get; init; }
 
     /// <summary>
     /// The check in plain words (<see cref="IssuePlainTexts"/>), or null while it has none, as written: a limit in them

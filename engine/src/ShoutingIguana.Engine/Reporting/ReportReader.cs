@@ -52,6 +52,9 @@ internal static class ReportReader
         var ran = IssueCatalog.All.Count(check => counts.ContainsKey(check.Id));
         var fixFirst = ReportSources.FixFirst(results);
 
+        // The files the checks of robots.txt and the sitemaps are about, of this analysis only.
+        var files = IssueFileReader.Read(crawlPath, export.Cache, cancellationToken) is { } stored && stored.AnalyzedAt == results.Analysis.AnalyzedAt ? stored.Checks : null;
+
         List<ReportProblem> problems = [];
         foreach (var id in fixFirst.Where(Lists))
         {
@@ -79,7 +82,10 @@ internal static class ReportReader
                         Named = targets.TryGetValue(row.UrlId, out var listedTargets) ? listedTargets.Targets : []
                     })
                 ],
-                oneFix));
+                oneFix)
+            {
+                Files = check.About is not null && files?.GetValueOrDefault(id) is { Count: > 0 } named ? [.. named.Select(file => file.Url)] : null
+            });
         }
 
         // Whatever was read above is one analysis's only if that analysis is still the last.

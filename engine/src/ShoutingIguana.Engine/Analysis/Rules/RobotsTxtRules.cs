@@ -63,7 +63,7 @@ internal sealed class RobotsTxtRules(UrlTable urls, IReadOnlyList<RobotsRecord> 
         {
             // An empty file is the commonest case, and says what to do: there's nothing in it yet to add the line to.
             var file = answered[0];
-            var empty = string.IsNullOrWhiteSpace(file.Content?.Replace("﻿", string.Empty, StringComparison.Ordinal));
+            var empty = string.IsNullOrWhiteSpace(file.Content?.Replace("\uFEFF", string.Empty, StringComparison.Ordinal));
             yield return new IssueHit(IssueCatalog.ROBOTS_TXT_NO_SITEMAP, urls.HomeId,
                 $"{file.Origin}/robots.txt {(empty ? "is empty, so it has" : "has")} no Sitemap: line; the sitemap was found at {found.Url}")
             {

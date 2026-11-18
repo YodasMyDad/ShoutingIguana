@@ -3,6 +3,7 @@ using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Analysis.Rules;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Fetching.Models;
+using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Engine.Storage.Models;
 using ShoutingIguana.Engine.Urls;
 
@@ -105,7 +106,7 @@ public sealed class SiteFileCheckTests
             .Finish().Where(hit => hit.Issue == IssueCatalog.ROBOTS_TXT_NO_SITEMAP).Select(hit => hit.Detail).SingleOrDefault();
 
         Assert.Equal("https://example.com/robots.txt is empty, so it has no Sitemap: line; the sitemap was found at https://example.com/sitemap.xml", Detail(string.Empty));
-        Assert.Equal("https://example.com/robots.txt is empty, so it has no Sitemap: line; the sitemap was found at https://example.com/sitemap.xml", Detail(" \r\n﻿\n"));
+        Assert.Equal("https://example.com/robots.txt is empty, so it has no Sitemap: line; the sitemap was found at https://example.com/sitemap.xml", Detail(" \r\n\uFEFF\n"));
         Assert.Equal("https://example.com/robots.txt has no Sitemap: line; the sitemap was found at https://example.com/sitemap.xml", Detail("User-agent: *\nDisallow:\n"));
     }
 
@@ -170,6 +171,22 @@ public sealed class SiteFileCheckTests
 
         // Refused because robots.txt couldn't be read still says so.
         Assert.Equal("robots.txt unreachable: 503 Service Unavailable", hits[down]);
+    }
+
+    [Fact]
+    public void PagesMissingFromTheSitemapsComeFewestLinksFirstWithTheirTitleAndDepth()
+    {
+        // A sitemap helps the pages links don't lead to: a product linked from one page, not the policy every footer links.
+        Assert.Equal(IssueRowOrder.FewestLinksFirst, IssueCatalog.NOT_IN_SITEMAP.RowOrder);
+        Assert.Equal(
+            [new UrlSort("inlinks"), new UrlSort("wordCount", Descending: true), new UrlSort("url")],
+            IssueGroupReader.ImportanceOrder(IssueCatalog.NOT_IN_SITEMAP, summary: true));
+        Assert.Equal(["title", "depth"], IssueCatalog.NOT_IN_SITEMAP.Evidence);
+
+        // Every other check keeps its order by importance.
+        Assert.All(IssueCatalog.All.Where(check => check != IssueCatalog.NOT_IN_SITEMAP), check => Assert.Equal(IssueRowOrder.Importance, check.RowOrder));
+        Assert.Equal([new UrlSort("inlinks", Descending: true), new UrlSort("depth"), new UrlSort("url")],
+            IssueGroupReader.ImportanceOrder(IssueCatalog.CANONICAL_MISSING, summary: true));
     }
 
     private static StoredSitemap Read(string url, int urls) => new(url, 200, false, urls, null) { ListedSitemaps = 0 };
