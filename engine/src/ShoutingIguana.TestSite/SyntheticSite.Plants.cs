@@ -744,6 +744,16 @@ public sealed partial class SyntheticSite
         {
             Content = page.Content + $"<div itemscope itemtype=\"https://schema.org/Product\"><p itemprop=\"name\">Microdata product</p><meta itemprop=\"image\" content=\"{_base}/img/1.jpg\"></div>"
         });
+        // Nothing to find: a complete Product whose offer gives its values in content attributes on spans and a div, as
+        // schema.org's own examples do, while the text shows the shopper something else (the old price and the new).
+        Page("microdata-content", "Microdata content values", [], page => page with
+        {
+            Content = page.Content + $"<div itemscope itemtype=\"https://schema.org/Product\"><p itemprop=\"name\">Planted bench</p>" +
+                      $"<meta itemprop=\"image\" content=\"{_base}/img/1.jpg\"><div itemprop=\"offers\" itemscope itemtype=\"https://schema.org/Offer\">" +
+                      "<span itemprop=\"priceCurrency\" content=\"GBP\">£</span><div itemprop=\"price\" content=\"9.1\">£15.15 £9.10</div>" +
+                      "<span itemprop=\"priceValidUntil\" content=\"2099-12-31\">until Christmas</span>" +
+                      "<span itemprop=\"availability\" content=\"https://schema.org/InStock\">In stock</span></div></div>"
+        });
 
         // A schema.org subtype is held to its parent's requirements: a Restaurant is a LocalBusiness, a MusicEvent an Event.
         Page("jsonld-subtypes", "Incomplete subtype markup", ["structured-data-missing-required"], page => page with
