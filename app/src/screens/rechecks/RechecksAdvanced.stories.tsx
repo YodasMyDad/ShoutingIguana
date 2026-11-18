@@ -4,6 +4,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { RouterContextProvider, createMemoryHistory, createRootRoute, createRouter } from '@tanstack/react-router';
+import { Copy, EyeOff } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import type { Recheck, RecheckPlan } from '../../api/fixLoop';
 import type { Check } from '../../api/types';
@@ -15,6 +16,8 @@ import { recheckEvent, recheckPlan, recheckRecord, recheckResult, recheckRoutes 
 import { message } from '../../test/overviewSidecar';
 import { ownSidecar } from '../../test/ScreenStory';
 import { StateRow, StoryFrame, StorySection } from '../../test/StoryFrame';
+import { Button } from '../../ui/Button';
+import { IconButton } from '../../ui/IconButton';
 import { RecheckBanner } from './RecheckBanner';
 import { RecheckControl } from './RecheckControl';
 import { RechecksCard } from './RechecksCard';
@@ -63,6 +66,14 @@ const controlStory = (plan: RecheckPlan, check: Check = CHECK, selection?: numbe
             check={check}
             group={{ detail: null, relatedUrlId: 812, urls: 3 }}
             selection={selection}
+            actions={
+              <>
+                <Button size="sm" icon={Copy}>
+                  Copy URLs
+                </Button>
+                <IconButton size="sm" icon={EyeOff} label="Hide this check" />
+              </>
+            }
           />
         </div>
       </StorySection>

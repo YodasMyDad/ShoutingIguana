@@ -532,6 +532,9 @@
   --licence-list-height: 360px;
   --measure-text: 62ch; /* the longest line of explaining text */
   --measure-explain: 46ch;
+  /* A note under a row of actions (Recheck's plan in a check's head, or why it can't run): right-aligned beneath them,
+     it wraps at this rather than widen the head and push the actions apart. */
+  --measure-note: 46ch;
   --opacity-disabled: 0.5;
   --opacity-zero: 0.4; /* a severity mark beside a count of 0 */
   --opacity-track: 0.25; /* a spinner's track */

@@ -139,6 +139,24 @@ export function CheckDetail({
   const cleared = change ? (change.fixed ?? 0) + (change.gone ?? 0) : 0;
   const notChecked = change?.notChecked ?? 0;
   const fixedTab = compare !== null && compare.marksRows && (cleared > 0 || notChecked > 0);
+  const hideControl =
+    onHideScopeChange && !entry.hidden ? (
+      // Hidden in this crawl only, or in every crawl: the check is the same, the reason to hide it may not be.
+      <DropdownMenu align="end" trigger={<IconButton size="sm" icon={EyeOff} label="Hide this check" />}>
+        <MenuItem shortcut="mod+shift+h" onSelect={() => onHideScopeChange('crawl')}>
+          Hide in this crawl
+        </MenuItem>
+        <MenuItem onSelect={() => onHideScopeChange('all')}>Hide in every crawl</MenuItem>
+      </DropdownMenu>
+    ) : (
+      <IconButton
+        size="sm"
+        icon={entry.hidden ? Eye : EyeOff}
+        label={entry.hidden ? showCheckWords(hiddenScope ?? null) : 'Hide this check'}
+        command="issues.hideCheck"
+        onClick={() => onHideChange(!entry.hidden)}
+      />
+    );
 
   return (
     <article aria-labelledby={titleId} className="flex flex-col">
@@ -170,29 +188,24 @@ export function CheckDetail({
           >
             {check.title}
           </h2>
-          <div className="flex max-w-full min-w-0 flex-wrap items-start justify-end gap-2">
-            {found ? <RecheckControl crawlId={crawlId} check={check} group={recheckGroup} /> : null}
+          {/* One row of actions, Recheck's first, at the head's end; Recheck's line goes under them all. */}
+          <div className="ml-auto max-w-full min-w-0">
             {found ? (
-              <Button size="sm" icon={Copy} command="issues.copyUrls" loading={copying} onClick={onCopy}>
-                Copy URLs
-              </Button>
-            ) : null}
-            {onHideScopeChange && !entry.hidden ? (
-              // Hidden in this crawl only, or in every crawl: the check is the same, the reason to hide it may not be.
-              <DropdownMenu align="end" trigger={<IconButton size="sm" icon={EyeOff} label="Hide this check" />}>
-                <MenuItem shortcut="mod+shift+h" onSelect={() => onHideScopeChange('crawl')}>
-                  Hide in this crawl
-                </MenuItem>
-                <MenuItem onSelect={() => onHideScopeChange('all')}>Hide in every crawl</MenuItem>
-              </DropdownMenu>
-            ) : (
-              <IconButton
-                size="sm"
-                icon={entry.hidden ? Eye : EyeOff}
-                label={entry.hidden ? showCheckWords(hiddenScope ?? null) : 'Hide this check'}
-                command="issues.hideCheck"
-                onClick={() => onHideChange(!entry.hidden)}
+              <RecheckControl
+                crawlId={crawlId}
+                check={check}
+                group={recheckGroup}
+                actions={
+                  <>
+                    <Button size="sm" icon={Copy} command="issues.copyUrls" loading={copying} onClick={onCopy}>
+                      Copy URLs
+                    </Button>
+                    {hideControl}
+                  </>
+                }
               />
+            ) : (
+              <div className="flex flex-wrap items-center justify-end gap-2">{hideControl}</div>
             )}
           </div>
         </div>
