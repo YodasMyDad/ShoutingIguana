@@ -3,7 +3,10 @@ import { useCallback, useMemo } from 'react';
 import { api } from '../../api/client';
 import type { GridSort, IssueRow } from '../../api/grids';
 import { queryKeys, urlColumnsQuery } from '../../api/queries';
-import type { Check } from '../../api/types';
+import type { Check, CheckFile } from '../../api/types';
+import { robotsOriginOf } from '../../inspector/placeLinks';
+import { formatCount } from '../../lib/format';
+import { TextLink } from '../../ui/TextLink';
 import { affectedWords } from '../../crawl/checkSubject';
 import { ErrorState } from '../../feedback/ErrorState';
 import { GridCore } from '../../grid/GridCore';
@@ -17,7 +20,7 @@ import { usePagedRows } from '../../grid/usePagedRows';
 import { Url } from '../../ui/Url';
 import { linksOfUrl } from '../links/linkPlaces';
 import { urlGridColumns } from '../urls/urlColumns';
-import { flatRowColumns } from './evidenceColumns';
+import { flatRowColumns, wrappedLines, wrapsText } from './evidenceColumns';
 import { IssuePageMenu } from './IssuePageMenu';
 import { WhereFoundLine } from './WhereFoundLine';
 import { referencesOf } from './whereFound';
@@ -52,10 +55,24 @@ const TIGHT_DETAIL_WIDTH = 180;
 const TIGHT_URL_WIDTH = 160;
 const TIGHT_WORDS_WIDTH = 120;
 const FRAME_SLACK = 24;
+/** "Open in Sitemaps", "Open robots.txt": a file's way to its own screen. */
+const OPEN_FILE_WIDTH = 160;
+/** A figure's column is at least as wide as its header's words ("Used on pages"), never cut to "sed on pages". */
+const HEADER_CHAR_WIDTH = 7.5;
+const HEADER_SLACK = 40;
+/** A wrapped line's height, and the row's room above and below its lines. */
+const LINE_HEIGHT = 18;
+const LINE_HEIGHT_COMFORTABLE = 20;
+const ROW_PADDING = 12;
 
 export interface IssueRowsGridProps {
   crawlId: string;
   check: Check;
+  /**
+   * For a check of the site's own files (`about`): the robots.txt or sitemaps it found at fault, named in place of the
+   * home page its issue is reported on, with the way to them. Null or left out: the row's own URL.
+   */
+  files?: readonly CheckFile[] | null | undefined;
   /** The check's flagged URLs: how tall the grid is before its first page. */
   total: number;
   siteOrigin: string | null;
@@ -78,6 +95,7 @@ export interface IssueRowsGridProps {
 export function IssueRowsGrid({
   crawlId,
   check,
+  files = null,
   total,
   siteOrigin,
   sort,
@@ -87,11 +105,26 @@ export function IssueRowsGrid({
   compare = null,
 }: IssueRowsGridProps) {
   const compareWith = compare?.compareWith ?? null;
-  const { rowHeight, headerHeight } = useGridMetrics();
+  const metrics = useGridMetrics();
+  const { headerHeight } = metrics;
   const [measure, width] = useElementWidth();
   // The URL, the detail, the check's evidence and what orders the rows: one key per set, so a check's own are cached.
-  const asked = useMemo(() => flatRowColumns(check), [check]);
+  // A check of the site's files names them: the home page's own figures (its links) say nothing of them.
+  const asked = useMemo(
+    () => (files ? flatRowColumns(check).filter((id) => id !== 'inlinks' && id !== 'usedOn') : flatRowColumns(check)),
+    [check, files],
+  );
   const extra = useMemo(() => asked.filter((id) => id !== 'url' && id !== 'detail'), [asked]);
+  // The text an owner has to change (a title, a description) wraps over two or three lines rather than being cut, in
+  // rows as tall as that takes.
+  const lines = wrappedLines(extra);
+  const rowHeight =
+    lines > 1
+      ? Math.max(
+          metrics.rowHeight,
+          lines * (metrics.rowHeight >= 40 ? LINE_HEIGHT_COMFORTABLE : LINE_HEIGHT) + ROW_PADDING,
+        )
+      : metrics.rowHeight;
   const catalogue = useQuery(urlColumnsQuery()).data;
   const queryKey = useMemo(
     () => [...queryKeys.issueRowsGrid(crawlId, check.id, sort), asked, compareWith ?? 'none'] as const,
@@ -121,21 +154,44 @@ export function IssueRowsGrid({
   const menuRow = rowMenu.state?.menu.row;
 
   const references = referencesOf(check);
+  // A check whose rows say nothing in their detail (the URL is the fault) has no Detail column of dashes.
+  const noDetail = rows.firstPage?.rows.every((row) => !row.detail) === true;
   const whereWidth = references === 'none' ? 0 : WHERE_WIDTH;
   // The evidence's columns, drawn as the URL grid draws them: a number right-aligned, a chain hop by hop.
   const drawn = useMemo<GridColumn<IssueRow>[]>(
-    () => urlGridColumns(extra, catalogue, { siteOrigin, fullUrls: false, sort, crawling: false }),
-    [extra, catalogue, siteOrigin, sort],
+    () =>
+      urlGridColumns(extra, catalogue, { siteOrigin, fullUrls: false, sort, crawling: false }).map((column) => {
+        if (column.numeric) {
+          const room = Math.ceil(column.header.length * HEADER_CHAR_WIDTH + HEADER_SLACK);
+          return { ...column, width: Math.max(column.width, room) };
+        }
+        if (!wrapsText(column.id)) return column;
+        return {
+          ...column,
+          cell: (row: IssueRow) => {
+            const text = column.text(row);
+            return text ? (
+              <span className={`block whitespace-normal ${lines > 2 ? 'line-clamp-3' : 'line-clamp-2'}`} title={text}>
+                {text}
+              </span>
+            ) : (
+              <span className="text-text-muted">–</span>
+            );
+          },
+        };
+      }),
+    [extra, catalogue, siteOrigin, sort, lines],
   );
   // The room: the detail, the figures and the where line keep their widths; the URL and the evidence's words (a
   // title, a chain) share the rest, so a narrow window keeps every figure in view rather than scrolling to it.
   const words = drawn.filter((column) => !column.numeric).length;
   const fixed = drawn.filter((column) => column.numeric).reduce((sum, column) => sum + column.width, 0);
-  const available = (width ?? 720) - fixed - whereWidth - (compare ? CHANGE_WIDTH : 0) - FRAME_SLACK;
+  const available =
+    (width ?? 720) - fixed - whereWidth - (compare ? CHANGE_WIDTH : 0) - (files ? OPEN_FILE_WIDTH : 0) - FRAME_SLACK;
   // Where the usual widths don't fit, the words take less: a figure is never scrolled out of view for them.
   const usual = extra.length > 1 ? DETAIL_WITH_EVIDENCE_WIDTH : DETAIL_WIDTH;
   const tight = words > 0 && available < usual + MIN_SHARED_URL_WIDTH + MIN_WORDS_WIDTH * words;
-  const detailWidth = tight ? TIGHT_DETAIL_WIDTH : usual;
+  const detailWidth = noDetail ? 0 : tight ? TIGHT_DETAIL_WIDTH : usual;
   const room = available - detailWidth;
   const urlWidth =
     words > 0
@@ -153,25 +209,40 @@ export function IssueRowsGrid({
       return entry ? { sort: entry.desc ? ('descending' as const) : ('ascending' as const) } : {};
     };
     return [
-      {
-        id: 'url',
-        header: 'URL',
-        width: urlWidth,
-        sortable: true,
-        ...sorted('url'),
-        cell: (row) => <Url url={row.url ?? ''} siteOrigin={siteOrigin} copyable={false} tabbable={false} />,
-        text: (row) => row.url ?? '',
-      },
-      {
-        id: 'detail',
-        header: 'Detail',
-        width: detailWidth,
-        sortable: true,
-        ...sorted('detail'),
-        cell: (row) => <span title={row.detail ?? undefined}>{row.detail ?? '–'}</span>,
-        text: (row) => row.detail ?? '',
-      },
+      files?.[0]
+        ? {
+            id: 'url',
+            header: files[0].sitemapId === null ? 'robots.txt' : 'Sitemap',
+            width: urlWidth,
+            cell: () => <FileCell files={files} siteOrigin={siteOrigin} />,
+            text: () => files.map((file) => file.url).join(' '),
+          }
+        : {
+            id: 'url',
+            header: 'URL',
+            width: urlWidth,
+            sortable: true,
+            ...sorted('url'),
+            cell: (row: IssueRow) => (
+              <Url url={row.url ?? ''} siteOrigin={siteOrigin} copyable={false} tabbable={false} />
+            ),
+            text: (row: IssueRow) => row.url ?? '',
+          },
+      ...(noDetail
+        ? []
+        : [
+            {
+              id: 'detail',
+              header: 'Detail',
+              width: detailWidth,
+              sortable: true,
+              ...sorted('detail'),
+              cell: (row: IssueRow) => <span title={row.detail ?? undefined}>{row.detail ?? '–'}</span>,
+              text: (row: IssueRow) => row.detail ?? '',
+            },
+          ]),
       ...evidenceColumns,
+      ...(files?.[0] ? [openFileColumn(crawlId, files[0])] : []),
       // The fix loop: how the row stood in the crawl compared with (Still, New, New URL, Not compared).
       ...(compare
         ? [
@@ -209,7 +280,7 @@ export function IssueRowsGrid({
             },
           ]),
     ];
-  }, [sort, urlWidth, detailWidth, evidenceColumns, siteOrigin, references, crawlId, check, compare]);
+  }, [sort, urlWidth, detailWidth, noDetail, evidenceColumns, siteOrigin, references, crawlId, check, compare, files]);
   // The columns as the user laid them out (resized, moved, pinned), kept for this grid with the preferences.
   const laid = useColumnLayout('issues.rows', columns);
 
@@ -264,4 +335,43 @@ export function IssueRowsGrid({
       />
     </div>
   );
+}
+
+/** The first file a check of the site's files found at fault, and how many more: "/sitemap.xml and 2 more". */
+function FileCell({ files, siteOrigin }: { files: readonly CheckFile[]; siteOrigin: string | null }) {
+  const [first] = files;
+  if (!first) return null;
+  return (
+    <span className="flex min-w-0 items-center gap-2">
+      <Url url={first.url} siteOrigin={siteOrigin} copyable={false} tabbable={false} className="min-w-0 shrink" />
+      {files.length > 1 ? (
+        <span className="shrink-0 text-text-muted">and {formatCount(files.length - 1)} more</span>
+      ) : null}
+    </span>
+  );
+}
+
+/** The way to a file's own screen: the sitemap in Sitemaps, the robots.txt of its origin. */
+function openFileColumn(crawlId: string, file: CheckFile): GridColumn<IssueRow> {
+  const origin = file.sitemapId === null ? robotsOriginOf(file.url) : null;
+  return {
+    id: 'open',
+    header: 'Open',
+    width: OPEN_FILE_WIDTH,
+    cell: () =>
+      file.sitemapId !== null ? (
+        <TextLink
+          to="/crawls/$crawl/sitemaps/{-$sitemap}"
+          params={{ crawl: crawlId, sitemap: String(file.sitemapId) }}
+          tabIndex={-1}
+        >
+          Open in Sitemaps
+        </TextLink>
+      ) : origin ? (
+        <TextLink to="/crawls/$crawl/robots/{-$origin}" params={{ crawl: crawlId, origin }} search={{}} tabIndex={-1}>
+          Open robots.txt
+        </TextLink>
+      ) : null,
+    text: () => '',
+  };
 }
