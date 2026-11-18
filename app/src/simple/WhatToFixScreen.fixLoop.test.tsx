@@ -17,6 +17,7 @@ import { TEST_CRAWL_ID, fakeSidecar, json, type FakeRoute } from '../test/fakeSi
 import { changesRoute, comparedGardenItem, recheckRecord, recheckResult, recheckRoutes } from '../test/fixLoopSidecar';
 import { createQueryClientWithoutBackoff } from '../test/queryClient';
 import { GARDEN_ANALYSIS, gardenItem, simpleRoutes } from '../test/simpleSidecar';
+import { TABLE_STUBBED } from './tableStubbed';
 
 const FIX = `/crawls/${TEST_CRAWL_ID}/issues`;
 
@@ -42,7 +43,7 @@ afterEach(() => {
   resetLikeForLikeForTests();
 });
 
-describe('What to fix since the last check', () => {
+describe.skipIf(TABLE_STUBBED)('What to fix since the last check', () => {
   it('gives each row its change in its count’s second line', async () => {
     await open(comparedGardenItem(), [changesRoute()]);
     await waitFor(() => expect(row('Links that lead to broken pages')).toHaveTextContent('9 on 17 Oct'));

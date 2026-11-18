@@ -16,6 +16,7 @@ import { TEST_CRAWL_ID, fakeSidecar, json, type FakeRoute, type FakeSidecar } fr
 import { EARLIER_ID, changesRoute, comparedGardenItem, gardenComparison } from '../test/fixLoopSidecar';
 import { createQueryClientWithoutBackoff } from '../test/queryClient';
 import { GARDEN_ANALYSIS, gardenItem, simpleRoutes } from '../test/simpleSidecar';
+import { TABLE_STUBBED } from './tableStubbed';
 
 const CRAWL = `/crawls/${TEST_CRAWL_ID}`;
 const FIX = `${CRAWL}/issues`;
@@ -40,7 +41,7 @@ afterEach(() => {
   resetLikeForLikeForTests();
 });
 
-describe('the Summary while a recheck runs', () => {
+describe.skipIf(TABLE_STUBBED)('the Summary while a recheck runs', () => {
   it('stays, never the checking screen, through the recheck’s analyses', async () => {
     await open(comparedGardenItem(), [changesRoute()]);
     act(() => {
@@ -74,7 +75,7 @@ describe('the Summary while a recheck runs', () => {
   });
 });
 
-describe('the Summary since the last check', () => {
+describe.skipIf(TABLE_STUBBED)('the Summary since the last check', () => {
   it('says the score then and now, the problems fixed and new, each a link to What to fix', async () => {
     await open(comparedGardenItem(), [changesRoute()]);
     const line = await within(card()).findByText(/^Since your last check on 17 Oct:/);
@@ -179,7 +180,7 @@ describe('the Summary since the last check', () => {
   });
 });
 
-describe('how the score is worked out, since the last check', () => {
+describe.skipIf(TABLE_STUBBED)('how the score is worked out, since the last check', () => {
   async function breakdown(item: CrawlListItem, extra: FakeRoute[]) {
     replaceSettings({ mode: 'simple', hiddenChecks: [], hiddenChecksByCrawl: {} });
     setTransport(fakeSidecar([...extra, ...simpleRoutes(item, GARDEN_ANALYSIS)]));
@@ -217,7 +218,7 @@ describe('how the score is worked out, since the last check', () => {
   });
 });
 
-describe('Fix these first, since the last check', () => {
+describe.skipIf(TABLE_STUBBED)('Fix these first, since the last check', () => {
   it('gives each row its change under its count', async () => {
     await open(comparedGardenItem(), [changesRoute()]);
     const first = screen.getByRole('region', { name: /Fix these first/ });

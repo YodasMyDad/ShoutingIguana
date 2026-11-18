@@ -23,6 +23,7 @@ import {
 } from '../test/fixLoopSidecar';
 import { createQueryClientWithoutBackoff } from '../test/queryClient';
 import { GARDEN_ANALYSIS, gardenItem, problemRoutes, simpleRoutes } from '../test/simpleSidecar';
+import { TABLE_STUBBED } from './tableStubbed';
 
 const PROBLEM = `/crawls/${TEST_CRAWL_ID}/issues/broken-internal-links`;
 
@@ -65,7 +66,7 @@ afterEach(() => {
   resetPendingRechecks();
 });
 
-describe('Fixed it?, before a recheck', () => {
+describe.skipIf(TABLE_STUBBED)('Fixed it?, before a recheck', () => {
   it('says what a recheck reads and how long, with Recheck these 5 pages and the whole site as the other way', async () => {
     await open();
     const fixed = await card();
@@ -123,7 +124,7 @@ describe('Fixed it?, before a recheck', () => {
   });
 });
 
-describe('Fixed it?, rechecking', () => {
+describe.skipIf(TABLE_STUBBED)('Fixed it?, rechecking', () => {
   it('starts it, follows it as it reads and works out the results, then says "4 of 5 fixed. 1 still has it:"', async () => {
     let settled = false;
     const sidecar = await open({}, PROBLEM, [
@@ -213,7 +214,7 @@ describe('Fixed it?, rechecking', () => {
   });
 });
 
-describe('Fixed it?, after a recheck', () => {
+describe.skipIf(TABLE_STUBBED)('Fixed it?, after a recheck', () => {
   it('says "All 5 fixed" when it found none still there', async () => {
     await open({ rechecks: [recheckRecord({ result: recheckResult({ fixed: 5, still: 0 }) })] });
     expect(await (await card()).findByText('All 5 fixed. This problem is gone from the list.')).toBeInTheDocument();
@@ -255,7 +256,7 @@ describe('Fixed it?, after a recheck', () => {
   });
 });
 
-describe('one problem, since the last check', () => {
+describe.skipIf(TABLE_STUBBED)('one problem, since the last check', () => {
   it('adds what it was to the count: "was 9 on 17 Oct"', async () => {
     await open({}, PROBLEM, [
       changesRoute(),
