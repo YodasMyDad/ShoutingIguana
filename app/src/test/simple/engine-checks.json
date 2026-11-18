@@ -128,7 +128,9 @@
         "pagination-broken",
         "social-image-broken"
       ],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "internal-server-error",
@@ -168,9 +170,12 @@
         "canonical-broken",
         "hreflang-broken-target",
         "pagination-broken",
-        "social-image-broken"
+        "social-image-broken",
+        "sitemap-non-indexable"
       ],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "internal-unreachable",
@@ -212,7 +217,9 @@
         "pagination-broken",
         "social-image-broken"
       ],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "internal-blocked",
@@ -246,7 +253,9 @@
       "evidence": ["type"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "content-type-mismatch",
@@ -279,7 +288,9 @@
       "evidence": ["type", "contentType"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "soft-404",
@@ -313,7 +324,9 @@
       "evidence": ["title", "h1", "wordCount"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "redirect-chain",
@@ -346,7 +359,9 @@
       "evidence": ["redirectChain", "redirectKind"],
       "targetFacts": ["statusCode", "indexability"],
       "clears": ["links-to-redirects", "pagination-broken"],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "redirect-loop",
@@ -380,7 +395,9 @@
       "evidence": ["redirectChain"],
       "targetFacts": [],
       "clears": ["broken-internal-links", "canonical-broken"],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "redirect-broken",
@@ -420,7 +437,9 @@
         "canonical-broken",
         "social-image-broken"
       ],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "redirect-temporary",
@@ -455,7 +474,9 @@
       "evidence": ["redirectChain", "redirectKind"],
       "targetFacts": ["statusCode"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "redirect-temporary-cached",
@@ -487,7 +508,9 @@
       "evidence": ["redirectChain", "redirectKind"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "redirect-downgrade",
@@ -521,7 +544,9 @@
       "evidence": ["redirectChain"],
       "targetFacts": ["statusCode", "final"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "meta-refresh",
@@ -556,7 +581,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "broken-internal-links",
@@ -590,7 +617,9 @@
       "evidence": [],
       "targetFacts": ["statusCode", "final", "text", "position", "fragment", "flags", "links"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "broken-external-links",
@@ -625,7 +654,9 @@
       "evidence": [],
       "targetFacts": ["statusCode", "final", "text", "position", "fragment", "flags", "links"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "links-to-redirects",
@@ -660,7 +691,9 @@
       "evidence": [],
       "targetFacts": ["statusCode", "final", "redirectKind", "text", "position", "links"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "internal-nofollow-links",
@@ -695,7 +728,9 @@
       "evidence": [],
       "targetFacts": ["statusCode", "text", "position", "flags", "links"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "empty-anchor-text",
@@ -730,7 +765,9 @@
       "evidence": [],
       "targetFacts": ["statusCode", "position", "flags", "links"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "broken-fragment-links",
@@ -765,7 +802,9 @@
       "evidence": [],
       "targetFacts": ["statusCode", "fragment", "text", "position", "links"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "orphan-page",
@@ -799,7 +838,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": []
+      "recheck": [],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "uncrawlable-links",
@@ -832,7 +873,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "broken-resources",
@@ -866,7 +909,9 @@
       "evidence": [],
       "targetFacts": ["statusCode", "final", "kind", "position", "links"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "links-to-localhost",
@@ -899,7 +944,9 @@
       "evidence": [],
       "targetFacts": ["statusCode", "text", "position"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "few-internal-outlinks",
@@ -932,7 +979,9 @@
       "evidence": ["outlinks"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "generic-anchor-text",
@@ -965,7 +1014,9 @@
       "evidence": [],
       "targetFacts": ["text", "position", "statusCode"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "non-indexable-inlinks-only",
@@ -999,7 +1050,9 @@
       "evidence": ["inlinks", "linkingPages"],
       "targetFacts": [],
       "clears": [],
-      "recheck": []
+      "recheck": [],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "deep-page",
@@ -1032,7 +1085,9 @@
       "evidence": ["depth", "inlinks"],
       "targetFacts": [],
       "clears": [],
-      "recheck": []
+      "recheck": [],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "too-many-links",
@@ -1065,7 +1120,9 @@
       "evidence": ["outlinks"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "slow-external-links",
@@ -1098,7 +1155,9 @@
       "evidence": [],
       "targetFacts": ["statusCode", "responseMs", "text", "position"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "pagination-not-linked",
@@ -1130,7 +1189,9 @@
       "evidence": [],
       "targetFacts": ["statusCode", "indexability"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "pagination-broken",
@@ -1161,7 +1222,9 @@
       "evidence": [],
       "targetFacts": ["statusCode", "final"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "pagination-to-non-indexable",
@@ -1193,7 +1256,9 @@
       "evidence": [],
       "targetFacts": ["statusCode", "indexability", "canonical"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "pagination-sequence-error",
@@ -1226,7 +1291,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "noindex-page",
@@ -1261,7 +1328,9 @@
       "evidence": ["metaRobots", "xRobotsTag"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "nofollow-page",
@@ -1295,14 +1364,16 @@
       "evidence": ["metaRobots", "xRobotsTag"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "blocked-by-robots",
       "category": "indexability",
       "severity": "notice",
       "title": "Blocked by robots.txt",
-      "description": "The crawler didn't fetch this internal URL, because robots.txt disallows it, or because robots.txt itself couldn't be read, which crawlers treat as disallowing everything: the detail then says so. Not checked on a crawl that was told to ignore robots.txt.",
+      "description": "The crawler didn't fetch this internal URL, because robots.txt disallows it, or because robots.txt itself couldn't be read, which crawlers treat as disallowing everything. The detail names the rule that refused it and its line, or says robots.txt couldn't be read. Not checked on a crawl that was told to ignore robots.txt.",
       "fix": "If the URL should be crawled, change or remove the Disallow rule that matches it. If it's meant to be blocked, avoid linking to it from crawlable pages where you can, and if it must stay out of search, allow crawling and use noindex instead.",
       "why": "Search engines that obey robots.txt can't read the page, so its content, links and any noindex on it go unseen, yet Google can still index the URL without its content, with no description, if links point to it. Blocking is right for URLs with no search value, such as baskets, internal search or filter combinations. It's a problem when a broad rule catches pages you want in search, or the CSS and JavaScript that pages need to render.",
       "learnMore": "https://developers.google.com/search/docs/crawling-indexing/robots/intro",
@@ -1331,7 +1402,9 @@
       "evidence": ["robotsRule"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "snippet-blocked",
@@ -1365,7 +1438,9 @@
       "evidence": ["metaRobots", "xRobotsTag"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "robots-txt-unreachable",
@@ -1400,7 +1475,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["robotsTxt"]
+      "recheck": ["robotsTxt"],
+      "about": "robotsTxt",
+      "rowOrder": "importance"
     },
     {
       "id": "robots-txt-unreachable-other-origin",
@@ -1434,7 +1511,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["robotsTxt"]
+      "recheck": ["robotsTxt"],
+      "about": "robotsTxt",
+      "rowOrder": "importance"
     },
     {
       "id": "robots-txt-missing",
@@ -1470,7 +1549,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["robotsTxt"]
+      "recheck": ["robotsTxt"],
+      "about": "robotsTxt",
+      "rowOrder": "importance"
     },
     {
       "id": "site-hidden-from-search",
@@ -1506,7 +1587,9 @@
       "evidence": ["metaRobots", "xRobotsTag"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "robots-directives-conflict",
@@ -1539,7 +1622,9 @@
       "evidence": ["metaRobots", "xRobotsTag"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "noindex-near-home",
@@ -1573,7 +1658,9 @@
       "evidence": ["metaRobots", "xRobotsTag", "depth", "inlinks"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "unavailable-after-passed",
@@ -1607,7 +1694,9 @@
       "evidence": ["metaRobots", "xRobotsTag"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "media-preview-blocked",
@@ -1640,7 +1729,9 @@
       "evidence": ["metaRobots", "xRobotsTag"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "translation-blocked",
@@ -1673,7 +1764,9 @@
       "evidence": ["metaRobots", "xRobotsTag"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "indexifembedded-without-noindex",
@@ -1706,7 +1799,9 @@
       "evidence": ["metaRobots", "xRobotsTag"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "canonicalised-page",
@@ -1740,7 +1835,9 @@
       "evidence": [],
       "targetFacts": ["statusCode", "final", "indexability", "canonical", "flags"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "canonical-missing",
@@ -1773,7 +1870,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "canonical-multiple",
@@ -1807,7 +1906,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "canonical-broken",
@@ -1841,7 +1942,9 @@
       "evidence": [],
       "targetFacts": ["statusCode", "final", "flags"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "canonical-to-redirect",
@@ -1875,7 +1978,9 @@
       "evidence": [],
       "targetFacts": ["statusCode", "final", "flags"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "canonical-to-non-indexable",
@@ -1909,7 +2014,9 @@
       "evidence": [],
       "targetFacts": ["statusCode", "indexability", "canonical", "final", "flags"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "canonical-outside-head",
@@ -1943,7 +2050,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "canonical-relative",
@@ -1977,7 +2086,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "canonical-invalid",
@@ -2010,7 +2121,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "noindex-with-canonical",
@@ -2044,7 +2157,9 @@
       "evidence": ["metaRobots", "xRobotsTag"],
       "targetFacts": ["statusCode", "indexability", "flags"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "canonical-to-first-page",
@@ -2077,7 +2192,9 @@
       "evidence": [],
       "targetFacts": ["statusCode", "indexability", "canonical", "flags"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "canonical-other-domain",
@@ -2111,7 +2228,9 @@
       "evidence": [],
       "targetFacts": ["statusCode", "final", "indexability", "canonical"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "canonical-loop",
@@ -2143,7 +2262,9 @@
       "evidence": [],
       "targetFacts": ["statusCode", "indexability", "canonical"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "canonical-on-redirect",
@@ -2176,7 +2297,9 @@
       "evidence": ["redirectChain"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "canonical-fragment",
@@ -2209,7 +2332,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "canonical-invalid-attribute",
@@ -2242,7 +2367,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "canonical-unlinked",
@@ -2274,7 +2401,9 @@
       "evidence": ["inlinks", "linkingPages"],
       "targetFacts": [],
       "clears": [],
-      "recheck": []
+      "recheck": [],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "sitemap-non-indexable",
@@ -2309,7 +2438,9 @@
       "evidence": ["indexability", "finalUrl", "canonicalUrl"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls", "sitemaps"]
+      "recheck": ["urls", "sitemaps"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "not-in-sitemap",
@@ -2341,10 +2472,12 @@
       "plainPassed": "No page is missing from the sitemap",
       "plainOneFix": null,
       "plainLooksFor": null,
-      "evidence": [],
+      "evidence": ["title", "depth"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls", "sitemaps"]
+      "recheck": ["urls", "sitemaps"],
+      "about": null,
+      "rowOrder": "fewestLinksFirst"
     },
     {
       "id": "sitemap-error",
@@ -2379,7 +2512,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["sitemaps"]
+      "recheck": ["sitemaps"],
+      "about": "sitemap",
+      "rowOrder": "importance"
     },
     {
       "id": "sitemap-missing",
@@ -2414,7 +2549,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["sitemaps"]
+      "recheck": ["sitemaps"],
+      "about": "sitemap",
+      "rowOrder": "importance"
     },
     {
       "id": "sitemap-url-other-host",
@@ -2449,7 +2586,9 @@
       "evidence": ["finalUrl"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls", "sitemaps"]
+      "recheck": ["urls", "sitemaps"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "robots-txt-no-sitemap",
@@ -2482,7 +2621,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["robotsTxt", "sitemaps"]
+      "recheck": ["robotsTxt", "sitemaps"],
+      "about": "robotsTxt",
+      "rowOrder": "importance"
     },
     {
       "id": "sitemap-over-limit",
@@ -2515,7 +2656,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["sitemaps"]
+      "recheck": ["sitemaps"],
+      "about": "sitemap",
+      "rowOrder": "importance"
     },
     {
       "id": "sitemap-near-limit",
@@ -2548,7 +2691,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["sitemaps"]
+      "recheck": ["sitemaps"],
+      "about": "sitemap",
+      "rowOrder": "importance"
     },
     {
       "id": "sitemap-empty",
@@ -2582,14 +2727,16 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["sitemaps"]
+      "recheck": ["sitemaps"],
+      "about": "sitemap",
+      "rowOrder": "importance"
     },
     {
       "id": "sitemap-url-repeated",
       "category": "sitemaps",
       "severity": "notice",
       "title": "URL listed in more than one sitemap",
-      "description": "More than one of the site's sitemap files lists this URL. The detail says how many; where it's found lists them.",
+      "description": "More than one of the site's sitemap files lists this URL. The detail names the sitemaps that list it.",
       "fix": "Keep each URL in one sitemap, usually the one for its kind of page. Repeats often come from two sitemap plugins at once, or a page listed under two sections.",
       "why": "The sitemaps protocol allows it and search engines cope, so this is housekeeping: repeated entries make sitemaps bigger and harder to keep right, and can give one URL two different lastmod dates.",
       "learnMore": "https://www.sitemaps.org/protocol.html",
@@ -2615,14 +2762,16 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["sitemaps"]
+      "recheck": ["sitemaps"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "sitemap-lastmod-invalid",
       "category": "sitemaps",
       "severity": "notice",
       "title": "Sitemap lastmod invalid or in the future",
-      "description": "Sitemap entries have a <lastmod> that isn't a date (sitemaps use W3C Datetime, such as 2026-11-17 or 2026-11-17T09:30:00+00:00) or a date more than a day after the crawl. Reported once, on the home page; the detail counts each kind and names the sitemaps. A crawl made before the crawler read lastmod isn't checked.",
+      "description": "Sitemap entries have a <lastmod> that isn't a date (sitemaps use W3C Datetime, such as 2026-11-17 or 2026-11-17T09:30:00+00:00) or a date more than a day after the crawl. Reported once, on the home page; the detail counts each kind, names the sitemaps, and gives the first wrong entry with what its lastmod says. A crawl made before the crawler read lastmod isn't checked.",
       "fix": "Have the sitemap give each URL's real last change in W3C Datetime, as most CMS sitemap plugins do when left to themselves. Don't set every entry to today's date, or any to a date in the future.",
       "why": "Google uses lastmod only when it's consistently and verifiably accurate. Dates it can't read, or that haven't happened yet, show it they aren't, so it may ignore the sitemap's dates and find changed pages later.",
       "learnMore": "https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap#additional-notes-about-xml-sitemaps",
@@ -2648,7 +2797,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["sitemaps"]
+      "recheck": ["sitemaps"],
+      "about": "sitemap",
+      "rowOrder": "importance"
     },
     {
       "id": "title-missing",
@@ -2682,7 +2833,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "title-multiple",
@@ -2716,7 +2869,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "title-too-long",
@@ -2750,7 +2905,9 @@
       "evidence": ["title", "titleInResults", "titleWidth", "titleLength"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "title-too-short",
@@ -2785,7 +2942,9 @@
       "evidence": ["title", "titleWidth", "titleLength"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "title-duplicate",
@@ -2820,7 +2979,9 @@
       "evidence": ["title"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "description-missing",
@@ -2854,7 +3015,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "description-multiple",
@@ -2888,7 +3051,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "description-too-long",
@@ -2922,7 +3087,9 @@
       "evidence": ["description", "descriptionInResults", "descriptionWidth", "descriptionLength"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "description-too-short",
@@ -2955,7 +3122,9 @@
       "evidence": ["description", "descriptionWidth", "descriptionLength"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "description-duplicate",
@@ -2989,7 +3158,9 @@
       "evidence": ["description"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "h1-missing",
@@ -3024,7 +3195,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "h1-multiple",
@@ -3059,7 +3232,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "h1-duplicate",
@@ -3093,7 +3268,9 @@
       "evidence": ["h1"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "heading-levels-skipped",
@@ -3125,7 +3302,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "h1-image-only",
@@ -3157,7 +3336,9 @@
       "evidence": ["h1"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "heading-too-long",
@@ -3186,7 +3367,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "h2-missing",
@@ -3215,7 +3398,9 @@
       "evidence": ["wordCount"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "low-word-count",
@@ -3249,7 +3434,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "duplicate-content",
@@ -3283,7 +3470,9 @@
       "evidence": ["indexability", "canonicalUrl", "inlinks"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "near-duplicate-content",
@@ -3318,7 +3507,9 @@
       "evidence": ["indexability", "canonicalUrl", "inlinks", "wordCount"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "duplicate-site-version",
@@ -3353,7 +3544,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["siteVersions"]
+      "recheck": ["siteVersions"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "placeholder-text",
@@ -3385,7 +3578,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "readability-low",
@@ -3416,7 +3611,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "boilerplate-heavy",
@@ -3448,7 +3645,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "image-missing-alt",
@@ -3482,7 +3681,9 @@
       "evidence": [],
       "targetFacts": ["img", "position", "links"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "image-alt-too-long",
@@ -3516,7 +3717,9 @@
       "evidence": [],
       "targetFacts": ["img", "position"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "image-missing-dimensions",
@@ -3550,7 +3753,9 @@
       "evidence": [],
       "targetFacts": ["img", "pixelWidth", "pixelHeight", "position"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "image-broken",
@@ -3585,7 +3790,9 @@
       "evidence": [],
       "targetFacts": ["statusCode", "final", "text", "position", "links"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "image-too-large",
@@ -3629,7 +3836,9 @@
         "links"
       ],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "image-missing-src",
@@ -3663,7 +3872,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "image-no-srcset",
@@ -3695,7 +3906,9 @@
       "evidence": [],
       "targetFacts": ["img", "pixelWidth", "pixelHeight", "sizeBytes"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "image-legacy-format",
@@ -3727,7 +3940,9 @@
       "evidence": [],
       "targetFacts": ["contentType", "sizeBytes", "pixelWidth", "pixelHeight"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "image-alt-unhelpful",
@@ -3759,7 +3974,9 @@
       "evidence": [],
       "targetFacts": ["img", "position"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "image-hotlinked",
@@ -3791,7 +4008,9 @@
       "evidence": [],
       "targetFacts": ["statusCode", "img", "position"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "image-inline-large",
@@ -3820,7 +4039,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "hreflang-invalid-code",
@@ -3854,7 +4075,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "hreflang-missing-self",
@@ -3888,7 +4111,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "hreflang-missing-return",
@@ -3922,7 +4147,9 @@
       "evidence": [],
       "targetFacts": ["statusCode", "text", "indexability"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "hreflang-broken-target",
@@ -3956,7 +4183,9 @@
       "evidence": [],
       "targetFacts": ["statusCode", "final", "text"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "hreflang-to-non-indexable",
@@ -3990,7 +4219,9 @@
       "evidence": [],
       "targetFacts": ["statusCode", "indexability", "final", "canonical", "text"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "hreflang-duplicate-code",
@@ -4024,7 +4255,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "hreflang-missing-x-default",
@@ -4057,7 +4290,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "hreflang-outside-head",
@@ -4091,7 +4326,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "hreflang-inconsistent-code",
@@ -4123,7 +4360,9 @@
       "evidence": [],
       "targetFacts": ["statusCode", "text", "indexability"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "hreflang-header-mismatch",
@@ -4154,7 +4393,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "hreflang-unlinked",
@@ -4186,7 +4427,9 @@
       "evidence": ["inlinks", "linkingPages"],
       "targetFacts": [],
       "clears": [],
-      "recheck": []
+      "recheck": [],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "hreflang-lang-mismatch",
@@ -4218,7 +4461,9 @@
       "evidence": ["language"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "hreflang-self-only",
@@ -4250,7 +4495,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "structured-data-invalid",
@@ -4284,7 +4531,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "structured-data-missing-required",
@@ -4318,7 +4567,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "structured-data-schema-errors",
@@ -4351,7 +4602,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "structured-data-missing-recommended",
@@ -4385,7 +4638,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "structured-data-on-noindex",
@@ -4419,7 +4674,9 @@
       "evidence": ["metaRobots", "xRobotsTag"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "no-https",
@@ -4455,7 +4712,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": []
+      "recheck": [],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "http-page",
@@ -4489,7 +4748,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "mixed-content",
@@ -4524,7 +4785,9 @@
       "evidence": [],
       "targetFacts": ["kind", "statusCode", "contentType", "position", "links"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "security-headers-missing",
@@ -4558,7 +4821,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "security-headers-weak",
@@ -4590,7 +4855,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "cookies-insecure",
@@ -4622,7 +4889,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "form-not-secure",
@@ -4654,7 +4923,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "protocol-relative-links",
@@ -4683,7 +4954,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "url-uppercase",
@@ -4717,7 +4990,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "url-underscores",
@@ -4751,7 +5026,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "url-too-long",
@@ -4786,7 +5063,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "url-tracking-parameters",
@@ -4817,7 +5096,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "url-multiple-slashes",
@@ -4849,7 +5130,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "url-space",
@@ -4881,7 +5164,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "url-parameters",
@@ -4913,7 +5198,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "url-non-ascii",
@@ -4945,7 +5232,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "url-repetitive-path",
@@ -4977,7 +5266,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "url-internal-search",
@@ -5009,7 +5300,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "slow-response",
@@ -5043,7 +5336,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "large-page",
@@ -5078,7 +5373,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "html-past-crawl-limit",
@@ -5112,7 +5409,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "resource-past-crawl-limit",
@@ -5145,7 +5444,9 @@
       "evidence": ["sizeBytes", "contentType"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "viewport-missing",
@@ -5179,7 +5480,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "lang-missing",
@@ -5212,7 +5515,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "charset-missing",
@@ -5245,7 +5550,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "open-graph-missing",
@@ -5279,7 +5586,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "x-card-missing",
@@ -5311,7 +5620,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "x-card-incomplete",
@@ -5343,7 +5654,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "social-image-relative",
@@ -5372,7 +5685,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "og-url-not-canonical",
@@ -5404,7 +5719,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "social-tags-multiple",
@@ -5436,7 +5753,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "og-title-duplicate",
@@ -5467,7 +5786,9 @@
       "evidence": ["title"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "og-description-duplicate",
@@ -5498,7 +5819,9 @@
       "evidence": ["description"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "social-image-broken",
@@ -5527,7 +5850,9 @@
       "evidence": [],
       "targetFacts": ["statusCode", "final", "contentType"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "social-image-too-large",
@@ -5556,7 +5881,9 @@
       "evidence": [],
       "targetFacts": ["sizeBytes", "contentType"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "social-image-too-small",
@@ -5585,7 +5912,9 @@
       "evidence": [],
       "targetFacts": ["pixelWidth", "pixelHeight"],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "head-tags-in-body",
@@ -5618,7 +5947,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "html-structure-errors",
@@ -5650,7 +5981,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "viewport-invalid",
@@ -5681,7 +6014,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "charset-invalid",
@@ -5712,7 +6047,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "lang-invalid",
@@ -5743,7 +6080,9 @@
       "evidence": ["language"],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     },
     {
       "id": "mobile-alternate",
@@ -5775,7 +6114,9 @@
       "evidence": [],
       "targetFacts": [],
       "clears": [],
-      "recheck": ["urls"]
+      "recheck": ["urls"],
+      "about": null,
+      "rowOrder": "importance"
     }
   ]
 }
