@@ -12,7 +12,8 @@ URLs.
 
 This is the design (stage A). The engine's stages E1 to E4 are built (branch `ui/3b-fixloop-engine`): where the build
 differs from this, [As built: the engine](#12-as-built-the-engine-stages-e1-to-e4) says so, and so does its part on the
-sidecar (S1, S2), built too. The app (U1, U2) isn't built yet. The API it adds is in
+sidecar (S1, S2), built too, and so does the app's (U1 Simple, U2 Advanced: [U1 and U2 as
+built](#u1-and-u2-as-built-the-app)). The API it adds is in
 [the sidecar API](v2-sidecar-api.md), marked "(fix loop)", and what the engine changes is under
 [Engine changes the fix loop makes](v2-sidecar-api.md#engine-changes-the-fix-loop-makes). It supersedes "crawl
 comparison: later" in [the rebuild plan](v2-rebuild.md) (step 3b now), in [the IA](v2-ui-ia.md#room-for-what-comes-later)
@@ -970,8 +971,8 @@ exact (33,156 rows compared in 24.8 s), memory flat.
   8 new (the moved links' missing URLs, fetched one step), in 75 requests and 2 s: the check's count goes from 37 to 19,
   and `broken-internal-links` (its referring pages fetched again) from 40 to 22, as a full crawl of revision 1 finds.
 - **Not built in E1 to E4:** the sidecar's refusals that need the library (`site-busy`, `recheck-not-latest`), its flow
-  (analyse first, recheck, analyse) and events, built in S2 (below); and everything the app shows (U1, U2), not built
-  yet.
+  (analyse first, recheck, analyse) and events, built in S2 (below); and everything the app shows, built in U1 and U2
+  (below).
 
 ### S1 and S2 as built: the sidecar
 
@@ -1027,3 +1028,66 @@ say each call as built; what follows is what the design left open, and where the
   rechecked, settled).
 - **The library item's `rechecks`** comes from the summary cache (format 7).
 - **Not built:** a recheck row's `reason` (the engine's rows have none). Pausing a recheck isn't offered (`crawl-busy`).
+
+### U1 and U2 as built: the app
+
+Built on `ui/3b-fixloop-u1` (Simple) and `ui/3b-fixloop-u2` (Advanced), side by side off U1's shared base, each merged
+with the other and with `ui/step-3` (the views lane, 170 checks). Tests are unit tests, stories (axe in both themes,
+forced colours, reduced motion) and e2e against the real sidecar on the synthetic site switched between revisions
+(`e2e/fix-loop-simple.spec.ts`, `e2e/fix-loop-advanced.spec.ts`, both on `e2e/revisionSite.ts`).
+
+**Shared** (`app/src/api/fixLoop.ts`, `app/src/changes/`, `app/src/crawl/recheck.ts`).
+
+- The API's fix-loop shapes by hand; `siteGroups` groups by the sidecar's `siteKey` and never works a site out itself.
+- The `changes` helper: the states at a glance (`comparisonStage`), what each mode counts (hidden checks out; Simple
+  problems only), and every word of section 4 in both modes. "Not checked" is never worded as fixed.
+- One recheck flow for both modes: `startRecheck` (the 202's number kept until the run's own events; `needs-secrets` as
+  Continue says it, "Recheck without" for headers alone), and `useRecheckRun` (starting, the analysis first, fetching,
+  stopping, the analysis after, settled, or ended when the crawl came to rest with no run, with the sidecar's reason).
+  A recheck is live: the pill, Stop and "Checking now" say "Rechecking"; its end is its own toast ("Recheck done: 4 of
+  5 fixed", See it), and an analysis it set off gives no "Analysis finished". The live bridge reads every crawl's
+  comparison again when any analysis ends, as one crawl's analysis can be another's previous.
+
+**Simple (U1).** Home's row ("▲14 since 17 Oct", "3 fixed · 1 new since 17 Oct", "rechecked 5 on 17 Nov"); the Summary's
+line, its links and the like-for-like tooltip, the previous crawl analysed again by itself, quietly, behind the line;
+the score breakdown's points then; What to fix's lines and its Fixed group; Fix these first's "9 on 17 Oct"; the problem
+page's head ("was 9 on 17 Oct", or fixed since with what was fixed), each cause's line with Fixed and Not checked folds,
+and the Fixed it? card as the recheck in every state. A check a recheck can't settle offers Check the site again.
+
+**Advanced (U2).** The library's Score column (each older crawl its own) and Compare with… in a crawl's menu; the
+switcher's score; the picker (the site's crawls newest first with date, status, URLs and score, disabled ones with why,
+Don't compare, kept per crawl in the preferences); Overview's comparison card and Rechecks card, Fix first's "was 12",
+the crawl in a line's "Rechecked once, on 17 Nov"; Issues' change on each check, the checks fixed since listed apart, the
+New, Fixed, Fewer, More and Changed filter (`?change=`), Change in the Sort menu, a check's "On 17 Oct", its Now and
+Fixed tabs, its groups' and rows' change columns; Recheck in a check's head (its menu: the open group), the rows' and
+groups' menus (the selection), URLs' row menu and the inspector, with its banner and a recheck's URLs in a dialog.
+
+**What the design left open, as built.**
+
+- Simple counts problems (Serious and Worth fixing) in every change count; its Fixed group lists every severity,
+  problems first, and counts "3 problems and 1 more worth a look". A first check's Fixed group is "Fixed by a recheck".
+- Advanced counts what moved in its headline's unit, things (round 3's AnswerHeadline): Overview's card has "Things to
+  fix 10 → 2 ▼8 │ Worth a look 3 → 6 ▲3" and "About 8 things fixed · about 3 more worth a look", and the Issues head
+  the same line under its headline; things fixed and new are added up check by check (a check's things then less now).
+  An analysis without its things counted, or a counts-only comparison, falls back to checks and issues, never mixing.
+- "Until" a later crawl is the comparison read forward, from this crawl to that one: fixed is new, fewer is more, the
+  score's change the other way; a row's "Fixed by then" and "Gone by then".
+- A crawl picked in Compare with… that can't be compared any more gives way to the previous crawl; the picker shows it
+  disabled. With no card (Don't compare, or a first crawl with later ones), Compare with… is a line under the totals;
+  a site's only crawl has none on Overview (its library menu says "No other crawl"): in the page head it pushed
+  Overview sideways at 200% zoom.
+- The checks list marks only what moved ("±0" only when its rows moved); the switcher's score is Advanced's only; the
+  library's Score column follows Checks with issues.
+- The Fixed tab counts fixed and gone; URLs not checked this time are listed with why and never counted. A recheck's
+  counts open its URLs in a dialog narrowed by outcome, as the grids' reads can't filter by a recheck's outcome.
+- Check the site again (New crawl from this crawl's settings) takes Recheck's place for every check whose `recheck` is
+  empty (`orphan-page`, `no-https`, `canonical-unlinked`, `hreflang-unlinked`, `non-indexable-inlinks-only`,
+  `deep-page`): in Simple's card; in Advanced's head, its group and row menus, URLs narrowed to such checks only, and
+  the inspector for a URL whose every issue is of one. A test holds every such check of the catalog to it.
+- A selection's recheck is in the grids' row menus (the row, or the selection it's in, at most 1,000); the head's menu
+  holds the open group.
+
+**Not built.** Crawl settings' "Rechecks use these settings."; let-go URLs hidden by the URL grid's default view (the
+`skipReason` column labels them); a per-page change line under a grouped check's groups (each group has its own); the
+report and workbook's `compareWith` chosen in the app (they compare with the previous crawl by default); the shell's
+OS notification for a recheck (the in-app toast says it).
