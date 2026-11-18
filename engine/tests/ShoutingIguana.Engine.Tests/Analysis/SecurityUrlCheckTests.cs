@@ -42,6 +42,67 @@ public sealed class SecurityUrlCheckTests
         Assert.Equal(detail, Detail(new SecurityRules(site.Table()).Check(home), IssueCatalog.SECURITY_HEADERS_WEAK));
     }
 
+    /// <summary>
+    /// A security header sent twice, or with its values joined by commas (as a proxy or CDN that combines repeats sends
+    /// it), is judged as browsers read it. X-Content-Type-Options: its values, every line's split at commas, and the first
+    /// says whether it's nosniff (the Fetch standard's "determine nosniff"). Strict-Transport-Security: only the first
+    /// line counts (RFC 6797, 8.1), and a line holding two policies joined by a comma is no policy browsers can read, so
+    /// stays flagged. Content-Security-Policy: every line is enforced, so frame-ancestors in any of them stands in for
+    /// X-Frame-Options. Referrer-Policy and X-Frame-Options are only judged missing or not.
+    /// </summary>
+    [Theory]
+    [InlineData("x-content-type-options", "nosniff, nosniff", null, null)]
+    [InlineData("x-content-type-options", "NOSNIFF,nosniff", null, null)]
+    [InlineData("x-content-type-options", "nosniff", "nosniff", null)]
+    [InlineData("x-content-type-options", "sniff, nosniff", null, "X-Content-Type-Options \"sniff, nosniff\"")]
+    [InlineData("x-content-type-options", "sniff", "nosniff", "X-Content-Type-Options \"sniff, nosniff\"")]
+    [InlineData("strict-transport-security", "max-age=31536000", "max-age=31536000", null)]
+    [InlineData("strict-transport-security", "max-age=31536000; preload", "max-age=60", null)]
+    [InlineData("strict-transport-security", "max-age=31536000, max-age=31536000", null, "HSTS max-age \"31536000, max-age=3…\" unreadable")]
+    public void ASecurityHeaderSentTwiceOrJoinedByCommasIsReadAsBrowsersReadIt(string name, string first, string? second, string? weak)
+    {
+        var site = new RuleHarness();
+        List<ResponseHeader> headers =
+        [
+            new("strict-transport-security", "max-age=31536000"), new("x-content-type-options", "nosniff"),
+            new("content-security-policy", "default-src 'self'"), new("x-frame-options", "DENY"), new("referrer-policy", "no-referrer")
+        ];
+        headers.RemoveAll(header => header.Name == name);
+        headers.Add(new ResponseHeader(name, first));
+        if (second is not null)
+        {
+            headers.Add(new ResponseHeader(name, second));
+        }
+
+        var hits = new SecurityRules(site.Table()).Check(site.Page($"{site.Site}/", RuleHarness.Html(), headers: headers)).ToList();
+
+        Assert.Equal(weak, Detail(hits, IssueCatalog.SECURITY_HEADERS_WEAK));
+        Assert.Null(Detail(hits, IssueCatalog.SECURITY_HEADERS_MISSING));
+    }
+
+    [Theory]
+    [InlineData("default-src 'self'", "frame-ancestors 'none'", null)]
+    [InlineData("frame-ancestors 'none', default-src 'self'", null, null)]
+    [InlineData("default-src 'self'", "default-src 'self'", "Missing X-Frame-Options")]
+    public void FrameAncestorsInAnyContentSecurityPolicyLineStandsInForXFrameOptions(string first, string? second, string? missing)
+    {
+        var site = new RuleHarness();
+        List<ResponseHeader> headers =
+        [
+            new("strict-transport-security", "max-age=31536000"), new("x-content-type-options", "nosniff"),
+            new("referrer-policy", "no-referrer, strict-origin-when-cross-origin"), new("content-security-policy", first)
+        ];
+        if (second is not null)
+        {
+            headers.Add(new ResponseHeader("content-security-policy", second));
+        }
+
+        var hits = new SecurityRules(site.Table()).Check(site.Page($"{site.Site}/", RuleHarness.Html(), headers: headers)).ToList();
+
+        Assert.Equal(missing, Detail(hits, IssueCatalog.SECURITY_HEADERS_MISSING));
+        Assert.Null(Detail(hits, IssueCatalog.SECURITY_HEADERS_WEAK));
+    }
+
     [Fact]
     public void CookiesWithoutProtectionAreNamedWithWhatTheyLack()
     {
