@@ -44,7 +44,7 @@ import { ChangeFact, FixedSinceNote } from './ProblemSince';
 import { useSimpleChanges, type SimpleChanges } from './useSimpleChanges';
 import { isRecheckRunning, useRecheckRun } from '../crawl/recheck';
 import { useSharedSource } from './useSharedSource';
-import { pathOrigin, sharedSourceAdvice } from './whereWords';
+import { filesOf, pathOrigin, sharedSourceAdvice } from './whereWords';
 import { useTemplateLink } from '../screens/issues/useWhereFound';
 import { firstGroupQuery } from './useOneFix';
 import { ShopifyPrompt } from '../shopify/ShopifyPrompt';
@@ -337,12 +337,18 @@ function FoundProblem({
   // An oversized image: the size its pages show it at, against the file's.
   const templateShownAt = useGroupShownAt(crawlId, check, template);
   const shared = useSharedSource(crawlId, check);
+  // X4: a site-wide check about the rules file or a sitemap names its files where its home page's row would be.
+  const files = filesOf(
+    check,
+    analysis.counts.find((candidate) => candidate.checkId === check.id),
+  );
   const context = {
     crawlId,
     check,
     site: crawlName(item),
     checkedAt: item.finishedAt ?? item.startedAt,
     share: share.text,
+    files,
   };
   const copyList = () => void copyProblemList(context);
   const saveSheet = () => saveCheckSheet(item, check);
@@ -365,7 +371,7 @@ function FoundProblem({
         run: saveSheet,
       },
     ],
-    [crawlId, check.id, share.text, item],
+    [crawlId, check.id, share.text, item, files],
   );
   const noun = (check.subject ?? 'page') === 'page' ? 'pages' : 'addresses';
   const what = check.plainWhat ?? [check.description];
@@ -454,6 +460,7 @@ function FoundProblem({
         onCopy={copyList}
         onSave={saveSheet}
         changes={changes}
+        files={files}
       />
       {/* The fix loop: Fixed it? is a recheck of these pages (./RecheckCard). */}
       <RecheckCard crawlId={crawlId} item={item} check={check} />

@@ -17,7 +17,7 @@ import { issuesOffer } from '../export/offers';
 import { longDate } from './dates';
 import { plainDetail, plainDetailColumn } from './plainEvidence';
 import { plainTitle } from './plainWords';
-import { causeName, causesWords, rowDetailSaysMore } from './whereWords';
+import { causeName, causesWords, fileWords, filesOf, rowDetailSaysMore } from './whereWords';
 
 /** The most rows (or groups) one read asks for (the contract's limit). */
 const PAGE = 1_000;
@@ -34,6 +34,11 @@ export interface ProblemListContext {
   checkedAt: string | null;
   /** "5 of 265 pages". */
   share: string;
+  /**
+   * X4: the site's files a check about its rules file or a sitemap names (whereWords' filesOf), handed on where its home
+   * page's address would be; null or left out hands on the row.
+   */
+  files?: readonly { url: string; sitemapId: number | null }[] | null | undefined;
 }
 
 /** A cause of a check that groups its issues, with the rows of the addresses it's on, as Copy the list hands it on. */
@@ -95,6 +100,15 @@ export function problemListText(
   const lines = [...head, ''];
   if (steps.length > 0) lines.push('How to fix it:', ...steps, '');
   lines.push('Where it is:');
+  // X4: a check about a file names its files, then what was found, never the home page its issue is on.
+  const files = filesOf(check, context);
+  if (files && check.about) {
+    const label = fileWords(check.about).label;
+    for (const file of files) lines.push(`${label}: ${file.url}`);
+    const found = rows.map((row) => detailOf(check, row)).filter((detail): detail is string => Boolean(detail));
+    for (const detail of new Set(found)) lines.push(`What was found: ${detail}`);
+    return lines.join('\n');
+  }
   if (check.grouping === 'none' || causes === null) {
     for (const row of rows) {
       const detail = detailOf(check, row);
@@ -208,11 +222,15 @@ export async function copyProblemList(
     clearTimeout(timer);
     const copied = await copy(problemListText(context, rows, causes));
     const pages = causes ? new Set(causes.flatMap((cause) => cause.rows.map((row) => row.url))).size : rows.length;
+    const files = filesOf(check, context);
+    const fileNoun = check.about ? fileWords(check.about) : null;
     const words = !copied
       ? 'The list couldn’t be copied'
-      : causes
-        ? `Copied the list: ${causesWords(check, causes.length, pages)}`
-        : `Copied the list: ${pages === 1 ? '1 address' : `${formatCount(pages)} addresses`}`;
+      : files && fileNoun
+        ? `Copied the list: ${formatCount(files.length)} ${files.length === 1 ? fileNoun.one : fileNoun.many}`
+        : causes
+          ? `Copied the list: ${causesWords(check, causes.length, pages)}`
+          : `Copied the list: ${pages === 1 ? '1 address' : `${formatCount(pages)} addresses`}`;
     const shown = progress as ReturnType<typeof notifyProgress> | null;
     if (shown) shown.done(words);
     else if (copied) notifyResult(words);

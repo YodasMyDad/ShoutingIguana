@@ -119,6 +119,58 @@ async function copied(checkId: string, words: string[] = []): Promise<string> {
 }
 
 describe('Copy the list', () => {
+  // X4: a check about a file hands on the file, where the home page was.
+  it('hands on a check’s files where its home page was, then what was found', () => {
+    const text = problemListText(
+      {
+        ...context,
+        check: { ...check('robots-txt-missing'), about: 'robotsTxt' },
+        files: [{ url: 'https://example.com/robots.txt', sitemapId: null }],
+      },
+      [{ id: 1, url: 'https://example.com/', detail: 'https://example.com/robots.txt (404 Not Found)' }],
+    );
+    expect(text.slice(text.indexOf('Where it is:')).split('\n')).toEqual([
+      'Where it is:',
+      'Your rules file (robots.txt): https://example.com/robots.txt',
+      'What was found: There’s no rules file at https://example.com/robots.txt (404 Not Found)',
+    ]);
+  });
+
+  it('says it copied the files, not an address', async () => {
+    setTransport(
+      groupedSidecar('robots-txt-missing', [], () => [
+        { id: 1, url: 'https://example.com/', detail: 'https://example.com/robots.txt (404 Not Found)' },
+      ]),
+    );
+    const words: string[] = [];
+    const stop = onAnnounce((message) => words.push(message));
+    try {
+      await copyProblemList(
+        {
+          ...context,
+          check: { ...check('robots-txt-missing'), about: 'robotsTxt' },
+          files: [{ url: 'https://example.com/robots.txt', sitemapId: null }],
+        },
+        () => Promise.resolve(true),
+      );
+    } finally {
+      stop();
+    }
+    expect(words).toEqual(['Copied the list: 1 rules file']);
+  });
+
+  it('keeps the home page’s row for an analysis that names no files', () => {
+    const text = problemListText(
+      { ...context, check: { ...check('robots-txt-missing'), about: 'robotsTxt' }, files: null },
+      [{ id: 1, url: 'https://example.com/', detail: 'https://example.com/robots.txt (404 Not Found)' }],
+    );
+    expect(
+      text.endsWith(
+        'Where it is:\nhttps://example.com/ (There’s no rules file at https://example.com/robots.txt (404 Not Found))',
+      ),
+    ).toBe(true);
+  });
+
   it('writes both titles, the site and date, how to fix it, then each cause with its full addresses', () => {
     const page = (id: number, url: string) => ({ id, url, relatedUrl: 'https://example.com/gone/' });
     const text = problemListText(

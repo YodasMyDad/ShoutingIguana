@@ -6,7 +6,7 @@ import { act, cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { IssueGroup, IssueRow } from '../api/grids';
 import { setTransport } from '../api/transport';
-import type { Analysis } from '../api/types';
+import type { Analysis, Check, CheckCount } from '../api/types';
 import { App } from '../app/App';
 import { createAppRouter } from '../app/router';
 import { installKeyboard } from '../keyboard/registry';
@@ -37,10 +37,18 @@ function catalogRoutes(
   count: number,
   groups: IssueGroup[],
   rows: (IssueRow & { group?: number })[],
+  /** The check's count's other fields, and the check's own (a sidecar newer than the catalog's fixture). */
+  { counted = {}, check = {} }: { counted?: Partial<CheckCount>; check?: Partial<Check> } = {},
 ): FakeRoute[] {
-  const analysis: Analysis = { ...EVIDENCE_ANALYSIS, counts: [{ checkId, count, likelyTemplate: false }] };
+  const analysis: Analysis = {
+    ...EVIDENCE_ANALYSIS,
+    counts: [{ checkId, count, likelyTemplate: false, ...counted }],
+  };
   return issuesRoutes({
-    checks: SIMPLE_CHECKS,
+    checks: {
+      ...SIMPLE_CHECKS,
+      checks: SIMPLE_CHECKS.checks.map((each) => (each.id === checkId ? { ...each, ...check } : each)),
+    },
     analysis,
     groups: { [checkId]: groups },
     rows: { [checkId]: rows },
@@ -255,6 +263,62 @@ describe.skipIf(TABLE_STUBBED)('Where it is, in Simple', () => {
       ),
     ).toHaveLength(2);
     expect(where.queryByText(/LineNumber|BytePositionInLine|is invalid after a value/)).toBeNull();
+  });
+
+  // X4: a site-wide check about robots.txt or a sitemap names its files where its home page was; the issue stays on
+  // the home page, so its row is read for what was found.
+  it('names a sitemap check’s files where its home page was, each read sitemap with a way to it in Advanced', async () => {
+    const files = [
+      { url: `${SITE}/sitemap.xml`, sitemapId: 3 },
+      { url: `${SITE}/sitemap-old.xml`, sitemapId: null },
+    ];
+    const rows = [page(1, '/', { title: 'Garden furniture', detail: `${SITE}/sitemap.xml (62,113 URLs) and 1 more` })];
+    const where = await open(
+      'sitemap-over-limit',
+      catalogRoutes('sitemap-over-limit', 1, [], rows, { counted: { files }, check: { about: 'sitemap' } }),
+    );
+    expect(await where.findByText('2 sitemaps')).toBeVisible();
+    expect(where.getByRole('columnheader', { name: 'File' })).toBeVisible();
+    expect(where.getAllByText('Your sitemap')).toHaveLength(2);
+    expect(where.getByText('/sitemap.xml')).toBeVisible();
+    expect(where.getByText('/sitemap-old.xml')).toBeVisible();
+    // A sitemap the check didn't read has no page in Advanced to go to.
+    const links = where.getAllByRole('link', { name: /See it in Advanced/ });
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAttribute('href', `/crawls/${TEST_CRAWL_ID}/sitemaps/3`);
+    expect(await where.findByText(/^Too big for search engines to read in full/)).toBeVisible();
+    // Neither the home page's title nor anything about how it's linked.
+    expect(where.queryByText('Garden furniture')).toBeNull();
+    expect(where.queryByText(/Linked from|Used on/)).toBeNull();
+    expect(where.getByText(/^All 2 sitemaps are shown\./)).toBeVisible();
+  });
+
+  it('names the rules file where its home page was, with robots.txt in Advanced by its origin', async () => {
+    const rows = [page(1, '/', { title: 'Garden furniture', detail: `${SITE}/robots.txt (404 Not Found)` })];
+    const where = await open(
+      'robots-txt-missing',
+      catalogRoutes('robots-txt-missing', 1, [], rows, {
+        counted: { files: [{ url: `${SITE}/robots.txt`, sitemapId: null }] },
+        check: { about: 'robotsTxt' },
+      }),
+    );
+    expect(await where.findByText('Your rules file (robots.txt)')).toBeVisible();
+    expect(where.getByText('1 rules file')).toBeVisible();
+    const link = where.getByRole('link', { name: 'See it in Advanced' });
+    expect(decodeURIComponent(link.getAttribute('href') ?? '')).toBe(`/crawls/${TEST_CRAWL_ID}/robots/${SITE}`);
+    expect(await where.findByText(/^There’s no rules file at/)).toBeVisible();
+    expect(where.queryByText('Garden furniture')).toBeNull();
+  });
+
+  it('keeps the home page’s row for an analysis that names no files', async () => {
+    const rows = [page(1, '/', { title: 'Garden furniture', detail: `${SITE}/robots.txt (404 Not Found)` })];
+    const where = await open(
+      'robots-txt-missing',
+      catalogRoutes('robots-txt-missing', 1, [], rows, { counted: { files: null }, check: { about: 'robotsTxt' } }),
+    );
+    expect(await where.findByText('Garden furniture')).toBeVisible();
+    expect(where.queryByText('Your rules file (robots.txt)')).toBeNull();
+    expect(where.queryByRole('link', { name: /See it in Advanced/ })).toBeNull();
   });
 
   // The fixit index audit's X5: a check with nothing measured showed an empty "What was found" on every row.

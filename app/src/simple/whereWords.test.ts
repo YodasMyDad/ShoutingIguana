@@ -4,7 +4,10 @@ import {
   causeName,
   causeWords,
   causesWords,
+  fileWords,
+  filesOf,
   pathOrigin,
+  robotsOrigin,
   rowDetailSaysMore,
   sharedSourceAdvice,
   shownWords,
@@ -213,5 +216,35 @@ describe('Where it is, under its list', () => {
     expect(pathOrigin('https://cdn.example.net/photo.jpg', garden)).toBe('https://gardenfurnituresets.co.uk');
     expect(pathOrigin(null, garden)).toBe('https://gardenfurnituresets.co.uk');
     expect(pathOrigin(null, { site: null, startUrl: null })).toBeNull();
+  });
+});
+
+// X4: a site-wide check about robots.txt or a sitemap names its files, where its home page was.
+describe('a check’s files, named', () => {
+  it('names the rules file plainly, the term once in brackets, and a sitemap as it is', () => {
+    expect(fileWords('robotsTxt')).toEqual({
+      label: 'Your rules file (robots.txt)',
+      one: 'rules file',
+      many: 'rules files',
+    });
+    expect(fileWords('sitemap')).toEqual({ label: 'Your sitemap', one: 'sitemap', many: 'sitemaps' });
+  });
+
+  it('lists the files only for a check about one, from an analysis that names them', () => {
+    const files = [{ url: 'https://example.com/sitemap.xml', sitemapId: 3 }];
+    expect(filesOf({ about: 'sitemap' }, { files })).toEqual(files);
+    // An analysis older than 16, or a sidecar from before X4: the home page's row, as before.
+    expect(filesOf({ about: 'sitemap' }, { files: null })).toBeNull();
+    expect(filesOf({ about: 'sitemap' }, {})).toBeNull();
+    expect(filesOf({ about: 'sitemap' }, undefined)).toBeNull();
+    // Nothing to name: never an empty list where the home page was.
+    expect(filesOf({ about: 'sitemap' }, { files: [] })).toBeNull();
+    expect(filesOf({ about: null }, { files })).toBeNull();
+    expect(filesOf({}, { files })).toBeNull();
+  });
+
+  it('finds a rules file’s origin, as robots.txt in Advanced is opened by', () => {
+    expect(robotsOrigin('https://www.example.com/robots.txt')).toBe('https://www.example.com');
+    expect(robotsOrigin('http://127.0.0.1:8080/robots.txt')).toBe('http://127.0.0.1:8080');
   });
 });

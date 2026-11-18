@@ -172,6 +172,13 @@ export interface Check {
    * from before it, which reads as empty.
    */
   clears?: string[];
+  /**
+   * The site's file a site-wide check is about (X4): `robotsTxt` for robots-txt-unreachable(-other-origin),
+   * robots-txt-missing and robots-txt-no-sitemap, `sitemap` for the sitemap checks of the whole site; null for every
+   * other check. Its issue stays on the home page; the analysis's `counts[].files` names the files. Left out by a sidecar
+   * from before it.
+   */
+  about?: 'robotsTxt' | 'sitemap' | null;
 }
 
 /**
@@ -444,6 +451,12 @@ export interface CheckCount {
    * clears there. Empty when none; left out by a sidecar from before it.
    */
   clears?: ClearedCheck[];
+  /**
+   * The files a check with an `about` is about (X4), each with its sitemap's id for a sitemap the crawl read. Null for a
+   * check about no file, and from an analysis older than 16 (show its home page's row then); left out by a sidecar from
+   * before it.
+   */
+  files?: { url: string; sitemapId: number | null }[] | null;
 }
 
 /** Another check a fix of one clears (related checks). */

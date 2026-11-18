@@ -2,7 +2,7 @@ import { groupChangeWords, rowChangeWords } from '../changes/changeWords';
 import type { SimpleChanges } from './useSimpleChanges';
 import { CausesFixedSince } from './WhereItIsSince';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { useRouter } from '@tanstack/react-router';
+import { Link, useRouter } from '@tanstack/react-router';
 import { ArrowUpRight, ChevronDown, Copy, FileSpreadsheet } from 'lucide-react';
 import { useState } from 'react';
 import { api } from '../api/client';
@@ -14,6 +14,7 @@ import { formatCount } from '../lib/format';
 import { switchMode } from '../mode/switchMode';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
+import { Icon } from '../ui/Icon';
 import { OpenUrlButton } from '../ui/OpenUrlButton';
 import { OneFixTag } from '../ui/PlainCheckRow';
 import { evidenceOf } from '../screens/issues/evidenceColumns';
@@ -25,7 +26,17 @@ import { isBrokenImage } from '../ui/imageFacts';
 import { plainDetail, plainEvidence, plainImageInsight, plainRelated } from './plainEvidence';
 import { TargetWords } from './TargetWords';
 import { oneFixTitle } from './oneFixWords';
-import { causeName, causeWords, causesWords, pathOrigin, rowDetailSaysMore, shownWords } from './whereWords';
+import {
+  causeName,
+  causeWords,
+  causesWords,
+  fileWords,
+  pathOrigin,
+  robotsOrigin,
+  rowDetailSaysMore,
+  shownWords,
+  type FileWords,
+} from './whereWords';
 
 /** Causes (or pages, for a check that doesn't group) shown at a time. */
 export const WHERE_STEP = 25;
@@ -180,6 +191,7 @@ export function WhereItIs({
   onCopy,
   onSave,
   changes,
+  files = null,
 }: {
   crawlId: string;
   item: CrawlListItem;
@@ -190,6 +202,11 @@ export function WhereItIs({
   onSave: () => void;
   /** The fix loop: what changed since the site's last check; each cause and page says whether it's new or still there. */
   changes?: SimpleChanges | undefined;
+  /**
+   * X4: the site's files a check about its rules file or a sitemap names (whereWords' filesOf), listed where its home
+   * page's row would be; null lists the row.
+   */
+  files?: readonly { url: string; sitemapId: number | null }[] | null | undefined;
 }) {
   const router = useRouter();
   const [limit, setLimit] = useState(WHERE_STEP);
@@ -216,14 +233,21 @@ export function WhereItIs({
     ? (sample.data?.rows[0]?.url ?? groups.data?.groups[0]?.relatedUrl)
     : rows.data?.rows[0]?.url;
   const origin = pathOrigin(firstUrl, item);
-  const [left, right] = headings(check);
+  // X4: the files a site-wide check is about, named where its home page's row was (the issue stays on the home page).
+  const named = files && check.about ? { files, words: fileWords(check.about) } : null;
+  const [left, right] = named ? ['File', 'What was found'] : headings(check);
   const pages = (check.subject ?? 'page') === 'page';
   const noun = (count: number) => (pages ? (count === 1 ? 'page' : 'pages') : count === 1 ? 'address' : 'addresses');
   const causes = grouped ? (groups.data?.groupCount ?? null) : null;
   const listed = grouped ? (groups.data?.groups.length ?? 0) : (rows.data?.rows.length ?? 0);
   const all = grouped ? (causes ?? 0) : total;
   // What it counts, by what its causes are, on the pages the headline counts: "129 images on 60 pages".
-  const meta = causes === null ? `${formatCount(total)} ${noun(total)}` : causesWords(check, causes, total);
+  const fileNoun = (count: number) => (named ? (count === 1 ? named.words.one : named.words.many) : noun(count));
+  const meta = named
+    ? `${formatCount(named.files.length)} ${fileNoun(named.files.length)}`
+    : causes === null
+      ? `${formatCount(total)} ${noun(total)}`
+      : causesWords(check, causes, total);
   const causeWord = causeWords(check);
   const cause = (count: number) => (count === 1 ? causeWord.one : causeWord.many);
   const error = grouped ? groups.error : rows.error;
@@ -265,35 +289,47 @@ export function WhereItIs({
             </tr>
           </thead>
           <tbody>
-            {grouped
-              ? (groups.data?.groups ?? []).map((group) => (
-                  <GroupRow
-                    key={`${group.detail ?? ''}|${group.relatedUrlId ?? ''}`}
-                    crawlId={crawlId}
-                    check={check}
-                    group={group}
-                    total={total}
-                    origin={origin}
-                    noun={noun}
-                    since={since}
-                  />
-                ))
-              : (rows.data?.rows ?? []).map((row) => (
-                  <tr key={row.id}>
-                    <td>
-                      <PageLine row={row} origin={origin} />
-                      {row.change ? <ChangeLine words={rowChangeWords(row.change.state, since, 'simple')} /> : null}
-                      <FoundOnWords crawlId={crawlId} check={check} urlId={row.id} origin={origin} />
+            {named ? (
+              <FilesRow
+                crawlId={crawlId}
+                check={check}
+                files={named.files}
+                words={named.words}
+                rows={rows.data?.rows ?? []}
+                origin={origin}
+                saysFound={saysFound}
+              />
+            ) : grouped ? (
+              (groups.data?.groups ?? []).map((group) => (
+                <GroupRow
+                  key={`${group.detail ?? ''}|${group.relatedUrlId ?? ''}`}
+                  crawlId={crawlId}
+                  check={check}
+                  group={group}
+                  total={total}
+                  origin={origin}
+                  noun={noun}
+                  since={since}
+                />
+              ))
+            ) : (
+              (rows.data?.rows ?? []).map((row) => (
+                <tr key={row.id}>
+                  <td>
+                    <PageLine row={row} origin={origin} />
+                    {row.change ? <ChangeLine words={rowChangeWords(row.change.state, since, 'simple')} /> : null}
+                    <FoundOnWords crawlId={crawlId} check={check} urlId={row.id} origin={origin} />
+                  </td>
+                  {saysFound ? (
+                    <td className="text-text-secondary">
+                      {/* The engine's detail, unless the check says it plainly ("Google will likely cut…"). */}
+                      {plainDetail(check, row as unknown as Record<string, unknown>) ?? row.detail ?? ''}
+                      <EvidenceLines row={row} check={check} origin={origin} />
                     </td>
-                    {saysFound ? (
-                      <td className="text-text-secondary">
-                        {/* The engine's detail, unless the check says it plainly ("Google will likely cut…"). */}
-                        {plainDetail(check, row as unknown as Record<string, unknown>) ?? row.detail ?? ''}
-                        <EvidenceLines row={row} check={check} origin={origin} />
-                      </td>
-                    ) : null}
-                  </tr>
-                ))}
+                  ) : null}
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       )}
@@ -301,17 +337,26 @@ export function WhereItIs({
       {read ? (
         <div className="flex flex-wrap items-center gap-3 border-t border-border-subtle bg-surface-sunken px-6 py-3 text-14 text-text-secondary">
           <span>
-            {shownWords({
-              grouped,
-              listed,
-              all,
-              noun,
-              cause,
-              origin,
-              shortened: origin !== null && (firstUrl ?? '').startsWith(origin),
-            })}
+            {named
+              ? shownWords({
+                  grouped: false,
+                  listed: named.files.length,
+                  all: named.files.length,
+                  noun: fileNoun,
+                  origin,
+                  shortened: origin !== null && named.files.some((file) => file.url.startsWith(origin)),
+                })
+              : shownWords({
+                  grouped,
+                  listed,
+                  all,
+                  noun,
+                  cause,
+                  origin,
+                  shortened: origin !== null && (firstUrl ?? '').startsWith(origin),
+                })}
           </span>
-          {listed < all && limit < WHERE_MAX ? (
+          {!named && listed < all && limit < WHERE_MAX ? (
             <Button
               variant="ghost"
               size="sm"
@@ -321,7 +366,7 @@ export function WhereItIs({
               Show {formatCount(Math.min(WHERE_STEP, all - listed))} more
             </Button>
           ) : null}
-          {listed < all && limit >= WHERE_MAX ? (
+          {!named && listed < all && limit >= WHERE_MAX ? (
             <Button variant="ghost" size="sm" iconEnd={ArrowUpRight} onClick={() => switchMode(router, 'advanced')}>
               See all {formatCount(all)} in Advanced
             </Button>
@@ -329,6 +374,106 @@ export function WhereItIs({
         </div>
       ) : null}
     </Card>
+  );
+}
+
+/**
+ * X4: a check's files where its home page's row would be: each named ("Your sitemap") over its address, with the way to
+ * it in Advanced (a sitemap the check read, by its id; a rules file, by its origin), and what was found at the right.
+ * Neither the home page's title nor how it's linked: the files are what the check is about.
+ */
+function FilesRow({
+  crawlId,
+  check,
+  files,
+  words,
+  rows,
+  origin,
+  saysFound,
+}: {
+  crawlId: string;
+  check: Check;
+  files: readonly { url: string; sitemapId: number | null }[];
+  words: FileWords;
+  /** The check's rows (the home page's, once for the site): what was found. */
+  rows: readonly IssueRow[];
+  origin: string | null;
+  saysFound: boolean;
+}) {
+  const found = rows
+    .map((row) => ({ row, said: plainDetail(check, row as unknown as Record<string, unknown>) ?? row.detail ?? '' }))
+    .filter(({ said }, index, all) => all.findIndex((other) => other.said === said) === index);
+  return (
+    <tr>
+      <td>
+        <ul className="flex flex-col gap-2">
+          {files.map((file) => (
+            <li key={file.url}>
+              <span className="block font-medium">{words.label}</span>
+              <Address url={file.url} origin={origin} small />
+              <FileInAdvanced crawlId={crawlId} check={check} file={file} named={files.length > 1} />
+            </li>
+          ))}
+        </ul>
+      </td>
+      {saysFound ? (
+        <td className="text-text-secondary">
+          {found.map(({ row, said }) => (
+            <span key={row.id} className="block">
+              {said}
+              <EvidenceLines row={row} check={check} origin={origin} />
+            </span>
+          ))}
+        </td>
+      ) : null}
+    </tr>
+  );
+}
+
+/**
+ * "See it in Advanced" for a file (docs/v2-ui-simple.md, The switch: Simple's links to an Advanced-only screen say so,
+ * and arriving there turns Advanced on): robots.txt by the file's origin, a sitemap by its id. Nothing for a sitemap the
+ * check didn't read, which has no page there. With more than one file, each link's name says which.
+ */
+function FileInAdvanced({
+  crawlId,
+  check,
+  file,
+  named,
+}: {
+  crawlId: string;
+  check: Check;
+  file: { url: string; sitemapId: number | null };
+  named: boolean;
+}) {
+  const content = (
+    <>
+      See it in Advanced
+      {named ? <span className="sr-only"> ({file.url})</span> : null}
+      <Icon icon={ArrowUpRight} size="sm" />
+    </>
+  );
+  const className = 'si-link mt-1 inline-flex items-center gap-1 text-13';
+  if (check.about === 'robotsTxt') {
+    return (
+      <Link
+        to="/crawls/$crawl/robots/{-$origin}"
+        params={{ crawl: crawlId, origin: robotsOrigin(file.url) }}
+        className={className}
+      >
+        {content}
+      </Link>
+    );
+  }
+  if (file.sitemapId === null) return null;
+  return (
+    <Link
+      to="/crawls/$crawl/sitemaps/{-$sitemap}"
+      params={{ crawl: crawlId, sitemap: String(file.sitemapId) }}
+      className={className}
+    >
+      {content}
+    </Link>
   );
 }
 

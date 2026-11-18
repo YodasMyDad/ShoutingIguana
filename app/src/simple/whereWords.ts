@@ -2,7 +2,7 @@
 // shortened against. Pure. The closing audit's gap 12: it said "It is shown. Addresses are on gardenfurnituresets.co.uk."
 // of one cause, while the list showed every address in full (the pages were on www., the start address wasn't).
 import type { IssueGroup, IssueRow } from '../api/grids';
-import type { Check, CrawlListItem } from '../api/types';
+import type { Check, CheckCount, CrawlListItem } from '../api/types';
 import { formatCount } from '../lib/format';
 import { plainDetail } from './plainEvidence';
 import { plainTitle } from './plainWords';
@@ -153,6 +153,45 @@ const UNNAMED_CAUSES: Record<string, string> = {
 export function causeName(check: Check, detail: string | null | undefined): string {
   if (detail) return plainDetail(check, { detail }) ?? detail;
   return UNNAMED_CAUSES[check.id] ?? plainTitle(check);
+}
+
+/** What a check's files are called (X4): its rules file, the term once in brackets, or its sitemap. */
+export interface FileWords {
+  /** What names each file, over its address. */
+  label: string;
+  one: string;
+  many: string;
+}
+
+/** A file a check is about, as the analysis's counts name it. */
+type CheckFile = NonNullable<CheckCount['files']>[number];
+
+/**
+ * The words for a check's files (X4): "Your rules file (robots.txt)", the plain word first and the term once in
+ * brackets (docs/v2-ui-simple.md, "The rules"), or "Your sitemap", a word that stays as it is.
+ */
+export function fileWords(about: NonNullable<Check['about']>): FileWords {
+  return about === 'robotsTxt'
+    ? { label: 'Your rules file (robots.txt)', one: 'rules file', many: 'rules files' }
+    : { label: 'Your sitemap', one: 'sitemap', many: 'sitemaps' };
+}
+
+/**
+ * The files Where it is and Copy the list name where a check's home page's row was (X4): those of a check `about` the
+ * site's rules file or a sitemap, from an analysis that names them. Null otherwise: an analysis older than 16, a
+ * sidecar from before it, or no file named (never an empty list where the row was). The row is shown then.
+ */
+export function filesOf(
+  check: Pick<Check, 'about'>,
+  counted: { files?: readonly CheckFile[] | null | undefined } | undefined,
+): readonly CheckFile[] | null {
+  const files = counted?.files ?? null;
+  return check.about && files && files.length > 0 ? files : null;
+}
+
+/** The origin robots.txt in Advanced opens a rules file by: its address without "/robots.txt". */
+export function robotsOrigin(url: string): string {
+  return url.replace(/\/robots\.txt$/i, '');
 }
 
 const bare = (host: string) => host.toLowerCase().replace(/^www\./, '');
