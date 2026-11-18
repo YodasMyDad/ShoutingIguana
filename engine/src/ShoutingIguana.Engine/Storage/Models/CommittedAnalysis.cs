@@ -6,4 +6,6 @@ namespace ShoutingIguana.Engine.Storage.Models;
 /// <param name="Counts">Flagged URL counts per issue id.</param>
 /// <param name="CrawledUrlCount">The URLs crawled, as the analysis read them.</param>
 /// <param name="Score">The score worked out from those counts, or null when no page was read.</param>
-internal sealed record CommittedAnalysis(Dictionary<string, long> Counts, long CrawledUrlCount, SiteScore? Score);
+/// <param name="PlatformOwned">The checks of what the site's platform set, which its owner can't change, as stored.</param>
+internal sealed record CommittedAnalysis(Dictionary<string, long> Counts, long CrawledUrlCount, SiteScore? Score,
+    IReadOnlyDictionary<string, PlatformOwner> PlatformOwned);

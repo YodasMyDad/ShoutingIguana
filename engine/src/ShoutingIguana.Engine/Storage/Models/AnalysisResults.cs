@@ -25,6 +25,13 @@ public sealed record AnalysisResults(
     public SiteScore? Score { get; init; }
 
     /// <summary>
+    /// The checks whose every issue is something the site's platform sets, which its owner can't change (a Shopify store's
+    /// security headers and Shopify's cookies), by id, each with the platform and why. They are in <see cref="Counts"/>, and
+    /// no part of the score or <see cref="FixFirst"/>. Empty for an analysis by an engine from before it was told.
+    /// </summary>
+    public IReadOnlyDictionary<string, PlatformOwner> PlatformOwned { get; init; } = new Dictionary<string, PlatformOwner>();
+
+    /// <summary>
     /// Why there's no score, or null when there is one: as <see cref="AnalysisInfo.NoScoreReason"/> says, and a score
     /// this engine can't read (a later engine's) is no score either.
     /// </summary>
@@ -33,9 +40,9 @@ public sealed record AnalysisResults(
     /// <summary>
     /// The checks that found something, in the order to fix them (<see cref="FixFirstOrder"/>): the most severe, a fault
     /// of the whole site leading its severity, then the most URLs flagged, then catalog order. Checks the user has hidden
-    /// in the app are in it.
+    /// in the app are in it; checks of what the site's platform set (<see cref="PlatformOwned"/>) aren't.
     /// </summary>
-    public IReadOnlyList<string> FixFirst => FixFirstOrder.Of(Counts);
+    public IReadOnlyList<string> FixFirst => FixFirstOrder.Of(Counts, PlatformOwned);
 
     /// <summary>Why the analysis no longer stands, if it doesn't, as of the snapshot.</summary>
     /// <param name="settings">The thresholds an analysis would run with now.</param>

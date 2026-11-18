@@ -25,6 +25,13 @@ internal readonly record struct IssueHit(IssueDefinition Issue, int UrlId, strin
     public IReadOnlyList<int>? Targets { get; init; }
 
     /// <summary>
+    /// The platform that set what the issue is about, which the site's owner can't change (on a page Shopify served, its
+    /// security headers and the cookies Shopify sets), or null when it's the site's own. A check whose every issue has the
+    /// same one is that platform's (<see cref="IssueCount.Platform"/>). No part of the issue's identity.
+    /// </summary>
+    public PlatformOwner? Platform { get; init; }
+
+    /// <summary>
     /// For a check of the site's files (<see cref="IssueDefinition.About"/>): every robots.txt or sitemap it found at fault, as
     /// full URLs in the order its detail names them, stored in <c>issue_files</c> so a view can name the file instead of the
     /// home page the issue is reported on. Null for any other check.

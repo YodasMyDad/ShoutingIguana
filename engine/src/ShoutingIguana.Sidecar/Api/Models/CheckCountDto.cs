@@ -14,6 +14,11 @@ namespace ShoutingIguana.Sidecar.Api.Models;
 /// The checks a fix of this one also clears, with the pages it clears there (related checks); empty when none, and when
 /// <paramref name="Causes"/> is null.
 /// </param>
+/// <remarks>
+/// <see cref="Platform"/>: the platform that set everything the check found, which the site's owner can't change (a Shopify
+/// store's security headers, Shopify's own cookies), with why; null for a check of the site's own, and for an analysis by
+/// an engine from before it. Such a check still counts, and is in no score line and not in Fix first.
+/// </remarks>
 internal sealed record CheckCountDto(string CheckId, long Count, bool LikelyTemplate = false)
 {
     public long? Causes { get; init; }
@@ -28,4 +33,6 @@ internal sealed record CheckCountDto(string CheckId, long Count, bool LikelyTemp
     /// and for an analysis before files were stored, or one that changed while it was read.
     /// </summary>
     public IReadOnlyList<IssueFileDto>? Files { get; init; }
+
+    public PlatformDto? Platform { get; init; }
 }

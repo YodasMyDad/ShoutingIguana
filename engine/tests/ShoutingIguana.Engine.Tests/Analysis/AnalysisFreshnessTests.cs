@@ -87,6 +87,16 @@ public sealed class AnalysisFreshnessTests
     }
 
     /// <summary>
+    /// Version 17 marks the checks of what a Shopify store's platform sets as Shopify's, out of the score and Fix first, and
+    /// says Shopify's reason and the fix in the note for the pages a store refused. An analysis 16 stored is out of date.
+    /// </summary>
+    [Fact]
+    public void AnAnalysisFromBeforeWhatShopifySetsIsOutOfDate()
+    {
+        Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 16 }, CRAWLED, new AnalysisSettings()));
+    }
+
+    /// <summary>
     /// Version 18 (the page part's; 17 is the Shopify lane's phase B) quotes in a detail what the check found (the heading
     /// too long or skipped to, the repeated share tags' values, which JSON-LD block failed and where), and groups three
     /// checks by the fault their detail shows. An analysis 17 stored is out of date.

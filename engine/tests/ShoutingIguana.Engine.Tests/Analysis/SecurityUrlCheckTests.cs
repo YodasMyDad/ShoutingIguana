@@ -1,6 +1,7 @@
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Analysis.Rules;
+using ShoutingIguana.Engine.Fetching;
 using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Parsing;
 using ShoutingIguana.Engine.Parsing.Models;
@@ -90,6 +91,43 @@ public sealed class SecurityUrlCheckTests
             "<a href=\"//example.com/b\">B</a><a href=\"/c\">C</a><a href=\"//\">Nothing</a>"));
 
         Assert.Equal("3 URLs, such as //cdn.example.com/app.js", Detail(new SecurityRules(site.Table()).Check(page), IssueCatalog.PROTOCOL_RELATIVE_LINKS));
+    }
+
+    /// <summary>
+    /// On a page Shopify served (a header says so), the security headers and the cookies Shopify sets (its cookie policy's
+    /// names) are Shopify's: the store's owner can't change them. A cookie of any other name on the page, or a page no
+    /// header says Shopify served, leaves the issue the site's own.
+    /// </summary>
+    [Fact]
+    public void WhatShopifySetsOnAPageItServedIsShopifys()
+    {
+        PlatformOwner? Owner(IssueDefinition check, bool servedByShopify, params string[] cookies)
+        {
+            var site = new RuleHarness("https://shop.example");
+            List<ResponseHeader> headers = [new("strict-transport-security", "max-age=7889238"), .. cookies.Select(cookie => new ResponseHeader("set-cookie", cookie))];
+            if (servedByShopify)
+            {
+                headers.Add(new ResponseHeader("powered-by", "Shopify"));
+            }
+
+            var home = site.Page($"{site.Site}/", RuleHarness.Html(), headers: headers);
+            return Assert.Single(new SecurityRules(site.Table()).Check(home), hit => hit.Issue == check).Platform;
+        }
+
+        string[] shopifys = ["localization=GB; Path=/", "cart_currency=GBP; Path=/", "_shopify_essential=x; Path=/"];
+        Assert.Equal(ShopifySignals.OWNER, Owner(IssueCatalog.SECURITY_HEADERS_MISSING, servedByShopify: true));
+        Assert.Equal(ShopifySignals.OWNER, Owner(IssueCatalog.SECURITY_HEADERS_WEAK, servedByShopify: true));
+        Assert.Equal(ShopifySignals.OWNER, Owner(IssueCatalog.COOKIES_INSECURE, servedByShopify: true, shopifys));
+        Assert.Equal(new PlatformOwner("Shopify", "Set by Shopify. You can't change this on a Shopify store."), ShopifySignals.OWNER);
+
+        // A cookie of the store's own, or of a name Shopify's policy doesn't give, is something its owner can see to.
+        Assert.Null(Owner(IssueCatalog.COOKIES_INSECURE, servedByShopify: true, [.. shopifys, "sessionid=x; Path=/"]));
+        Assert.Null(Owner(IssueCatalog.COOKIES_INSECURE, servedByShopify: true, "Localization=GB; Path=/"));
+
+        // A page no header says Shopify served is the site's, whatever its cookies are called.
+        Assert.Null(Owner(IssueCatalog.SECURITY_HEADERS_MISSING, servedByShopify: false));
+        Assert.Null(Owner(IssueCatalog.SECURITY_HEADERS_WEAK, servedByShopify: false));
+        Assert.Null(Owner(IssueCatalog.COOKIES_INSECURE, servedByShopify: false, shopifys));
     }
 
     [Theory]

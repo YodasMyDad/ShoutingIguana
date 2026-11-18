@@ -5,9 +5,10 @@
 //! memory while it runs, and writes nothing (which forgets) when the option is unticked (docs/v2-ui-architecture.md,
 //! "Secrets"). This module keeps what it's given and forgets what it's told to; the consent is the page's to ask.
 //!
-//! The page names what the secrets are for, never where they go: `defaults` (the crawl defaults' proxy) or
-//! `crawl:<id>` (what a crawl was started with, so Continue needn't ask again). Each is one entry, a small JSON object
-//! the page reads back as it wrote it: `{"proxyUrl": "...", "headers": {"Authorization": "..."}}`.
+//! The page names what the secrets are for, never where they go: `defaults` (the crawl defaults' proxy),
+//! `crawl:<id>` (what a crawl was started with, so Continue needn't ask again), or `shopify:<host>` (a Shopify store's
+//! crawler signature the user ticked Remember for, so the store's next crawl fills it in until it ends). Each is one
+//! entry, a small JSON object the page reads back as it wrote it: `{"proxyUrl": "...", "headers": {"Authorization": "..."}}`.
 
 use std::fmt;
 
@@ -30,7 +31,8 @@ pub enum SecretsError {
 impl fmt::Display for SecretsError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::BadKey => formatter.write_str("The shell keeps secrets for the crawl defaults and for crawls only."),
+            Self::BadKey => formatter
+                .write_str("The shell keeps secrets for the crawl defaults, for crawls and for Shopify stores only."),
             Self::TooLarge(bytes) => write!(
                 formatter,
                 "The secrets are {bytes} bytes, more than the {MAX_BYTES} the credential store is given."
@@ -41,16 +43,40 @@ impl fmt::Display for SecretsError {
     }
 }
 
-/// `defaults`, or `crawl:` and a crawl's id (letters, digits, `-` and `_`, at most 64).
+/// `defaults`; `crawl:` and a crawl's id (letters, digits, `-` and `_`, at most 64); or `shopify:` and a store's host as
+/// the engine keys signatures (lowercase letters, digits, `-` and `.`, at most 253, and a `:port` of its own when it
+/// has one).
 pub fn valid_key(key: &str) -> bool {
     if key == "defaults" {
         return true;
+    }
+    if let Some(host) = key.strip_prefix("shopify:") {
+        return valid_host(host);
     }
     key.strip_prefix("crawl:").is_some_and(|id| {
         !id.is_empty()
             && id.len() <= 64
             && id.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
     })
+}
+
+/// `shop.example.com` or `localhost:8443`: a lowercase name of dot-separated labels, none empty, with a port of 1 to 5
+/// digits when it has one. Never a path, a user name or anything else.
+fn valid_host(host: &str) -> bool {
+    let (name, port) = match host.split_once(':') {
+        Some((name, port)) => (name, Some(port)),
+        None => (host, None),
+    };
+    let port_ok =
+        port.is_none_or(|port| (1..=5).contains(&port.len()) && port.bytes().all(|byte| byte.is_ascii_digit()));
+    port_ok
+        && !name.is_empty()
+        && name.len() <= 253
+        && name.split('.').all(|label| {
+            !label.is_empty()
+                && label.len() <= 63
+                && label.bytes().all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+        })
 }
 
 /// A test run of the built app keeps its secrets apart from the user's own.
@@ -111,13 +137,33 @@ mod tests {
     use super::*;
 
     #[test]
-    fn only_the_defaults_and_crawls_have_secrets() {
+    fn only_the_defaults_crawls_and_shopify_stores_have_secrets() {
         assert!(valid_key("defaults"));
         assert!(valid_key("crawl:0123456789abcdef"));
         assert!(valid_key("crawl:a-b_c"));
-        for key in
-            ["", "crawl:", "crawl:../x", "crawl:a b", "settings", "Defaults", &format!("crawl:{}", "a".repeat(65))]
-        {
+        assert!(valid_key("shopify:shop.example.com"));
+        assert!(valid_key("shopify:www.my-shop.example"));
+        assert!(valid_key("shopify:localhost:8443"));
+        for key in [
+            "",
+            "crawl:",
+            "crawl:../x",
+            "crawl:a b",
+            "settings",
+            "Defaults",
+            &format!("crawl:{}", "a".repeat(65)),
+            "shopify:",
+            "shopify:Shop.example",
+            "shopify:shop..example",
+            "shopify:.shop.example",
+            "shopify:shop.example/admin",
+            "shopify:me@shop.example",
+            "shopify:shop.example:",
+            "shopify:shop.example:123456",
+            "shopify:shop.example:80:80",
+            "shopify:shop_example.com",
+            &format!("shopify:{}.example", "a".repeat(64)),
+        ] {
             assert!(!valid_key(key), "{key}");
         }
     }

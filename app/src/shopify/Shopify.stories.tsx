@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
 import { setTransport } from '../api/transport';
+import { liveStore } from '../live/liveStore';
 import type { ShopifyAccess } from '../api/types';
 import { createQueryClient } from '../app/queryClient';
 import { ShopifyAccessFields } from '../crawl/options/ShopifyAccessFields';
@@ -17,6 +18,7 @@ import {
 } from '../test/shopifySidecar';
 import { AddSignatureDialog } from './AddSignatureDialog';
 import { ShopifyPrompt } from './ShopifyPrompt';
+import { SignAndContinueDialog } from './SignAndContinue';
 
 const meta = { title: 'Shopify crawler access' } satisfies Meta;
 export default meta;
@@ -83,6 +85,26 @@ export const FieldsMalformed = fields({
 /** Simple's words: plain, but Shopify's buttons named exactly. */
 export const FieldsSimple = fields(signed(day(80)), 'simple');
 
+/** The signature remembered for this shop, filled in: said, with when it ends, in place of last time's refusals. */
+export const FieldsSaved: Story = {
+  render: () => {
+    const saved = { signatureInput: fakeSignatureInput(day(80)), signature: FAKE_SIGNATURE };
+    return (
+      <div className="si-card p-5" style={{ maxWidth: 680 }}>
+        <ShopifyAccessFields
+          value={{ domain: '', ...saved }}
+          onChange={() => undefined}
+          startUrl="https://shop.example.com/"
+          mode="simple"
+          now={NOW}
+          lastRefused={8}
+          saved={saved}
+        />
+      </div>
+    );
+  },
+};
+
 /** Simple, ended. */
 export const FieldsSimpleEnded = fields(signed(day(-2)), 'simple');
 
@@ -145,3 +167,27 @@ export const AddSignatureAdvanced: Story = { render: () => <Dialog mode="advance
 
 /** The same in Simple: Recheck these 8 pages. */
 export const AddSignatureSimple: Story = { render: () => <Dialog mode="simple" /> };
+
+// ------------------------------------------------------------------------------- While it checks, in Simple (phase B)
+
+/** The live alert's Add a Shopify signature in Simple: the check is told to stop, and the form waits for it to. */
+function SignWhileChecking({ status }: { status: 'stopping' | 'stopped' }) {
+  const [client] = useState(() => {
+    setTransport(fakeSidecar([['POST', /\/continue$/, () => json({}, 202)]]));
+    liveStore.reset();
+    liveStore.ingest({ event: 'hello', id: '', data: JSON.stringify({ live: [TEST_CRAWL_ID] }) });
+    liveStore.ingest({ event: 'crawl', id: '', data: JSON.stringify({ crawlId: TEST_CRAWL_ID, status }) });
+    return createQueryClient();
+  });
+  return (
+    <QueryClientProvider client={client}>
+      <SignAndContinueDialog crawlId={TEST_CRAWL_ID} host="shop.example.com" onClose={() => undefined} now={NOW} />
+    </QueryClientProvider>
+  );
+}
+
+/** Stopping: "Stopping the check…", and Continue the check waits. */
+export const SignWhileCheckingStopping: Story = { render: () => <SignWhileChecking status="stopping" /> };
+
+/** Stopped: the form, Remember said of the signature, and Continue the check once both values are in. */
+export const SignWhileCheckingStopped: Story = { render: () => <SignWhileChecking status="stopped" /> };

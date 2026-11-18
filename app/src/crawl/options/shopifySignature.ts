@@ -159,6 +159,11 @@ export function endsOn(expires: Date): string {
   return expires.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
 }
 
+/** The form holds the signature remembered for the store: "Using your saved Shopify signature, ends 1 March 2027". */
+export function savedSignatureWords(expires: Date | null): string {
+  return expires ? `Using your saved Shopify signature, ends ${endsOn(expires)}` : 'Using your saved Shopify signature';
+}
+
 /** The site's last crawl met Shopify's limit: "Last time Shopify refused 8 pages. Add a signature before you start." */
 export function lastRefusedWords(count: number): string {
   return `Last time Shopify refused ${count === 1 ? '1 page' : `${count.toLocaleString('en-GB')} pages`}. Add a signature before you start.`;

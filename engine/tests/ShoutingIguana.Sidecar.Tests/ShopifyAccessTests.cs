@@ -111,6 +111,37 @@ public sealed class ShopifyAccessTests(RecheckSite site) : IClassFixture<Recheck
         Assert.Equal(4, access["urlIds"]!.AsArray().Count);
     }
 
+    /// <summary>
+    /// A check whose every issue is something the site's platform sets has it on its count, <c>platform</c>, with the name
+    /// and why, and isn't in Fix first; every other check's is null.
+    /// </summary>
+    [Fact]
+    public async Task ACheckOfWhatShopifySetsSaysSoOnItsCountAndIsNoPartOfFixFirst()
+    {
+        var before = await _sidecar.GetJsonAsync($"api/crawls/{CrawlIds.For(FixLoopCrawls.AddTo(_sidecar, site.Then, "ordinary"))}/analysis");
+        var store = FixLoopCrawls.AddTo(_sidecar, site.Then, "store", change: path =>
+        {
+            using var connection = new SqliteConnection($"Data Source={path};Pooling=False");
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = "UPDATE issue_types SET platform = 'Shopify', platform_reason = $reason WHERE id = 'cookies-insecure'";
+            command.Parameters.AddWithValue("$reason", "Set by Shopify. You can't change this on a Shopify store.");
+            Assert.Equal(1, command.ExecuteNonQuery());
+        });
+
+        var analysis = await _sidecar.GetJsonAsync($"api/crawls/{CrawlIds.For(store)}/analysis");
+
+        var counts = analysis["counts"]!.AsArray();
+        var cookies = counts.Single(count => (string?)count!["checkId"] == "cookies-insecure")!;
+        Assert.True((long)cookies["count"]! > 0);
+        Assert.Equal(["name", "reason"], cookies["platform"]!.AsObject().Select(property => property.Key));
+        Assert.Equal("Shopify", (string?)cookies["platform"]!["name"]);
+        Assert.Equal("Set by Shopify. You can't change this on a Shopify store.", (string?)cookies["platform"]!["reason"]);
+        Assert.All(counts.Where(count => (string?)count!["checkId"] != "cookies-insecure"), count => Assert.Null(count!["platform"]));
+        Assert.Contains("cookies-insecure", before["fixFirst"]!.AsArray().Select(id => (string?)id));
+        Assert.DoesNotContain("cookies-insecure", analysis["fixFirst"]!.AsArray().Select(id => (string?)id));
+    }
+
     private static JsonObject Options(string startUrl, string host, string signatureInput, int? maxUrls = null)
     {
         var options = new JsonObject { ["startUrl"] = startUrl, ["signatures"] = Signatures(host, signatureInput) };

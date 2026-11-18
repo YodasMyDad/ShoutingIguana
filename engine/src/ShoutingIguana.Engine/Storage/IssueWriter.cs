@@ -51,6 +51,9 @@ internal sealed class IssueWriter : IDisposable
     private readonly SqliteParameter _file;
     private readonly ILogger _logger;
 
+    // Per check stored: the platform that set every issue so far (null once one was the site's own, or another's).
+    private readonly Dictionary<string, PlatformOwner?> _platforms = new(StringComparer.Ordinal);
+
     private IssueWriter(SqliteConnection connection, CrawlFileLock fileLock, ILogger logger)
     {
         _connection = connection;
@@ -151,6 +154,8 @@ internal sealed class IssueWriter : IDisposable
             return;
         }
 
+        _platforms[hit.Issue.Id] = _platforms.TryGetValue(hit.Issue.Id, out var platform) && platform != hit.Platform ? null : hit.Platform;
+
         var targets = hit.AllTargets;
         if (targets.Count == 0 && hit.Issue.Grouping == IssueGrouping.RelatedUrl)
         {
@@ -193,6 +198,11 @@ internal sealed class IssueWriter : IDisposable
     /// </summary>
     public void Discard(IReadOnlyList<IssueDefinition> checks)
     {
+        foreach (var check in checks)
+        {
+            _platforms.Remove(check.Id);
+        }
+
         foreach (var table in new[] { "issues", "issue_targets", "issue_faults", "issue_files" })
         {
             using var delete = Command($"DELETE FROM {table} WHERE issue = $issue");
@@ -246,13 +256,24 @@ internal sealed class IssueWriter : IDisposable
             }
         }
 
+        // A check that found something, all of it set by one platform, is that platform's.
+        Dictionary<string, PlatformOwner> platformOwned = new(StringComparer.Ordinal);
+        foreach (var (checkId, platform) in _platforms)
+        {
+            if (platform is not null && counts.GetValueOrDefault(checkId) > 0)
+            {
+                platformOwned[checkId] = platform;
+            }
+        }
+
         using (var type = Command("""
-                   INSERT INTO issue_types (id, category, severity, title, description, fix, url_count)
-                   VALUES ($id, $category, $severity, $title, $description, $fix, $count)
+                   INSERT INTO issue_types (id, category, severity, title, description, fix, url_count, platform, platform_reason)
+                   VALUES ($id, $category, $severity, $title, $description, $fix, $count, $platform, $platformReason)
                    """))
         {
             foreach (var issue in checks)
             {
+                var platform = platformOwned.GetValueOrDefault(issue.Id);
                 type.Parameters.Clear();
                 type.Parameters.AddWithValue("$id", issue.Id);
                 type.Parameters.AddWithValue("$category", issue.Category.ToString());
@@ -261,6 +282,8 @@ internal sealed class IssueWriter : IDisposable
                 type.Parameters.AddWithValue("$description", issue.Description);
                 type.Parameters.AddWithValue("$fix", issue.Fix);
                 type.Parameters.AddWithValue("$count", counts.GetValueOrDefault(issue.Id));
+                type.Parameters.AddWithValue("$platform", (object?)platform?.Name ?? DBNull.Value);
+                type.Parameters.AddWithValue("$platformReason", (object?)platform?.Reason ?? DBNull.Value);
                 type.ExecuteNonQuery();
             }
         }
@@ -284,7 +307,8 @@ internal sealed class IssueWriter : IDisposable
         }
 
         var crawledUrls = urls.CountCrawled();
-        var score = ScoreCalculator.Calculate([.. checks.Select(issue => new IssueCount(issue, counts.GetValueOrDefault(issue.Id)))], skipped.Count,
+        var score = ScoreCalculator.Calculate(
+            [.. checks.Select(issue => new IssueCount(issue, counts.GetValueOrDefault(issue.Id)) { Platform = platformOwned.GetValueOrDefault(issue.Id) })], skipped.Count,
             info.PagesAnalyzed, crawledUrls, incomplete, urls.CountBlockedByRobots());
 
         // The crawl row's updated_at as it stands: the lock keeps any crawl out until this commits, so it's the one analysed.
@@ -340,7 +364,7 @@ internal sealed class IssueWriter : IDisposable
 
         _transaction.Commit();
         IndexLinkKinds();
-        return new CommittedAnalysis(counts, crawledUrls, score);
+        return new CommittedAnalysis(counts, crawledUrls, score, platformOwned);
     }
 
     /// <summary>Rolls back unless committed, then folds the write-ahead log and closes the file.</summary>
@@ -390,20 +414,23 @@ internal sealed class IssueWriter : IDisposable
     /// <summary>A file analysed by an earlier engine has the analysis table without the columns added since.</summary>
     private static void AddMissingColumns(SqliteConnection connection)
     {
-        HashSet<string> existing = new(StringComparer.OrdinalIgnoreCase);
-        using (var columns = connection.CreateCommand())
+        foreach (var (table, added) in new[] { ("analysis", CrawlSchema.ANALYSIS_COLUMNS), ("issue_types", CrawlSchema.ISSUE_TYPES_COLUMNS) })
         {
-            columns.CommandText = "SELECT name FROM pragma_table_info('analysis')";
-            using var reader = columns.ExecuteReader();
-            while (reader.Read())
+            HashSet<string> existing = new(StringComparer.OrdinalIgnoreCase);
+            using (var columns = connection.CreateCommand())
             {
-                existing.Add(reader.GetString(0));
+                columns.CommandText = $"SELECT name FROM pragma_table_info('{table}')";
+                using var reader = columns.ExecuteReader();
+                while (reader.Read())
+                {
+                    existing.Add(reader.GetString(0));
+                }
             }
-        }
 
-        foreach (var (name, type) in CrawlSchema.ANALYSIS_COLUMNS.Where(column => !existing.Contains(column.Name)))
-        {
-            CrawlDatabase.Execute(connection, $"ALTER TABLE analysis ADD COLUMN {name} {type}");
+            foreach (var (name, type) in added.Where(column => !existing.Contains(column.Name)))
+            {
+                CrawlDatabase.Execute(connection, $"ALTER TABLE {table} ADD COLUMN {name} {type}");
+            }
         }
     }
 

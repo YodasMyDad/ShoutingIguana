@@ -8,17 +8,18 @@ namespace ShoutingIguana.Engine.Analysis;
 /// the most URLs flagged; then catalog order. A site-wide fault is one issue, so by its count it would come after every
 /// check that flagged more, and it is the first thing to fix: it leads however small its count. The one order for
 /// every host: the score's lines follow it, and what "fixing the first five" would leave is worked out from it. A check
-/// the user has hidden in the app is still in it: hiding is the app's own preference, which the engine doesn't know.
+/// the user has hidden in the app is still in it: hiding is the app's own preference, which the engine doesn't know. A
+/// check of what the site's platform set (<see cref="IssueCount.Platform"/>), which its owner can't change, isn't.
 /// </summary>
 public static class FixFirstOrder
 {
     private static readonly Dictionary<string, int> CATALOG_ORDER =
         IssueCatalog.All.Select((check, index) => (check.Id, index)).ToDictionary(pair => pair.Id, pair => pair.index, StringComparer.Ordinal);
 
-    /// <summary>The checks with a count above 0, in fix-first order.</summary>
+    /// <summary>The checks with a count above 0, in fix-first order, but for those of what the site's platform set.</summary>
     public static IReadOnlyList<IssueCount> Of(IEnumerable<IssueCount> checks) =>
     [
-        .. checks.Where(check => check.Count > 0)
+        .. checks.Where(check => check.Count > 0 && check.Platform is null)
             .OrderBy(check => check.Issue.Severity)
             .ThenByDescending(check => check.Issue.SiteWide)
             .ThenByDescending(check => check.Issue.SiteWide ? 0 : check.Count)
@@ -31,9 +32,11 @@ public static class FixFirstOrder
     /// as it is now. A check the catalog doesn't know (a newer engine's) is left out, as it has no severity to place it by.
     /// </summary>
     /// <param name="counts">URLs flagged per check id, as <see cref="Storage.IssueReader.ReadCounts"/> gives them.</param>
-    public static IReadOnlyList<string> Of(IReadOnlyDictionary<string, long> counts) =>
+    /// <param name="platformOwned">The checks of what the site's platform set, as the analysis stored them: left out.</param>
+    public static IReadOnlyList<string> Of(IReadOnlyDictionary<string, long> counts, IReadOnlyDictionary<string, PlatformOwner>? platformOwned = null) =>
     [
-        .. Of(IssueCatalog.All.Where(check => counts.ContainsKey(check.Id)).Select(check => new IssueCount(check, counts[check.Id])))
+        .. Of(IssueCatalog.All.Where(check => counts.ContainsKey(check.Id))
+                .Select(check => new IssueCount(check, counts[check.Id]) { Platform = platformOwned?.GetValueOrDefault(check.Id) }))
             .Select(check => check.Issue.Id)
     ];
 }
