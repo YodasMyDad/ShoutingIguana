@@ -78,6 +78,23 @@ public sealed class ShopifyCrawlTests : IDisposable
         Assert.Equal(0, access.NotCheckedSigned);
         Assert.Equal(refused, access.NotCheckedUrlIds.Count);
 
+        // A crawl made before the platform was kept (as the owner's Jitsunami crawls were) is told by its first page's
+        // stored headers, and its refusals counted the same.
+        var earlier = _files.NewPath();
+        File.Copy(path, earlier);
+        using (var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={earlier};Pooling=False"))
+        {
+            connection.Open();
+            using var drop = connection.CreateCommand();
+            drop.CommandText = "DROP TABLE site_platform";
+            drop.ExecuteNonQuery();
+        }
+
+        Assert.Null(SitePlatformReader.Read(earlier));
+        var fromHeaders = ShopifyAccessReader.Read(earlier);
+        Assert.Equal("powered-by: Shopify", fromHeaders?.Signal);
+        Assert.Equal((int)refused, fromHeaders?.NotCheckedUnsigned);
+
         // Not checked is no fault of the pages: no check calls them broken or unreachable.
         await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
         string[] failures = ["internal-blocked", "internal-client-error", "internal-server-error", "internal-unreachable", "broken-internal-links"];
