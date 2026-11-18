@@ -464,6 +464,8 @@ describe('a Shopify signature remembered for the store (lane shopify, phase B)',
     expect(await screen.findByText('Using your saved Shopify signature, ends 1 January 2100')).toBeVisible();
     expect(screen.getByRole('textbox', { name: 'Signature' })).toHaveValue(SAVED.signature);
     expect(remember()).toBeChecked();
+    // Remember, in the Shopify part, is said of the signature.
+    expect(screen.getByText(/^Kept in Windows Credential Manager until it ends/)).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: /^Start crawl/ }));
 
     await waitFor(() => expect(signatures(transport)).toEqual({ 'shop.example': SAVED }));
@@ -479,6 +481,17 @@ describe('a Shopify signature remembered for the store (lane shopify, phase B)',
 
     await waitFor(() => expect(signatures(transport)).toEqual({ 'shop.example': SAVED }));
     await waitFor(() => expect(kept.has('shopify:shop.example')).toBe(false));
+  });
+
+  it('in Simple, says Remember of the signature when it is the only secret', async () => {
+    sidecar();
+    await open('/new?url=https://shop.example/&focus=shopify', 'simple');
+    expect(await screen.findByText('Using your saved Shopify signature, ends 1 January 2100')).toBeVisible();
+    expect(
+      screen.getByText(
+        'Windows keeps this signature safe until it ends, and the next check of this shop uses it, so you won’t paste it again.',
+      ),
+    ).toBeVisible();
   });
 
   it('fills in nothing for another site', async () => {

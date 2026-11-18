@@ -26,6 +26,7 @@ import {
 import { ProxyTest } from './ProxyTest';
 import { RememberSecrets, type RememberSecretsProps } from './RememberSecrets';
 import { ShopifyAccessFields } from './ShopifyAccessFields';
+import { EMPTY_SIGNATURE } from './shopifySignature';
 import type { FormErrors } from './useValidation';
 import { FIELD_WORDS, SIMPLE_WORDS, USER_AGENT_NAMES, sectionSummary, speedTitle, speedWords } from './words';
 
@@ -251,7 +252,12 @@ function SimpleQuestions({
           />
         </div>
       </Fold>
-      {remember && formHasSecrets(form) ? <RememberSecrets {...remember} /> : null}
+      {remember && formHasSecrets(form) ? (
+        <RememberSecrets
+          {...remember}
+          subject={formHasSecrets({ ...form, signatures: EMPTY_SIGNATURE }) ? 'secrets' : 'signature'}
+        />
+      ) : null}
     </div>
   );
 }
@@ -445,7 +451,7 @@ function AdvancedSections({
               saved={shopifySaved}
             />
             {remember && formHasSecrets({ ...form, proxyUrl: '', headers: [] }) ? (
-              <RememberSecrets {...remember} />
+              <RememberSecrets {...remember} subject="signature" />
             ) : null}
           </>,
         )}
