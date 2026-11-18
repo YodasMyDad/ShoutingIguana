@@ -116,6 +116,23 @@ describe('the crawl’s settings', () => {
     await waitFor(() => expect(lastContinue(transport)).toMatchObject({ skipMissingHeaders: true }));
   });
 
+  it('continue a stopped crawl with a Shopify signature, opened on it from the alert, so the refused pages go signed', async () => {
+    const transport = sidecar('stopped');
+    await open(`${SETTINGS}?focus=shopify`);
+    await screen.findByRole('region', { name: 'Continue' });
+    await waitFor(() => expect(continueCard().getByRole('textbox', { name: 'Domain' })).toHaveFocus());
+    const input = 'sig1=("@authority" "signature-agent");created=1767225600;expires=4102444800;keyid="FAKETESTONLY"';
+    fireEvent.change(continueCard().getByRole('textbox', { name: 'Signature-Input' }), { target: { value: input } });
+    fireEvent.change(continueCard().getByRole('textbox', { name: 'Signature' }), { target: { value: 'sig1=:FAKE:' } });
+    fireEvent.change(continueCard().getByRole('textbox', { name: 'Header 1 value' }), { target: { value: 's3cret' } });
+    fireEvent.click(continueCard().getByRole('button', { name: 'Continue the crawl' }));
+    await waitFor(() =>
+      expect(lastContinue(transport)).toMatchObject({
+        signatures: { 'example.com': { signatureInput: input, signature: 'sig1=:FAKE:' } },
+      }),
+    );
+  });
+
   it('open on the speed when an alert asks to continue more slowly', async () => {
     sidecar('stopped');
     await open(`${SETTINGS}?focus=speed`);

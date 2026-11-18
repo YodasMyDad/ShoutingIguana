@@ -1,5 +1,7 @@
 using System.Text.Json;
 using ShoutingIguana.Engine.Configuration.Models;
+using ShoutingIguana.Engine.Serialization;
+using ShoutingIguana.Engine.Tests.Support;
 
 namespace ShoutingIguana.Engine.Tests.Configuration;
 
@@ -151,6 +153,77 @@ public sealed class CrawlOptionsTests
         Assert.All(fields.Keys, field => Assert.Contains(field, properties));
         Assert.Empty(new CrawlOptions { StartUrl = "https://example.com/" }.ValidateFields());
     }
+
+    [Fact]
+    public void AcceptsAShopifySignatureForAHost() =>
+        Assert.Empty(WithSignatures(FakeSignatures.For("shop.example")).Validate());
+
+    [Fact]
+    public void RefusesASignatureForWhatIsNoHost() =>
+        Assert.Equal(["A Shopify signature is for 'shop.example/products', which isn't a domain."],
+            WithSignatures(FakeSignatures.For("shop.example/products")).Validate());
+
+    [Fact]
+    public void RefusesTwoSignaturesForOneHost()
+    {
+        var options = WithSignatures(new Dictionary<string, CrawlSignature> { ["shop.example"] = FakeSignatures.Valid(), ["SHOP.example."] = FakeSignatures.Valid() });
+
+        Assert.Equal(["There are two Shopify signatures for shop.example: keep one."], options.Validate());
+    }
+
+    [Fact]
+    public void RefusesAMalformedSignatureByItsFieldWithoutRepeatingIt()
+    {
+        var options = WithSignatures(new Dictionary<string, CrawlSignature>
+        {
+            ["shop.example"] = FakeSignatures.Valid() with { Signature = $"sig1={FakeSignatures.MARKER}" }
+        });
+
+        var problem = Assert.Single(Assert.Single(options.ValidateFields(), field => field.Key == "signatures").Value);
+        Assert.StartsWith("The Shopify signature for shop.example: Signature isn't in the form Shopify gives", problem);
+        Assert.DoesNotContain(FakeSignatures.MARKER, problem);
+    }
+
+    [Fact]
+    public void RefusesAnExpiredSignatureAndSaysWhenItEnded()
+    {
+        var options = WithSignatures(FakeSignatures.For("shop.example", expires: FakeSignatures.CREATED + 60));
+
+        Assert.Equal(
+            ["The Shopify signature for shop.example expired on 1 January 2026. Create a new one in Shopify admin: Online Store › Preferences › Crawler access."],
+            options.Validate());
+    }
+
+    [Fact]
+    public void ACrawlFileKeepsNoSignature()
+    {
+        var options = WithSignatures(FakeSignatures.For("shop.example"));
+
+        var stored = options.WithoutSecrets();
+        var json = JsonSerializer.Serialize(stored, EngineJsonContext.Default.CrawlOptions);
+
+        Assert.Empty(stored.Signatures);
+        Assert.DoesNotContain(FakeSignatures.MARKER, json);
+        Assert.DoesNotContain("shop.example", json.Replace("https://example.com/", string.Empty, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AResumeSendsTheSignaturesGivenAgainOnly()
+    {
+        var stored = WithSignatures(FakeSignatures.For("shop.example")).WithoutSecrets();
+
+        var given = stored.PlanResume(new ResumeChanges { Signatures = FakeSignatures.For("shop.example") });
+        var notGiven = stored.PlanResume(new ResumeChanges());
+
+        Assert.Equal(FakeSignatures.SIGNATURE, given.Options.Signatures["shop.example"].Signature);
+        Assert.Empty(notGiven.Options.Signatures);
+    }
+
+    private static CrawlOptions WithSignatures(IReadOnlyDictionary<string, CrawlSignature> signatures) => new()
+    {
+        StartUrl = "https://example.com/",
+        Signatures = signatures
+    };
 
     private static CrawlOptions WithHeader(string name, string value) => new()
     {

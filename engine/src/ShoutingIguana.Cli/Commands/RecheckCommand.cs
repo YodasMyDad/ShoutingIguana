@@ -32,11 +32,12 @@ internal static class RecheckCommand
         var urls = new Option<string?>("--urls") { Description = "A file of URLs to recheck, one a line (up to 1,000), instead of the check's." };
         var headers = new Option<string[]>("--header") { Description = "A request header the crawl sent, given again: crawl files don't keep their values. Repeatable." };
         var proxy = new Option<string?>("--proxy") { Description = "The crawl's proxy, given again when it had a user name and password." };
+        var signatureFiles = SignatureFile.CreateOption();
         var planOnly = new Option<bool>("--plan") { Description = "Only say what the recheck would do (and how long it took to work out), fetching nothing." };
         var verbose = new Option<bool>("--verbose", "-v") { Description = "Detailed engine logging." };
         var command = new Command("recheck", "Fetch a problem's URLs again into the same crawl, analyse it, and say how many are fixed.")
         {
-            database, check, groupUrl, groupDetail, urls, headers, proxy, planOnly, verbose
+            database, check, groupUrl, groupDetail, urls, headers, proxy, signatureFiles, planOnly, verbose
         };
 
         command.SetAction((parse, cancellationToken) => CommandErrors.RunAsync(async () =>
@@ -91,7 +92,18 @@ internal static class RecheckCommand
                 return Fail(headerError);
             }
 
-            var resume = CrawlDatabase.ReadOptions(path).PlanResume(new ResumeChanges { ExtraHeaders = extraHeaders, ProxyUrl = parse.GetValue(proxy) });
+            var stored = CrawlDatabase.ReadOptions(path);
+            if (!SignatureFile.TryRead(parse.GetValue(signatureFiles) ?? [], stored.StartUrl, out var signatures, out var signatureError))
+            {
+                return Fail(signatureError);
+            }
+
+            var resume = stored.PlanResume(new ResumeChanges { ExtraHeaders = extraHeaders, ProxyUrl = parse.GetValue(proxy), Signatures = signatures });
+            if (resume.Options.ValidateFields().TryGetValue("signatures", out var signatureProblems))
+            {
+                return Fail(string.Join(Environment.NewLine, signatureProblems));
+            }
+
             if (resume.MissingProxyCredentials)
             {
                 return Fail("This crawl used a proxy with a user name and password, which crawl files don't store. Pass --proxy again.");

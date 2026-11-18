@@ -213,6 +213,22 @@ describe('causes and rows', () => {
     expect(clearedIsFixed('fixed')).toBe(true);
     expect(clearedIsFixed('gone')).toBe(true);
     expect(clearedIsFixed('notChecked')).toBe(false);
+    const refused = 'Not checked: the site asked the crawler to slow down (429 Too Many Requests)';
+    expect(
+      notCheckedWords(
+        { code: 'rateLimited', text: `${refused}: Shopify limits crawlers without a signature` },
+        'simple',
+      ),
+    ).toBe('Shopify turns away checks without a signature, so it wasn’t read.');
+    expect(
+      notCheckedWords(
+        { code: 'rateLimited', text: `${refused}: Shopify refused the crawler's signature, which may be invalid` },
+        'simple',
+      ),
+    ).toBe('Shopify turned the check away even with the signature, so it wasn’t read.');
+    expect(notCheckedWords({ code: 'rateLimited', text: refused }, 'simple')).toBe(
+      'The site asked the check to slow down, so it wasn’t read.',
+    );
     expect(notCheckedWords({ code: 'redirects', text: 'Now forwards to /new/' }, 'simple')).toBe(
       'It now forwards to another address.',
     );

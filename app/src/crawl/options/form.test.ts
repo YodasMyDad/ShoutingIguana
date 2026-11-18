@@ -170,3 +170,36 @@ describe('the secrets in the form', () => {
     expect(missingSecrets({})).toBe(false);
   });
 });
+
+describe('the form’s Shopify crawler access', () => {
+  const signatureInput = 'sig1=("@authority" "signature-agent");created=1767225600;expires=4102444800;keyid="FAKE"';
+  const signature = 'sig1=:FAKEAAAA:';
+
+  it('sends one signature, keyed by the start address’s host unless another domain is named, and never saves it', () => {
+    const form = {
+      ...formFromOptions(ENGINE_DEFAULTS, 'https://shop.example/products/a'),
+      signatures: { domain: '', signatureInput, signature },
+    };
+
+    expect(optionsFromForm(form).signatures).toEqual({ 'shop.example': { signatureInput, signature } });
+    expect(
+      optionsFromForm({ ...form, signatures: { ...form.signatures, domain: 'www.shop.example' } }).signatures,
+    ).toEqual({
+      'www.shop.example': { signatureInput, signature },
+    });
+    expect(optionsFromForm(form, { secrets: false }).signatures).toEqual({});
+    expect(formHasSecrets(form)).toBe(true);
+    expect(changedFields(form, formFromOptions(ENGINE_DEFAULTS))).toContain('signatures');
+  });
+
+  it('comes back from options given their kept secrets, and says itself in its section’s line', () => {
+    const form = formFromOptions(
+      { ...ENGINE_DEFAULTS, signatures: { 'shop.example': { signatureInput, signature } } },
+      'https://shop.example/',
+    );
+
+    expect(form.signatures).toEqual({ domain: '', signatureInput, signature });
+    expect(sectionSummary('shopify', form)).toBe('A signature for shop.example, until 1 January 2100');
+    expect(sectionSummary('shopify', formFromOptions(ENGINE_DEFAULTS))).toBe('No signature');
+  });
+});
