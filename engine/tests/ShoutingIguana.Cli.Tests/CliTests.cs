@@ -332,9 +332,9 @@ public sealed class CliTests : IAsyncLifetime
 
         var check = Path.Combine(_folder, "check.csv");
         Assert.Equal(0, (await RunAsync("export", crawl, "--kind", "check", "--check", "title-too-long", "--out", check)).ExitCode);
-        // The check's sheet's columns, then its evidence: where results cut a long title, its width and its length (its title is
-        // the page title already there).
-        Assert.Equal("Address,Page title,What was found,Other address,Title in results,Title width (px),Title length", (await File.ReadAllLinesAsync(check))[0].TrimStart((char)0xFEFF));
+        // The check's sheet's columns, then its evidence: where results cut a long title (its title is the page title already
+        // there; its width and length are what was found).
+        Assert.Equal("Address,Page title,What was found,Other address,Title in results", (await File.ReadAllLinesAsync(check))[0].TrimStart((char)0xFEFF));
         Assert.Equal(0, (await RunAsync("export", crawl, "--kind", "issueRows", "--check", "title-too-long", "--out", check, "--columns", "url,detail")).ExitCode);
         Assert.Equal("URL,Detail", (await File.ReadAllLinesAsync(check))[0].TrimStart((char)0xFEFF));
 
