@@ -5,7 +5,7 @@ namespace ShoutingIguana.Engine.Crawling.Models;
 /// <list type="bullet">
 /// <item><c>blocked</c>: Host, Reason (the firewall or challenge), Count (the host's responses blocked: 1 as raised, so far when read from the file).</item>
 /// <item><c>rate-limited</c>: Host, Reason (429 Too Many Requests), Duration (the pause it asked for, when it did).</item>
-/// <item><c>rate-limited-unchecked</c>: Host (of the first such URL), Reason (429 Too Many Requests), Count (the site's URLs stored as not checked).</item>
+/// <item><c>rate-limited-unchecked</c>: Host (of the first such URL), Reason (429 Too Many Requests), Count (the site's URLs stored as not checked: refused, or never asked).</item>
 /// <item><c>mostly-forbidden</c>: Host, Count (the 403s), Sampled (the site's first URLs fetched).</item>
 /// <item><c>start-redirects-away</c>: Url (where the start URL leads).</item>
 /// <item><c>robots-unreachable</c>: Origin, Reason (the status or error), Duration (until robots.txt is asked again).</item>

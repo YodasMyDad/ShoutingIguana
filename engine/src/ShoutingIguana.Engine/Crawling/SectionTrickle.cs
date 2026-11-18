@@ -14,9 +14,10 @@ namespace ShoutingIguana.Engine.Crawling;
 /// One answered 429 again goes back to the front of its section's line; nothing is given up while pages still get
 /// through. A section is given up on after <see cref="GIVE_UP_FAILURES"/> 429s in a row at its slowest pace (one page
 /// every <see cref="SectionPace.MAX_INTERVAL"/>, which the cap leaves no room for), and every
-/// section <see cref="GIVE_UP_AFTER"/> after the rest of the crawl is over: what is left is stored as not checked. A try
-/// that would come after that comes as the time runs out instead, so each section has its last try then, and no wait
-/// says a try comes later than that.
+/// section <see cref="GIVE_UP_AFTER"/> after the rest of the crawl is over: what is left is stored as not checked, as
+/// refused if it was asked and answered 429, and as never asked (<see cref="RetryingFetcher.NEVER_ASKED_ERROR"/>) if its
+/// turn hadn't come. A try that would come after that comes as the time runs out instead, so each section has its last
+/// try then, and no wait says a try comes later than that.
 /// </summary>
 internal sealed class SectionTrickle(
     HostGateRegistry gates,
@@ -38,6 +39,9 @@ internal sealed class SectionTrickle(
 
     private readonly Lock _sync = new();
     private readonly Dictionary<SectionPace, Line> _lines = [];
+
+    // The sections given up on with URLs never asked, for the notice at the end of the crawl.
+    private readonly Dictionary<SectionPace, SectionGivenUp> _givenUp = [];
     private int _held;
     private int _heldLinked;
     private DateTimeOffset? _restOverAt;
@@ -47,6 +51,18 @@ internal sealed class SectionTrickle(
 
     /// <summary>Those of them that pages link to, as opposed to ones only sitemaps list: the URLs only sitemaps list don't wait for them.</summary>
     public int HeldLinked => Volatile.Read(ref _heldLinked);
+
+    /// <summary>The sections given up on while URLs in them were still waiting their turn, and why.</summary>
+    public List<SectionGivenUp> GivenUp
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return [.. _givenUp.Values];
+            }
+        }
+    }
 
     /// <summary>
     /// Holds the item back when its URL is in a section its host limits: one of the site's own, not a probe. <paramref
@@ -114,7 +130,8 @@ internal sealed class SectionTrickle(
 
     /// <summary>Asks the held-back URLs, one at a time per section, as their turns come, until stopped.</summary>
     /// <param name="record">Stores a URL's record, once it's done with.</param>
-    public async Task RunAsync(Func<PageRecord, CancellationToken, Task> record, CancellationToken cancellationToken)
+    /// <param name="answered">Hears how each try ended, as it does: a URL refused again is put back, not recorded.</param>
+    public async Task RunAsync(Func<PageRecord, CancellationToken, Task> record, Action<PageRecord> answered, CancellationToken cancellationToken)
     {
         while (true)
         {
@@ -142,6 +159,7 @@ internal sealed class SectionTrickle(
                 result = PageProcessor.Failed(item, timeProvider.GetUtcNow().ToUnixTimeMilliseconds(), FetchOutcome.ProcessingError, exception.Message);
             }
 
+            answered(result);
             if (IsRateLimited(result) && !section.IsRefusingEverything(GIVE_UP_FAILURES))
             {
                 // Still refused: back to the front of the line, for its section's next turn.
@@ -185,7 +203,7 @@ internal sealed class SectionTrickle(
     /// <summary>
     /// The URLs of sections that refuse everything at their slowest pace, and of every section once the rest of the crawl
     /// has been over for <see cref="GIVE_UP_AFTER"/> and it has had its last try: not checked, the site having asked the
-    /// crawler to slow down.
+    /// crawler to slow down. One asked and refused keeps that record; one whose turn hadn't come is stored as never asked.
     /// </summary>
     private List<PageRecord> GiveUp(DateTimeOffset now)
     {
@@ -203,13 +221,23 @@ internal sealed class SectionTrickle(
                 }
 
                 logger.LogInformation("Giving up on {Count} URLs in {Section} of {Host}", line.Waiting.Count, section.Path, line.Host);
+                var neverAsked = 0;
                 foreach (var (item, last) in line.Waiting)
                 {
                     Count(item, -1);
-                    givenUp.Add(last is not null && IsRateLimited(last)
-                        ? last
-                        : PageProcessor.Failed(item, now.ToUnixTimeMilliseconds(), FetchOutcome.NetworkError,
-                            $"{RetryingFetcher.RATE_LIMITED_ERROR} ({HttpStatusNames.Describe(429)})"));
+                    if (last is not null && IsRateLimited(last))
+                    {
+                        givenUp.Add(last);
+                        continue;
+                    }
+
+                    neverAsked++;
+                    givenUp.Add(PageProcessor.Failed(item, now.ToUnixTimeMilliseconds(), FetchOutcome.NetworkError, RetryingFetcher.NEVER_ASKED_ERROR));
+                }
+
+                if (neverAsked > 0)
+                {
+                    _givenUp[section] = new SectionGivenUp(line.Host, section.Path, timeRanOut);
                 }
 
                 line.Waiting.Clear();
@@ -255,8 +283,7 @@ internal sealed class SectionTrickle(
             Data = new CrawlNoticeData(Host: host, Url: section.Path, Reason: HttpStatusNames.Describe(429), Duration: section.Interval)
         });
 
-    private static bool IsRateLimited(PageRecord record) =>
-        record.Response.Error?.StartsWith(RetryingFetcher.RATE_LIMITED_ERROR, StringComparison.Ordinal) == true;
+    private static bool IsRateLimited(PageRecord record) => RateLimitedErrors.IsRateLimited(record.Response.Error);
 
     /// <summary>One section's URLs waiting their turn, oldest first, and its host as progress names it.</summary>
     private sealed class Line(string host)
