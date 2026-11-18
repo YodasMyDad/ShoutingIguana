@@ -118,6 +118,7 @@ namespace ShoutingIguana.Sidecar.Serialization;
 [JsonSerializable(typeof(HistoryDto))]
 [JsonSerializable(typeof(AnalysisDto))]
 [JsonSerializable(typeof(CrawlStatsDto))]
+[JsonSerializable(typeof(ShopifyAccessDto))]
 [JsonSerializable(typeof(IssuesPageDto))]
 [JsonSerializable(typeof(HelloEventDto))]
 [JsonSerializable(typeof(ProgressEventDto))]

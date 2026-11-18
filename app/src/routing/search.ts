@@ -160,9 +160,10 @@ export function validateHomeSearch(search: Record<string, unknown>): HomeSearch 
 
 /**
  * A setting a link opens a form on, in focus: an alert's "Continue more slowly" (`speed`), "Add headers" (`headers`),
- * "Crawl as another user agent" (`userAgent`) and "Crawl again with robots.txt ignored" (`robots`).
+ * "Crawl as another user agent" (`userAgent`), "Crawl again with robots.txt ignored" (`robots`) and "Add a Shopify
+ * signature" (`shopify`).
  */
-export const SETTING_FOCUSES = ['speed', 'headers', 'proxy', 'userAgent', 'robots'] as const;
+export const SETTING_FOCUSES = ['speed', 'headers', 'proxy', 'userAgent', 'robots', 'shopify'] as const;
 export type SettingFocus = (typeof SETTING_FOCUSES)[number];
 
 function settingFocus(value: unknown): SettingFocus | undefined {

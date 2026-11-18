@@ -35,6 +35,8 @@ export const queryKeys = {
   crawlItem: (id: string) => ['crawl', id, 'item'] as const,
   analysis: (id: string) => ['crawl', id, 'analysis'] as const,
   stats: (id: string) => ['crawl', id, 'stats'] as const,
+  /** A Shopify store's crawler access: under the crawl, so an analysis after a recheck reads it afresh. */
+  shopifyAccess: (id: string) => ['crawl', id, 'shopify'] as const,
   crawlOptions: (id: string) => ['crawl', id, 'options'] as const,
   alerts: (id: string) => ['crawl', id, 'alerts'] as const,
   history: (id: string) => ['crawl', id, 'history'] as const,
@@ -182,6 +184,13 @@ export const analysisQuery = (id: string) =>
   queryOptions({
     queryKey: queryKeys.analysis(id),
     queryFn: ({ signal }) => api.analysis(id, signal),
+    staleTime: Infinity,
+  });
+
+export const shopifyAccessQuery = (id: string) =>
+  queryOptions({
+    queryKey: queryKeys.shopifyAccess(id),
+    queryFn: ({ signal }) => api.shopifyAccess(id, signal),
     staleTime: Infinity,
   });
 

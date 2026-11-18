@@ -25,6 +25,7 @@ internal static class CrawlCommand
         var userAgentString = new Option<string?>("--user-agent-string") { Description = "Send this exact User-Agent instead of a preset." };
         var headers = new Option<string[]>("--header") { Description = "Extra request header, e.g. \"X-Crawler-Key: secret\". Repeatable." };
         var proxy = new Option<string?>("--proxy") { Description = "http://, https:// or socks5:// proxy URL." };
+        var signatureFiles = SignatureFile.CreateOption();
         var timeout = new Option<int?>("--timeout") { Description = "Per-request timeout in seconds (default 20)." };
         var ignoreRobots = new Option<bool>("--ignore-robots") { Description = "Crawl URLs that robots.txt disallows." };
         var crawlDelay = new Option<bool>("--respect-crawl-delay") { Description = "Honour robots.txt Crawl-delay." };
@@ -41,7 +42,7 @@ internal static class CrawlCommand
 
         var command = new Command("crawl", "Crawl a site into a .sicrawl file.")
         {
-            url, database, resume, maxUrls, maxDepth, concurrency, rate, userAgent, userAgentString, headers, proxy, timeout,
+            url, database, resume, maxUrls, maxDepth, concurrency, rate, userAgent, userAgentString, headers, proxy, signatureFiles, timeout,
             ignoreRobots, crawlDelay, noResources, noExternal, noSitemaps, subdomains, anyFolder, followNofollow, storeHtml,
             noAnalyze, quiet, verbose
         };
@@ -76,7 +77,7 @@ internal static class CrawlCommand
                 if (unchangeable.Count > 0)
                 {
                     return Fail($"{string.Join(", ", unchangeable)} can't change when resuming: a crawl keeps the settings it started with. " +
-                                "When resuming you can change --concurrency, --rate, --timeout, --header and --proxy.");
+                                "When resuming you can change --concurrency, --rate, --timeout, --header, --proxy and --signature-file.");
                 }
 
                 var plan = CrawlDatabase.ReadOptions(databasePath).PlanResume(new ResumeChanges
@@ -138,6 +139,13 @@ internal static class CrawlCommand
                 databasePath ??= CrawlDatabase.DefaultDatabasePath(startUrl);
             }
 
+            // A crawl file keeps no signature, so a resumed crawl sends one only when it's given again.
+            if (!SignatureFile.TryRead(parse.GetValue(signatureFiles) ?? [], options.StartUrl, out var signatures, out var signatureError))
+            {
+                return Fail(signatureError);
+            }
+
+            options = options with { Signatures = signatures };
             var errors = options.Validate();
             if (errors.Count > 0)
             {
@@ -147,6 +155,7 @@ internal static class CrawlCommand
             using var loggerFactory = Logging.Create(parse.GetValue(verbose));
             var observer = new ConsoleCrawlObserver(parse.GetValue(quiet));
             Console.WriteLine($"{(isResume ? "Resuming" : "Crawling")} {options.StartUrl} -> {Path.GetFullPath(databasePath)}");
+            SignatureFile.SayWhatIsSent(signatures);
 
             await using var job = new CrawlEngine(loggerFactory).Start(new CrawlRequest(options, databasePath, isResume), observer);
             await using var stopOnCancel = cancellationToken.Register(() => job.StopAsync());

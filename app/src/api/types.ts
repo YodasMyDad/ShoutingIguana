@@ -221,6 +221,11 @@ export interface CrawlOptions {
   acceptLanguage?: string | null;
   /** Header name to value. Stored crawls and saved defaults keep the names with empty values. */
   extraHeaders?: Record<string, string> | null;
+  /**
+   * Shopify crawler signatures, by the host each was made for. Sent in requests only: no response, crawl file or saved
+   * default ever holds one.
+   */
+  signatures?: Record<string, CrawlSignature> | null;
   respectRobotsTxt?: boolean | null;
   respectCrawlDelay?: boolean | null;
   checkResources?: boolean | null;
@@ -371,6 +376,28 @@ export interface CrawlListItem {
 
 // --------------------------------------------------------------------------------------------------- Crawl control
 
+/** A Shopify crawler signature's two values, as the store's admin gives them to copy. A secret. */
+export interface CrawlSignature {
+  signatureInput: string;
+  signature: string;
+}
+
+/**
+ * `GET /api/crawls/{id}/shopify`: a Shopify store's crawl, as far as its crawler access goes; null for any other site.
+ * `notCheckedUnsigned`: the site's URLs Shopify refused for want of a signature; `notCheckedSigned`: those it refused
+ * though one was sent; `urlIds`: both kinds, most important first, at most 1,000 (what "Recheck these pages" asks for).
+ */
+export interface ShopifyAccess {
+  host: string;
+  /** What told it was a store (`powered-by: Shopify`, `Shopify.theme`); null when only a refused signature did. */
+  signal: string | null;
+  notCheckedUnsigned: number;
+  notCheckedSigned: number;
+  urlIds: number[];
+  /** What was wrong with the crawl's signature, where it could tell: "the signature for shop.example expired on 1 March 2027". */
+  reasons: string[];
+}
+
 export interface StartCrawlRequest {
   options: CrawlOptions;
   /** True unless false is given. A crawl that stops isn't analysed by itself. */
@@ -386,6 +413,8 @@ export interface ContinueCrawlRequest {
   extraHeaders?: Record<string, string>;
   /** Needed again when the stored proxy had a user name and password. */
   proxyUrl?: string;
+  /** The Shopify crawler signatures to send from now on, by host: crawl files keep none. */
+  signatures?: Record<string, CrawlSignature>;
   /** Continue without the stored headers that weren't given again, instead of asking for them. */
   skipMissingHeaders?: boolean;
 }

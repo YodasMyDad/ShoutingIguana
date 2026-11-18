@@ -41,6 +41,7 @@ import { SummaryChange } from './SummaryChange';
 import { useSimpleChanges } from './useSimpleChanges';
 import { FixFirstCard, ScoreHero, SummaryCards } from './SummaryParts';
 import { useHiddenChecks } from '../settings/hiddenChecks';
+import { ShopifyPrompt } from '../shopify/ShopifyPrompt';
 
 const ROUTE = '/crawls/$crawl/overview';
 
@@ -200,6 +201,7 @@ function Summary({
             action="Update the results"
           />
         )}
+        <ShopifyPrompt crawlId={crawlId} mode="simple" />
         <FixFirstCard crawlId={crawlId} results={results} score={score} changeOf={changes.wordsOf} />
         <SummaryCards crawlId={crawlId} results={results} />
       </>

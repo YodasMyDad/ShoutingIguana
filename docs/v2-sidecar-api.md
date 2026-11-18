@@ -369,6 +369,15 @@ public category titles, so the UI hard-codes none.
 The options DTO has every public `CrawlOptions` property. `extraHeaders` is an object of name to value, and
 `trustedCertificate` is never exposed.
 
+`signatures` (lane shopify, step 3b) is Shopify's crawler access: an object of host to `{ signatureInput, signature }`,
+the two values as the store's admin gives them to copy (Online Store › Preferences › Crawler access › Create
+signature). The host is the one it was made for (`shop.example`, or `host:port` off the default port). The engine sends
+`Signature-Input`, `Signature` and `Signature-Agent: "https://shopify.com"` to that exact host only, over https, until
+the signature's `expires=`: never to another host, a subdomain, a CDN, the www twin without one of its own, or across a
+redirect to another host. Validation refuses one not in RFC 9421's form, two for one host, and an expired one, under
+`signatures`, never repeating a value. It is taken in requests only: no response gives one back, a crawl file keeps
+none (not even the host), and saved defaults drop it. Continue and a recheck take `signatures` too.
+
 `speedPresets` sets concurrency and a rate. These values are provisional until the IA sign-off:
 
 | Preset | Concurrency | Rate |
@@ -542,8 +551,9 @@ folder, plus files opened from elsewhere, minus the ones removed from the librar
 `POST /api/crawls/{id}/continue` resumes a crawl from its file: any crawl that isn't live and whose file isn't in
 use, as `si crawl --resume` allows. It's analysed when it completes.
 
-- **Body.** `{ concurrency?, maxRequestsPerSecond?, requestTimeoutSeconds?, extraHeaders?, proxyUrl?,
-  skipMissingHeaders = false }`.
+- **Body.** `{ concurrency?, maxRequestsPerSecond?, requestTimeoutSeconds?, extraHeaders?, proxyUrl?, signatures?,
+  skipMissingHeaders = false }`. `signatures` as the options have them: a crawl file keeps none, so a continued crawl
+  sends one only when given it again.
 - **What can change.** Only these fields, as with the CLI: a resumed crawl keeps the scope and rules it started
   with. The engine gets one helper that applies resume changes, and the CLI uses it too.
 - **`needs-secrets`.** The call gives this with `{ missingHeaders: [names], proxyCredentials: bool }` when:
@@ -2820,6 +2830,26 @@ title contains the text, on every keystroke. A `POST` with the text in the body,
   the text, 55 to 89 ms (49 to 78 ms at p50), over five runs on a shared machine, the review's among them. That first read is the one over the palette's 50 ms: the empty search
   as the palette opens is what keeps it off the first keystroke.
 
+### Shopify crawler access (lane shopify)
+
+`GET /api/crawls/{id}/shopify` says what the results need of a Shopify store's crawl, or JSON `null` for any other site:
+`{ host, signal, notCheckedUnsigned, notCheckedSigned, urlIds }`. The store is told by its responses (`powered-by:
+Shopify`, `shopify-complexity-score`, `x-shopid`, `x-shopify-stage`, `x-sorting-hat-shopid`) or its markup (the inline
+`Shopify.theme` object, a script or stylesheet from cdn.shopify.com), kept by the crawl as a fact (`site_platform`), or
+for a crawl made before that, read from the first page's stored headers. `signal` is what told it (null when only a
+refused signature did). `notCheckedUnsigned` counts the site's URLs Shopify refused with 429 without a signature,
+`notCheckedSigned` those it refused though the crawl sent one; their stored errors say so ("Not checked: the site asked
+the crawler to slow down (429 Too Many Requests): Shopify limits crawlers without a signature", or "Shopify refused the
+crawler's signature"), then what was wrong with the signature when the crawl could tell: made under an hour ago (a new
+one can take up to an hour), expired on a date, or made for the www twin or the bare domain; else that it may not be
+active yet, may have expired or may be for another domain. `reasons` gives those, each once. `urlIds` are both kinds,
+most important first, at most 1,000: what "Recheck these pages" sends as `urlIds`, with the signature in `signatures`.
+
+The live alerts say it as it happens. `shopify-unsigned` (data: host, count, reason) is raised at the first refusal of
+an unsigned request on a host known to be a store, and raised again with its count while that grows, at most every
+30 s: the app shows one alert, its newest count. `reason` is set when the crawl had a signature it couldn't send there
+(expired, or for the www twin or bare domain). `shopify-signature-refused` (data: host, reason) is raised once.
+
 ### Favicon (E6)
 
 `GET /api/crawls/{id}/favicon` gives the site's icon as the crawl kept it, for the library, the top bar and the
@@ -3172,8 +3202,8 @@ every address). It is the catalog's, as `references` is: not stored, not in the 
     site’s latest check.") as such a run is usually the newer crawl. The latest crawl is the newest of the site's that
     the library lists, in Home's order, a missing file apart.
 
-**`POST /api/crawls/{id}/rechecks`** starts one: the plan's body, plus Continue's `extraHeaders`, `proxyUrl` and
-`skipMissingHeaders`. It answers 202 with `{ recheckId, …plan }`, and the crawl's status goes `rechecking` (an
+**`POST /api/crawls/{id}/rechecks`** starts one: the plan's body, plus Continue's `extraHeaders`, `proxyUrl`,
+`signatures` and `skipMissingHeaders`. It answers 202 with `{ recheckId, …plan }`, and the crawl's status goes `rechecking` (an
 `analyzing` first when `analysisFirst`), then `analyzing`, then what it was. Errors: those under `refused`, and
 `needs-secrets` as Continue gives it.
 

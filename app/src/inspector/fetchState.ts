@@ -4,6 +4,7 @@
 // the outcome, never by `fetched`.
 import type { UrlDetail } from '../api/inspector';
 import { NOT_FETCHED_WORDS, TYPE_IN_A_SENTENCE, reasonPhrase } from './words';
+import { reasonSentence, shopifyReasonOf, shopifyRefusalOf } from '../shopify/refusals';
 
 /** How the engine's error starts for a URL its site answered only with 429 Too Many Requests. */
 const RATE_LIMITED_ERROR = 'Not checked: the site asked the crawler to slow down';
@@ -110,6 +111,27 @@ export function fetchState(subject: Subject, crawling: boolean): FetchState {
       );
     case 'notChecked':
       // The engine's error says why: its site kept answering 429, it's on a private network, or its host stopped answering.
+      if (shopifyRefusalOf(response.error) === 'unsigned') {
+        const reason = shopifyReasonOf(response.error);
+        return state(
+          'notChecked',
+          'Not checked',
+          `Shopify limits crawlers without a signature (429 Too Many Requests), so it wasn’t read: no fault of the page’s.${
+            reason ? ` ${reasonSentence(reason)}` : ''
+          } Add a Shopify signature, then recheck it.`,
+        );
+      }
+      if (shopifyRefusalOf(response.error) === 'signed') {
+        const reason = shopifyReasonOf(response.error);
+        return state(
+          'notChecked',
+          'Not checked',
+          `Shopify refused it even with the signature (429 Too Many Requests). ${reasonSentence(
+            reason ??
+              'it may not be active yet (a new one can take up to an hour), may have expired, or may be for another domain',
+          )}`,
+        );
+      }
       if (response.error?.startsWith(NEVER_ASKED_ERROR)) {
         return state(
           'notChecked',
