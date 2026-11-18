@@ -1,8 +1,10 @@
 using Microsoft.Data.Sqlite;
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
+using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Engine.Storage.Models;
+using ShoutingIguana.Engine.Urls;
 
 namespace ShoutingIguana.Engine.Storage;
 
@@ -88,7 +90,7 @@ public static class RecheckPlanReader
             AddProbes(connection, snapshot, check, scope);
         }
 
-        var robotsOrigins = kinds.Contains(RecheckKind.RobotsTxt) ? RobotsOrigins(connection, snapshot) : [];
+        var robotsOrigins = kinds.Contains(RecheckKind.RobotsTxt) ? RobotsOrigins(connection, snapshot, CrawlDatabase.ReadOptions(databasePath), check) : [];
 
         var phase1 = scope.Count(url => url.Phase == 1);
         var phase2 = scope.Count(url => url.Phase == 2);
@@ -323,15 +325,42 @@ public static class RecheckPlanReader
         return referrers;
     }
 
-    /// <summary>The origins whose robots.txt a robots.txt check is about: each one the crawl couldn't read, or found missing.</summary>
-    private static List<string> RobotsOrigins(SqliteConnection connection, SqliteTransaction snapshot)
+    /// <summary>
+    /// The origins whose robots.txt a robots.txt check is about, read again beside the start URL's: the crawl's own (its
+    /// start host, and the site's versions it covered, as the robots.txt checks judge them) that the check's issues name.
+    /// Never another site's: the crawl read those before checking links to them, and they aren't the site owner's to fix.
+    /// </summary>
+    private static List<string> RobotsOrigins(SqliteConnection connection, SqliteTransaction snapshot, CrawlOptions options, IssueDefinition? check)
     {
-        List<string> origins = [];
-        using var command = Command(connection, snapshot, "SELECT origin FROM robots WHERE status_code IS NULL OR status_code >= 400 ORDER BY origin");
-        using var reader = command.ExecuteReader();
-        while (reader.Read())
+        if (check is null || !UrlNormalizer.TryNormalize(options.StartUrl, out var startUrl))
         {
-            origins.Add(reader.GetString(0));
+            return [];
+        }
+
+        var scope = new CrawlScope(new Uri(startUrl), options.IncludeSubdomains, options.StayInStartFolder);
+        List<string> details = [];
+        using (var command = Command(connection, snapshot, "SELECT detail FROM issues WHERE issue = $check AND detail IS NOT NULL", ("$check", check.Id)))
+        {
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                details.Add(reader.GetString(0));
+            }
+        }
+
+        List<string> origins = [];
+        using (var command = Command(connection, snapshot, "SELECT origin FROM robots ORDER BY origin"))
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                var origin = reader.GetString(0);
+                if (Uri.TryCreate(origin, UriKind.Absolute, out var uri) && scope.IsInternal(uri) &&
+                    details.Any(detail => detail.Contains($"{origin}/robots.txt", StringComparison.Ordinal)))
+                {
+                    origins.Add(origin);
+                }
+            }
         }
 
         return origins;

@@ -80,6 +80,26 @@ public sealed class RecheckKindsTests(RecheckCrawls crawls, RecheckKindsTests.Ht
         Assert.Equal(200, TestCrawls.Count(path, $"SELECT status_code FROM robots WHERE origin = '{plain}'"));
     }
 
+    /// <summary>
+    /// A recheck of the site's robots.txt reads only the site's own origins its issues name, never another site's: a real
+    /// crawl's had robots.txt rows for third parties it couldn't read (instant.page), which its recheck asked again.
+    /// </summary>
+    [Fact]
+    public async Task ARobotsTxtRecheckReadsOnlyTheSitesOwnOriginsItsIssuesName()
+    {
+        var path = https.Copy();
+        GridQueries.Change(path, "INSERT OR REPLACE INTO robots (origin, status_code, content, error, fetched_at) VALUES ('https://third-party.invalid', 404, NULL, NULL, 0)");
+        var plain = "http" + https.Server.BaseUri.GetLeftPart(UriPartial.Authority)["https".Length..];
+
+        var plan = RecheckPlanReader.Plan(path, new RecheckAsk("robots-txt-unreachable-other-origin"), new AnalysisSettings());
+
+        Assert.Equal([plain], plan.RobotsOrigins);
+        var (_, recheck) = await RecheckCrawls.RecheckAsync(path, plan);
+        Assert.Equal((1, 1), (recheck.Judged, recheck.Result!.Fixed));
+        Assert.Equal((404, 0L), ((int)TestCrawls.Count(path, "SELECT status_code FROM robots WHERE origin = 'https://third-party.invalid'"),
+            TestCrawls.Count(path, "SELECT fetched_at FROM robots WHERE origin = 'https://third-party.invalid'")));
+    }
+
     /// <summary>Over HTTPS, revision 1's plain-HTTP home page redirects to the HTTPS one: asking the site's other versions again fixes the duplicate.</summary>
     [Fact]
     public async Task ADuplicateSiteVersionIsRecheckedByAskingTheVersionsAgain()

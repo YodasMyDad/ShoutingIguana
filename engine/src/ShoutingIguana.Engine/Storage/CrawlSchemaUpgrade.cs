@@ -18,7 +18,17 @@ namespace ShoutingIguana.Engine.Storage;
 internal static class CrawlSchemaUpgrade
 {
     /// <summary>The crawl-time tables made since the first file of the schema, in the order they came.</summary>
-    public static readonly string[] TABLES = [CrawlSchema.NOTICES, CrawlSchema.RUN_TIME, CrawlSchema.FAVICON, CrawlSchema.RECHECKS];
+    public static readonly string[] TABLES = [CrawlSchema.NOTICES, CrawlSchema.RUN_TIME, CrawlSchema.FAVICON, CrawlSchema.RECHECKS, CrawlSchema.UNCOLLECTED];
+
+    /// <summary>
+    /// The columns whose null means something of its own, by <c>table.column</c>, with what a file already has that lacks
+    /// the fact when the column is added (<see cref="CrawlSchema.UNCOLLECTED"/>): for a sitemap entry's lastmod, every
+    /// sitemap read so far.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, string> UNCOLLECTED = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        [CrawlSchema.LASTMOD_FACT] = "SELECT id FROM sitemaps"
+    };
 
     /// <summary>The columns added since each table was first made, by table.</summary>
     public static readonly (string Table, (string Name, string Type)[] Columns)[] COLUMNS =
@@ -103,6 +113,12 @@ internal static class CrawlSchemaUpgrade
         foreach (var (name, type) in columns.Where(column => !existing.Contains(column.Name)))
         {
             CrawlDatabase.Execute(connection, $"ALTER TABLE {table} ADD COLUMN {name} {type}", transaction);
+
+            // What the file has so far didn't collect it: the analysis must not read its nulls as "none".
+            if (UNCOLLECTED.TryGetValue($"{table}.{name}", out var items))
+            {
+                CrawlDatabase.Execute(connection, $"INSERT OR IGNORE INTO uncollected_facts (fact, item_id) SELECT '{table}.{name}', id FROM ({items})", transaction);
+            }
         }
     }
 }

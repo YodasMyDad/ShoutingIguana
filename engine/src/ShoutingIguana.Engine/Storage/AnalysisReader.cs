@@ -415,8 +415,29 @@ internal sealed class AnalysisReader : IDisposable
         return internalUrls;
     }
 
-    /// <summary>Whether the crawl's sitemap entries have their lastmod (an engine from before it didn't read it).</summary>
-    public bool HasSitemapLastmods() => HasColumn("sitemap_urls", "lastmod");
+    /// <summary>
+    /// Whether the crawl's sitemap entries have their lastmod: the column is there, and every sitemap the file has was read
+    /// by an engine that keeps it. An earlier engine didn't read it; a file it made gets the column when a later one
+    /// continues or rechecks it, with its sitemaps so far recorded as without the fact (<see cref="CrawlSchema.UNCOLLECTED"/>)
+    /// until they're read again.
+    /// </summary>
+    public bool HasSitemapLastmods()
+    {
+        if (!HasColumn("sitemap_urls", "lastmod"))
+        {
+            return false;
+        }
+
+        if (!HasColumn("uncollected_facts", "fact"))
+        {
+            return true;
+        }
+
+        using var command = _connection.CreateCommand();
+        command.CommandText = "SELECT EXISTS (SELECT 1 FROM uncollected_facts g JOIN sitemaps s ON s.id = g.item_id WHERE g.fact = $fact)";
+        command.Parameters.AddWithValue("$fact", CrawlSchema.LASTMOD_FACT);
+        return Convert.ToInt64(command.ExecuteScalar(), CultureInfo.InvariantCulture) == 0;
+    }
 
     /// <summary>
     /// Each sitemap with entries whose lastmod is later than <paramref name="latestSeconds"/> or isn't a date, in the order
