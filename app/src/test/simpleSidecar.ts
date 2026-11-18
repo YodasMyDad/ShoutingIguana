@@ -175,6 +175,37 @@ export function simpleRoutes(item: CrawlListItem, analysis: Analysis | 'not-anal
       /^\/api\/health$/,
       () => json({ version: 'test', engineVersion: 'test', dataDir: 'C:\\data', stateDir: 'C:\\state', pid: 1 }),
     ],
+    // The fix loop, as a sidecar with nothing to compare with and no recheck yet answers: what a recheck of a check's
+    // pages would do (all of them, about 20 seconds), no rechecks, and no previous crawl.
+    [
+      'POST',
+      /^\/api\/crawls\/[0-9a-f]{16}\/rechecks\/plan$/,
+      (request) => {
+        const checkId = (request.body as { checkId?: string } | undefined)?.checkId ?? null;
+        const counted =
+          analysis === 'not-analyzed' ? 0 : (analysis.counts.find((count) => count.checkId === checkId)?.count ?? 0);
+        return json({
+          checkId,
+          group: null,
+          urlList: false,
+          kinds: ['urls'],
+          judged: counted,
+          phase1: counted,
+          phase2Max: 0,
+          limit: 1_000,
+          capped: false,
+          notRechecked: 0,
+          estimateMs: 21_000,
+          suggestFullCheck: false,
+          analysisFirst: false,
+          countBefore: counted,
+          secrets: { missingHeaders: [], proxyCredentials: false },
+          refused: null,
+        });
+      },
+    ],
+    ['GET', /^\/api\/crawls\/[0-9a-f]{16}\/rechecks$/, () => json({ rechecks: [] })],
+    ['GET', /^\/api\/crawls\/([0-9a-f]{16})\/changes/, (_request, match) => json({ crawlId: match[1], with: null })],
   ];
 }
 

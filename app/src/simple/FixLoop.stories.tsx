@@ -16,7 +16,7 @@ import {
   recheckRoutes,
 } from '../test/fixLoopSidecar';
 import { ScreenApp, ownSidecar } from '../test/ScreenStory';
-import { GARDEN_ANALYSIS, gardenItem, problemRoutes, simpleRoutes } from '../test/simpleSidecar';
+import { GARDEN_ANALYSIS, SIMPLE_CHECKS, gardenItem, problemRoutes, simpleRoutes } from '../test/simpleSidecar';
 
 // The fix loop in Simple (docs/v2-fix-loop.md, section 4): the garden crawl compared with its site's earlier check
 // (17 Oct, 72), in every state the design lists. Over a sidecar of the story's own (src/test/fixLoopSidecar.ts).
@@ -300,3 +300,19 @@ export const ProblemRecheckNotCheckedAndNew: Story = problem({
 
 /** A problem fixed since the last check: the good news, what was fixed, and what wasn't checked this time. */
 export const ProblemFixedSince: Story = problem({}, `${CRAWL}/issues/internal-server-error`);
+
+/** Before the fix loop (a sidecar from before it, no recheck in its catalog): Fixed it? as it was. */
+export const ProblemLegacyCard: Story = {
+  loaders: [
+    () =>
+      own(gardenItem({ previous: null, changes: null }), [
+        [
+          'GET',
+          /^\/api\/checks/,
+          () =>
+            json({ ...SIMPLE_CHECKS, checks: SIMPLE_CHECKS.checks.map(({ recheck: _recheck, ...check }) => check) }),
+        ],
+      ]),
+  ],
+  render: () => <ScreenApp path={BROKEN} mode="simple" />,
+};
