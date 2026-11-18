@@ -33,3 +33,25 @@ export function useOneFix(crawlId: string, entries: readonly CheckEntry[]): Read
       ),
   });
 }
+
+/**
+ * The checks of a list whose largest group is the engine's `likelyTemplate` but isn't on every page the check flagged,
+ * with how many it's on: their rows say "One fix covers 195 of 225 pages", as the problem's page does. A shared cause on
+ * every page is `useOneFix`'s "One fix" instead. Reads the same largest groups, so nothing more is asked of the sidecar.
+ */
+export function useOneFixCovers(crawlId: string, entries: readonly CheckEntry[]): ReadonlyMap<string, number> {
+  const grouped = entries.filter((entry) => entry.check.grouping !== 'none' && (entry.count ?? 0) > 0);
+  return useQueries({
+    queries: grouped.map((entry) => firstGroupQuery(crawlId, entry.check.id)),
+    combine: (results) =>
+      new Map(
+        results.flatMap((result, index) => {
+          const entry = grouped[index];
+          const largest = result.data?.groups[0];
+          if (!entry || !largest?.likelyTemplate) return [];
+          const on = largest.urls ?? largest.pages;
+          return on < (entry.count ?? 0) ? [[entry.check.id, on] as const] : [];
+        }),
+      ),
+  });
+}

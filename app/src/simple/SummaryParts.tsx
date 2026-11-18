@@ -33,7 +33,8 @@ import { FIX_FIRST_COUNT, siteWideLead, type PlainResults, type SkippedGroup } f
 import { ScoreRing } from '../ui/ScoreRing';
 import { openedHereState } from './scoreHistory';
 import { platformLines } from './summaryWords';
-import { useOneFix } from './useOneFix';
+import { oneFixTitle } from './oneFixWords';
+import { useOneFix, useOneFixCovers } from './useOneFix';
 import type { CheckEntry } from '../screens/issues/checkList';
 
 const FIX = '/crawls/$crawl/issues/{-$check}';
@@ -161,6 +162,7 @@ export function ProblemRow({
   nested = false,
   change,
   platform = null,
+  oneFixCovers = null,
   ref,
   ...rest
 }: {
@@ -181,6 +183,11 @@ export function ProblemRow({
    * row's line, and it gives no points back.
    */
   platform?: PlatformOwner | null | undefined;
+  /**
+   * How many of its pages one shared cause covers, where it's most but not all of them (`useOneFixCovers`): said beside
+   * its title as the problem's page says it, "One fix covers 195 of 225 pages".
+   */
+  oneFixCovers?: number | null | undefined;
   ref?: React.Ref<HTMLAnchorElement> | undefined;
 } & Omit<React.HTMLAttributes<HTMLAnchorElement>, 'title' | 'results'>) {
   const share = rowCountWords(entry.check, entry.count ?? 0);
@@ -193,7 +200,22 @@ export function ProblemRow({
       oneFix={oneFix}
       quiet={nested || platform !== null || entry.outcome === 'notice'}
       className={nested ? 'si-plain-row--nested' : undefined}
-      title={plainTitle(entry.check)}
+      title={
+        oneFixCovers && !oneFix ? (
+          <>
+            {plainTitle(entry.check)}{' '}
+            <span className="text-13 font-regular text-text-secondary">
+              {oneFixTitle(
+                oneFixCovers,
+                entry.count ?? 0,
+                (entry.check.subject ?? 'page') === 'page' ? 'pages' : 'addresses',
+              )}
+            </span>
+          </>
+        ) : (
+          plainTitle(entry.check)
+        )
+      }
       summary={platform ? platform.reason : nested ? 'Fixed along with the problem above.' : plainSummary(entry.check)}
       count={
         <>
@@ -244,6 +266,7 @@ export function FixFirstCard({
   const worthALook = results.fixFirst.length > 0 ? [] : results.found.notice.slice(0, FIX_FIRST_COUNT);
   const jobs = fixFirstJobs(results, score);
   const oneFix = useOneFix(crawlId, results.fixFirst.length > 0 ? results.fixFirst : worthALook);
+  const covers = useOneFixCovers(crawlId, results.fixFirst.length > 0 ? results.fixFirst : worthALook);
   return (
     <Card as="section" aria-labelledby="summary-fix-first" className="overflow-hidden">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-6 pt-5 pb-3">
@@ -265,6 +288,7 @@ export function FixFirstCard({
                 results={results}
                 number={index + 1}
                 oneFix={oneFix.has(job.entry.check.id)}
+                oneFixCovers={covers.get(job.entry.check.id)}
                 points={job.points}
                 change={changeOf(job.entry.check.id)}
               />
@@ -276,6 +300,7 @@ export function FixFirstCard({
                   entry={nested}
                   results={results}
                   oneFix={oneFix.has(nested.check.id)}
+                  oneFixCovers={covers.get(nested.check.id)}
                   nested
                   change={changeOf(nested.check.id)}
                 />
@@ -305,6 +330,7 @@ export function FixFirstCard({
                     entry={entry}
                     results={results}
                     oneFix={oneFix.has(entry.check.id)}
+                    oneFixCovers={covers.get(entry.check.id)}
                     change={changeOf(entry.check.id)}
                   />
                 </li>

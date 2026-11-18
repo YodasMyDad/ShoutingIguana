@@ -154,6 +154,40 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
     );
   });
 
+  // The fixit page's item: as the problem page and What to fix say it, how much a shared cause covers.
+  it('says how much One fix covers on a row whose shared cause isn’t on every page', async () => {
+    const sharedImage: FakeRoute = [
+      'POST',
+      /\/issues\/image-too-large\/groups$/,
+      () =>
+        json({
+          checkId: 'image-too-large',
+          grouping: 'relatedUrl',
+          total: 61,
+          groupCount: 12,
+          offset: 0,
+          groups: [
+            {
+              detail: null,
+              relatedUrlId: 9,
+              relatedUrl: 'https://www.gardenfurnituresets.co.uk/img/hero.jpg',
+              pages: 50,
+              urls: 50,
+              share: 50 / 265,
+              likelyTemplate: true,
+              related: null,
+              sharedText: null,
+            },
+          ],
+        }),
+    ];
+    await open(GARDEN_ANALYSIS, gardenItem(), `${CRAWL}/overview`, [sharedImage]);
+    await site();
+    const list = within(main().getByRole('region', { name: 'Fix these first' }));
+    expect(await list.findByText('One fix covers 50 of 61 pages')).toBeVisible();
+    expect(list.queryByText('One fix')).toBeNull();
+  });
+
   it('says what’s fine and what couldn’t be checked, with the engine’s plain reasons', async () => {
     await open(GARDEN_ANALYSIS);
     await site();

@@ -10,7 +10,7 @@ import { TEST_CRAWL_ID, fakeSidecar, json } from '../test/fakeSidecar';
 import { createQueryClientWithoutBackoff } from '../test/queryClient';
 import { SIMPLE_CHECKS, groupPage } from '../test/simpleSidecar';
 import type { CheckEntry } from '../screens/issues/checkList';
-import { firstGroupQuery, useOneFix } from './useOneFix';
+import { firstGroupQuery, useOneFix, useOneFixCovers } from './useOneFix';
 
 const SITE = 'https://www.gardenfurnituresets.co.uk';
 
@@ -66,5 +66,39 @@ describe('useOneFix', () => {
       }
     });
     await waitFor(() => expect([...result.current]).toEqual(['image-missing-alt']));
+  });
+
+  // The fixit page's item: the problem page says "One fix covers 195 of 225 pages"; a row can say it too.
+  it('says how many pages a shared cause covers where it covers most of them but not all', async () => {
+    setTransport(
+      fakeSidecar([
+        [
+          'POST',
+          /\/issues\/image-missing-alt\/groups$/,
+          () => json(groupPage('image-missing-alt', [template(40, 1)], 40)),
+        ],
+        [
+          'POST',
+          /\/issues\/image-missing-dimensions\/groups$/,
+          () => json(groupPage('image-missing-dimensions', [template(195, 195 / 225)], 225)),
+        ],
+        [
+          'POST',
+          /\/issues\/image-too-large\/groups$/,
+          () => json(groupPage('image-too-large', [{ ...template(3, 3 / 60), likelyTemplate: false }], 60)),
+        ],
+      ]),
+    );
+    const client = createQueryClientWithoutBackoff();
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const entries = [
+      entry('image-missing-alt', 40),
+      entry('image-missing-dimensions', 225),
+      entry('image-too-large', 60),
+    ];
+    const { result } = renderHook(() => useOneFixCovers(TEST_CRAWL_ID, entries), { wrapper });
+    await waitFor(() => expect([...result.current]).toEqual([['image-missing-dimensions', 195]]));
   });
 });

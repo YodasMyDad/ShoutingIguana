@@ -47,7 +47,7 @@ import { ProblemScreen } from './ProblemScreen';
 import { useKeepsPlace } from './scrollPlace';
 import { plainResults, type PlainResults, type PlatformEntry, type SkippedGroup } from './results';
 import { ProblemRow } from './SummaryParts';
-import { useOneFix } from './useOneFix';
+import { useOneFix, useOneFixCovers } from './useOneFix';
 import { showAllHidden, useHiddenChecks } from '../settings/hiddenChecks';
 import { updateSettings, useSettings } from '../settings/settingsStore';
 import { fixRows, PLAIN_CHECK_SORTS, type FixRow } from './fixRows';
@@ -362,6 +362,7 @@ function FixLists({
     ...results.platform.map(({ entry }) => entry),
   ];
   const oneFix = useOneFix(crawlId, shown);
+  const covers = useOneFixCovers(crawlId, shown);
 
   // J and K: the problem the keys are on, and its link, which Enter opens.
   const [current, setCurrent] = useState<number | null>(null);
@@ -417,6 +418,7 @@ function FixLists({
         entry={entry}
         results={results}
         oneFix={!platform && oneFix.has(entry.check.id)}
+        oneFixCovers={platform ? null : covers.get(entry.check.id)}
         points={points}
         nested={nested}
         platform={platform}

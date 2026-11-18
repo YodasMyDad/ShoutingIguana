@@ -177,6 +177,19 @@ describe.skipIf(TABLE_STUBBED)('What to fix', () => {
     await waitFor(() => expect(main().getByRole('heading', { name: 'Worth a look 22' })).toHaveFocus());
   });
 
+  // The fixit page's item: the problem page says how much a shared cause covers when it isn't every page; its row too.
+  it('says how much One fix covers on a row whose shared cause isn’t on every page, as the problem page does', async () => {
+    // The logo's link on 264 of empty-anchor-text's 265 pages.
+    await open(FIX);
+    await whatToFix();
+    const looks = within(main().getByRole('region', { name: 'Worth a look 22' }));
+    expect(await looks.findByText('One fix covers 264 of 265 pages')).toBeVisible();
+    expect(looks.queryByText('One fix')).toBeNull();
+    expect(
+      looks.getByRole('link', { name: /^Worth a look Links with nothing to read One fix covers 264 of 265 pages/ }),
+    ).toBeVisible();
+  });
+
   it('opens every check that couldn’t run when its count is landed on', async () => {
     await open(`${FIX}#couldnt-check`);
     await whatToFix();
