@@ -32,17 +32,35 @@ public sealed class LinkCheckTests
             new Uri("https://example.com/"), [], TOKEN);
 
         Assert.Equal(5, parsed.Facts.UncrawlableLinks!.Count);
-        Assert.Equal([new UncrawlableLinkFact("Shop", "onclick"), new UncrawlableLinkFact("Products", "javascript:"), new UncrawlableLinkFact("Next", "onclick")],
+        Assert.Equal(
+            [
+                new UncrawlableLinkFact("Shop", "onclick") { Position = LinkPosition.Content }, new UncrawlableLinkFact("Products", "javascript:") { Position = LinkPosition.Content },
+                new UncrawlableLinkFact("Next", "onclick") { Position = LinkPosition.Content }
+            ],
             parsed.Facts.UncrawlableLinks.Examples);
         Assert.Null(HtmlPageParser.Parse(RuleHarness.Html(body: "<a href=\"/a\">A</a><a name=\"b\"></a><a href=\"\">Read more</a><span href=\"javascript:void(0)\">Stars</span>"),
             new Uri("https://example.com/"), [], TOKEN).Facts.UncrawlableLinks);
 
+        // Each says where on the page it is; one a page parsed before positions were noted doesn't.
         var site = new RuleHarness();
         var page = site.Page($"{site.Site}/", RuleHarness.Html(body:
-            "<a onclick=\"location='/shop'\">Shop</a><span href=\"/sale\"></span><a href=\"javascript:void(0)\">Open menu</a><a routerLink=\"/x\">Basket</a>" +
-            "<a href=\"javascript:window.open('https://example.com/terms')\">Terms</a>"));
+            "<nav><a onclick=\"location='/shop'\">Shop</a></nav><span href=\"/sale\"></span><a href=\"javascript:void(0)\">Open menu</a>" +
+            "<aside><a routerLink=\"/x\">Basket</a></aside><a href=\"javascript:window.open('https://example.com/terms')\">Terms</a>"));
         var hit = new LinkStructureRules(SETTINGS, site.Table(), site.UrlOf).Check(page).Single(hit => hit.Issue == IssueCatalog.UNCRAWLABLE_LINKS);
-        Assert.Equal("4 links: \"Shop\" (onclick), no text (<span href>), \"Basket\" (routerLink) …", hit.Detail);
+        Assert.Equal("4 links: \"Shop\" (onclick, navigation), no text (<span href>, content), \"Basket\" (routerLink, sidebar) …", hit.Detail);
+
+        var earlier = page with
+        {
+            Facts = page.Facts with
+            {
+                UncrawlableLinks = page.Facts.UncrawlableLinks! with
+                {
+                    Examples = [.. page.Facts.UncrawlableLinks.Examples.Select(example => example with { Position = null })]
+                }
+            }
+        };
+        Assert.Equal("4 links: \"Shop\" (onclick), no text (<span href>), \"Basket\" (routerLink) …",
+            new LinkStructureRules(SETTINGS, site.Table(), site.UrlOf).Check(earlier).Single(hit => hit.Issue == IssueCatalog.UNCRAWLABLE_LINKS).Detail);
     }
 
     [Fact]

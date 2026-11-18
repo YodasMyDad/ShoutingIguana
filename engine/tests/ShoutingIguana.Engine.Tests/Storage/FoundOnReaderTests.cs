@@ -218,6 +218,19 @@ public sealed class FoundOnReaderTests(GridCrawl crawl)
     }
 
     /// <summary>
+    /// A page linking a URL with words of its own and with generic text names a generic link, with where on the page it
+    /// is, and counts the generic ones alone.
+    /// </summary>
+    [Fact]
+    public void AGenericAnchorTargetIsNamedByItsGenericLinks()
+    {
+        var page = Flagged("generic-anchor-text").Single(id => Url(id).EndsWith("/plants/generic-anchors", StringComparison.Ordinal));
+        var thin = Assert.Single(FoundOnReader.ReadTargets(crawl.Path, "generic-anchor-text", [page])!.Single().Targets);
+        Assert.Equal(("Click here", LinkPosition.Content, 2), (thin.Text, thin.Position, thin.Links));
+        Assert.Equal(["3"], Query($"SELECT COUNT(*) FROM links WHERE from_id = {page} AND to_id = {thin.Id}"));
+    }
+
+    /// <summary>
     /// A page writing URLs without their scheme names each one it links to or loads: its script, and the thin page, which
     /// it also links with the scheme written. The thin page's link is the one written //, counted alone. Its resource hint
     /// is no link, so the page is in the group naming no URL as well.

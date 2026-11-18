@@ -16,8 +16,9 @@ public sealed record PageFacts
     /// Microdata, batch 5's, which only adds what an earlier page lacks). 3 is batch 7's: the page's forms, and its href
     /// and src values written without a scheme. 4 is batch 8's: whether a heading is an image's alt, the main text's
     /// placeholder, sentences and syllables, and the whole body's words. 6 is the fix loop's (2026-11-18): which links are
-    /// written without a scheme (<see cref="LinkFlags.ProtocolRelative"/>), and how many such values are in no link
-    /// (<see cref="ProtocolRelativeFact.Unlinked"/>).
+    /// written without a scheme (<see cref="LinkFlags.ProtocolRelative"/>), how many such values are in no link
+    /// (<see cref="ProtocolRelativeFact.Unlinked"/>), and where on the page each link search engines can't follow is
+    /// (<see cref="UncrawlableLinkFact.Position"/>).
     /// </summary>
     public const int CURRENT_COLLECTION = 6;
 

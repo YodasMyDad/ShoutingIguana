@@ -558,7 +558,8 @@ public sealed partial class SyntheticSite
         Page("dead-end", "Dead end", ["few-internal-outlinks"], page => page with { Chrome = false });
         Page("generic-anchors", "Links with generic text", ["generic-anchor-text"], page => page with
         {
-            Content = page.Content + $"<p><a href=\"{PLANTS_PATH}thin\">Click here</a> <a href=\"{PLANTS_PATH}thin\">Read more…</a></p>"
+            Content = page.Content + $"<p><a href=\"{PLANTS_PATH}thin\">The thin page</a> <a href=\"{PLANTS_PATH}thin\">Click here</a> " +
+                      $"<a href=\"{PLANTS_PATH}thin\">Read more…</a></p>"
         });
 
         // A page only a noindex page links to.
@@ -984,7 +985,6 @@ public sealed partial class SyntheticSite
                 Content = page.Content + $"<img src=\"{_external}/ext/img/1.jpg\" alt=\"A photo served over plain HTTP\" width=\"400\" height=\"300\">"
             });
             Other("downgrade", 301, linked: true, ["redirect-downgrade"], () => Redirect(301, $"{_external}/ext/plain-http"));
-        }
 
             // A development copy's address left in content: private, and not the crawl's own machine (the site is on
             // loopback). The crawl started on a private address, so it may ask private ones: the link is nofollow so that it
@@ -993,6 +993,7 @@ public sealed partial class SyntheticSite
             {
                 Content = page.Content + $"<p><a href=\"{PRIVATE_ADDRESS}\" rel=\"nofollow\">The development shop</a></p>"
             });
+        }
 
         // The hub links to redirects, and to the unreachable URL, the redirect loop and the redirect to a 404, which are
         // all broken, so it carries those link issues itself.

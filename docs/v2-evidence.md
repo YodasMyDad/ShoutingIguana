@@ -74,7 +74,7 @@ and is in the group without a related URL.
   redirect changes), `img` (the `<img>` as the page writes it: `width`, `height`,
   `alt`, `hasAlt`, `altLength`, `srcset`, `loading`), and the page's link to it: `kind`, `text` (anchor, alt or
   hreflang code), `position`, `fragment`, `flags`, `links` (how many links the page has to it; for `empty-anchor-text`,
-  `internal-nofollow-links`, `protocol-relative-links` and `broken-fragment-links`, only the ones at fault, the first of which is the link named). For a `sources` check
+  `internal-nofollow-links`, `protocol-relative-links`, `generic-anchor-text` and `broken-fragment-links`, only the ones at fault, the first of which is the link named). For a `sources` check
   they describe the group's related URL only (its rows' sources are the found-on read, which already has the linking
   page, kind, text, position and flags).
 - **Detail**: before → after. "Same" is unchanged. A limit is shown at its default ("over 115"); a detail names the
@@ -119,7 +119,7 @@ and is in the group without a related URL.
 | 16 | `empty-anchor-text` | P/RU/T | – | `statusCode`, `position`, `flags` (`imageLink`: an image link whose image has no alt), `links`. A link to the page itself (a home page's logo, since the check audit) names the page: its target is the page, read as its link without text and without a fragment, and the app says "this same page" | Same ("Links to 2 URLs") | imp · pages |
 | 17 | `broken-fragment-links` | P/RU/T | – | `statusCode`, `fragment`, `text`, `position`, `links` | "2 links" → `2 links to missing sections: /faq/#specs, #top` (a fragment alone is on the page itself) | imp · pages |
 | 18 | `orphan-page` | P/N/S | – | – | Same ("Only found in a sitemap"), or `Only nofollow links lead here` (a sitemap page only nofollow links lead to, since the new checks) | imp · – |
-| 101 | `uncrawlable-links` (new) | P/N/– | – | – | `3 links: "Shop" (javascript:), "Next" (onclick) …` (the first three, what makes each uncrawlable; only links that lead somewhere: script that navigates, a routerLink, a URL on a `<span>`). Template hint | imp · – |
+| 101 | `uncrawlable-links` (new) | P/N/– | – | – | `3 links: "Shop" (javascript:, header), "Next" (onclick, content) …` (the first three, what makes each uncrawlable and where on the page it is; only links that lead somewhere: script that navigates, a routerLink, a URL on a `<span>`). Template hint | imp · – |
 | 102 | `broken-resources` (new) | P/RU/T | – | `statusCode`, `final`, `kind`, `position`, `links` | `2 broken files (the first returns 404 Not Found)` | imp · pages |
 | 103 | `links-to-localhost` (new) | P/RU/T | – | `statusCode`, `text`, `position` | `2 links, such as http://localhost:3000/shop`; on a crawl started at a private address, that machine's own addresses don't count | imp · pages |
 | 104 | `few-internal-outlinks` (new) | P/N/– | `outlinks` | – | `No links to other pages`, `2 links to other pages, under 3` | imp · – |

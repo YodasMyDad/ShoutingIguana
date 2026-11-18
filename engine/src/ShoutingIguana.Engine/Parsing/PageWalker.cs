@@ -233,7 +233,7 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
         // engines can't follow (a widget's href="javascript:void(0)" or "#reviews" leads nowhere they could go).
         if (name is not ("a" or "area" or "link" or "base") && LeadsSomewhere(element.GetAttribute("href")))
         {
-            AddUncrawlable(element, $"<{name} href>");
+            AddUncrawlable(element, $"<{name} href>", context.Position);
         }
 
         var childContext = context;
@@ -654,7 +654,7 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
         var href = element.GetAttribute("href");
         if (element.LocalName == "a" && UncrawlableBy(element, href) is { } why)
         {
-            AddUncrawlable(element, why);
+            AddUncrawlable(element, why, context.Position);
         }
 
         if (href is null)
@@ -729,13 +729,13 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex NavigatingScript();
 
-    private void AddUncrawlable(IElement element, string why)
+    private void AddUncrawlable(IElement element, string why, LinkPosition position)
     {
         UncrawlableCount++;
         if (UncrawlableExamples.Count < MAX_UNCRAWLABLE_EXAMPLES)
         {
             var text = ReadableText(element, MAX_UNCRAWLABLE_TEXT);
-            UncrawlableExamples.Add(new UncrawlableLinkFact(text.Length > 0 ? text : NameWithoutText(element), why));
+            UncrawlableExamples.Add(new UncrawlableLinkFact(text.Length > 0 ? text : NameWithoutText(element), why) { Position = position });
         }
     }
 

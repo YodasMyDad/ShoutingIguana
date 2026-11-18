@@ -177,8 +177,9 @@ public static class FoundOnReader
             var preferred = (int)PreferredKind(checkId);
 
             // Where only some of a page's links to a target are at fault, the target's link is the first of those and its
-            // links count those alone. A broken fragment's are judged against the target's ids below; until then, the
-            // first link with a fragment. Any other check's link is the first of its kind, and every link to it counts.
+            // links count those alone. Broken fragments and generic texts are judged in code below; until then, a broken
+            // fragment's is the first link with a fragment. Any other check's link is the first of its kind, and every link
+            // to it counts.
             var flagged = FlaggedLinks(checkId);
             var flaggedFirst = flagged is null ? string.Empty : $"CASE WHEN {flagged} THEN 0 ELSE 1 END, ";
             var fragmentFirst = checkId == IssueCatalog.BROKEN_FRAGMENT_LINKS.Id ? "CASE WHEN l.fragment IS NULL THEN 1 ELSE 0 END, " : string.Empty;
@@ -209,9 +210,9 @@ public static class FoundOnReader
                 }
             }
 
-            if (checkId == IssueCatalog.BROKEN_FRAGMENT_LINKS.Id)
+            if (AtFault(context, checkId, urlId) is { } atFault)
             {
-                found = [.. found.Select(entry => MissingSections(context, urlId, entry.Target.Id) is (var link, var count) ? (entry.Target with { Links = count }, link) : entry)];
+                found = [.. found.Select(entry => atFault(entry.Target.Id) is (var link, var count) ? (entry.Target with { Links = count }, link) : entry)];
             }
 
             var facts = UrlFactsReader.Read(context, [.. found.Select(entry => entry.Target.Id)]);
@@ -253,28 +254,42 @@ public static class FoundOnReader
     }
 
     /// <summary>
-    /// The page's links to a target whose #fragment the target has no id for, as the check judges them
-    /// (<see cref="FragmentRules.Misses"/>): the first, and how many. Null where none does, or the target's ids can't be
-    /// read, so the first link with a fragment stands.
+    /// For the checks that judge a page's links in code, not SQL, the page's links to a target the check flags: the first,
+    /// and how many; null for a target where none is (a file analysed before the page changed), so the first link SQL
+    /// orders first stands. A link to a section the target has no id for (<see cref="FragmentRules.Misses"/>, against the
+    /// target's stored ids), and a link whose text is generic (<see cref="LinkStructureRules.IsGeneric"/>). Null for the
+    /// other checks.
     /// </summary>
-    private static (long Link, int Count)? MissingSections(GridReadContext context, int pageId, int targetId)
+    private static Func<int, (long Link, int Count)?>? AtFault(GridReadContext context, string checkId, int pageId)
     {
-        if (StoredFacts(context, targetId) is not { } facts)
+        if (checkId == IssueCatalog.BROKEN_FRAGMENT_LINKS.Id)
         {
-            return null;
+            return target => StoredFacts(context, target) is { } facts
+                ? FirstAtFault(context, pageId, target, "l.fragment IS NOT NULL", link => FragmentRules.Misses(link.Fragment!, facts.AnchorIds))
+                : null;
         }
 
+        return checkId == IssueCatalog.GENERIC_ANCHOR_TEXT.Id
+            ? target => FirstAtFault(context, pageId, target, $"l.text IS NOT NULL AND l.position <> {(int)LinkPosition.Head}",
+                link => LinkStructureRules.IsGeneric(link.Text!, link.Flags))
+            : null;
+    }
+
+    /// <summary>The page's hyperlinks to a target, of those <paramref name="where"/> picks, that are at fault: the first, and how many.</summary>
+    private static (long Link, int Count)? FirstAtFault(GridReadContext context, int pageId, int targetId, string where,
+        Func<(string? Text, string? Fragment, LinkFlags Flags), bool> atFault)
+    {
         long? first = null;
         var count = 0;
         using var command = context.Command($"""
-            SELECT l.rowid, l.fragment FROM links l
-            WHERE l.from_id = $id AND +l.to_id = $target AND l.kind = {(int)LinkKind.Hyperlink} AND l.fragment IS NOT NULL
+            SELECT l.rowid, l.text, l.fragment, l.flags FROM links l
+            WHERE l.from_id = $id AND +l.to_id = $target AND l.kind = {(int)LinkKind.Hyperlink} AND {where}
             ORDER BY l.rowid
             """, [new("$id", pageId), new("$target", targetId)]);
         using var reader = command.ExecuteReader();
         while (reader.Read())
         {
-            if (FragmentRules.Misses(reader.GetString(1), facts.AnchorIds))
+            if (atFault((reader.IsDBNull(1) ? null : reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetString(2), (LinkFlags)reader.GetInt64(3))))
             {
                 first ??= reader.GetInt64(0);
                 count++;

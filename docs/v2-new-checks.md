@@ -368,7 +368,9 @@ Links · **Warning**: what's reached only through them is invisible to search en
   audit:* only links that lead somewhere count: a `javascript:` href or onclick whose script navigates (sets the location
   or an href, opens a window, calls navigate or goto, or quotes a path or URL), a routerLink, an href with a URL on another
   element. A review widget's `<span href="javascript:void(0)">` and a theme's `<a href="">Read more</a>` were flagged, and
-  lead nowhere a search engine could go (an empty href is the page itself).
+  lead nowhere a search engine could go (an empty href is the page itself). *Changed by the site-owner audit
+  (2026-11-18):* each says where on the page it is (content, navigation, header, footer or sidebar),
+  `“Shop” (onclick, header)`, from collection 6's facts; a page parsed before doesn't.
 - **Standard:** Google, "Make your links crawlable": Google "can only crawl your link if it's an `<a>` HTML element with an
   href attribute"; `<a onclick>`, `<span href>`, `<a routerLink>` and `javascript:` hrefs are "not recommended".
 - **Data:** `PageFacts.UncrawlableLinks` (new).

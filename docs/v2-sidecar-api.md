@@ -1873,9 +1873,9 @@ the page without opening anything:
   link and a footer link to the same 404 are 2). Where only some of the page's links to it are at fault, the link is
   the first of those and `links` counts those alone: for `empty-anchor-text` the links with nothing to read (not ones
   written as a fragment to the page itself), for `internal-nofollow-links` the nofollow ones, for
-  `protocol-relative-links` the ones written without a scheme, and for `broken-fragment-links` the ones to a section the
-  target lacks (a working `#present` beside a broken `#missing` names `#missing`, and counts 1). All null, and `flags`
-  empty, where the page has no stored link to it.
+  `protocol-relative-links` the ones written without a scheme, for `generic-anchor-text` the ones with generic text,
+  and for `broken-fragment-links` the ones to a section the target lacks (a working `#present` beside a broken
+  `#missing` names `#missing`, and counts 1). All null, and `flags` empty, where the page has no stored link to it.
 - **`img`** is the `<img>` as the page writes it, for a target the page shows as an image: `width` and `height` the
   attributes as written (`"400"`, `"100%"`, null when missing), `alt` its alt text (null when it has none), `hasAlt`
   whether the attribute is there at all (`alt=""` is there, and fine), `altLength` its length as `image-alt-too-long`

@@ -54,7 +54,8 @@ public static class AnalysisFreshness
     /// writes one note for each reason checks weren't run, the checks totalled ("24 checks weren't run: this crawl was made
     /// by an earlier version…"), where 14 wrote one for each collection of facts a page's parse lacked. 16 names each URL
     /// <c>protocol-relative-links</c> counts as the issue's targets (on pages parsed from collection 6 on), names in its detail
-    /// any in a tag that isn't a link or file, and doesn't flag an HTTPS page the home page's HSTS covers.
+    /// any in a tag that isn't a link or file, and doesn't flag an HTTPS page the home page's HSTS covers; and
+    /// <c>uncrawlable-links</c>' detail says where on the page each example is.
     /// </summary>
     public const int VERSION = 16;
 
