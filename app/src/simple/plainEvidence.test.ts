@@ -207,6 +207,43 @@ describe('how a page has a cause, in plain words', () => {
     expect(plainLinkedFrom(found({ start: true }), ORIGIN)).toBe('It’s the address the check started from');
     expect(plainLinkedFrom(found(), ORIGIN)).toBeNull();
   });
+
+  it('says a page names it as its main address or a language version, not that it links here (X7)', () => {
+    const named = [
+      link(1, '/a/', { kind: 'canonical', position: 'head' }),
+      link(2, '/b/', { kind: 'canonical', position: 'head' }),
+    ];
+    expect(plainLinkedFrom(found({ links: 2, pages: 2, sources: named }), ORIGIN)).toBe(
+      'Named as the main address by /a/ and /b/',
+    );
+    const languages = [link(1, '/fr/', { kind: 'hreflang', position: 'head', text: 'fr' })];
+    expect(plainLinkedFrom(found({ links: 1, pages: 1, sources: languages }), ORIGIN)).toBe(
+      'Named as a language version by /fr/',
+    );
+    // A page that names it one way and another links to it: the first says how it refers to it.
+    const mixed = [link(1, '/a/', { kind: 'canonical', position: 'head' }), link(2, '/b/', { position: 'footer' })];
+    expect(plainLinkedFrom(found({ links: 2, pages: 2, sources: mixed }), ORIGIN)).toBe(
+      'Linked from /a/ (names it as its main address) and /b/',
+    );
+  });
+
+  it('says an old address forwards here, not that it links here', () => {
+    const moved = [link(1, '/ext-moved', { kind: 'redirect', position: 'head' })];
+    expect(plainLinkedFrom(found({ links: 1, pages: 1, sources: moved }), ORIGIN)).toBe('/ext-moved forwards here');
+    const many = [
+      link(1, '/a', { kind: 'redirect', position: 'head' }),
+      link(2, '/b', { kind: 'metaRefresh', position: 'head' }),
+    ];
+    expect(plainLinkedFrom(found({ links: 3, pages: 3, sources: many }), ORIGIN)).toBe(
+      '/a, /b and 1 more forward here',
+    );
+    const image = [link(1, '/garden/', { kind: 'image', position: 'content' })];
+    expect(plainLinkedFrom(found({ links: 1, pages: 1, sources: image }), ORIGIN)).toBe(
+      'Shown on /garden/ (in the main content)',
+    );
+    const script = [link(1, '/garden/', { kind: 'script', position: 'head' })];
+    expect(plainLinkedFrom(found({ links: 1, pages: 1, sources: script }), ORIGIN)).toBe('Loaded by /garden/');
+  });
 });
 
 describe('a page’s own evidence, in plain words', () => {

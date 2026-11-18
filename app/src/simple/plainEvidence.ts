@@ -3,7 +3,15 @@
 // has it ("Shown at 400×300 pixels, in the main content", "The link is in the footer: “Old range”") and a page's own
 // evidence ("The rules file says “Disallow: /cart/”, on line 12"). Advanced's words are crawl/evidence.ts. Pure.
 import type { IndexabilityReason, RelatedFacts, RobotsRule, UrlOutcome } from '../api/grids';
-import type { ImgFacts, IssueTarget, LinkPosition, RedirectChain, TargetEnd, UrlFoundOn } from '../api/inspector';
+import type {
+  ImgFacts,
+  IssueTarget,
+  LinkKind,
+  LinkPosition,
+  RedirectChain,
+  TargetEnd,
+  UrlFoundOn,
+} from '../api/inspector';
 import type { Check } from '../api/types';
 import type { ShownAt } from '../crawl/evidence';
 import { reasonPhrase } from '../inspector/words';
@@ -244,17 +252,76 @@ export function plainTargetLine(
 /** A line as a sentence: its first letter up. */
 const sentence = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
+/** How a page refers to an address, by its link's kind, where it isn't a link: named as the main address, forwarded. */
+type Reference = 'link' | 'shown' | 'loaded' | 'canonical' | 'language' | 'forward' | 'series' | 'share';
+
+function referenceOf(kind: LinkKind | null): Reference {
+  switch (kind) {
+    case 'image':
+      return 'shown';
+    case 'script':
+    case 'stylesheet':
+    case 'iframe':
+    case 'media':
+    case 'icon':
+      return 'loaded';
+    case 'canonical':
+      return 'canonical';
+    case 'hreflang':
+      return 'language';
+    case 'redirect':
+    case 'metaRefresh':
+      return 'forward';
+    case 'pagination':
+      return 'series';
+    case 'socialImage':
+      return 'share';
+    default:
+      return 'link';
+  }
+}
+
+/** The pages that refer to an address one way, said before them: "Named as the main address by /a/ and /b/". */
+const REFERENCED_BY: Record<Exclude<Reference, 'forward'>, string> = {
+  link: 'Linked from',
+  shown: 'Shown on',
+  loaded: 'Loaded by',
+  canonical: 'Named as the main address by',
+  language: 'Named as a language version by',
+  series: 'Named as the next or previous page by',
+  share: 'Named as the share image by',
+};
+
+/** How the first page refers to it, beside it in a list that mixes ways: "/a/ (names it as its main address)". */
+const REFERENCE_PLACE: Partial<Record<Reference, string>> = {
+  loaded: 'loads it',
+  canonical: 'names it as its main address',
+  language: 'names it as a language version',
+  forward: 'forwards here',
+  series: 'names it as the next or previous page',
+  share: 'names it as its share image',
+};
+
 /**
  * Where to fix a broken or forwarding address: "Linked from /garden/ (in the footer: “Old range”), /sofas/ and 3
  * more", the first page with where on it the link is and what it says; "Listed in your sitemap"; "It’s the address the
- * check started from". Null when nothing crawled refers to it.
+ * check started from". Pages that refer to it another way say so (X7): "Named as the main address by /a/ and /b/",
+ * "/ext-moved forwards here", "Shown on /garden/". Null when nothing crawled refers to it.
  */
 export function plainLinkedFrom(found: UrlFoundOn, origin: string | null, few = 3): string | null {
   const pages = sourcePages(found).slice(0, few);
   if (found.pages > 0 && pages.length > 0) {
+    const references = new Set(pages.map((page) => referenceOf(page.kind)));
+    const one = references.size === 1 ? (references.values().next().value ?? 'link') : null;
     const named = pages.map((page, index) => {
       const path = plainAddress(page.url, origin);
       if (index > 0) return path;
+      const reference = referenceOf(page.kind);
+      // A page's code holds no place to say: "in the page's code" says nothing of a canonical or a redirect.
+      if (reference !== 'link' && reference !== 'shown') {
+        const how = one === null ? REFERENCE_PLACE[reference] : undefined;
+        return how ? `${path} (${how})` : path;
+      }
       const where = plainPosition(page.position);
       const text = page.text?.trim();
       const place = where && text ? `${where}: ${quote(text, 40)}` : (where ?? (text ? quote(text, 40) : null));
@@ -267,7 +334,8 @@ export function plainLinkedFrom(found: UrlFoundOn, origin: string | null, few = 
         : named.length > 1
           ? `${named.slice(0, -1).join(', ')} and ${named[named.length - 1]}`
           : named[0];
-    return `Linked from ${list}`;
+    if (one === 'forward') return `${list} ${found.pages === 1 ? 'forwards' : 'forward'} here`;
+    return `${REFERENCED_BY[one ?? 'link']} ${list}`;
   }
   if (found.sitemaps.total > 0)
     return found.sitemaps.total === 1 ? 'Listed in your sitemap' : 'Listed in your sitemaps';
