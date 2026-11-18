@@ -953,7 +953,8 @@ exact (33,156 rows compared in 24.8 s), memory flat.
   include the probes of the site's versions.
 - **The kinds.** `sitemaps` replaces each sitemap's entries as it's read again and drops, once every sitemap is read,
   the files nothing lists any more; a URL a sitemap newly lists is recorded as `SkipReason.Recheck`. `robotsTxt` reads
-  again the origins whose robots.txt the crawl couldn't read or found missing, and the start URL's. `siteVersions` asks
+  again the site's own origins (its start host and the versions of it the crawl covered) that the check's issues name,
+  and the start URL's: never another site's. `siteVersions` asks
   every probe again (the plan adds them as named). A check read only by these kinds has its judged URLs settled as
   rechecked when the recheck completed.
 - **Labels.** The URL grid gains a `skipReason` column ("Why not read"): every skip reason, with "Found by a recheck,

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using ShoutingIguana.Engine.Analysis;
 using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Crawling.Models;
@@ -26,6 +27,9 @@ public sealed class OlderFileRecheckTests(RecheckCrawls crawls, RecheckKindsTest
         Assert.Equal((CrawlStatus.Completed, RecheckStatus.Completed), (run.Status, recheck.Status));
         Assert.Equal((1, 1, 1), (recheck.Result!.Fixed, recheck.Result.Still, recheck.Result.NotChecked));
         await AssertUpToDateAsync(path);
+
+        // The recheck read no sitemap: the lastmod column it added is empty, not "no lastmod anywhere".
+        AssertLastmodsNotRun(path);
     }
 
     [Fact]
@@ -38,6 +42,9 @@ public sealed class OlderFileRecheckTests(RecheckCrawls crawls, RecheckKindsTest
         Assert.Equal((CrawlStatus.Completed, RecheckStatus.Completed, 1, 1, 0), (run.Status, recheck.Status, recheck.Judged, recheck.Result!.Fixed, recheck.Result.Still));
         Assert.True(TestCrawls.Count(path, "SELECT COUNT(*) FROM sitemap_urls WHERE lastmod IS NOT NULL") > 0);
         await AssertUpToDateAsync(path);
+
+        // It read every sitemap again, each entry with its lastmod: the check runs.
+        Assert.DoesNotContain(IssueReader.ReadSkippedChecks(path), skip => skip.CheckId == "sitemap-lastmod-invalid");
     }
 
     [Fact]
@@ -97,6 +104,21 @@ public sealed class OlderFileRecheckTests(RecheckCrawls crawls, RecheckKindsTest
 
         Assert.Equal(CrawlStatus.Completed, run.Status);
         await AssertUpToDateAsync(path);
+
+        // Its sitemaps were read before: continuing read none again, so their entries' lastmods weren't collected.
+        await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
+        AssertLastmodsNotRun(path);
+    }
+
+    /// <summary>The lastmod check wasn't run, for the reason an earlier version's crawl gives, rather than finding nothing.</summary>
+    private static void AssertLastmodsNotRun(string path)
+    {
+        var skipped = Assert.Single(IssueReader.ReadSkippedChecks(path), skip => skip.CheckId == "sitemap-lastmod-invalid");
+        Assert.Contains("earlier version", skipped.Text, StringComparison.Ordinal);
+        // Said in the analysis's notes: on its own, or among the checks an earlier version left out.
+        Assert.Contains(IssueReader.ReadNotes(path), note => note.Contains("earlier version", StringComparison.Ordinal) &&
+                                                             (note.StartsWith("Sitemap lastmod invalid or in the future wasn't checked", StringComparison.Ordinal) ||
+                                                              note.Contains("checks weren't run: this crawl was made by an earlier version", StringComparison.Ordinal)));
     }
 
     private static async Task<string> OlderCopyAsync(string path)

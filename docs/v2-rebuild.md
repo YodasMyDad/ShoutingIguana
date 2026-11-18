@@ -420,7 +420,7 @@ machine):
     - Duplicate titles: 2 still.
     - Both are right: the site wasn't changed.
     - The robots.txt recheck failed. The fix lane below takes that up.
-- **Found by the real-site run, now on `ui/3b-recheck-fixes`:**
+- **Found by the real-site run, fixed on `ui/3b-recheck-fixes`:**
   - B1: rechecking sitemaps fails on any crawl made before `sitemap_urls.lastmod`, which includes every 17 Nov crawl.
   - B2: a failed recheck leaves the file half-written (all 240 sitemap entries deleted), and the analysis still runs.
     `si compare` then reports two checks as fixed that weren't.
@@ -430,6 +430,21 @@ machine):
   - B7: repeated notes.
   - Session cookies counted as new on a recheck.
   - The owner's installed app predates the fix loop, so none of the owner's files can have been touched.
+- **Merged e7a5a578 (`ui/3b-recheck-fixes` at 0c866ef):** all of the above, each with a test seen failing first.
+  - B1: one shared schema upgrade (`Storage/CrawlSchemaUpgrade`) for a new crawl, a continue and a recheck, plus a
+    guard test that fails when a column is added without it.
+  - B2: a recheck is one transaction. A failure leaves the file as it was, and nothing is analysed.
+  - B3: the CLI says asked, read, refused again (and why) and never asked. The app says "the site turned them away
+    again" in Simple and "refused again: 429" in Advanced.
+  - Cookies are judged by name across the site. `AnalysisFreshness` is 15.
+  - A rerun of the garden recheck against a local copy found one more bug: a robots.txt or sitemap read that got no
+    answer wiped the sitemap entries and said "fixed". It is now "not checked", and the crawl's data is kept.
+  - Checks: engine all passed (one new pace test was timing-sensitive under load and is being made deterministic);
+    Sidecar 325, Cli 36; bench flat (210 → 183 MB); Vitest 4,701; e2e fix loop and inspector 26.
+  - **Round 2 on the same branch, under way:** a check whose column an upgrade added but the crawl never filled
+    reports "not run", not 0; a robots.txt or sitemap recheck reads only the site's own origins (it asked
+    instant.page); the B5 test made deterministic.
+  - **For phase B:** paused time still counts toward the 20-minute cap.
 - **Jitsunami, crawl 5, at the owner's word (2026-11-18, `-c 1 --rate 1 --no-external`):** 46 URLs, 9 pages, the same 8
   not checked, 20:47. Shopify refused the products from about 35 s in, after roughly 25 requests, and for the whole
   cap. Going slower doesn't get an unsigned crawler through.
@@ -455,7 +470,8 @@ machine):
 
 Next:
 
-- Merge `ui/3b-recheck-fixes`, then `ui/3b-shopify`, then phase B.
+- Merge round 2 of `ui/3b-recheck-fixes`, then `ui/3b-shopify`, then phase B (with paused time not counting toward
+  the cap).
 - **Then the "can I fix it from this?" pass (the owner, 2026-11-18):** every check that fires on copies of the real
   crawls and on the synthetic site, opened in the app in both modes and judged as a site owner. Does it show where
   the problem is (the URL, the element or snippet, the page linking to it), the value against the limit, and what to
