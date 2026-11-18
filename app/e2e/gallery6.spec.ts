@@ -56,10 +56,12 @@ test('what became of each sitemap shows whole, beside its whole name, once the w
     const full = (await rows.nth(index).locator('.si-url__full').textContent()) ?? '';
     expect(await cut(rows.nth(index).locator('.si-url__shown')), `row ${index + 1}: ${full}`).toBe(false);
     const status = rows.nth(index).getByRole('gridcell').nth(2);
-    await expect(status).toHaveText(/^(Read|Couldn’t be read)/);
+    // The synthetic site plants an empty sitemap (sitemap-empty), which the list flags as such since the check audit.
+    await expect(status).toHaveText(/^(Read|Couldn’t be read|Empty: lists no URLs$)/);
     expect(await cut(status), `row ${index + 1}: ${await status.textContent()}`).toBe(false);
   }
   await expect(page.getByRole('treegrid', { name: 'Sitemaps' })).toContainText('Couldn’t be read: 404 Not Found');
+  await expect(page.getByRole('treegrid', { name: 'Sitemaps' })).toContainText('Empty: lists no URLs');
 });
 
 test.describe('Simple Home', () => {
