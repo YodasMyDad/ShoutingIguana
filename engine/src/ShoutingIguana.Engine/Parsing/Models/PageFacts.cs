@@ -15,9 +15,11 @@ public sealed record PageFacts
     /// 6's: whether an image is a data: URI and its size, and whether it's in a picture with other sources (and the page's
     /// Microdata, batch 5's, which only adds what an earlier page lacks). 3 is batch 7's: the page's forms, and its href
     /// and src values written without a scheme. 4 is batch 8's: whether a heading is an image's alt, the main text's
-    /// placeholder, sentences and syllables, and the whole body's words.
+    /// placeholder, sentences and syllables, and the whole body's words. 5 is batch 9's: whether a meta tag is written as
+    /// property= only, and share images as links of their own. 6 is the fixit page's: an image without a URL's class and place, and a lazy-loaded srcset
+    /// (data-srcset) counted as a srcset.
     /// </summary>
-    public const int CURRENT_COLLECTION = 5;
+    public const int CURRENT_COLLECTION = 6;
 
     /// <summary>
     /// Which collection of facts made these: <see cref="CURRENT_COLLECTION"/> for a page parsed now, 0 for every page parsed

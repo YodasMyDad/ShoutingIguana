@@ -1422,7 +1422,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition IMAGE_MISSING_SRC = new("image-missing-src", IssueCategory.Images, IssueSeverity.Warning,
         "Image without a source",
-        """The page has <img> elements with no file to show: no src, none of the lazy-loading attributes the crawler reads (data-src and the like), no srcset, and not a data: image. The detail counts them. A crawl made before the crawler told data: images apart isn't checked.""",
+        """The page has <img> elements with no file to show: no src, none of the lazy-loading attributes the crawler reads (data-src and the like), no srcset, and not a data: image. The detail counts them and says which is the first: its alt text, else its class, else where on the page it is. A crawl made before the crawler told data: images apart isn't checked.""",
         """Give each image its file in src. If a lazy-loading script fills it in, check that it uses a standard attribute such as data-src or loading="lazy", and that the image shows without the script.""")
     {
         Why = """An image with no source never shows, for visitors or for Google Images. It's usually a template slot left empty, or a lazy-loading script keeping the file in an attribute only it knows, which search engines may not read either. Not an error: a script the crawler doesn't know can look the same.""",
@@ -1490,7 +1490,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition IMAGE_INLINE_LARGE = new("image-inline-large", IssueCategory.Images, IssueSeverity.Notice,
         "Large inline (data:) image",
-        """The page builds images into its HTML as data: URIs larger than 10 KB once decoded (the default, which can be changed in the analysis settings). A crawl made before the crawler measured them isn't checked. The detail counts them and gives the largest.""",
+        """The page builds images into its HTML as data: URIs larger than 10 KB once decoded (the default, which can be changed in the analysis settings). A crawl made before the crawler measured them isn't checked. The detail counts them and gives the largest, and which it is: its alt text, else its class, else where on the page it is.""",
         """Save each as an image file and show it with an ordinary src, so browsers can cache it and download it alongside the page.""")
     {
         Why = """An inline image comes with the page every time, can't be cached on its own, and in base64 is a third bigger than the file. A small icon is fine; a photo makes every view of the page slower.""",

@@ -37,6 +37,9 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
     private const int MAX_HEAD_TAGS_IN_BODY = 20;
     private const int MAX_CHARSET_DECLARATIONS = 5;
 
+    /// <summary>The most characters of an image's class a page's facts keep, for an image without a URL.</summary>
+    private const int MAX_IMAGE_CLASS_CHARS = 100;
+
     /// <summary>Raw text read for a heading or link label, before whitespace is collapsed and the result capped.</summary>
     private const int MAX_RAW_LABEL_CHARS = 16 * MAX_HEADING_CHARS;
     /// <summary>Longer blocks are cut to this length, which leaves them unparseable; rules skip blocks this long.</summary>
@@ -768,7 +771,11 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
                 IsDataUri = data is not null,
                 DataUriBytes = data,
                 InPicture = element.ParentElement is { LocalName: "picture" } picture &&
-                            picture.Children.Any(child => child.LocalName == "source" && SourceSrcset(child) is not null)
+                            picture.Children.Any(child => child.LocalName == "source" && SourceSrcset(child) is not null),
+
+                // What tells apart an image with no file to name: only those keep it, so a page of photos stores no more.
+                Class = url is null ? NullIfBlank(Clean(element.GetAttribute("class"), MAX_IMAGE_CLASS_CHARS)) : null,
+                Position = url is null ? context.Position : null
             });
         }
     }

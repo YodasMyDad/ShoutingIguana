@@ -46,8 +46,59 @@ public sealed class ImageCheckTests
 
         var hits = new ImageRules(SETTINGS, site.Table(), site.Find).Check(page).ToList();
         // An srcset attribute, even an empty one, is something a script may fill: only an image with neither is counted.
-        Assert.Equal("2 images", Detail(hits, IssueCatalog.IMAGE_MISSING_SRC));
-        Assert.Equal("2 inline images, the largest 24 KB", Detail(hits, IssueCatalog.IMAGE_INLINE_LARGE));
+        Assert.Equal("2 images, the first: alt \"No file\"", Detail(hits, IssueCatalog.IMAGE_MISSING_SRC));
+        Assert.Equal("2 inline images, the largest 24 KB, alt \"Bigger\"", Detail(hits, IssueCatalog.IMAGE_INLINE_LARGE));
+    }
+
+    /// <summary>
+    /// The real-site audit's case: "1 image" said nothing of which. An image with no file to name is told by its alt text,
+    /// else its class, else where on the page it is; one the crawler parsed before it noted the class and place, by its
+    /// alt text or not at all.
+    /// </summary>
+    [Fact]
+    public void AnImageWithoutAFileIsToldByItsAltItsClassOrItsPlace()
+    {
+        var payload = Convert.ToBase64String(new byte[12 * 1024]);
+        var large = Convert.ToBase64String(new byte[48 * 1024]);
+        (string? Missing, string? Inline) Details(string body)
+        {
+            var site = new RuleHarness();
+            var hits = new ImageRules(SETTINGS, site.Table(), site.Find).Check(site.Page($"{site.Site}/", Document(body))).ToList();
+            return (Detail(hits, IssueCatalog.IMAGE_MISSING_SRC), Detail(hits, IssueCatalog.IMAGE_INLINE_LARGE));
+        }
+
+        Assert.Equal("1 image: alt \"Product photo\"", Details("<img alt=\"Product photo\">").Missing);
+        Assert.Equal("1 image: class \"hero lazy\"", Details("<img alt=\"\" class=\" hero  lazy \">").Missing);
+        Assert.Equal("1 image, in the header", Details("<header><img></header>").Missing);
+        Assert.Equal("1 image, in the main content", Details("<main><img alt=\" \"></main>").Missing);
+        Assert.Equal("3 images, the first: class \"thumb\"", Details("<img class=\"thumb\"><img alt=\"Two\"><img alt=\"Three\">").Missing);
+        Assert.Equal("2 images, the first in the footer", Details("<footer><img><img></footer>").Missing);
+
+        Assert.Equal("1 inline image: 12 KB, alt \"Logo\"", Details($"<img src=\"data:image/png;base64,{payload}\" alt=\"Logo\">").Inline);
+        Assert.Equal("1 inline image: 12 KB, in the navigation", Details($"<nav><img src=\"data:image/png;base64,{payload}\"></nav>").Inline);
+        Assert.Equal("2 inline images, the largest 48 KB, class \"banner\"",
+            Details($"<img src=\"data:image/png;base64,{payload}\" alt=\"Small\"><img src=\"data:image/png;base64,{large}\" class=\"banner\">").Inline);
+
+        // A page parsed before the crawler noted an image's class and place.
+        var earlier = new RuleHarness();
+        var page = earlier.Page($"{earlier.Site}/", Document("<header><img class=\"hero\"><img alt=\"Two\"></header>"));
+        page = page with { Facts = page.Facts with { Images = [.. page.Facts.Images.Select(image => image with { Class = null, Position = null })] } };
+        Assert.Equal("2 images", Detail(new ImageRules(SETTINGS, earlier.Table(), earlier.Find).Check(page).ToList(), IssueCatalog.IMAGE_MISSING_SRC));
+    }
+
+    [Fact]
+    public void TheParserNotesTheClassAndPlaceOfAnImageWithoutAFileOnly()
+    {
+        var parsed = HtmlPageParser.Parse(Document(
+            "<header><img class=\" logo   lazy \"></header><footer><img data-foo=\"1\"></footer><img src=\"/a.jpg\" class=\"photo\">" +
+            $"<aside><img src=\"data:image/gif;base64,R0lGOD\" class=\"{new string('c', 150)}\"></aside>"), new Uri("https://example.com/"), [], "ShoutingIguana");
+
+        var images = parsed.Facts.Images;
+        Assert.Equal(("logo lazy", (LinkPosition?)LinkPosition.Header), (images[0].Class, images[0].Position));
+        Assert.Equal((null, (LinkPosition?)LinkPosition.Footer), (images[1].Class, images[1].Position));
+        Assert.Equal((null, (LinkPosition?)null), (images[2].Class, images[2].Position));
+        Assert.Equal((100, (LinkPosition?)LinkPosition.Sidebar), (images[3].Class!.Length, images[3].Position));
+        Assert.Equal(6, PageFacts.CURRENT_COLLECTION);
     }
 
     [Fact]
@@ -174,6 +225,10 @@ public sealed class ImageCheckTests
         Assert.Contains(new ImageRules(SETTINGS, site.Table(), site.Find, scope, startIsPrivate: false, readUrl: site.UrlOf).Check(page),
             hit => hit.Issue == IssueCatalog.IMAGE_HOTLINKED);
     }
+
+    /// <summary>A page whose body is what the test passes in, not in a &lt;main&gt;: a header or footer there is the page's own.</summary>
+    private static string Document(string body) =>
+        $"<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>Images</title></head><body>{body}</body></html>";
 
     private static string? Detail(List<IssueHit> hits, IssueDefinition check) => hits.Where(hit => hit.Issue == check).Select(hit => hit.Detail).SingleOrDefault();
 }
