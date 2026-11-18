@@ -48,6 +48,7 @@ import { filesOf, pathOrigin, sharedSourceAdvice } from './whereWords';
 import { useTemplateLink } from '../screens/issues/useWhereFound';
 import { firstGroupQuery } from './useOneFix';
 import { ShopifyPrompt } from '../shopify/ShopifyPrompt';
+import { useShopifyPromptOnProblem } from './shopifyPromptPlace';
 
 const FIX = '/crawls/$crawl/issues/{-$check}';
 
@@ -337,6 +338,7 @@ function FoundProblem({
   // An oversized image: the size its pages show it at, against the file's.
   const templateShownAt = useGroupShownAt(crawlId, check, template);
   const shared = useSharedSource(crawlId, check);
+  const shopifyHere = useShopifyPromptOnProblem(crawlId, check);
   const counted = analysis.counts.find((candidate) => candidate.checkId === check.id);
   // X4: a site-wide check about the rules file or a sitemap names its files where its home page's row would be.
   const files = filesOf(check, counted);
@@ -468,7 +470,7 @@ function FoundProblem({
           {sharedSourceWords(pathOf(shared.url, item), shared.position, sharedSourceAdvice(check))}
         </Callout>
       ) : null}
-      <ShopifyPrompt crawlId={crawlId} mode="simple" className="mt-4" />
+      {shopifyHere ? <ShopifyPrompt crawlId={crawlId} mode="simple" className="mt-4" /> : null}
       <WhereItIs
         crawlId={crawlId}
         item={item}
