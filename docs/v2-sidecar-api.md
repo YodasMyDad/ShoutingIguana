@@ -614,7 +614,9 @@ on, mid-crawl as at the end.
   `statusClasses.noResponse`. `robotsDisallowed` is the same count as the top-level field (refused by a rule, or because
   robots.txt couldn't be read). `notChecked` is URLs never asked, their host having stopped answering, or asked and
   only ever answered 429 Too Many Requests, the site asking the crawler to slow down (their `error` starts "Not
-  checked: the site asked the crawler to slow down"), or on a private network address a public site's crawl doesn't
+  checked: the site asked the crawler to slow down"; one held in a section the site limits apart whose turn didn't come
+  before the crawl gave up on the section goes on "(429 Too Many Requests), and the crawl gave up on the pages it
+  limits before this URL had its turn"), or on a private network address a public site's crawl doesn't
   ask ("Not checked: private network address; not checked from a public site"): unknown, not broken, so the UI
   shouldn't call them errors. `networkError` doesn't include them.
 - **`crawlingMs`** (E3c) is the time spent crawling so far, over every run of the crawl: the earlier runs' time, and
@@ -732,7 +734,7 @@ An alert is a `CrawlNotice`, kept in the crawl file as the engine raises it (the
   | `mostly-forbidden` | warning | `host`, `count` (the 403s), `sampled` (of the site's first 20 URLs) | As for `blocked` |
   | `rate-limited` | info | `host`, `reason` (`429 Too Many Requests`), `durationMs`: the pause it asked for, when it did. Once per host in each run: the crawler waits as asked, goes on at a slower pace it learns, and asks again at the end for the URLs it was refused. Not a block | Nothing: it is handled |
   | `section-rate-limited` | info | `host`, `url`: the section ("/products/"), `reason` (`429 Too Many Requests`), `durationMs`: the first interval between its URLs. Once per section in each run: its URLs are held back and read one at a time, and the rest of the site isn't slowed | Nothing: it is handled; the `sectionLimited` wait says how it goes |
-  | `rate-limited-unchecked` | warning | `host` (of the first such URL), `reason` (`429 Too Many Requests`), `count`: the site's URLs stored as not checked (`outcome` `notChecked`) because it still answered 429 at their last try. Said at the end of a run, only when there are some | Crawl again later, or at the Polite speed |
+  | `rate-limited-unchecked` | warning | `host` (of the first such URL), `reason` (`429 Too Many Requests`), `count`: the site's URLs stored as not checked (`outcome` `notChecked`) because it kept asking the crawler to slow down: asked and still answered 429 at their last try, or held in a section it limits apart and never asked, the crawl having given up on the section before their turn came. The message says how many of each, how many times those asked were refused, and why the others weren't asked. Said at the end of a run, only when there are some | Crawl again later, or at the Polite speed |
   | `start-redirects-away` | warning | `url`: where the start URL leads | Crawl from there instead |
   | `robots-unreachable` | warning | `origin`, `reason` (`503 Service Unavailable`, or the error), `durationMs`: how long until it's asked again | Crawl again with robots.txt ignored |
   | `site-unreachable` | warning | `origin`, `reason` (the last error), `durationMs`: the pause between tries | Wait, or stop and continue later |
@@ -3182,6 +3184,12 @@ every address). It is the catalog's, as `references` is: not stored, not in the 
   then it analyses the crawl, which settles the recheck.
 - **The crawl is left as it was**: its status (completed, or stopped with its queue untouched), its options. Its stamp
   moves, so its analysis is out of date between the run and the analysis, as after Continue.
+- **All or nothing.** The run is stored in one transaction as it ends. A run that fails anywhere (the file, the
+  network, the run) is rolled back whole: the file is as it was, its analysis still today's, and it has no recheck. The
+  analysis after it isn't run; the `recheck` event says `failed` (no result) and the crawl event's `error` says why ("The
+  recheck failed: …"). A process that dies part-way leaves the file as it was too. A robots.txt or sitemap read again
+  that gets no answer (the connection failed, or it timed out) leaves the crawl's as it was, and the URL it judges
+  couldn't be checked (`answers.noAnswer`): never fixed.
 - **Pace** is the crawl's own options, through the same per-host pacing as a crawl. A site that stops answering ends a
   recheck after a minute (a crawl waits ten).
 - **Stop** is the crawl's: `POST /api/crawls/{id}/stop`. What was fetched stays, the analysis runs, and the recheck is
@@ -3195,8 +3203,8 @@ every address). It is the catalog's, as `references` is: not stored, not in the 
     `needs-secrets` says "Rechecking this crawl needs …"; options the secrets make invalid are `invalid-options`.
   - **The flow**: `analyzing` (when `analysisFirst`) with its `analysis` events, then the plan is made again from
     today's analysis (a refusal now ends it, with the reason as the crawl event's `error`); `rechecking`; `analyzing`
-    (the analysis that settles it); then the file's status, with a `library` event. A failed run is still analysed,
-    and its end says why.
+    (the analysis that settles it); then the file's status, with a `library` event. A failed run stored nothing and
+    isn't analysed: its end says why.
   - **Stop**: during the run, the crawl event says `stopping`, the run ends (`recheck` event `stopped`), and the analysis
     runs and settles it. During the analysis first, it cancels that analysis and no recheck is run (no `recheck`
     event). During the analysis after, `crawl-busy`, as for any analysis: `/analyze/cancel` cancels it. A sidecar shut
@@ -3212,7 +3220,8 @@ one (`recheck-not-found`, 404, for an id the file doesn't have):
 {"rechecks":[{"id":1,"status":"completed","startedAt":"2026-11-17T14:02:12Z","endedAt":"2026-11-17T14:02:31Z",
               "settledAt":"2026-11-17T14:02:41Z","crawlingMs":19200,"checkId":"broken-internal-links","group":null,
               "urlList":false,"kinds":["urls"],"judged":5,"fetched":8,"countBefore":5,
-              "result":{"fixed":4,"still":1,"notChecked":0,"notRechecked":0,"new":0,"scoreBefore":85,"scoreAfter":88}}]}
+              "result":{"fixed":4,"still":1,"notChecked":0,"notRechecked":0,"new":0,"scoreBefore":85,"scoreAfter":88},
+              "answers":{"read":5,"rateLimited":0,"blocked":0,"robotsTxt":0,"noAnswer":0,"notAsked":0,"refused":0}}]}
 ```
 
 - **`status`**: `running` (here), `completed`, `stopped`, `failed`, or `interrupted` (its run ended with the process; the
@@ -3223,6 +3232,14 @@ one (`recheck-not-found`, 404, for an id the file doesn't have):
   rate-limited, refused by robots.txt, now forwarding elsewhere, or the check was skipped); `notRechecked` were past the
   cap or the stop; `new` were in scope, not flagged before and flagged now.
 - **`crawlingMs`** is the recheck's own time. The crawl's `crawlingMs` leaves rechecks out.
+- **`fetched`** is the requests the run sent the site, each counted as the site sees it: its pages (each try, each hop
+  of a redirect), robots.txt and the sitemaps. A URL it never asked isn't one, nor a connection that couldn't be made.
+- **`answers`** is how the site answered it for the URLs it judges, kept as its run ended, with or without a check:
+  `read` (an answer of the site's own: a page, a redirect, an error code); refused again, by why: `rateLimited` (429),
+  `blocked` (a firewall or bot check), `robotsTxt` (disallowed, or robots.txt unreadable), `noAnswer`; and `notAsked`
+  (past the cap, not reached before it ended, its time for a section the site limits ran out first, or its host had
+  stopped answering). They add up to `judged`; `refused` is the four refusals together. Null for a recheck by an engine
+  before they were kept.
 
 **`POST /api/crawls/{id}/rechecks/{n}/rows`**, the URLs of one recheck, paged as `/rows` is:
 

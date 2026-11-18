@@ -260,8 +260,9 @@ public sealed class RecheckRunTests(RecheckCrawls crawls) : IDisposable
         var plan = RecheckPlanReader.Plan(path, new RecheckAsk("title-duplicate", UrlIds: [id]), new AnalysisSettings());
         Assert.Equal(new[] { (id, RecheckRole.Judged), (cluster, RecheckRole.Named) }.Order(), plan.Scope.Select(url => (url.Id, url.Role)).Order());
 
+        // Its requests: the two pages, and robots.txt, which every run reads afresh.
         var (_, recheck) = await RecheckCrawls.RecheckAsync(path, new RecheckAsk("title-duplicate", UrlIds: [id]));
-        Assert.Equal((2, (RecheckOutcome?)RecheckOutcome.NotChecked), (recheck.Fetched, Outcomes(path, recheck.Id)["/p/185"]));
+        Assert.Equal((2 + 1, (RecheckOutcome?)RecheckOutcome.NotChecked), (recheck.Fetched, Outcomes(path, recheck.Id)["/p/185"]));
     }
 
     /// <summary>
@@ -307,7 +308,7 @@ public sealed class RecheckRunTests(RecheckCrawls crawls) : IDisposable
         Assert.Equal(first, plan.Scope.Select(url => url.Id));
 
         var (_, recheck) = await RecheckCrawls.RecheckAsync(path, new RecheckAsk("description-missing"), limit: 3);
-        Assert.Equal((count, count - 3, 3), (recheck.Judged, recheck.Result!.NotRechecked, recheck.Fetched));
+        Assert.Equal((count, count - 3, 3 + 1), (recheck.Judged, recheck.Result!.NotRechecked, recheck.Fetched));
     }
 
     /// <summary>A recheck is paced as the crawl's options say: never faster than its rate, as polite as the crawl was.</summary>
@@ -318,8 +319,9 @@ public sealed class RecheckRunTests(RecheckCrawls crawls) : IDisposable
         var time = Stopwatch.StartNew();
         var (_, recheck) = await RecheckCrawls.RecheckAsync(path, new RecheckAsk("title-duplicate"), options => options with { MaxRequestsPerSecond = 4 });
 
-        // Ten fetches at four a second take at least two and a quarter seconds between the first and the last.
-        Assert.Equal(10, recheck.Fetched);
+        // Ten fetches at four a second take at least two and a quarter seconds between the first and the last. Its requests
+        // are those, and robots.txt.
+        Assert.Equal(10 + 1, recheck.Fetched);
         Assert.True(time.Elapsed >= TimeSpan.FromSeconds(2.25), $"Took {time.Elapsed}");
     }
 

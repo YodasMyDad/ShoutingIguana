@@ -247,6 +247,7 @@ export function recheckRecord(patch: Partial<Recheck> = {}): Recheck {
     fetched: 8,
     countBefore: 5,
     result: recheckResult(),
+    answers: { read: 5, rateLimited: 0, blocked: 0, robotsTxt: 0, noAnswer: 0, notAsked: 0, refused: 0 },
     ...patch,
   };
 }

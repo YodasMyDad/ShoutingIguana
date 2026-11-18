@@ -96,6 +96,13 @@ public sealed class FixLoopRecheckTests(RecheckSite site) : IClassFixture<Rechec
             ((int)result["fixed"]!, (int)result["still"]!, (int)result["notChecked"]!, (int)result["notRechecked"]!, (int)result["new"]!, (int?)result["scoreBefore"],
                 (int?)result["scoreAfter"]));
         Assert.Equal(result.ToJsonString(), settled.seen.Data["result"]!.ToJsonString());
+
+        // How the site answered it for the URLs it judged, as the file keeps it.
+        var answers = record.Answers!;
+        Assert.Equal((answers.Read, answers.RateLimited, answers.Blocked, answers.RobotsTxt, answers.NoAnswer, answers.NotAsked, answers.Refused),
+            ((int)listed["answers"]!["read"]!, (int)listed["answers"]!["rateLimited"]!, (int)listed["answers"]!["blocked"]!, (int)listed["answers"]!["robotsTxt"]!,
+                (int)listed["answers"]!["noAnswer"]!, (int)listed["answers"]!["notAsked"]!, (int)listed["answers"]!["refused"]!));
+        Assert.Equal(record.Judged, answers.Read + answers.Refused + answers.NotAsked);
         Assert.EndsWith("Z", (string?)listed["startedAt"]);
         Assert.NotNull(listed["settledAt"]);
         Assert.Equal(listed.ToJsonString(), (await _sidecar.GetJsonAsync($"api/crawls/{id}/rechecks/1")).ToJsonString());
@@ -325,6 +332,43 @@ public sealed class FixLoopRecheckTests(RecheckSite site) : IClassFixture<Rechec
         {
             manager.AnalysisStarting = null;
             release.Set();
+        }
+    }
+
+    /// <summary>
+    /// A recheck that fails part-way stores nothing, so nothing is analysed after it: its run's event says failed, the crawl
+    /// ends with why, and the crawl file is as it was, its analysis today's and no recheck in it.
+    /// </summary>
+    [Fact]
+    public async Task ARecheckThatFailsIsNotAnalysedAndLeavesTheCrawlAsItWas()
+    {
+        var path = FixLoopCrawls.AddTo(_sidecar, site.Then, "site");
+        var id = CrawlIds.For(path);
+        var analysedAt = IssueReader.ReadAnalysis(path)!.AnalyzedAt;
+        var manager = _sidecar.Host.Services.GetRequiredService<CrawlManager>();
+        manager.RecheckJob = (request, observer) => new CrawlEngine(NullLoggerFactory.Instance).Recheck(request with
+        {
+            AtStage = stage => throw new InvalidOperationException($"A test's fault at {stage}")
+        }, observer);
+        try
+        {
+            await using var events = await EventStreamReader.ConnectAsync(_sidecar.Client);
+            Assert.Equal(HttpStatusCode.Accepted, (await _sidecar.PostAsync($"api/crawls/{id}/rechecks", new JsonObject { ["checkId"] = CLIENT_ERRORS })).Status);
+            var ended = await events.CrawlStatusAsync(id, "completed");
+
+            Assert.Equal(["rechecking", "completed"],
+                events.Seen().Where(seen => seen.Name == "crawl" && (string?)seen.Data["crawlId"] == id).Select(seen => (string)seen.Data["status"]!));
+            Assert.StartsWith("The recheck failed: A test's fault at RobotsStored", (string?)ended["error"]);
+            var last = events.Seen().Last(seen => seen.Name == "recheck" && (string?)seen.Data["crawlId"] == id);
+            Assert.Equal(("failed", null), ((string?)last.Data["status"], last.Data["result"]));
+            Assert.DoesNotContain(events.Seen(), seen => seen.Name == "analysis" && (string?)seen.Data["crawlId"] == id);
+            Assert.Empty(RecheckReader.ReadAll(path));
+            Assert.Equal(analysedAt, IssueReader.ReadAnalysis(path)!.AnalyzedAt);
+            Assert.False((bool)(await _sidecar.GetJsonAsync($"api/crawls/{id}"))["outOfDate"]!);
+        }
+        finally
+        {
+            manager.RecheckJob = null;
         }
     }
 

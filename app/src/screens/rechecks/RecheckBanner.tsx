@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ListChecks, Square, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { recheckQuery, recheckRowsQuery } from '../../api/queries';
-import { advancedResultWords, recheckProgressWords } from '../../changes/recheckWords';
+import { advancedEndedWords, advancedResultWords, recheckProgressWords } from '../../changes/recheckWords';
 import { stopCrawl } from '../../crawl/actions';
 import { refreshAfterRecheck, useRecheckRun, type RecheckRun } from '../../crawl/recheck';
 import { Banner } from '../../ui/Banner';
@@ -88,7 +88,7 @@ function RunBanner({
   if (run.stage === 'ended') {
     return (
       <Banner inset role="none" actions={dismiss}>
-        The recheck didn’t run{run.error ? `: ${run.error}` : '.'}
+        {advancedEndedWords(run.status, run.error)}
       </Banner>
     );
   }
@@ -103,6 +103,7 @@ function RunBanner({
       judged,
       result,
       stillPaths: (stillRows.data?.rows ?? []).map((row) => pathOf(row.url)),
+      answers: recheck?.answers ?? null,
     });
     const other = recheck && recheck.checkId !== checkId ? recheckWhatWords(recheck, titleOf) : null;
     return (

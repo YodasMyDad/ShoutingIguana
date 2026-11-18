@@ -108,6 +108,33 @@ public sealed class StructuredDataCheckTests
         ], parsed.Facts.Microdata);
     }
 
+    /// <summary>
+    /// A <c>content</c> attribute is the value on any element, as schema.org's own examples write a price on a span, and it
+    /// wins over the element's own attribute or text, as RDFa's <c>@content</c> does; an item is an item all the same. The
+    /// price is a real site's: the text holds the old price and the new.
+    /// </summary>
+    [Fact]
+    public void MicrodataTakesAContentAttributeOnAnyElementAsTheValue()
+    {
+        var parsed = HtmlPageParser.Parse(RuleHarness.Html(body: """
+            <div itemscope itemtype="https://schema.org/Product">
+              <p itemprop="name">Bench</p>
+              <div itemprop="offers" itemscope itemtype="https://schema.org/Offer" content="not a value">
+                <span itemprop="priceCurrency" content="GBP">£</span><div itemprop="price" content="9.1">£15.15 £9.10</div>
+                <time itemprop="priceValidUntil" datetime="2026-12-31" content="2027-01-31">31 December</time>
+                <a itemprop="url" href="/bench" content="https://example.com/offers/bench">Buy</a>
+                <data itemprop="sku" value="B-1" content="B-2">B</data>
+                <meta itemprop="availability" content="https://schema.org/InStock">
+              </div>
+            </div>
+            """), new Uri("https://example.com/shop/"), [], "ShoutingIguana");
+
+        Assert.Equal(
+        [
+            """{"@context":"https://schema.org","@type":"Product","name":"Bench","offers":{"@type":"Offer","priceCurrency":"GBP","price":"9.1","priceValidUntil":"2027-01-31","url":"https://example.com/offers/bench","sku":"B-2","availability":"https://schema.org/InStock"}}"""
+        ], parsed.Facts.Microdata);
+    }
+
     [Fact]
     public void MicrodataIsHeldToWhatJsonLdIs()
     {

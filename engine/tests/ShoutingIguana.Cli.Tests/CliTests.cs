@@ -68,6 +68,53 @@ public sealed class CliTests : IAsyncLifetime
         AssertFails(await RunAsync("recheck", crawl, "--urls", Path.Combine(_folder, "missing.txt")), "missing.txt");
     }
 
+    /// <summary>
+    /// A recheck of a list of URLs with no check still says what became of each: of four asked for, the home page read, a
+    /// page behind a bot challenge and one robots.txt disallows refused again (and why), and a file the crawl never fetched
+    /// never asked. It prints its progress, even with its output redirected, and counts the requests it sent.
+    /// </summary>
+    [Fact]
+    public async Task AUrlListRecheckSaysWhatWasReadRefusedAgainAndNeverAsked()
+    {
+        var crawl = await CrawlAsync();
+        var list = Path.Combine(_folder, "urls.txt");
+        string[] paths = ["/", "/plants/blocked", "/private/listed", "/img/5.jpg?width=1400"];
+        await File.WriteAllLinesAsync(list, paths.Select(path => _server.BaseUri + path.TrimStart('/')));
+
+        var recheck = await RunAsync("recheck", crawl, "--urls", list);
+
+        Assert.True(recheck.ExitCode == 0, recheck.Error);
+        Assert.Matches(@"\] Rechecking: \d+ of \d+ URLs fetched", recheck.Output);
+        Assert.Contains("Asked for 4 URLs: 1 read, 2 refused again (1 blocked by a firewall or bot check, 1 disallowed by robots.txt), 1 never asked.", recheck.Output);
+        var record = Assert.Single(RecheckReader.ReadAll(crawl));
+        Assert.Equal(new RecheckAnswerCounts(Read: 1, RateLimited: 0, Blocked: 1, RobotsTxt: 1, NoAnswer: 0, NotAsked: 1), record.Answers);
+        Assert.Contains($"  {record.Fetched} requests in ", recheck.Output);
+        Assert.DoesNotContain("Rechecked ", recheck.Output);
+    }
+
+    /// <summary>A recheck that fails says so, with why, stores nothing and analyses nothing: the crawl file is as it was.</summary>
+    [Fact]
+    public async Task ARecheckThatFailsLeavesTheCrawlAsItWasAndAnalysesNothing()
+    {
+        var crawl = await CrawlAsync();
+        var analysedAt = IssueReader.ReadAnalysis(crawl)?.AnalyzedAt;
+        Commands.RecheckCommand.AtStage = stage => throw new InvalidOperationException($"A test's fault at {stage}");
+        (int ExitCode, string Output, string Error) recheck;
+        try
+        {
+            recheck = await RunAsync("recheck", crawl, "--check", "title-too-long");
+        }
+        finally
+        {
+            Commands.RecheckCommand.AtStage = null;
+        }
+
+        Assert.Equal(1, recheck.ExitCode);
+        Assert.Contains("The recheck failed: A test's fault at RobotsStored. Nothing it fetched was kept: the crawl is as it was.", recheck.Error);
+        Assert.Empty(RecheckReader.ReadAll(crawl));
+        Assert.Equal(analysedAt, IssueReader.ReadAnalysis(crawl)?.AnalyzedAt);
+    }
+
     [Fact]
     public async Task CrawlsAnalysesAndReportsTheIssues()
     {

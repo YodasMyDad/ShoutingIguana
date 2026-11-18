@@ -68,7 +68,7 @@ internal sealed class RobotsTxtRules(UrlTable urls, IReadOnlyList<RobotsRecord> 
         content is not null && content.Split('\n').Any(line => line.Trim().TrimStart('\uFEFF').StartsWith("sitemap:", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>RobotsCache records a robots.txt behind too many redirects without a status, and allows everything.</summary>
-    private static bool TooManyRedirects(RobotsRecord file) =>
+    internal static bool TooManyRedirects(RobotsRecord file) =>
         file.StatusCode is null && file.Error?.Contains("redirects", StringComparison.OrdinalIgnoreCase) == true;
 
     private static string Describe(RobotsRecord file) =>

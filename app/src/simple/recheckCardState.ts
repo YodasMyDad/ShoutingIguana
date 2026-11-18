@@ -16,8 +16,11 @@ export type RecheckCardState =
   | { kind: 'loading' }
   /** The plan couldn't be read. */
   | { kind: 'planFailed' }
-  /** It can run: `ended` says why the last one asked here didn't run, when the sidecar said. */
-  | { kind: 'ready'; plan: RecheckPlan; ended: string | null }
+  /**
+   * It can run: `ended` says why the last one asked here didn't run, when the sidecar said; `failed`, that it ran and
+   * failed, which kept nothing it read.
+   */
+  | { kind: 'ready'; plan: RecheckPlan; ended: string | null; failed: boolean }
   | { kind: 'refused'; plan: RecheckPlan; refused: RecheckRefusal }
   /** A recheck of another of this crawl's problems runs: this one waits for it. */
   | { kind: 'busyElsewhere' }
@@ -90,5 +93,5 @@ export function recheckCardState(input: {
   if (!plan) return { kind: 'loading' };
   if (plan.refused) return { kind: 'refused', plan, refused: plan.refused };
   const ended = run?.stage === 'ended' && ours ? (run.error ?? 'The recheck didn’t run.') : null;
-  return { kind: 'ready', plan, ended };
+  return { kind: 'ready', plan, ended, failed: ended !== null && run?.status === 'failed' };
 }

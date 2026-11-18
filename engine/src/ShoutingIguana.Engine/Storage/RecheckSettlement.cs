@@ -20,6 +20,8 @@ namespace ShoutingIguana.Engine.Storage;
 /// <item><b>Not rechecked</b>: past the cap, or not reached before the run ended.</item>
 /// <item><b>New</b>: a URL in its scope the check didn't flag before and flags now.</item>
 /// </list>
+/// The cookie check is settled by cookie rather than by page (<see cref="RecheckCookies"/>): a recheck's fresh session
+/// cookie lands on another page than the crawl's did.
 /// </summary>
 internal static class RecheckSettlement
 {
@@ -33,6 +35,9 @@ internal static class RecheckSettlement
         }
 
         var skippedChecks = skipped.ToHashSet(StringComparer.Ordinal);
+
+        // How the site answered each URL, kept by this engine's rechecks: a file an earlier engine rechecked has no column for it.
+        var hasAnswers = Scalar(connection, transaction, "SELECT 1 FROM pragma_table_info('recheck_urls') WHERE name = 'answer'") is not null;
         List<(int Id, string? CheckId, long StartedAt, RecheckStatus Status, string Kinds, int Judged)> unsettled = [];
         using (var command = Command(connection, transaction, "SELECT id, check_id, started_at, status, kinds, judged FROM rechecks WHERE settled_at IS NULL ORDER BY id"))
         using (var reader = command.ExecuteReader())
@@ -50,7 +55,11 @@ internal static class RecheckSettlement
             var status = recheck.Status == RecheckStatus.Running ? RecheckStatus.Interrupted : recheck.Status;
             var check = recheck.CheckId is null ? null : IssueCatalog.Find(recheck.CheckId);
             SetOutcomes(connection, transaction, recheck.Id, recheck.StartedAt, check, check is not null && skippedChecks.Contains(check.Id),
-                fetchesUrls: recheck.Kinds.Split(',').Contains(nameof(RecheckKind.Urls)), readOnlyCompleted: status == RecheckStatus.Completed);
+                fetchesUrls: recheck.Kinds.Split(',').Contains(nameof(RecheckKind.Urls)), readOnlyCompleted: status == RecheckStatus.Completed, hasAnswers);
+            if (check == IssueCatalog.COOKIES_INSECURE && !skippedChecks.Contains(check.Id))
+            {
+                RecheckCookies.Settle(connection, transaction, recheck.Id, recheck.StartedAt);
+            }
 
             using var counts = Command(connection, transaction, $"""
                 UPDATE rechecks SET
@@ -62,7 +71,7 @@ internal static class RecheckSettlement
                         + MAX(0, judged - (SELECT COUNT(*) FROM recheck_urls WHERE recheck_id = $id AND role = {(int)RecheckRole.Judged})),
                     new = (SELECT COUNT(*) FROM recheck_urls WHERE recheck_id = $id AND outcome = {(int)RecheckOutcome.New})
                         + (SELECT COUNT(*) FROM recheck_urls ru WHERE ru.recheck_id = $id AND ru.role <> {(int)RecheckRole.Judged} AND ru.flagged_before = 0
-                           AND EXISTS (SELECT 1 FROM issues i WHERE i.issue = $check AND i.url_id = ru.url_id)),
+                           AND ru.outcome IS NULL AND EXISTS (SELECT 1 FROM issues i WHERE i.issue = $check AND i.url_id = ru.url_id)),
                     score_after = $score,
                     settled_at = $now
                 WHERE id = $id
@@ -75,8 +84,12 @@ internal static class RecheckSettlement
     /// <summary>The outcome of each URL the recheck judged, as the analysis now finds it.</summary>
     /// <param name="fetchesUrls">The recheck read its URLs again; one that read only sitemaps, robots.txt or the site's versions didn't.</param>
     /// <param name="readOnlyCompleted">For a recheck that didn't read its URLs again, it read what it does read in full.</param>
+    /// <param name="hasAnswers">
+    /// The file keeps how the site answered each URL: for a recheck that didn't read its URLs again, one whose robots.txt
+    /// or sitemap reads got no answer couldn't be judged, so it's not checked, never fixed.
+    /// </param>
     private static void SetOutcomes(SqliteConnection connection, SqliteTransaction transaction, int id, long startedAt, IssueDefinition? check, bool skipped,
-        bool fetchesUrls, bool readOnlyCompleted)
+        bool fetchesUrls, bool readOnlyCompleted, bool hasAnswers)
     {
         if (check is null)
         {
@@ -88,6 +101,9 @@ internal static class RecheckSettlement
         var rechecked = fetchesUrls
             ? "COALESCE((SELECT r2.fetched_at FROM responses r2 WHERE r2.url_id = recheck_urls.url_id), 0) >= $startedAt"
             : readOnlyCompleted ? "1" : "0";
+        var unanswered = !fetchesUrls && hasAnswers
+            ? $"WHEN recheck_urls.answer IN ({(int)RecheckAnswer.RateLimited}, {(int)RecheckAnswer.Blocked}, {(int)RecheckAnswer.RobotsTxt}, {(int)RecheckAnswer.NoAnswer}) THEN {(int)RecheckOutcome.NotChecked}"
+            : string.Empty;
         var reading = $"(SELECT {CheckJudging.READING} FROM urls u LEFT JOIN responses r ON r.url_id = u.id WHERE u.id = recheck_urls.url_id)";
 
         // A duplicate no longer flagged though its own text is as it was: the others changed, and a page the recheck didn't
@@ -101,6 +117,7 @@ internal static class RecheckSettlement
             UPDATE recheck_urls SET outcome = CASE
                 WHEN $skipped = 1 THEN {(int)RecheckOutcome.NotChecked}
                 WHEN {reading} = {(int)UrlReading.NotFound} THEN CASE WHEN flagged_before = 1 THEN {(int)RecheckOutcome.Fixed} END
+                {unanswered}
                 WHEN NOT ({rechecked}) THEN {(int)RecheckOutcome.NotRechecked}
                 WHEN EXISTS (SELECT 1 FROM issues i WHERE i.issue = $check AND i.url_id = recheck_urls.url_id)
                     THEN CASE WHEN flagged_before = 1 THEN {(int)RecheckOutcome.Still} ELSE {(int)RecheckOutcome.New} END
