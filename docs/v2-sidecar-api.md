@@ -279,11 +279,11 @@ Built in stages:
   What a fix clears **on a crawl** is counted, never assumed: the analysis's `counts[].clears`. Only how a check is
   shown: not stored with an analysis, nor in the checks' fingerprint.
 - **`evidence`** (evidence) is the URL columns that show what the check found, in the order to show them, beside each
-  row's `url` and `detail`: `["title", "titleInResults", "titleWidth", "titleLength"]` for `title-too-long`,
-  `["metaRobots", "xRobotsTag"]` for `noindex-page` (where the noindex comes from), `["redirectChain"]` for the
-  redirect checks, `["robotsRule"]` for `blocked-by-robots`. Each is a column of [`/rows`](#issue-groups-e3a) and
+  row's `url` and `detail`: `["title", "titleInResults"]` for `title-too-long` (its detail gives the width and the
+  length), `["metaRobots", "xRobotsTag"]` for `noindex-page` (where the noindex comes from), `["redirectChain"]` for
+  the redirect checks but `redirect-loop` (whose detail is its chain), `["robotsRule"]` for `blocked-by-robots`. Each is a column of [`/rows`](#issue-groups-e3a) and
   of [the URL grid](#urls-e3a), so a view asks `/rows` for `url`, `detail` and these. Empty for a check whose URL and
-  detail say it all (27 checks have some); [the per-check table](v2-evidence.md#the-checks) has every one. A column
+  detail say it all (50 checks have some); [the per-check table](v2-evidence.md#the-checks) has every one. A column
   that needs the URL summary has no values without one, and is listed in `/rows`' `unavailable`, as any is.
 - **`targetFacts`** (evidence) is what to say about each URL the check's issues name, in the order to say it: the
   fields of a target on [`/issues/{checkId}/targets`](#where-a-url-is-found-found-on), and of a group's `related` URL
@@ -1765,8 +1765,8 @@ with `matching` the rows the filters match and `total` the check's flagged URLs,
   on 200 pages first), then `depth`, then `url`. Without a URL summary, which `inlinks` and `usedOn` need, it is
   `depth`, then `url`. So a group's pages, a check's export and the report's examples come in the same order. Crawl
   order is still there to ask for: `[{ "column": "id" }]`. A cursor is of the order its page was read in, as always.
-- **A check's evidence** is asked for as any columns are: `"columns": ["url", "detail", "title", "titleInResults",
-  "titleWidth", "titleLength"]` for `title-too-long`, the check's `evidence` from [`/checks`](#checks-e1).
+- **A check's evidence** is asked for as any columns are: `"columns": ["url", "detail", "title", "titleInResults"]`
+  for `title-too-long`, the check's `evidence` from [`/checks`](#checks-e1).
 
 ```json
 {"group":{"detail":null,"relatedUrlId":1},"columns":["url","inlinks","detail"],"sort":[{"column":"inlinks","desc":true}],"limit":100}

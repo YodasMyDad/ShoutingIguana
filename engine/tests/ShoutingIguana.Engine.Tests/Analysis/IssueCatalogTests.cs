@@ -136,10 +136,17 @@ public sealed class IssueCatalogTests
             () => Assert.Contains("narrower than 200 pixels (the default", IssueCatalog.TITLE_TOO_SHORT.Description),
             () => Assert.Contains("wider than 985 pixels (the default", IssueCatalog.DESCRIPTION_TOO_LONG.Description),
             () => Assert.Contains("narrower than 400 pixels (the default", IssueCatalog.DESCRIPTION_TOO_SHORT.Description),
-            () => Assert.Equal(["title", "titleInResults", "titleWidth", "titleLength"], IssueCatalog.TITLE_TOO_LONG.Evidence),
-            () => Assert.Equal(["title", "titleWidth", "titleLength"], IssueCatalog.TITLE_TOO_SHORT.Evidence),
-            () => Assert.Equal(["description", "descriptionInResults", "descriptionWidth", "descriptionLength"], IssueCatalog.DESCRIPTION_TOO_LONG.Evidence),
-            () => Assert.Equal(["description", "descriptionWidth", "descriptionLength"], IssueCatalog.DESCRIPTION_TOO_SHORT.Evidence),
+            // Their detail gives the width, the limit and the length ("742 px, over 580 (78 characters)"): the evidence is
+            // the text, and where it's cut in results, not the same numbers again.
+            () => Assert.Equal(["title", "titleInResults"], IssueCatalog.TITLE_TOO_LONG.Evidence),
+            () => Assert.Equal(["title"], IssueCatalog.TITLE_TOO_SHORT.Evidence),
+            () => Assert.Equal(["description", "descriptionInResults"], IssueCatalog.DESCRIPTION_TOO_LONG.Evidence),
+            () => Assert.Equal(["description"], IssueCatalog.DESCRIPTION_TOO_SHORT.Evidence),
+
+            // A soft 404's detail gives its word count, and a loop's its hops: neither repeats them as evidence. Which of the
+            // title and H1 reads as an error varies, so both stay.
+            () => Assert.Equal(["title", "h1"], IssueCatalog.SOFT_404.Evidence),
+            () => Assert.Empty(IssueCatalog.REDIRECT_LOOP.Evidence),
 
             // One threshold, named as the default once.
             () => Assert.Single(Regex.Matches(IssueCatalog.NEAR_DUPLICATE_CONTENT.Description, "default")),

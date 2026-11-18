@@ -94,14 +94,14 @@ and is in the group without a related URL.
 | 3 | `internal-unreachable` | U/RD/S | `type`, `fetchError`, `responseMs` | – | Same ("Timed out", "Connection failed": the group stays one per kind; the column says which failure) | use · pages |
 | 4 | `internal-blocked` | U/RD/S | `type` | – | Same (the protection). Since the polite crawl a 429 isn't this check's: it's held back, asked again, and stored as not checked if it never gets through | use · pages |
 | 114 | `content-type-mismatch` (new) | U/RD/S | `type`, `contentType` | – | `Used as a script, sent as text/html` (each way it's used; "sent with no Content-Type") | use · pages |
-| 5 | `soft-404` | P/N/– | `title`, `h1`, `wordCount` | – | "The title or H1 says the page wasn't found" → `The title reads as an error: "Page not found – Example" · 120 words, under 300` (or "The H1 reads as an error: …"; the quoted text is the field that matched) | imp · – |
+| 5 | `soft-404` | P/N/– | `title`, `h1` | – | "The title or H1 says the page wasn't found" → `The title reads as an error: "Page not found – Example" · 120 words, under 300` (or "The H1 reads as an error: …"; the quoted text is the field that matched) | imp · – |
 
 ### Redirects
 
 | # | Check | S/G/R | Evidence columns | Target facts | Detail before → after | Rows · groups |
 | --- | --- | --- | --- | --- | --- | --- |
 | 6 | `redirect-chain` | U/RU/S | `redirectChain`, `redirectKind` | `statusCode`, `indexability` (the final URL the group is named by) | Same ("3 redirects") | use · pages |
-| 7 | `redirect-loop` | U/N/S | `redirectChain` | – | "3 hops" → `3 hops: /a/ (301) → /a (301) → back to /a/` (paths on the URL's own host, full URLs elsewhere) | use · – |
+| 7 | `redirect-loop` | U/N/S | – | – | "3 hops" → `3 hops: /a/ (301) → /a (301) → back to /a/` (paths on the URL's own host, full URLs elsewhere) | use · – |
 | 8 | `redirect-broken` | U/RD/S | `redirectChain`, `redirectKind` | `statusCode` (the URL it ends at) | Same ("Ends at a URL that returns 404 Not Found") | use · pages |
 | 9 | `redirect-temporary` | U/RD/S | `redirectChain`, `redirectKind` | `statusCode` (the target) | Same ("302 Found") | use · pages |
 | 115 | `redirect-temporary-cached` (new) | U/RD/S | `redirectChain`, `redirectKind` | – | `302 Found, cached for 30 days` | use · pages |
@@ -196,8 +196,8 @@ and is in the group without a related URL.
 | --- | --- | --- | --- | --- | --- | --- |
 | 42 | `title-missing` | P/N/– | – | – | Same (none) | imp · – |
 | 43 | `title-multiple` | P/N/– | – | – | "2 titles" → `2 titles: "Sofas \| Example" · "Example"` | imp · – |
-| 44 | `title-too-long` | P/N/– | `title`, `titleInResults`, `titleWidth`, `titleLength` | – | "78 characters" → `78 characters, over 60`, and since [pixel widths](v2-pixel-widths.md) `780 px, over 580 (78 characters)` | imp · – |
-| 45 | `title-too-short` | P/N/– | `title`, `titleWidth`, `titleLength` | – | "10 characters" → `10 characters, under 30`, and since pixel widths `98 px, under 200 (10 characters)` | imp · – |
+| 44 | `title-too-long` | P/N/– | `title`, `titleInResults` | – | "78 characters" → `78 characters, over 60`, and since [pixel widths](v2-pixel-widths.md) `780 px, over 580 (78 characters)` | imp · – |
+| 45 | `title-too-short` | P/N/– | `title` | – | "10 characters" → `10 characters, under 30`, and since pixel widths `98 px, under 200 (10 characters)` | imp · – |
 | 46 | `title-duplicate` | P/RU/– | `title` | – | Same ("2 other pages"). The group is named by its `sharedText`, the title | imp · pages |
 
 ### Meta descriptions
@@ -206,8 +206,8 @@ and is in the group without a related URL.
 | --- | --- | --- | --- | --- | --- | --- |
 | 47 | `description-missing` | P/N/– | – | – | Same (none) | imp · – |
 | 48 | `description-multiple` | P/N/– | – | – | "2 meta descriptions" → `2 meta descriptions: "Garden sofas for…" · "Shop online"` | imp · – |
-| 49 | `description-too-long` | P/N/– | `description`, `descriptionInResults`, `descriptionWidth`, `descriptionLength` | – | "183 characters" → `183 characters, over 155`, and since pixel widths `1,084 px, over 985 (183 characters)` | imp · – |
-| 50 | `description-too-short` | P/N/– | `description`, `descriptionWidth`, `descriptionLength` | – | "10 characters" → `10 characters, under 70`, and since pixel widths `63 px, under 400 (10 characters)` | imp · – |
+| 49 | `description-too-long` | P/N/– | `description`, `descriptionInResults` | – | "183 characters" → `183 characters, over 155`, and since pixel widths `1,084 px, over 985 (183 characters)` | imp · – |
+| 50 | `description-too-short` | P/N/– | `description` | – | "10 characters" → `10 characters, under 70`, and since pixel widths `63 px, under 400 (10 characters)` | imp · – |
 | 51 | `description-duplicate` | P/RU/– | `description` | – | Same. The group is named by its `sharedText` | imp · pages |
 
 ### Headings
@@ -428,6 +428,12 @@ What Stage B built differs from the contract above only where this says so; the 
   text that ended a head says so without a line, which the parser doesn't give for text (`Text "Welcome" ended the head
   early`); a page with one hreflang entry says `Its one entry doesn't name this URL`. A quoted text is cut at 40
   characters, a soft 404's at 60, and every detail at 120, each with "…".
+- **Evidence the detail already says is dropped** (the site-owner audit of 2026-11-18): the four title and description
+  length checks show the text (and, for one too long, where results cut it), not `titleWidth`, `titleLength`,
+  `descriptionWidth` or `descriptionLength`, which their detail gives (`742 px, over 580 (78 characters)`); `soft-404`
+  shows the title and the H1, not `wordCount` (its detail quotes the field that reads as an error and counts the
+  words; which field matched varies, so both stay); and `redirect-loop` shows no column, as its detail is the chain
+  (`2 hops: /a (301) → /b (301) → back to /a`). The columns are still the grid's, to add.
 - **Rows by importance keep the URL as their last key**: on the 100k benchmark crawl, the biggest check's rows
   (`title-duplicate`, 5,152) read by importance in 18.1 ms at p95 (by inlinks alone, 14.3 ms), its groups in 16.1 ms,
   against the 75 ms gate of a check's reads; no fallback to crawl order was needed.
