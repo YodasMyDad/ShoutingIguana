@@ -5,17 +5,22 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { ApiError } from '../api/errors';
 import { api } from '../api/client';
-import { analysisQuery, checksQuery, gridPagesOf, liveGridPagesOf, queryKeys } from '../api/queries';
+import { analysisQuery, checksQuery, comparisonReads, gridPagesOf, liveGridPagesOf, queryKeys } from '../api/queries';
+import type { RecheckEvent } from '../api/fixLoop';
 import { getTransport } from '../api/transport';
 import type { CrawlEvent, CrawlListItem, CrawlStatus, IssueCounts } from '../api/types';
 import { isCrawling, isLive } from '../api/types';
 import { analyseCrawl, continueCrawl } from '../crawl/actions';
+import { askedRecheck, forgetRecheckAsked } from '../crawl/rechecks';
+import { changeCounts, countedItemChanges, severitiesOf } from '../changes/changes';
+import { recheckToastTitle } from '../changes/recheckWords';
 import { crawlName, crawledUrls, statusAnnouncement } from '../crawl/status';
 import { announce } from '../feedback/announce';
 import { crawlToast, dismissToast, notifyError, notifyResult } from '../feedback/notify';
 import { formatCountOf } from '../lib/format';
 import { getMode } from '../mode/mode';
 import { checkEntries, foundBySeverity } from '../screens/issues/checkList';
+import { plainTitle } from '../simple/plainWords';
 import {
   simpleFailedTitle,
   simpleFinishedWords,
@@ -34,8 +39,11 @@ export const LIVE_GRID_REFRESH_MS = 1_000;
 
 export interface LiveBridgeOptions {
   queryClient: QueryClient;
-  /** Opens a crawl's view from a toast's action: its Summary or Overview, Issues, or the Report. */
-  openCrawl: (id: string, view: 'overview' | 'issues' | 'report') => void;
+  /**
+   * Opens a crawl's view from a toast's action: its Summary or Overview, Issues (at one check, when `checkId` is given),
+   * or the Report.
+   */
+  openCrawl: (id: string, view: 'overview' | 'issues' | 'report', checkId?: string) => void;
   /**
    * Where the user is now (the app's path): a toast offers what's useful from there, never the screen already on it
    * (round 5's polish: Simple's toast offered See the summary over the Summary). Left out, a toast offers everything.
@@ -67,6 +75,11 @@ export function startLiveBridge({
   const stoppedHere = new Set<string>();
   /** A completed crawl, waiting a moment to see whether an analysis follows. */
   const finishing = new Map<string, ReturnType<typeof setTimeout>>();
+  /**
+   * The fix loop: crawls being rechecked, from the recheck's first sign (its status, its event, or its asking here) to
+   * the crawl's status at rest again. Their analyses and stops are the recheck's: its own toast says how it went.
+   */
+  const rechecking = new Set<string>();
   /** When each running analysis's crawl was last analysed: an analysis that ends with it unchanged was cancelled. */
   const analysedBefore = new Map<string, string | null>();
   const lastStatus = new Map<string, CrawlStatus>();
@@ -105,10 +118,50 @@ export function startLiveBridge({
       case 'crawl':
         onCrawlEvent(event.data);
         break;
+      case 'recheck':
+        onRecheckEvent(event.data);
+        break;
       default:
         break;
     }
   });
+
+  /** A recheck's event: it marks the crawl as being rechecked, and its last (with the result) earns the toast. */
+  function onRecheckEvent(event: RecheckEvent) {
+    rechecking.add(event.crawlId);
+    if (event.result !== null) void toastRecheck(event);
+  }
+
+  /**
+   * "Recheck done: 4 of 5 fixed", with See it (the check's page): not on that page itself, where its card or banner
+   * says the result.
+   */
+  async function toastRecheck(event: RecheckEvent) {
+    const { crawlId, recheckId, status, result } = event;
+    let judged = askedRecheck(crawlId)?.recheckId === recheckId ? askedRecheck(crawlId)?.judged : undefined;
+    let checkId = askedRecheck(crawlId)?.recheckId === recheckId ? askedRecheck(crawlId)?.checkId : undefined;
+    try {
+      const record = await api.recheck(crawlId, recheckId);
+      judged = record.judged;
+      checkId = record.checkId;
+    } catch {
+      // What was asked here stands in; without it, the toast says the result without its share.
+    }
+    if (checkId && viewing().startsWith(`/crawls/${crawlId}/issues/${checkId}`)) return;
+    const item = await itemOf(crawlId);
+    const checks = await queryClient.query(checksQuery()).catch(() => null);
+    const check = checkId ? checks?.checks.find((candidate) => candidate.id === checkId) : undefined;
+    const simple = getMode() === 'simple';
+    const what = check ? (simple ? plainTitle(check) : check.title) : null;
+    notifyResult(recheckToastTitle(status, judged ?? result?.fixed ?? 0, result), {
+      id: crawlToast(crawlId, 'recheck'),
+      description: [crawlName(item), what].filter(Boolean).join(': '),
+      action: {
+        label: 'See it',
+        onClick: () => (checkId ? openCrawl(crawlId, 'issues', checkId) : openCrawl(crawlId, 'issues')),
+      },
+    });
+  }
 
   /**
    * A new stream: `hello` says what's live now, whatever the app believed. A crawl that was live and isn't any more
@@ -178,6 +231,11 @@ export function startLiveBridge({
       item ? { ...item, status } : item,
     );
     if (status === previous) return;
+    // The fix loop: an analysis's end changes the comparisons with this crawl, which may be another's previous crawl.
+    if (previous === 'analyzing' && !isLive(status)) {
+      void queryClient.invalidateQueries(comparisonReads(), { cancelRefetch: false });
+    }
+    if (status === 'rechecking') rechecking.add(crawlId);
     dismissStaleToasts(event);
     if (status === 'completed' || status === 'stopped' || status === 'failed') {
       gridRefreshedAt.delete(crawlId);
@@ -237,6 +295,10 @@ export function startLiveBridge({
    */
   function decideToast(event: CrawlEvent, previous: CrawlStatus | undefined) {
     const { crawlId, status } = event;
+    if (rechecking.has(crawlId) || askedRecheck(crawlId)) {
+      decideRecheckToast(event);
+      return;
+    }
     if (status === 'analyzing') {
       // What the screens already hold, read now: a fetch could land after a quick analysis ended.
       const known =
@@ -299,6 +361,34 @@ export function startLiveBridge({
     stoppedHere.delete(crawlId);
   }
 
+  /**
+   * A crawl being rechecked: its analyses and its stop are the recheck's, whose own toast says how it went. Only a
+   * failure is said here: the recheck asked couldn't run (refused once its analysis first was done), or failed. Once
+   * the crawl is at rest again, it's an ordinary crawl.
+   */
+  function decideRecheckToast(event: CrawlEvent) {
+    const { crawlId, status } = event;
+    if (status === 'failed' || event.error) {
+      void itemOf(crawlId).then((item) =>
+        notifyError(new CrawlFailure(event.error ?? 'The engine didn’t say why.', false), {
+          id: crawlToast(crawlId, 'failed'),
+          title:
+            getMode() === 'simple'
+              ? `The recheck of ${crawlName(item)} couldn’t run`
+              : `${crawlName(item)}: the recheck couldn’t run`,
+        }),
+      );
+    }
+    if (!isLive(status)) {
+      rechecking.delete(crawlId);
+      forgetRecheckAsked(crawlId);
+      crawledHere.delete(crawlId);
+      analysingAfterCrawl.delete(crawlId);
+      stoppedHere.delete(crawlId);
+      analysedBefore.delete(crawlId);
+    }
+  }
+
   async function toastFinished(crawlId: string, crawled: boolean) {
     const before = analysedBefore.get(crawlId);
     analysedBefore.delete(crawlId);
@@ -331,6 +421,7 @@ export function startLiveBridge({
         score: item?.score,
         problems,
         pageCount: item?.pageCount ?? null,
+        change: await changeOf(crawlId, item),
       });
       // On the Summary: the report, and what to fix when there is any; on the Report: back to the summary.
       const toFix = problems !== null && problems > 0 && here !== 'issues' ? whatToFix : null;
@@ -379,6 +470,27 @@ export function startLiveBridge({
       ]);
       const { error, warning, notice } = foundBySeverity(checkEntries(checks, analysis, new Set(hidden)));
       return { error, warning, notice };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * The fix loop: what changed since the site's last check, as Simple counts it (problems, the hidden ones left out),
+   * from the item's cached changes; null for a first check, or when the catalog can't be read.
+   */
+  async function changeOf(crawlId: string, item: CrawlListItem | undefined) {
+    if (!item?.previous || !item.changes) return null;
+    try {
+      const checks = await queryClient.query(checksQuery());
+      const counted = countedItemChanges(
+        item.changes,
+        severitiesOf(checks.checks),
+        new Set(currentHiddenChecks(crawlId)),
+        'simple',
+      );
+      const counts = changeCounts(counted);
+      return { since: item.previous.startedAt, score: item.changes.score, fixed: counts.fixed, new: counts.new };
     } catch {
       return null;
     }

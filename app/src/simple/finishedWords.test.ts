@@ -46,6 +46,23 @@ describe('the words of a check’s end, in Simple', () => {
     expect(problemsToFix(1_234)).toBe('1,234 problems to fix');
   });
 
+  it('says what changed since the last check, when there was one (the fix loop)', () => {
+    const score = { value: 85, band: 'good' as const, partial: false };
+    const since = '2026-11-03T09:12:00Z';
+    const words = (change: { score: number | null; fixed: number; new: number }, problems = 6) =>
+      simpleFinishedWords({ site, crawled: true, score, problems, pageCount: 265, change: { since, ...change } })
+        .description;
+    expect(words({ score: 14, fixed: 3, new: 1 })).toBe('Score 85 (▲14 since 3 Nov): 3 problems fixed, 1 new');
+    expect(words({ score: -2, fixed: 0, new: 1 })).toBe('Score 85 (▼2 since 3 Nov): 1 new problem');
+    expect(words({ score: 0, fixed: 0, new: 0 })).toBe('Score 85 (same as 3 Nov): 6 problems to fix');
+    // Scored another way: no score change, the problems as ever.
+    expect(words({ score: null, fixed: 2, new: 0 })).toBe('Score 85: 2 problems fixed');
+    // A first check: as before.
+    expect(
+      simpleFinishedWords({ site, crawled: true, score, problems: 6, pageCount: 265, change: null }).description,
+    ).toBe('Score 85: 6 problems to fix');
+  });
+
   it('says a stopped check with what it checked', () => {
     expect(simpleStoppedWords(site, 1)).toEqual({
       title: 'The check of gardenfurnituresets.co.uk was stopped',

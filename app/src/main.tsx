@@ -50,9 +50,9 @@ async function start() {
   installKeyboard();
   startLiveBridge({
     queryClient,
-    openCrawl: (crawl, view) =>
+    openCrawl: (crawl, view, check) =>
       void (view === 'issues'
-        ? router.navigate({ to: '/crawls/$crawl/issues/{-$check}', params: { crawl } })
+        ? router.navigate({ to: '/crawls/$crawl/issues/{-$check}', params: { crawl, check } })
         : view === 'report'
           ? router.navigate({ to: '/crawls/$crawl/report', params: { crawl } })
           : router.navigate({ to: '/crawls/$crawl/overview', params: { crawl } })),

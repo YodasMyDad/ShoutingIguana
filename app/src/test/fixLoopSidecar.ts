@@ -23,6 +23,7 @@ import {
   scenarioFixed,
   type ComparisonScenario,
 } from '../api/mock/fixLoop';
+import type { ProblemBody } from '../api/errors';
 import type { CrawlListItem } from '../api/types';
 import { json, problem, type FakeRoute } from './fakeSidecar';
 import { GARDEN_ANALYSIS, SIMPLE_CHECKS, gardenItem } from './simpleSidecar';
@@ -336,10 +337,10 @@ export function recheckRoutes({
 }
 
 /** The needs-secrets problem a recheck of a crawl that had header values answers with, as Continue does. */
-export const RECHECK_NEEDS_SECRETS = {
+export const RECHECK_NEEDS_SECRETS: ProblemBody = {
   type: 'needs-secrets',
   title: 'Rechecking this crawl needs the values of its headers.',
   status: 409,
   missingHeaders: ['Authorization'],
   proxyCredentials: false,
-} as const;
+};

@@ -38,6 +38,12 @@ export type ProblemType =
   // STALE_PLACE_WORDS below.
   | 'sitemap-not-found'
   | 'origin-not-found'
+  // The fix loop: a comparison with a crawl that can't be compared, and a recheck that can't run now.
+  | 'crawl-not-comparable'
+  | 'site-busy'
+  | 'recheck-not-latest'
+  | 'recheck-not-found'
+  | 'recheck-unsupported'
   | (string & {});
 
 /**
