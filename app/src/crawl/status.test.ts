@@ -45,6 +45,16 @@ describe('the status a crawl shows', () => {
     }
   });
 
+  it('while a recheck runs, offers the crawl’s Stop and nothing else (the fix loop: a recheck is a run of the crawl)', () => {
+    expect(crawlControls('rechecking', testCrawlItem({ status: 'rechecking' }))).toEqual({
+      canPause: false,
+      canResume: false,
+      canStop: true,
+      canContinue: false,
+      canAnalyse: false,
+    });
+  });
+
   it('after an analysis is cut off by a restart, offers Analyse again', () => {
     let state = applyEvent(empty, { type: 'crawl', data: { crawlId: ID, status: 'analyzing' } });
     state = applyEvent(state, { type: 'hello', data: { live: [] } });

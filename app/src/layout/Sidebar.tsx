@@ -25,6 +25,7 @@ import logoUrl from '../assets/iguana-64.png';
 import { runningTitle } from '../crawl/runningWords';
 import { crawlName, crawledUrls } from '../crawl/status';
 import { ExportsInProgress } from '../export/ExportsInProgress';
+import { recheckingSiteWords } from '../changes/recheckWords';
 import { useLive, useLiveCrawl, useLiveIds } from '../live/liveStore';
 import { useMode } from '../mode/mode';
 import { IconButton } from '../ui/IconButton';
@@ -323,7 +324,8 @@ function RunningCrawl({ id, name, collapsed }: { id: string; name: string; colla
       <NavItem
         to="/crawls/$crawl/overview"
         params={{ crawl: id }}
-        label={name}
+        // The fix loop: a recheck is listed by what it does, "Rechecking gardenfurnituresets.co.uk".
+        label={crawl?.status === 'rechecking' ? recheckingSiteWords(name) : name}
         icon={<LiveDot />}
         count={fetched}
         collapsed={collapsed}

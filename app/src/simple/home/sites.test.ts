@@ -169,6 +169,9 @@ describe('Your sites', () => {
     expect(rowMeta(crawl({}), 'running', 0)).toBe('Checking now');
     expect(rowMeta(crawl({}), 'paused', 0)).toBe('Paused');
     expect(rowMeta(crawl({}), 'analyzing', 0)).toBe('Working out the results');
+    // The fix loop: a recheck is live too, and says so.
+    expect(rowKind(crawl({}), 'rechecking')).toBe('live');
+    expect(rowMeta(crawl({}), 'rechecking', 0)).toBe('Rechecking some pages');
   });
 
   it('marks a stopped check’s score as so far, whatever the engine’s flag', () => {

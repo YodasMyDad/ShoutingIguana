@@ -1,7 +1,7 @@
 // Your sites (docs/v2-ui-simple.md, Home): the library as Simple shows it, a row a site with the newest check first,
 // the older checks of a site folded under it, and the checks running now pinned above. What each row says of its
 // check, from the library's item. Pure.
-import type { CrawlListItem, CrawlStatus, IssueCounts, ScoreSummary } from '../../api/types';
+import { isLive, type CrawlListItem, type CrawlStatus, type IssueCounts, type ScoreSummary } from '../../api/types';
 import { crawlName } from '../../crawl/status';
 import { formatCount, formatCountOf } from '../../lib/format';
 
@@ -76,7 +76,7 @@ export type RowKind =
   | 'scored';
 
 export function rowKind(item: CrawlListItem, status: CrawlStatus): RowKind {
-  if (status === 'running' || status === 'paused' || status === 'stopping' || status === 'analyzing') return 'live';
+  if (isLive(status)) return 'live';
   if (item.missing) return 'missing';
   if (status === 'unreadable') return 'unreadable';
   if (!item.analyzedAt && !item.issues) return 'notAnalysed';
@@ -115,7 +115,13 @@ export function rowMeta(item: CrawlListItem, status: CrawlStatus, earlier: numbe
     case 'unreadable':
       return `The file can’t be read${more}`;
     case 'live':
-      return status === 'analyzing' ? 'Working out the results' : status === 'paused' ? 'Paused' : 'Checking now';
+      return status === 'analyzing'
+        ? 'Working out the results'
+        : status === 'paused'
+          ? 'Paused'
+          : status === 'rechecking'
+            ? 'Rechecking some pages'
+            : 'Checking now';
     default:
       break;
   }
