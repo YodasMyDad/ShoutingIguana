@@ -44,7 +44,7 @@ function noValueWords(facet: FacetId, crawling: boolean): string {
     case 'statusCode':
       return 'No status';
     case 'indexability':
-      return 'Not judged';
+      return 'Not crawled, so not judged';
     case 'depth':
       return 'Only in a sitemap';
     case 'responseTime':
@@ -118,25 +118,38 @@ export function buildUrlFacets(
   crawling = false,
   /** The engine's words for a column's values (`valueTitles`), by the column's id: the facet's are its column's. */
   titles: (column: string) => Readonly<Record<string, string>> | undefined = () => undefined,
+  /**
+   * How many pages the not-in-sitemap check found, from the analysis: the Sitemaps menu offers exactly them, in one
+   * click, where "In no sitemap" is every URL (images, other sites' links). Only on a view not narrowed yet, whose count
+   * it is; null or 0 offers nothing.
+   */
+  notInSitemap: number | null = null,
 ): UrlFacet[] {
   return URL_FACET_IDS.flatMap((id) => {
     const buckets = page.facets[id];
     if (!buckets) return [];
-    return [
-      {
-        id,
-        title: URL_FACET_TITLES[id],
-        values: buckets.map((bucket) => ({
-          key: String(bucket.value),
-          words: urlFacetValueWords(id, bucket, crawling, titles(id)),
-          count: bucket.count,
-          filter: bucket.filter,
-          applied: filters.some((filter) => sameFilters([filter], [bucket.filter])),
-        })),
-      },
-    ];
+    const values: UrlFacetValue[] = buckets.map((bucket) => ({
+      key: String(bucket.value),
+      words: urlFacetValueWords(id, bucket, crawling, titles(id)),
+      count: bucket.count,
+      filter: bucket.filter,
+      applied: filters.some((filter) => sameFilters([filter], [bucket.filter])),
+    }));
+    if (id === 'inSitemap' && filters.length === 0 && notInSitemap !== null && notInSitemap > 0) {
+      values.push({
+        key: 'check:not-in-sitemap',
+        words: 'Indexable pages in no sitemap',
+        count: notInSitemap,
+        filter: NOT_IN_SITEMAP_CHECK,
+        applied: false,
+      });
+    }
+    return [{ id, title: URL_FACET_TITLES[id], values }];
   });
 }
+
+/** The URLs the not-in-sitemap check flagged: the check's own filter, so the grid holds exactly its pages. */
+export const NOT_IN_SITEMAP_CHECK: GridFilter = { column: 'check', op: 'in', values: ['not-in-sitemap'] };
 
 /** A value's name for a screen reader and a tooltip: "4xx, 12 URLs". */
 export function urlFacetValueName(value: UrlFacetValue): string {

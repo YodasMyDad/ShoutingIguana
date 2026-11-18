@@ -14,6 +14,12 @@ public sealed record RobotsBlockedUrl(int Id, string Url, RobotsBlockReason Reas
     public long? LinkingPages { get; init; }
 
     /// <summary>
+    /// The pages that use it by any kind of link (load it as a script, show it as an image): the URL summary's <c>used_on</c>,
+    /// so a file pages load that no page links to isn't "linked from no pages".
+    /// </summary>
+    public long? UsedOn { get; init; }
+
+    /// <summary>
     /// A sitemap lists it; false only when every sitemap was read and none does, else null when none of those read does
     /// (the URL summary's <c>in_sitemap</c>).
     /// </summary>

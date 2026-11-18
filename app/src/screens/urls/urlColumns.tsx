@@ -175,6 +175,8 @@ export function shownUrlColumns(
 export function urlQueryColumns(shown: readonly string[]): string[] {
   const asked = new Set<string>(['url', ...shown]);
   if (shown.includes('statusCode')) ['statusClass', 'outcome', 'fetched'].forEach((id) => asked.add(id));
+  // A file (a stylesheet, an image) isn't a page to judge for search: its indexability cell says so by its type.
+  if (shown.includes('indexability')) asked.add('type');
   return [...asked];
 }
 
@@ -399,10 +401,22 @@ const CELL_VALUES: Record<string, Record<string, string>> = {
   outcome: OUTCOME_WORDS,
 };
 
-/** An enum value in a cell's words: the engine's (`titles`, its `valueTitles`), else this version's, else the value. */
+/**
+ * Words this version says more plainly than the engine's: "Blocked" beside "Blocked by robots.txt" read as the same thing
+ * (the fix-it pass); it's a firewall or a bot check that answered.
+ */
+const CLEARER_VALUES: Record<string, Record<string, string>> = { indexability: { blocked: 'Blocked by a firewall' } };
+
+/**
+ * An enum value in a cell's words: this version's clearer words, else the engine's (`titles`, its `valueTitles`), else
+ * this version's, else the value.
+ */
 export function urlCellValue(column: string, value: string, titles?: Readonly<Record<string, string>>): string {
-  return titles?.[value] ?? CELL_VALUES[column]?.[value] ?? value;
+  return CLEARER_VALUES[column]?.[value] ?? titles?.[value] ?? CELL_VALUES[column]?.[value] ?? value;
 }
+
+/** A file's indexability, where it has none to judge: search engines index pages, not stylesheets or images. */
+export const NOT_A_PAGE = 'Not a page';
 
 /** Columns that hold a URL: drawn in the URL's face, a path where it's on the crawl's own site. */
 const URL_TEXT: ReadonlySet<string> = new Set(['redirectTarget', 'canonicalUrl', 'finalUrl']);
@@ -639,6 +653,8 @@ function urlGridColumn(id: string, column: UrlColumn | undefined, context: UrlCo
     case 'enum': {
       const words = (row: UrlRow) => {
         const raw = valueOf(row, id);
+        // A file that answered isn't "Indexable": it isn't a page. One that failed still says how.
+        if (id === 'indexability' && raw === 'none' && row.type && RESOURCE_URL_TYPES.has(row.type)) return NOT_A_PAGE;
         return typeof raw === 'string' ? urlCellValue(id, raw, column?.valueTitles) : '';
       };
       return {
@@ -669,8 +685,19 @@ function urlGridColumn(id: string, column: UrlColumn | undefined, context: UrlCo
         return {
           ...base,
           mono: true,
-          cell: (row) =>
-            words(row) ? <Url url={words(row)} siteOrigin={origin} copyable={false} tabbable={false} /> : muted('–'),
+          cell: (row) => {
+            const url = words(row);
+            if (!url) return muted('–');
+            // A canonical to the page itself is the usual, right case: said as "Self", so one to another URL stands out.
+            if (id === 'canonicalUrl' && url === row.url) {
+              return (
+                <span className="text-text-muted" title="The page names itself as its main address">
+                  Self
+                </span>
+              );
+            }
+            return <Url url={url} siteOrigin={origin} copyable={false} tabbable={false} />;
+          },
           text: words,
         };
       }

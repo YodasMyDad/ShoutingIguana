@@ -84,7 +84,7 @@ const ROUTE = '/crawls/$crawl/robots/{-$origin}';
 
 // Every column fits beside the URL in the pane, at 1440 px and at the window's least (stacked there): a few words in
 // each, the whole of it behind them on hover and for a screen reader.
-const WHY_WIDTH = 136;
+const WHY_WIDTH = 168;
 const LINKED_WIDTH = 104;
 const SITEMAP_WIDTH = 112;
 const CONFLICT_WIDTH = 128;
@@ -609,17 +609,21 @@ function BlockedUrls({
         width: LINKED_WIDTH,
         numeric: true,
         cell: (row) => {
-          const words = linkedFromWords(row.linkingPages);
+          const words = linkedFromWords(row.linkingPages, row.usedOn);
           if (words === null) return <NotCounted why={unknown} />;
-          if (!row.linkingPages) return <span className="text-text-muted">{words}</span>;
+          const usedOnly = !row.linkingPages && (row.usedOn ?? 0) > 0;
+          if (!row.linkingPages && !usedOnly) return <span className="text-text-muted">{words}</span>;
           return (
-            // The links to it in Links, as the inspector's "All N in Links" leads: Enter on the cell does the same.
+            // The links to it in Links, as the inspector's "All N in Links" leads: Enter on the cell does the same. A file
+            // pages load opens every kind of link to it, its scripts and images, as no hyperlink leads there.
             <TextLink
               to="/crawls/$crawl/links"
               params={{ crawl: crawlId }}
-              search={{ filter: linksOfUrl('inlinks', row.id, 'hyperlink') }}
+              search={{
+                filter: usedOnly ? linksOfUrl('inlinks', row.id, 'all') : linksOfUrl('inlinks', row.id, 'hyperlink'),
+              }}
               tabIndex={-1}
-              aria-label={`Linked from ${words}: show the links in Links`}
+              aria-label={`${usedOnly ? words : `Linked from ${words}`}: show the links in Links`}
             >
               {words}
             </TextLink>
@@ -820,11 +824,16 @@ function BlockedUrls({
           // Enter on the Linked from or In a sitemap cell goes where its link does; anywhere else, the URL is inspected.
           onActivateCell={(_index, row, column) => {
             if (!row) return;
-            if (column === 'linkingPages' && (row.linkingPages ?? 0) > 0) {
+            if (column === 'linkingPages' && ((row.linkingPages ?? 0) > 0 || (row.usedOn ?? 0) > 0)) {
               void navigate({
                 to: '/crawls/$crawl/links',
                 params: { crawl: crawlId },
-                search: { filter: linksOfUrl('inlinks', row.id, 'hyperlink') },
+                search: {
+                  filter:
+                    (row.linkingPages ?? 0) > 0
+                      ? linksOfUrl('inlinks', row.id, 'hyperlink')
+                      : linksOfUrl('inlinks', row.id, 'all'),
+                },
               });
             } else if (column === 'sitemap' && row.sitemap) {
               void navigate({

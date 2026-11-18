@@ -3,7 +3,7 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import { Network, Play, RefreshCw } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import type { GridFilter, Sitemap, SitemapList as SitemapListData } from '../../api/grids';
-import { analysisQuery, urlFacetsQuery } from '../../api/queries';
+import { analysisQuery, checksQuery, urlFacetsQuery } from '../../api/queries';
 import { analyseCrawl, continueCrawl } from '../../crawl/actions';
 import type { CrawlState } from '../../crawl/useCrawlState';
 import { ErrorState } from '../../feedback/ErrorState';
@@ -17,6 +17,7 @@ import { Callout } from '../../ui/Callout';
 import { EmptyState } from '../../ui/EmptyState';
 import { LiveBadge } from '../../ui/LiveBadge';
 import { PageHeader } from '../../ui/PageHeader';
+import { TextLink } from '../../ui/TextLink';
 import { CountSentence } from '../SentenceWithCounts';
 import { SitemapTree } from './SitemapTreeGrid';
 import {
@@ -29,9 +30,11 @@ import {
   coverageOf,
   coverageSkippedWords,
   coverageWords,
+  sitemapChecksOf,
   tallyOf,
 } from './sitemapWords';
 import { sitemapsOffer } from '../../export/offers';
+import { formatCount } from '../../lib/format';
 import { useExportCommand } from '../../export/useExportCommand';
 
 const ROUTE = '/crawls/$crawl/sitemaps/{-$sitemap}';
@@ -196,6 +199,7 @@ export function SitemapList({ crawlId, list, crawl, wanted }: SitemapListProps) 
       ) : null}
       {body}
       {data && sitemaps && tally && tally.read > 0 ? <NotInAnySitemap crawlId={crawlId} /> : null}
+      {data && sitemaps && sitemaps.length > 0 && !crawl.crawling ? <SitemapChecks crawlId={crawlId} /> : null}
     </GridScreen>
   );
 }
@@ -231,6 +235,37 @@ function NotInAnySitemap({ crawlId }: { crawlId: string }) {
     <p className="text-13 text-text-secondary">
       <CountSentence crawlId={crawlId} parts={coverageWords(coverage)} />
     </p>
+  );
+}
+
+/**
+ * What the checks of the sitemaps found, each a link to its check in Issues: the counts above are every URL the sitemaps
+ * list, other sites' among them, where the checks count the site's own (a sitemap's "Non-indexable 3" can be one
+ * non-indexable URL of the site's and two on another site). Nothing while the analysis is read or when none found
+ * anything; the line is a part of its own, so the list stays when its read fails.
+ */
+function SitemapChecks({ crawlId }: { crawlId: string }) {
+  const analysis = useQuery(analysisQuery(crawlId));
+  const checks = useQuery(checksQuery());
+  if (!analysis.data || !checks.data) return null;
+  const found = sitemapChecksOf(checks.data.checks, analysis.data.counts);
+  if (found.length === 0) return null;
+  return (
+    <section aria-labelledby="sitemap-checks" className="text-13 text-text-secondary">
+      <h2 id="sitemap-checks" className="mb-1 text-13 font-semibold text-text">
+        What the checks found in the sitemaps
+      </h2>
+      <ul className="flex flex-wrap gap-x-5 gap-y-1">
+        {found.map((check) => (
+          <li key={check.id}>
+            <TextLink to="/crawls/$crawl/issues/{-$check}" params={{ crawl: crawlId, check: check.id }}>
+              {check.title}
+            </TextLink>{' '}
+            <span className="tabular-nums">{formatCount(check.count)}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
