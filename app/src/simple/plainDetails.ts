@@ -449,6 +449,31 @@ function repeatedShareTags(detail: string): string | null {
   return said.every((part): part is string => part !== null) ? said.join('; ') : null;
 }
 
+/** The kinds of relative canonical a canonical-relative group is by (the engine's IssueFaults.RelativeCanonical). */
+const RELATIVE_CANONICALS: Readonly<Record<string, string>> = {
+  'Root-relative: starts with /': 'it gives its main address without the site’s name, starting with “/”',
+  'Protocol-relative: starts with //': 'it gives its main address without “https:”, starting with “//”',
+  "Relative to the page's own address":
+    'it gives its main address as a path from its own address, without the site’s name',
+};
+
+/**
+ * What ended a page's head early, as a head-tags-in-body group is by (IssueFaults.HeadEndCause, without the tags or the
+ * line): `<div id="promo"> ended the head early`, `Text "Free delivery" ended the head early`, or "After <body>" for
+ * tags written in the body.
+ */
+function headEndCause(detail: string): string | null {
+  if (detail === 'After <body>') {
+    return 'some of what belongs in the top part of the page’s code is written further down, where it may be ignored';
+  }
+  const ended = /^(.+) ended the head early$/.exec(detail);
+  if (!ended) return null;
+  const text = /^Text "(.*)"$/i.exec(ended[1] ?? '');
+  return text
+    ? `words on the page (“${text[1] ?? ''}”) end the top part of its code early, so what comes after them may be ignored`
+    : `code on the page (“${ended[1] ?? ''}”) ends the top part of its code early, so what comes after it may be ignored`;
+}
+
 const DETAIL_WORDS: Readonly<Record<string, Say>> = {
   // Response codes
   'internal-client-error': (detail) => (codeClause(detail) ? `it ${codeClause(detail) ?? ''}` : null),
@@ -627,6 +652,11 @@ const DETAIL_WORDS: Readonly<Record<string, Say>> = {
   'pagination-broken': pagedTarget,
   'pagination-to-non-indexable': pagedTarget,
   'pagination-sequence-error': (detail) => {
+    // The kinds its groups are by (the engine's IssueFaults.PaginationFault), then each page's own.
+    if (detail === "The next page doesn't point back") return 'the next page doesn’t name it as the one before it';
+    if (detail === 'rel="next" leads back to an earlier page')
+      return 'its next pages lead back round to an earlier page';
+    if (detail === 'More than one rel="next" or rel="prev"') return 'it names more than one next or previous page';
     const back = /^(\S+) doesn't point back$/.exec(detail);
     if (back) return `${back[1] ?? ''} doesn’t name this page as the one before it`;
     const itself = /^rel="(next|prev)" names the page itself$/.exec(detail);
@@ -700,8 +730,16 @@ const DETAIL_WORDS: Readonly<Record<string, Say>> = {
   'canonical-to-redirect': canonicalTarget,
   'canonical-to-non-indexable': canonicalTarget,
   'canonical-outside-head': (detail) => headEnded(detail),
-  'canonical-relative': (detail) => `it gives its main address without the site’s name: ${detail}`,
-  'canonical-invalid': (detail) => `the main address it gives isn’t a real web address: “${detail}”`,
+  'canonical-relative': (detail) =>
+    RELATIVE_CANONICALS[detail] ?? `it gives its main address without the site’s name: ${detail}`,
+  'canonical-invalid': (detail) => {
+    // The kinds its groups are by (IssueFaults.InvalidCanonical), then each page's own address.
+    if (detail === 'Empty') return 'the main address it gives is empty';
+    if (detail === 'Malformed URL') return 'the main address it gives isn’t a real web address';
+    const scheme = /^Uses (\S+): instead of http\(s\)$/.exec(detail);
+    if (scheme) return `the main address it gives isn’t a web address: it starts with “${scheme[1] ?? ''}:”`;
+    return `the main address it gives isn’t a real web address: “${detail}”`;
+  },
   'noindex-with-canonical': () => null,
   'canonical-to-first-page': (detail) => {
     const page = /^Page (\d[\d,]*) names page 1 as its canonical$/.exec(detail);
@@ -949,11 +987,16 @@ const DETAIL_WORDS: Readonly<Record<string, Say>> = {
       : null;
   },
   'hreflang-duplicate-code': (detail) =>
-    eachPart(detail, (part) => {
-      // An older engine's names the code alone.
-      const match = /^([^\s:]+)(?:: (.+))?$/.exec(part);
-      return match ? `more than one address is given for “${match[1] ?? ''}”${match[2] ? `: ${match[2]}` : ''}` : null;
-    }),
+    // A group's codes, without their addresses (IssueFaults.HreflangCodes): "en-gb, de".
+    /^[^\s:;,]+(?:, [^\s:;,]+)+$/.test(detail)
+      ? `more than one address is given for each of ${listed(detail.split(', ').map((code) => `“${code}”`))}`
+      : eachPart(detail, (part) => {
+          // An older engine's names the code alone.
+          const match = /^([^\s:]+)(?:: (.+))?$/.exec(part);
+          return match
+            ? `more than one address is given for “${match[1] ?? ''}”${match[2] ? `: ${match[2]}` : ''}`
+            : null;
+        }),
   'hreflang-missing-x-default': () => null,
   'hreflang-outside-head': (detail) => {
     const match = /^(\d[\d,]*) (?:entry|entries) in the body(?:: (.*))?$/.exec(detail);
@@ -1152,7 +1195,7 @@ const DETAIL_WORDS: Readonly<Record<string, Say>> = {
   },
   'head-tags-in-body': (detail) => {
     const match = /^(.+?) (is|are) in the body(.*)$/.exec(detail);
-    if (!match) return null;
+    if (!match) return headEndCause(detail);
     const names = (match[1] ?? '').split(/, | and /).map(headTagName);
     const many = match[2] === 'are';
     const lead = `${listed(names)} ${many ? 'are' : 'is'} below the top part of the page’s code, where ${many ? 'they' : 'it'} may be ignored`;

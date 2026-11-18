@@ -126,6 +126,10 @@ const DETAILS: Readonly<Record<string, readonly (string | null)[]>> = {
     'rel="next" names the page itself',
     '2 rel="next" URLs',
     'rel="next" leads back to /plants/series/',
+    // The kinds its groups are by (the engine's IssueFaults.PaginationFault).
+    "The next page doesn't point back",
+    'rel="next" leads back to an earlier page',
+    'More than one rel="next" or rel="prev"',
   ],
   // Indexability
   'noindex-page': [null],
@@ -181,8 +185,15 @@ const DETAILS: Readonly<Record<string, readonly (string | null)[]>> = {
     '<div id="promo"> on line 12 ended the head early',
     'Img ended the head early',
   ],
-  'canonical-relative': ['/plants/canonical-relative'],
-  'canonical-invalid': ['http://[not a host]/'],
+  'canonical-relative': [
+    '/plants/canonical-relative',
+    // The kinds its groups are by (IssueFaults.RelativeCanonical).
+    'Root-relative: starts with /',
+    'Protocol-relative: starts with //',
+    "Relative to the page's own address",
+  ],
+  // The href, then the kinds its groups are by (IssueFaults.InvalidCanonical).
+  'canonical-invalid': ['http://[not a host]/', 'Empty', 'Uses ftp: instead of http(s)', 'Malformed URL'],
   'noindex-with-canonical': [null],
   'canonical-to-first-page': ['Page 2 names page 1 as its canonical', 'A later page names page 1 as its canonical'],
   'canonical-other-domain': ['On another host: 127.0.0.1:54385', 'On another host: shop.example.org'],
@@ -309,7 +320,8 @@ const DETAILS: Readonly<Record<string, readonly (string | null)[]>> = {
   'hreflang-missing-return': ["1 alternate doesn't link back", "3 alternates don't link back"],
   'hreflang-broken-target': ['1 URL', '2 URLs'],
   'hreflang-to-non-indexable': ['1 URL', '2 URLs'],
-  'hreflang-duplicate-code': ['en', 'en: /plants/hreflang-conflict · /plants/hreflang-fr'],
+  // A group's codes, without their addresses (IssueFaults.HreflangCodes), last.
+  'hreflang-duplicate-code': ['en', 'en: /plants/hreflang-conflict · /plants/hreflang-fr', 'en-gb, de'],
   'hreflang-missing-x-default': [null],
   'hreflang-outside-head': [
     "2 entries in the body: it's in the body (after <body> on line 121)",
@@ -330,6 +342,8 @@ const DETAILS: Readonly<Record<string, readonly (string | null)[]>> = {
     `Block 2 of 3, line 1, position 55: '"' is invalid after a value. Expected either ',', '}', or ']'.`,
     'A property name escapes an invalid character, such as half of a surrogate pair',
     'Expected depth to be zero at the end of the JSON payload. There is an open JSON object or array that should be closed. LineNumber: 4 | BytePositionInLine: 1.',
+    // A group's fault, without where it failed (IssueFaults.JsonError).
+    `'…' is invalid after a value. Expected either ',', '}', or ']'.`,
   ],
   'structured-data-missing-required': [
     'Product: needs offers or review or aggregateRating',
@@ -436,6 +450,10 @@ const DETAILS: Readonly<Record<string, readonly (string | null)[]>> = {
     '1 Open Graph tag is in the body: <div id="promo"> on line 121 ended the head early',
     'title, meta description and 3 Open Graph tags are in the body, after <body> on line 30',
     'meta robots and 2 X tags are in the body: Iframe ended the head early',
+    // The causes its groups are by, without the tags or the line (IssueFaults.HeadEndCause).
+    'After <body>',
+    '<div id="promo"> ended the head early',
+    'Text "Free delivery" ended the head early',
   ],
   'html-structure-errors': [
     '2 <head> tags; 2 <body> tags',
@@ -775,6 +793,59 @@ describe('a check’s detail, plainly: the forms the fixit audit named', () => {
       '5 clicks from the home page; at most 4 is advised',
     );
     expect(say('noindex-near-home', '1 click from the start')).toBe('1 click from the home page');
+  });
+});
+
+// Where it is names a check's causes by its groups' details (whereWords' causeName): a check whose page details differ
+// from page to page groups by what they have in common (the engine's IssueFaults), a form of its own.
+describe('a cause, plainly: the kinds a check’s groups are by', () => {
+  const say = (id: string, detail: string) => plainDetail({ id }, { detail });
+
+  it('says each kind of fault a group is by in words, never the engine’s', () => {
+    expect(say('pagination-sequence-error', "The next page doesn't point back")).toBe(
+      'The next page doesn’t name it as the one before it',
+    );
+    expect(say('pagination-sequence-error', 'rel="next" leads back to an earlier page')).toBe(
+      'Its next pages lead back round to an earlier page',
+    );
+    expect(say('pagination-sequence-error', 'More than one rel="next" or rel="prev"')).toBe(
+      'It names more than one next or previous page',
+    );
+    expect(say('canonical-relative', 'Root-relative: starts with /')).toBe(
+      'It gives its main address without the site’s name, starting with “/”',
+    );
+    expect(say('canonical-relative', 'Protocol-relative: starts with //')).toBe(
+      'It gives its main address without “https:”, starting with “//”',
+    );
+    expect(say('canonical-relative', "Relative to the page's own address")).toBe(
+      'It gives its main address as a path from its own address, without the site’s name',
+    );
+    expect(say('canonical-invalid', 'Empty')).toBe('The main address it gives is empty');
+    expect(say('canonical-invalid', 'Uses ftp: instead of http(s)')).toBe(
+      'The main address it gives isn’t a web address: it starts with “ftp:”',
+    );
+    expect(say('canonical-invalid', 'Malformed URL')).toBe('The main address it gives isn’t a real web address');
+    expect(say('hreflang-duplicate-code', 'en-gb, de')).toBe(
+      'More than one address is given for each of “en-gb” and “de”',
+    );
+    expect(say('heading-levels-skipped', 'H1 → H4')).toBe(
+      'It goes from the main heading to a level-4 heading, skipping levels 2 and 3',
+    );
+    expect(say('head-tags-in-body', 'After <body>')).toBe(
+      'Some of what belongs in the top part of the page’s code is written further down, where it may be ignored',
+    );
+    expect(say('head-tags-in-body', '<div id="promo"> ended the head early')).toBe(
+      'Code on the page (“<div id="promo">”) ends the top part of its code early, so what comes after it may be ignored',
+    );
+    expect(say('head-tags-in-body', 'Text "Free delivery" ended the head early')).toBe(
+      'Words on the page (“Free delivery”) end the top part of its code early, so what comes after them may be ignored',
+    );
+  });
+
+  it('says what breaks the details for search engines, never the parser’s message', () => {
+    expect(say('structured-data-invalid', `'…' is invalid after a value. Expected either ',', '}', or ']'.`)).toBe(
+      'The details for search engines have a mistake: a comma or closing bracket is missing, so search engines can’t read them',
+    );
   });
 });
 
