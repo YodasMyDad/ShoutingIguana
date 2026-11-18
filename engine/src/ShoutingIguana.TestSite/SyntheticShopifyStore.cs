@@ -52,8 +52,10 @@ internal sealed partial class SyntheticShopifyStore(SyntheticShopify shopify, Ti
             Interlocked.Increment(ref _signedElsewhere);
         }
 
+        // Each store limits its own crawlers: the same server under another host's name (localhost) is another store,
+        // which a crawl only status-checks, and which isn't limited.
         var path = request.Path.Value ?? "/";
-        if (!path.StartsWith("/p/", StringComparison.Ordinal) || IsValidlySigned(request, host, siteAuthority) || !_unsigned.IsOverTheLimit(path))
+        if (!isTheStore || !path.StartsWith("/p/", StringComparison.Ordinal) || IsValidlySigned(request, host, siteAuthority) || !_unsigned.IsOverTheLimit(path))
         {
             return null;
         }

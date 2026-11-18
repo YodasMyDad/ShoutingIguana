@@ -42,7 +42,13 @@ public sealed class ShopifyCrawlTests : IDisposable
 
         var summary = await CrawlAsync(Options(server), path, time, observer);
 
+        // Waiting on would only renew Shopify's penalty: once the rest of the crawl is over, one more try after the pause the
+        // store asked for, and the crawl ends. (The rest's own time on the fake clock is the synthetic site's: its slow
+        // pages answer in real seconds, which the pumped clock stretches.)
         Assert.Equal(CrawlStatus.Completed, summary.Status);
+        var afterTheRest = time.GetUtcNow() - observer.Phases.First(phase => phase.Phase == CrawlPhase.Retrying).At;
+        Assert.True(afterTheRest <= SectionTrickle.SHOPIFY_RETRY_CAP + TimeSpan.FromMinutes(1),
+            $"An unsigned crawl of the store went on {afterTheRest} after the rest of it, on the fake clock.");
         var products = TestCrawls.Count(path, $"SELECT COUNT(*) {PRODUCTS}");
         var refused = TestCrawls.Count(path, $"SELECT COUNT(*) {PRODUCTS} AND r.error = '{REFUSED_UNSIGNED.Replace("'", "''", StringComparison.Ordinal)}'");
         var read = TestCrawls.Count(path, $"SELECT COUNT(*) {PRODUCTS} AND r.status_code = 200");
@@ -171,6 +177,11 @@ public sealed class ShopifyCrawlTests : IDisposable
         var observer = new RecordingObserver(time);
 
         await CrawlAsync(Signed(Options(server), server), path, time, observer);
+
+        // A signed crawl the store refuses keeps the polite path: its limited pages have their 20 minutes.
+        var afterTheRest = time.GetUtcNow() - observer.Phases.First(phase => phase.Phase == CrawlPhase.Retrying).At;
+        Assert.True(afterTheRest >= SectionTrickle.GIVE_UP_AFTER - TimeSpan.FromSeconds(10),
+            $"A signed crawl the store refused went on {afterTheRest} after the rest of it, on the fake clock.");
 
         // Refused when asked, or never asked before the section's time ran out (the crawl's end, under load): either way
         // a signed crawl was refused, and said so, never "without a signature".

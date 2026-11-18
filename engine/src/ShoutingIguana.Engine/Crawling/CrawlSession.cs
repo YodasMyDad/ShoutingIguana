@@ -151,7 +151,8 @@ internal sealed class CrawlSession
         _links = new OutLinkFactory(scope);
         _favicon = new FaviconFetcher(_options, _fetcher, _gates, _robots, _writer, scope, _pause, timeProvider, loggerFactory.CreateLogger<FaviconFetcher>(), _stop.Token);
         _processor = new PageProcessor(_options, userAgent, fetcher, _robots, _links, _observer, scope, _gates, _favicon, timeProvider);
-        _trickle = new SectionTrickle(_gates, _processor, scope, _observer, _pause, timeProvider, loggerFactory.CreateLogger<SectionTrickle>());
+        _trickle = new SectionTrickle(_gates, _processor, scope, _observer, _pause, timeProvider, loggerFactory.CreateLogger<SectionTrickle>(),
+            () => TimeSpan.FromMilliseconds(_crawling.ElapsedMs));
         _sitemaps = new SitemapDiscoverer(_options, _fetcher, _gates, _robots, _writer, _links, _observer, _pause, timeProvider,
             loggerFactory.CreateLogger<SitemapDiscoverer>());
         _internalQueue = Channel.CreateBounded<FrontierItem>(new BoundedChannelOptions(_options.Concurrency * 2) { SingleWriter = true });
@@ -820,7 +821,7 @@ internal sealed class CrawlSession
                             response.Error?.StartsWith(RetryingFetcher.NOT_CHECKED_ERROR, StringComparison.Ordinal) != true;
         var throttled = IsRateLimited(response) || response is { Outcome: FetchOutcome.ServerError, StatusCode: 503 };
         if (!item.IsInternal || item.Source == DiscoverySource.SiteVersion || !(gotNoResponse || refusedByRobots || throttled) ||
-            _retried.ContainsKey(item.Id) && !HasRateLimitedTriesLeft(item.Id, response) || Interlocked.Increment(ref _deferredTotal) > MAX_DEFERRED)
+            _retried.ContainsKey(item.Id) && !HasRateLimitedTriesLeft(item, response) || Interlocked.Increment(ref _deferredTotal) > MAX_DEFERRED)
         {
             return false;
         }
@@ -846,8 +847,15 @@ internal sealed class CrawlSession
             : retried;
 
     /// <summary>A URL answered 429 at an end-of-crawl try, with tries left: this one is counted.</summary>
-    private bool HasRateLimitedTriesLeft(int id, ResponseRow response) =>
-        IsRateLimited(response) && _rateLimitedTries.AddOrUpdate(id, 1, static (_, tries) => tries + 1) < MAX_RATE_LIMITED_TRIES;
+    private bool HasRateLimitedTriesLeft(FrontierItem item, ResponseRow response) =>
+        IsRateLimited(response) && _rateLimitedTries.AddOrUpdate(item.Id, 1, static (_, tries) => tries + 1) < RateLimitedTriesFor(item);
+
+    /// <summary>
+    /// A Shopify store refuses a crawler without a signature for as long as it asks, and each try renews its penalty: one
+    /// more try, after the pause it asked for, and the URL is not checked. Every other site's get <see cref="MAX_RATE_LIMITED_TRIES"/>.
+    /// </summary>
+    private int RateLimitedTriesFor(FrontierItem item) =>
+        _processor.Shopify.IsUnsignedShopify(new Uri(item.Url)) ? 1 : MAX_RATE_LIMITED_TRIES;
 
     /// <summary>Stored as not checked because the site answered 429 Too Many Requests: refused, or never asked.</summary>
     private static bool IsRateLimited(ResponseRow response) => RateLimitedErrors.IsRateLimited(response.Error);
