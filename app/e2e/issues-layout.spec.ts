@@ -66,3 +66,41 @@ test('at 1920 px the list stays beside the check, until the inspector needs the 
   await expect(allChecks(page)).toBeVisible();
   await expectCheckInView(page, 1000);
 });
+
+// The 3b polish: in a check's group, each page's type and "Found on" flowed after its URL, so they started at a
+// different x on every row. They're columns now, and no URL is cut while the row has room for it.
+test('a group’s pages line their type and where they’re found up in columns, each URL whole', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openSection(page, /^Issues/);
+  await expect(page).toHaveURL(/\/crawls\/[0-9a-f]{16}\/issues\/[a-z0-9-]+/);
+  const crawl = /\/crawls\/([0-9a-f]{16})\//.exec(page.url())?.[1] ?? '';
+  await page.goto(`/crawls/${crawl}/issues/internal-client-error`);
+  const grid = page.getByRole('treegrid', { name: /^Internal URL returns 4xx: / });
+  const group = grid.locator('[role="row"][aria-level="1"]').filter({ hasText: '404 Not Found' });
+  if ((await group.getAttribute('aria-expanded')) !== 'true') await group.locator('[data-tree-toggle]').click();
+  const pages = grid.locator('[role="row"][aria-level="2"]');
+  await expect(pages.nth(3)).toBeVisible();
+  await expect(grid.locator('[data-where-found="pending"]')).toHaveCount(0);
+  const lines = await pages.evaluateAll((rows) =>
+    rows
+      .filter((row) => row.querySelector('.si-url__full'))
+      .map((row) => {
+        const left = (selector: string) => {
+          const element = row.querySelector<HTMLElement>(selector);
+          return element && element.textContent !== '' ? Math.round(element.getBoundingClientRect().left) : null;
+        };
+        const shown = row.querySelector<HTMLElement>('.si-url__shown');
+        return {
+          url: row.querySelector('.si-url__full')?.textContent ?? '',
+          type: left('.si-row-evidence'),
+          where: left('.si-where-line'),
+          cut: !shown || shown.scrollWidth > shown.clientWidth + 0.5 || shown.textContent.includes('…'),
+        };
+      }),
+  );
+  expect(lines.length).toBeGreaterThanOrEqual(4);
+  expect(new Set(lines.map((line) => line.type)).size, JSON.stringify(lines)).toBe(1);
+  expect(new Set(lines.map((line) => line.where)).size, JSON.stringify(lines)).toBe(1);
+  expect(lines[0]?.type).not.toBeNull();
+  expect(lines.filter((line) => line.cut).map((line) => line.url)).toEqual([]);
+});

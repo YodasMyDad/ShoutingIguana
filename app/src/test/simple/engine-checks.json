@@ -2241,7 +2241,7 @@
       "fix": "Choose the one page of the loop that should be indexed, give it a canonical to itself, and point the others' canonicals at it.",
       "why": "Each page asks to be dropped for another that asks the same, so the canonicals cancel out and Google picks a page itself, which may not be the one you meant. It usually comes from two pages each set to the other by hand, or from one rule that rewrites canonicals undoing another.",
       "learnMore": "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls",
-      "grouping": "relatedUrl",
+      "grouping": "pageDetail",
       "subject": "page",
       "references": "targets",
       "siteWide": false,

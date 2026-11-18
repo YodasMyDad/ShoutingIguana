@@ -49,7 +49,7 @@ public sealed class AnalysisFreshnessTests
     [Fact]
     public void AnAnalysisFromBeforeTheNewChecksIsOutOfDate()
     {
-        Assert.Equal(19, AnalysisFreshness.VERSION);
+        Assert.Equal(20, AnalysisFreshness.VERSION);
         Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 12 }, CRAWLED, new AnalysisSettings()));
     }
 
@@ -116,7 +116,19 @@ public sealed class AnalysisFreshnessTests
     public void AnAnalysisFromBeforeProtocolRelativeTargetsIsOutOfDate()
     {
         Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 18 }, CRAWLED, new AnalysisSettings()));
-        Assert.Empty(AnalysisFreshness.Check(Current() with { AnalysisVersion = 19 }, CRAWLED, new AnalysisSettings()));
+        Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 19 }, CRAWLED, new AnalysisSettings()));
+    }
+
+    /// <summary>
+    /// Version 20 reads a security header as browsers do when it's repeated or its repeats are joined by commas
+    /// ("nosniff, nosniff" is nosniff; frame-ancestors in any Content-Security-Policy line stands in for X-Frame-Options),
+    /// and groups the pages of one canonical loop as one. An analysis 19 stored is out of date.
+    /// </summary>
+    [Fact]
+    public void AnAnalysisFromBeforeRepeatedHeadersAndOneGroupPerCanonicalLoopIsOutOfDate()
+    {
+        Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 19 }, CRAWLED, new AnalysisSettings()));
+        Assert.Empty(AnalysisFreshness.Check(Current() with { AnalysisVersion = 20 }, CRAWLED, new AnalysisSettings()));
     }
 
     [Fact]

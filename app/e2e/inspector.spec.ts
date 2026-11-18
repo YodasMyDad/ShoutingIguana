@@ -608,6 +608,37 @@ test('at 1280 px each tab is whole in the strip or in its menu, which lists exac
   await expectNoViolations(page);
 });
 
+// The 3b polish: at 1440 px the docked inspector showed Summary, Issues and Inlinks, then "7 more", Outlinks among
+// them, though the panel had room for it. The home page has the synthetic site's largest counts (Inlinks in the
+// hundreds).
+test('at 1440 px the strip shows Outlinks beside its "N more" button, whole, on the home page too', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openSection(page, /^URLs/);
+  const grid = page.getByRole('grid', { name: 'URLs' });
+  await grid.getByRole('row').nth(1).getByRole('gridcell').first().click();
+  await page.keyboard.press('Enter');
+  const inspector = inspectorOf(page);
+  await expect(inspector.getByRole('heading', { level: 2 })).toHaveText(/\/$/);
+  const strip = inspector.getByRole('tablist', { name: 'About this URL' });
+  await expect(strip.locator('[data-value="inlinks"] .si-tab__count')).toHaveText(/^\d{3}$/);
+  await expect(strip.locator('[data-value="outlinks"] .si-tab__count')).toBeAttached();
+  const state = await stripState(strip);
+  expect(state.shown).toEqual(['summary', 'issues', 'inlinks', 'outlinks']);
+  expect(state.cut).toEqual([]);
+  // The button comes after the last tab, clear of it, and inside the panel.
+  const more = inspector.getByRole('button', { name: /^\d+ more: / });
+  await expect(more).toHaveText(`${state.inMenu.length} more`);
+  const [lastTab, button, panel] = await Promise.all([
+    strip.locator('[data-value="outlinks"]').boundingBox(),
+    more.boundingBox(),
+    inspector.boundingBox(),
+  ]);
+  expect(button!.x).toBeGreaterThanOrEqual(lastTab!.x + lastTab!.width);
+  expect(button!.x + button!.width).toBeLessThanOrEqual(panel!.x + panel!.width);
+});
+
 for (const colorScheme of ['light', 'dark'] as const) {
   test(`the inspector passes axe in every section (${colorScheme})`, async ({ page }) => {
     await page.emulateMedia({ colorScheme });

@@ -261,6 +261,35 @@ public sealed class IndexingCheckTests
         Assert.False(urls.IsOnCanonicalLoop(lead.UrlId));
     }
 
+    /// <summary>
+    /// One loop is one fault, so its pages share one group: the fault is the loop as its detail lists it, from the step
+    /// that comes first, so each page's detail (which starts from that page) reads as the same loop. Each page still names
+    /// the page its own canonical names.
+    /// </summary>
+    [Fact]
+    public void ThePagesOfOneCanonicalLoopAreOneGroup()
+    {
+        var site = new RuleHarness();
+        var html = (string target) => RuleHarness.Html($"<link rel=\"canonical\" href=\"{site.Site}{target}\">");
+        var a = site.Page($"{site.Site}/a", html("/b"), IndexabilityReason.Canonicalised);
+        var b = site.Page($"{site.Site}/b", html("/c"), IndexabilityReason.Canonicalised);
+        var c = site.Page($"{site.Site}/c", html("/a"), IndexabilityReason.Canonicalised);
+        var x = site.Page($"{site.Site}/x", html("/y"), IndexabilityReason.Canonicalised);
+        var y = site.Page($"{site.Site}/y", html("/x"), IndexabilityReason.Canonicalised);
+        var urls = site.Table(canonicals: [(a.UrlId, b.UrlId), (b.UrlId, c.UrlId), (c.UrlId, a.UrlId), (x.UrlId, y.UrlId), (y.UrlId, x.UrlId)]);
+        var rules = new CanonicalRules(urls, site.UrlOf);
+        IssueHit Loop(AnalyzedPage page) => rules.Check(page).Single(hit => hit.Issue == IssueCatalog.CANONICAL_LOOP);
+        string Fault(AnalyzedPage page) => IssueCatalog.CANONICAL_LOOP.FaultOf!(Loop(page).Detail!);
+
+        Assert.Equal(IssueGrouping.PageDetail, IssueCatalog.CANONICAL_LOOP.Grouping);
+        Assert.Equal("A loop of 3: /c → /a → /b → back to /c", Loop(c).Detail);
+        Assert.Equal(["A loop of 3: /a → /b → /c → back to /a"], new[] { a, b, c }.Select(Fault).Distinct());
+        Assert.Equal(["A loop of 2: /x → /y → back to /x"], new[] { x, y }.Select(Fault).Distinct());
+        Assert.Equal([b.UrlId, c.UrlId, a.UrlId], new[] { a, b, c }.Select(page => Loop(page).RelatedUrlId));
+        // A detail cut short, which can't be read as a loop, is its own fault.
+        Assert.Equal("A loop of 9: /p → /q → …", IssueCatalog.CANONICAL_LOOP.FaultOf!("A loop of 9: /p → /q → …"));
+    }
+
     [Fact]
     public void ACanonicalWithAFragmentOrAnAlternatesAttributesIsFlaggedThoughItNamesThePageItself()
     {

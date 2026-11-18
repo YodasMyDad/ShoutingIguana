@@ -48,7 +48,6 @@ import { useExportCommand } from '../export/useExportCommand';
 import { linkExportColumns, linkGroupsOffer, linksOffer } from '../export/offers';
 import { useCommands, type Command } from '../keyboard/registry';
 import { formatCount, formatCountOf, formatShownOf } from '../lib/format';
-import { textWidth, tokenValue } from '../lib/textWidth';
 import { useLiveCrawl } from '../live/liveStore';
 import { useInspector } from '../routing/inspector';
 import { MAX_FILTERS } from '../routing/search';
@@ -77,7 +76,7 @@ import {
   linkExportShown,
   fittedLinkWidths,
   linkColumnNeeds,
-  type LinkFace,
+  linkTextMeasure,
 } from './links/linkColumns';
 import { LinkGroupsGrid } from './links/LinkGroupsGrid';
 import {
@@ -114,17 +113,6 @@ interface Counted {
   total: number | null;
   /** Why the crawl has no URL summary, or null when it has one. */
   reason: SummaryReason | null;
-}
-
-/**
- * How wide a value draws in the Links grid: a URL in the cells' monospace (13 px at the URL face's 0.93), anything else
- * in the cells' own font. The fonts are read once, for one view's measuring.
- */
-function linkTextMeasure(): (text: string, face: LinkFace) => number {
-  const size = Number.parseFloat(tokenValue('--grid-font-size', '13px')) || 13;
-  const urlFont = `${(size * 0.93).toFixed(2)}px ${tokenValue('--font-mono', 'monospace')}`;
-  const textFont = `${size}px ${tokenValue('--font-sans', 'sans-serif')}`;
-  return (text, face) => textWidth(text, face === 'url' ? urlFont : textFont);
 }
 
 /**

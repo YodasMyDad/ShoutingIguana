@@ -839,7 +839,8 @@ public static class IssueCatalog
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
         Recheck = [RecheckKind.Urls],
-        Grouping = IssueGrouping.RelatedUrl,
+        // One loop is one fault, whichever of its pages each issue is on (each names the page its own canonical names).
+        Grouping = IssueGrouping.PageDetail, FaultOf = IssueFaults.CanonicalLoop, FaultsSince = 20,
         TargetFacts = ["statusCode", "indexability", "canonical"]
     };
 

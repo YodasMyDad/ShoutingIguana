@@ -121,7 +121,9 @@ internal sealed class SecurityRules(UrlTable urls, HstsPolicy? hsts = null) : IP
 
     /// <summary>
     /// Security headers there but set too weakly: Strict-Transport-Security (on HTTPS) without a max-age of a year or more,
-    /// as the preload list asks; X-Content-Type-Options other than nosniff, its one directive.
+    /// as the preload list asks; X-Content-Type-Options other than nosniff, its one directive. Only the first
+    /// Strict-Transport-Security line counts (RFC 6797, 8.1); one holding two policies joined by a comma is no policy a
+    /// browser can read, so its max-age is unreadable.
     /// </summary>
     private static List<string> WeakHeaders(AnalyzedPage page, bool isHttps)
     {
@@ -142,9 +144,12 @@ internal sealed class SecurityRules(UrlTable urls, HstsPolicy? hsts = null) : IP
             }
         }
 
-        if (page.Header("x-content-type-options") is { } options && !options.Trim().Equals("nosniff", StringComparison.OrdinalIgnoreCase))
+        // Browsers read every line's values, split at commas, and look at the first (the Fetch standard's "determine
+        // nosniff"): a header repeated, or its repeats joined by a proxy into "nosniff, nosniff", is still nosniff.
+        string[] options = [.. page.Headers.Where(header => header.Name == "x-content-type-options").Select(header => header.Value)];
+        if (options.Length > 0 && !options[0].Split(',')[0].Trim().Equals("nosniff", StringComparison.OrdinalIgnoreCase))
         {
-            weak.Add($"X-Content-Type-Options {RuleText.Quote(options, 30)}");
+            weak.Add($"X-Content-Type-Options {RuleText.Quote(string.Join(", ", options), 30)}");
         }
 
         return weak;
@@ -224,13 +229,14 @@ internal sealed class SecurityRules(UrlTable urls, HstsPolicy? hsts = null) : IP
             missing.Add("X-Content-Type-Options");
         }
 
-        var policy = page.Header("content-security-policy");
-        if (policy is null)
+        // Browsers enforce every Content-Security-Policy line, so frame-ancestors in any of them stands in for X-Frame-Options.
+        var policies = page.Headers.Where(header => header.Name == "content-security-policy").Select(header => header.Value).ToList();
+        if (policies.Count == 0)
         {
             missing.Add("Content-Security-Policy");
         }
 
-        if (page.Header("x-frame-options") is null && policy?.Contains("frame-ancestors", StringComparison.OrdinalIgnoreCase) != true)
+        if (page.Header("x-frame-options") is null && !policies.Any(policy => policy.Contains("frame-ancestors", StringComparison.OrdinalIgnoreCase)))
         {
             missing.Add("X-Frame-Options");
         }

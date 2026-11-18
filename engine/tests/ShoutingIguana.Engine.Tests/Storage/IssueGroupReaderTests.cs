@@ -20,6 +20,16 @@ public sealed class IssueGroupReaderTests(GridCrawl crawl)
     /// <summary>A check's rows in crawl order, asked for: without an order they come by importance (<see cref="EvidenceReadTests"/>).</summary>
     private static readonly IReadOnlyList<UrlSort> CRAWL_ORDER = [new UrlSort("id")];
 
+    /// <summary>The synthetic site's one canonical loop (canonical-loop-a and -b, each the other's canonical) is one group of both.</summary>
+    [Fact]
+    public void ACanonicalLoopIsOneGroup()
+    {
+        var page = IssueGroupReader.ReadGroups(crawl.Path, IssueCatalog.CANONICAL_LOOP.Id, 0, 100, IssueGroupSort.Pages)!;
+        var group = Assert.Single(page.Groups);
+        Assert.Equal(2, group.Pages);
+        Assert.Matches("^A loop of 2: /plants/canonical-loop-a → /plants/canonical-loop-b → back to /plants/canonical-loop-a$", group.Detail);
+    }
+
     [Fact]
     public void EveryCheckGroupsAsTheCatalogSays()
     {

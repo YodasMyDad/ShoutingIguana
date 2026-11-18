@@ -277,3 +277,35 @@ test('the inspector follows the cursor down the grouped view', async ({ page }) 
   await expect(inspector.getByRole('heading', { level: 2 })).toContainText(new URL(grouped.rows[1]!.url).pathname);
   await expect(page).toHaveURL(new RegExp(`inspect=${grouped.rows[1]!.id}(&|$)`));
 });
+
+// The 3b polish: grouped by target, a long address was cut in the middle ("/metal-fur…re/metal-patio-sets/") while
+// the counts' columns and the anchor text had room to give, where the flat grid sizes its URLs by what they take.
+test('grouped by target, every address in view shows whole while the grid has room for it', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openLinks(page);
+  await main(page).getByRole('button', { name: 'Group by target' }).click();
+  await expect(page).toHaveURL(/by=target/);
+  const grid = main(page).getByRole('treegrid', { name: 'Links grouped by target' });
+  // By target, Z to A: the other sites' URLs first, shown whole with their host ("http://127.0.0.1:…/ext/canonical-target"),
+  // the longest addresses the synthetic site links to.
+  const target = grid.getByRole('columnheader', { name: 'Target' }).getByRole('button');
+  await target.click();
+  await expect(grid.getByRole('columnheader', { name: 'Target' })).toHaveAttribute('aria-sort', 'ascending');
+  await target.click();
+  await expect(grid.getByRole('columnheader', { name: 'Target' })).toHaveAttribute('aria-sort', 'descending');
+  const rows = grid.locator('[role="row"][aria-level="1"]');
+  await expect(rows.nth(5)).toBeVisible();
+  const addresses = await rows.evaluateAll((elements) =>
+    elements
+      .filter((row) => row.getBoundingClientRect().bottom <= window.innerHeight)
+      .map((row) => {
+        const shown = row.querySelector<HTMLElement>('.si-url__shown');
+        return {
+          url: row.querySelector('.si-url__full')?.textContent ?? '',
+          cut: !shown || shown.scrollWidth > shown.clientWidth + 0.5 || shown.textContent.includes('…'),
+        };
+      }),
+  );
+  expect(addresses.length).toBeGreaterThan(5);
+  expect(addresses.filter((address) => address.cut).map((address) => address.url)).toEqual([]);
+});

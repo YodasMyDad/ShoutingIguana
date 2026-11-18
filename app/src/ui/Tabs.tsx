@@ -1,6 +1,5 @@
 import * as TabsPrimitive from '@radix-ui/react-tabs';
 import clsx from 'clsx';
-import { ChevronDown } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { formatCount } from '../lib/format';
 import { Button } from './Button';
@@ -29,8 +28,8 @@ export interface TabsProps<T extends string> {
   panelClassName?: string | undefined;
 }
 
-/** The "N more" button's width before it has been drawn once: about what "7 more" takes. */
-const MORE_GUESS = 96;
+/** The "N more" button's width with its margins before it has been drawn once: about what "7 more" takes. */
+const MORE_GUESS = 56;
 
 /** An element's width with its side margins: what it takes in its row. */
 function outerWidth(element: Element): number {
@@ -66,7 +65,8 @@ const sameList = (a: readonly string[], b: readonly string[]) =>
 
 /**
  * Tabs: the selected one has the accent underline (3:1). A strip wider than its room shows the tabs that fit whole,
- * in order, the chosen one always among them, and ends in a button that says how many it leaves out ("5 more") and
+ * in order, the chosen one always among them, and ends in a button that says how many it leaves out ("5 more", its
+ * words alone, a tab's gap after the last tab's, so a docked inspector at 1440 px has room for Outlinks too) and
  * lists exactly those: a tab is in the strip or in the menu, never both and never cut (polish 2: the inspector's
  * Inlinks tab showed half beside "7 more", which listed it too; round 5's polish had made it a scrolling strip that
  * cut tabs at its ends). A tab chosen from the menu takes its place in the strip, in place of the last that fitted, and
@@ -171,7 +171,6 @@ export function Tabs<T extends string>({
               <Button
                 size="sm"
                 variant="ghost"
-                icon={ChevronDown}
                 aria-label={`${formatCount(hidden.length)} more: ${hidden.map((tab) => tab.label).join(', ')}`}
                 className="si-tabs-bar__more"
               >

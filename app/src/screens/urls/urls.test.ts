@@ -159,6 +159,16 @@ describe('the URL grid’s cells', () => {
     // Copied whole either way.
     expect(canonical.text(self)).toBe('https://example.com/a');
 
+    // A URL that didn't redirect is its own final URL: said as "Self" too, as the Canonical column says it, so a URL
+    // that ends elsewhere stands out.
+    const final = column('finalUrl');
+    const stays: UrlRow = { id: 4, url: 'https://example.com/b', finalUrl: 'https://example.com/b' };
+    const moves: UrlRow = { id: 5, url: 'https://example.com/old', finalUrl: 'https://example.com/b' };
+    expect(render(final.cell(stays)).textContent).toBe('Self');
+    expect(render(final.cell(moves)).textContent).not.toContain('Self');
+    expect(render(final.cell(moves)).textContent).toContain('/b');
+    expect(final.text(stays)).toBe('https://example.com/b');
+
     const indexability = column('indexability');
     expect(
       indexability.text({ id: 3, url: 'https://example.com/s.css', indexability: 'none', type: 'stylesheet' }),

@@ -168,7 +168,7 @@ and is in the group without a related URL.
 | 36 | `noindex-with-canonical` | P/RU/T | `metaRobots`, `xRobotsTag` | `statusCode`, `indexability`, `flags` | Same (none) | imp · pages |
 | 94 | `canonical-to-first-page` (new) | P/RU/T | – | `statusCode`, `indexability`, `canonical`, `flags` | `Page 2 names page 1 as its canonical` (or "A later page …" when only its rel="prev" says so); grouped by the first page, so a series is one group | imp · pages |
 | 95 | `canonical-other-domain` (new) | P/RU/T | – | `statusCode`, `final`, `indexability`, `canonical` | `On another host: staging.example.com` | imp · pages |
-| 96 | `canonical-loop` (new) | P/RU/T | – | `statusCode`, `indexability`, `canonical` | `A loop of 2: /a/ → /b/ → back to /a/` (paths on the page's own host) | imp · pages |
+| 96 | `canonical-loop` (new) | P/PD/T | – | `statusCode`, `indexability`, `canonical` | `A loop of 2: /a/ → /b/ → back to /a/` (paths on the page's own host), from the page it's on. One loop is one group (analysis 20 on): grouped by the loop as listed from the step that sorts first (`IssueFaults.CanonicalLoop`), so every page of it is in that group; each page still names the page its own canonical names | imp · pages |
 | 97 | `canonical-on-redirect` (new) | U/N/S | `redirectChain` | – | `Redirects to https://x/c/; its canonical header names https://x/b/` | use · – |
 | 98 | `canonical-fragment` (new) | P/PD/– | – | – | The fragment: `#reviews` | imp · pages |
 | 99 | `canonical-invalid-attribute` (new) | P/PD/– | – | – | The attributes: `media`, `hreflang, type` | imp · pages |

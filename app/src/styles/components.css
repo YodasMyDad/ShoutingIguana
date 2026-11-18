@@ -785,7 +785,7 @@
   */
   .si-tabs {
     display: flex;
-    gap: var(--space-5);
+    gap: var(--space-4);
     padding: 0 var(--space-5);
     box-shadow: inset 0 calc(var(--hairline) * -1) 0 var(--color-border-subtle);
     overflow-x: clip;
@@ -826,13 +826,17 @@
     margin: 0;
   }
 
+  /* Its words a tab's gap after the last tab's and ending where the panel's content does, its padding taken from the
+     strip's (the 3b polish: the inspector's Outlinks tab went to the menu at 1440 px with room to spare). */
   .si-tabs-bar__more {
     flex: none;
-    margin-right: var(--space-5);
+    margin-right: calc(var(--space-5) - var(--space-2-5));
+    margin-left: calc(var(--space-4) - var(--space-5) - var(--space-2) - var(--space-2-5));
   }
 
   .si-tabs-bar--flush .si-tabs-bar__more {
     margin-right: var(--space-1);
+    margin-left: calc(var(--space-4) - var(--space-1) - var(--space-2) - var(--space-2-5));
   }
 
   .si-tab {
@@ -840,7 +844,7 @@
     display: inline-flex;
     flex: none;
     align-items: center;
-    gap: var(--space-1-5);
+    gap: var(--space-1);
     height: var(--tab-height);
     /* Room for the focus ring beside the words, taken back by the margin, so the words sit where they would. */
     margin: 0 calc(var(--space-1) * -1);
@@ -883,13 +887,12 @@
     cursor: default;
   }
 
+  /* A count as the sidebar's are: a muted number after the words, no pill, so four tabs and the menu's button fit a
+     docked inspector. */
   .si-tab__count {
-    padding: 0 var(--space-1-5);
-    border-radius: var(--radius-full);
-    background: var(--color-surface-hover);
-    color: var(--color-text-secondary);
+    color: var(--color-text-muted);
     font-size: var(--text-11);
-    line-height: var(--leading-12);
+    font-weight: var(--font-weight-regular);
     font-variant-numeric: tabular-nums lining-nums;
   }
 

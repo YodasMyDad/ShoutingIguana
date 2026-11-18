@@ -10,6 +10,7 @@ import { objectCellWords, pixelsWords } from '../../crawl/evidence';
 import { FLAG_WORDS } from '../../inspector/words';
 import { urlStatusWords } from '../urls/urlColumns';
 import { formatBytes, formatCount, formatMilliseconds } from '../../lib/format';
+import { textWidth, tokenValue } from '../../lib/textWidth';
 import { ImageThumb } from '../../ui/ImageThumb';
 import { isBrokenImage } from '../../ui/imageFacts';
 import { StatusCode } from '../../ui/StatusCode';
@@ -423,6 +424,17 @@ const URL_BUTTON_ROOM = 24;
 
 /** Which face a value is drawn in: a URL's monospace, or the cells' text. */
 export type LinkFace = 'url' | 'text';
+
+/**
+ * How wide a value draws in the Links grid: a URL in the cells' monospace (13 px at the URL face's 0.93), anything else
+ * in the cells' own font. The fonts are read once, for one view's measuring.
+ */
+export function linkTextMeasure(): (text: string, face: LinkFace) => number {
+  const size = Number.parseFloat(tokenValue('--grid-font-size', '13px')) || 13;
+  const urlFont = `${(size * 0.93).toFixed(2)}px ${tokenValue('--font-mono', 'monospace')}`;
+  const textFont = `${size}px ${tokenValue('--font-sans', 'sans-serif')}`;
+  return (text, face) => textWidth(text, face === 'url' ? urlFont : textFont);
+}
 
 /**
  * What the URL columns and the anchor or alt text take to show their values in view whole: the widest of them, as

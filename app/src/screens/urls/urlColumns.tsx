@@ -681,9 +681,17 @@ function urlGridColumn(id: string, column: UrlColumn | undefined, context: UrlCo
             const url = words(row);
             if (!url) return muted('–');
             // A canonical to the page itself is the usual, right case: said as "Self", so one to another URL stands out.
-            if (id === 'canonicalUrl' && url === row.url) {
+            // So is a final URL that is the URL itself, as it didn't redirect.
+            if ((id === 'canonicalUrl' || id === 'finalUrl') && url === row.url) {
               return (
-                <span className="text-text-muted" title="The page names itself as its main address">
+                <span
+                  className="text-text-muted"
+                  title={
+                    id === 'canonicalUrl'
+                      ? 'The page names itself as its main address'
+                      : 'It didn’t redirect: this URL is where it ends'
+                  }
+                >
                   Self
                 </span>
               );
