@@ -273,7 +273,6 @@ export const ProblemRecheckSomeFixed: Story = problem({ rechecks: [recheckRecord
 /** All of them fixed. */
 export const ProblemRecheckAllFixed: Story = problem({
   rechecks: [recheckRecord({ result: recheckResult({ fixed: 5, still: 0 }) })],
-  rows: [],
 });
 
 /** None fixed: maybe a saved copy (a cache). */
@@ -289,7 +288,6 @@ export const ProblemRecheckStopped: Story = problem({
 /** Cut short when the app closed: what it got through, never more. */
 export const ProblemRecheckInterrupted: Story = problem({
   rechecks: [recheckRecord({ status: 'interrupted', result: recheckResult({ fixed: 1, still: 0, notRechecked: 4 }) })],
-  rows: [],
 });
 
 /** Some couldn't be rechecked, and one page has it now that didn't. */
