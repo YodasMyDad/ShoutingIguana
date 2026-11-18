@@ -690,8 +690,14 @@ result as a record in the file ("rechecked 5 pages on 17 Nov: 4 fixed"). The des
   (`IssueDefinition.Recheck` empty: `orphan-page`, `no-https`) or that the analysis skipped.
 - **What else it reads**, by the check's `Recheck` kinds: `sitemaps` reads every sitemap again as the crawl found
   them, each one's entries replacing those read before, a file nothing lists any more dropped, and a URL a sitemap newly
-  lists recorded and not fetched; `robotsTxt` reads the robots.txt of the origins the crawl couldn't read, and the start
-  URL's, again; `siteVersions` asks every probe of the site's other versions again.
+  lists recorded and not fetched; `robotsTxt` reads again the robots.txt of the site's own origins (its start host and
+  the versions of it the crawl covered) that the check's issues name, and the start URL's, never another site's;
+  `siteVersions` asks every probe of the site's other versions again.
+- **Facts not collected.** The shared upgrade adds a column whose null means something of its own (a sitemap entry's
+  `lastmod`: none) with a row in `uncollected_facts` for each thing the file already had (each sitemap). A write that
+  collects the fact deletes its row (a recheck that reads a sitemap again), and until none is left the analysis says
+  the check wasn't run ("this crawl was made by an earlier version"), never that it found nothing. A continue doesn't
+  read stored sitemaps again, so it leaves them as they are.
 - **The run** (`CrawlEngine.Recheck`) is a run of the crawl in a recheck mode: the file opened as a continue opens it
   (locked), the crawl's options and secrets, its pace through the same host gates, robots.txt read afresh. Only the
   recheck's own URLs are handed out, never the crawl's queue, and only URLs the crawl fetched (a URL it never read, a

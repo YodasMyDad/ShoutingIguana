@@ -502,6 +502,9 @@ internal sealed partial class CrawlWriter
 
         RunTime("DELETE FROM sitemap_urls WHERE sitemap_id = $parked", _transaction, ("$parked", -record.Id));
         _statements.UpdateSitemap(record);
+
+        // Its entries were stored afresh, each with its lastmod as read now: that fact is collected for it.
+        RunTime("DELETE FROM uncollected_facts WHERE fact = $fact AND item_id = $id", _transaction, ("$fact", CrawlSchema.LASTMOD_FACT), ("$id", record.Id));
     }
 
     /// <summary>A sitemap the recheck couldn't read again: what came of it goes, and its entries are put back; one the crawl didn't have goes.</summary>
@@ -545,6 +548,7 @@ internal sealed partial class CrawlWriter
         var kept = string.Join(", ", read);
         RunTime($"DELETE FROM sitemap_urls WHERE sitemap_id NOT IN ({kept})", _transaction);
         RunTime($"DELETE FROM sitemaps WHERE id NOT IN ({kept})", _transaction);
+        RunTime($"DELETE FROM uncollected_facts WHERE fact = $fact AND item_id NOT IN ({kept})", _transaction, ("$fact", CrawlSchema.LASTMOD_FACT));
     }
 
     /// <summary>

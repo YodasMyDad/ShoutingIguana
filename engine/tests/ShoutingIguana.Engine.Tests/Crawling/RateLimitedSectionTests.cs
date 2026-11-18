@@ -43,21 +43,31 @@ public sealed class RateLimitedSectionTests : IAsyncLifetime
     /// them comes as they end instead, so their last minutes aren't spent waiting for nothing, and progress never
     /// promises a try past them.
     /// </summary>
+    /// <remarks>
+    /// The fake clock is pumped while the engine works in real time, so under load it runs on between the engine deciding
+    /// something and the test seeing it: a report or a request comes late on it, never early. Each bound is set so that
+    /// only lateness it can't come from would break it: when the rest was over lies between the last report before the
+    /// section was left alone and the first after; the latest try promised is the time running out; and the site was asked
+    /// no earlier than that.
+    /// </remarks>
     [Fact]
     public async Task ASectionsLastTryComesAsItsTimeRunsOutAndProgressNeverPromisesOneAfter()
     {
         var run = await CrawlAShopWhoseProductsAreAlwaysRefusedAsync(products: 1);
 
         Assert.Equal(CrawlStatus.Completed, run.Summary.Status);
-        var restOver = run.Observer.FirstAt(progress => progress.Phase == CrawlPhase.Retrying);
-        var timeRunsOut = restOver + SectionTrickle.GIVE_UP_AFTER;
-        var lastTry = run.Asked["/products/1"].Max();
-        Assert.InRange(lastTry, timeRunsOut - SLACK, timeRunsOut + SLACK);
-
+        var restOverAfter = run.Observer.LastAtBefore(progress => progress.Phase == CrawlPhase.Retrying);
+        var restOverBy = run.Observer.FirstAt(progress => progress.Phase == CrawlPhase.Retrying);
         var promised = run.Observer.Promises().ToList();
         Assert.NotEmpty(promised);
-        Assert.All(promised, promise => Assert.True(promise.NextTry <= timeRunsOut + SLACK,
-            $"At {promise.At - restOver} after the rest of the crawl, the next try was promised at {promise.NextTry - restOver}."));
+        var latest = promised.MaxBy(promise => promise.NextTry);
+
+        Assert.True(latest.NextTry <= restOverBy + SectionTrickle.GIVE_UP_AFTER + SLACK,
+            $"At {latest.At - restOverAfter} after the rest of the crawl, the next try was promised at {latest.NextTry - restOverAfter}.");
+        Assert.True(latest.NextTry >= restOverAfter + SectionTrickle.GIVE_UP_AFTER - SLACK,
+            $"The latest try promised was at {latest.NextTry - restOverAfter} after the rest of the crawl, before its time ran out.");
+        Assert.True(run.Asked["/products/1"].Max() >= latest.NextTry - SLACK,
+            $"The last try came {run.Asked["/products/1"].Max() - restOverAfter} after the rest of the crawl, before the one promised at {latest.NextTry - restOverAfter}.");
     }
 
     /// <summary>
@@ -226,6 +236,10 @@ public sealed class RateLimitedSectionTests : IAsyncLifetime
         public void OnNotice(CrawlNotice notice) => _notices.Enqueue(notice);
 
         public DateTimeOffset FirstAt(Func<CrawlProgress, bool> condition) => _progress.First(report => condition(report.Progress)).At;
+
+        /// <summary>When the last report before the first that meets <paramref name="condition"/> came.</summary>
+        public DateTimeOffset LastAtBefore(Func<CrawlProgress, bool> condition) =>
+            _progress.TakeWhile(report => !condition(report.Progress)).Last().At;
 
         /// <summary>When each report said a limited section's next try would come, and when it said so.</summary>
         public IEnumerable<(DateTimeOffset At, DateTimeOffset NextTry)> Promises() =>

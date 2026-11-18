@@ -336,6 +336,26 @@ internal static class CrawlSchema
     /// </summary>
     public static readonly (string Name, string Type)[] SITEMAP_URL_COLUMNS = [("lastmod", "INTEGER")];
 
+    /// <summary>The fact <see cref="SITEMAP_URL_COLUMNS"/>' <c>lastmod</c> keeps, as <see cref="UNCOLLECTED"/> names it.</summary>
+    public const string LASTMOD_FACT = "sitemap_urls.lastmod";
+
+    /// <summary>
+    /// What a file has that an engine before a fact didn't collect, though the column for it is there now: a crawl-time table
+    /// <see cref="CrawlSchemaUpgrade"/> creates and fills as it adds a column whose null means something of its own (a
+    /// sitemap entry's <c>lastmod</c> null is an entry without one), one row per thing the file already had (for
+    /// <see cref="LASTMOD_FACT"/>, each sitemap by id). A write path that collects the fact for one deletes its row: a
+    /// recheck that reads a sitemap again, and stores its entries afresh. The analysis treats a fact any row still names as
+    /// not collected ("this crawl was made by an earlier version"), never as found to be fine. A column whose null already
+    /// means "not known" (an image's pixel size, a page's share title) needs no row: its readers treat every null so.
+    /// </summary>
+    public const string UNCOLLECTED = """
+        CREATE TABLE IF NOT EXISTS uncollected_facts (
+            fact TEXT NOT NULL,
+            item_id INTEGER NOT NULL,
+            PRIMARY KEY (fact, item_id)
+        ) WITHOUT ROWID;
+        """;
+
     /// <summary>
     /// The <c>recheck_urls</c> columns added since the first rechecks' tables, added as <see cref="RESPONSE_COLUMNS"/> are
     /// (<see cref="CrawlSchemaUpgrade"/>): <c>text_before</c>, a duplicate check's text as it stood; and <c>answer</c>, how
