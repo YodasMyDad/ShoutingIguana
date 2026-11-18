@@ -94,7 +94,7 @@ test('a group’s pages line their type and where they’re found up in columns,
           url: row.querySelector('.si-url__full')?.textContent ?? '',
           type: left('.si-row-evidence'),
           where: left('.si-where-line'),
-          cut: !shown || shown.scrollWidth > shown.clientWidth + 0.5 || (shown.textContent ?? '').includes('…'),
+          cut: !shown || shown.scrollWidth > shown.clientWidth + 0.5 || shown.textContent.includes('…'),
         };
       }),
   );

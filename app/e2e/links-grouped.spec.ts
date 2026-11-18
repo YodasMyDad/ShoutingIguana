@@ -302,7 +302,7 @@ test('grouped by target, every address in view shows whole while the grid has ro
         const shown = row.querySelector<HTMLElement>('.si-url__shown');
         return {
           url: row.querySelector('.si-url__full')?.textContent ?? '',
-          cut: !shown || shown.scrollWidth > shown.clientWidth + 0.5 || (shown.textContent ?? '').includes('…'),
+          cut: !shown || shown.scrollWidth > shown.clientWidth + 0.5 || shown.textContent.includes('…'),
         };
       }),
   );
