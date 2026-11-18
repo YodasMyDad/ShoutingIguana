@@ -111,8 +111,9 @@ describe('the URL grid’s columns', () => {
     await waitFor(() => expect(router.state.location.search).toMatchObject({ cols: content.columns }));
     expect(screen.getByRole('button', { name: 'Content' })).toHaveAttribute('aria-pressed', 'true');
     const after = await screen.findByRole('grid', { name: 'URLs' });
-    await waitFor(() => expect(headers(after)).toContain('Title length'));
-    // The widths the title and description checks judge, beside the lengths.
+    await waitFor(() => expect(headers(after)).toContain('Title width'));
+    // The widths the title and description checks judge (the fix-it pass fits the preset at 1,440 pixels: the lengths
+    // are in the Columns menu).
     expect(headers(after)).toEqual(expect.arrayContaining(['Title width', 'Description width']));
   });
 
@@ -414,7 +415,7 @@ describe('round 5: the URL grid’s columns laid out (gap 10)', () => {
     await user.keyboard('{ArrowUp}{ArrowRight}{Control>}{Shift>}{ArrowRight}{/Shift}{/Control}');
     await waitFor(() => expect(router.state.location.search.cols).toEqual(['url', 'title', 'statusCode']));
     await user.keyboard('{Shift>}{ArrowRight}{/Shift}');
-    expect(getSettings().gridColumns.urls?.widths).toEqual({ statusCode: 120 });
+    expect(getSettings().gridColumns.urls?.widths).toEqual({ statusCode: 104 });
   });
 
   it('saves a view with its columns’ widths and pins, and lays them out so when it opens', async () => {

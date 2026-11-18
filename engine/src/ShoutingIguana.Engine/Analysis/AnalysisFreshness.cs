@@ -52,14 +52,17 @@ public static class AnalysisFreshness
     /// with a space after its colon is one rule. 14 is the new sitemap checks' (batch 4): a sitemap entry on another scheme
     /// than every sitemap listing it, and not on the site's own, is reported as on another host (sitemap-url-other-host). 15
     /// writes one note for each reason checks weren't run, the checks totalled ("24 checks weren't run: this crawl was made
-    /// by an earlier version…"), where 14 wrote one for each collection of facts a page's parse lacked. 16 quotes in a
-    /// detail what the check found: the heading too long (<c>H2 of 86 characters, over 70: "…"</c>) or skipped to
-    /// (<c>H1 → H4: "…"</c>), the values of a repeated share tag, which image has no source or is inline, the line of a
-    /// second &lt;head&gt; or &lt;body&gt;, and which JSON-LD block failed, on which line and where (counted from 1); and
-    /// groups <c>heading-levels-skipped</c>, <c>social-tags-multiple</c> and <c>html-structure-errors</c> by the fault their
-    /// detail shows (each from its <see cref="Models.IssueDefinition.FaultsSince"/>).
+    /// by an earlier version…"), where 14 wrote one for each collection of facts a page's parse lacked. 16 is the "can I fix it
+    /// from this?" pass's: the checks of the site's robots.txt and sitemaps store the files they're about (<c>issue_files</c>),
+    /// <c>blocked-by-robots</c> names the rule that refused a URL and its line ("Disallow: /checkout, line 50"), a URL in
+    /// several sitemaps names them, a wrong lastmod names the first entry and what it says, and an empty robots.txt says so.
+    /// 17 is the Shopify lane's (phase B). 18 is the page part's: it quotes in a detail what the check found: the heading
+    /// too long (<c>H2 of 86 characters, over 70: "…"</c>) or skipped to (<c>H1 → H4: "…"</c>), the values of a repeated share
+    /// tag, which image has no source or is inline, the line of a second &lt;head&gt; or &lt;body&gt;, and which JSON-LD block
+    /// failed, on which line and where (counted from 1); and groups <c>heading-levels-skipped</c>, <c>social-tags-multiple</c>
+    /// and <c>html-structure-errors</c> by the fault their detail shows (each from its <see cref="Models.IssueDefinition.FaultsSince"/>).
     /// </summary>
-    public const int VERSION = 16;
+    public const int VERSION = 18;
 
     /// <summary>
     /// The catalog's check ids with their categories and severities, hashed. Titles, descriptions, fixes, why and

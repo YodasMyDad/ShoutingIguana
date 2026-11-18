@@ -108,8 +108,10 @@ test('the list: an index with its sitemaps under it, what became of each, and th
   await expect(urls.getByRole('row').nth(1)).toContainText('/private/listed');
   await page.goBack();
   await expect(tree(page).getByRole('row').nth(1)).toBeVisible();
-  // The site's pages no sitemap lists, as a link to exactly them.
-  await expect(main(page).getByText(/of the site’s [\d,]+ pages (aren’t|isn’t) in any sitemap\./)).toBeVisible();
+  // The site's indexable pages no sitemap lists (the not-in-sitemap check's), as a link to exactly them.
+  await expect(
+    main(page).getByText(/of the site’s [\d,]+ indexable pages? (aren’t|isn’t) in any sitemap\./),
+  ).toBeVisible();
 });
 
 test('every count in the list lands on exactly its URLs, and back returns to the list', async ({ page }) => {
@@ -142,7 +144,8 @@ test('the pages no sitemap lists land on exactly those pages in URLs', async ({ 
   const { crawl } = await sitemapsOf();
   const facets = await read<{ facets: { inSitemap?: { value: boolean | null; count: number }[] } }>(
     `/api/crawls/${crawl}/urls/facets`,
-    { filters: ANSWERED_SITE_PAGES, facets: ['inSitemap'] },
+    // The indexable pages, as the line counts them (the not-in-sitemap check's).
+    { filters: [...ANSWERED_SITE_PAGES, { column: 'indexable', op: 'is', value: true }], facets: ['inSitemap'] },
   );
   const missing = facets.facets.inSitemap?.find((bucket) => bucket.value === false)?.count ?? 0;
   expect(missing, 'the synthetic site has pages no sitemap lists').toBeGreaterThan(0);

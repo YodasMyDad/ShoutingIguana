@@ -281,7 +281,7 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             ISiteRule[] siteRules =
             [
                 new InlinkRules(urls, linksComplete, everyLinkingPage), duplicates, new FragmentRules(urls, reader.ReadFacts, reader.ReadFragmentLinks, reader.ReadUrl), hreflang,
-                new ResponseCodeRules(urls, reader.ReadBlockReasons()), new RedirectRules(urls, reader.ReadUrl),
+                new ResponseCodeRules(urls, reader.ReadBlockReasons(), robots, robotsToken, reader.ReadUrl), new RedirectRules(urls, reader.ReadUrl),
                 new SitemapRules(urls, sitemaps, options, crawlComplete, reader.ReadOffHostSitemapEntries(mainUrls.Select(uri => uri.Authority).Distinct().ToList()),
                     new SitemapEntryFacts
                     {

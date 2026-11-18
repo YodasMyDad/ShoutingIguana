@@ -232,7 +232,8 @@ export function blockedWhy(row: Pick<RobotsBlockedUrl, 'reason' | 'line' | 'rule
       const line = row.line === null ? 'A rule' : `Line ${formatCount(row.line)}`;
       return {
         short: row.rule === null ? line : `${line}: ${row.rule}`,
-        cell: line,
+        // The rule itself in the cell, its line in the tooltip: the line number alone left the owner hunting for it.
+        cell: row.rule ?? line,
         sentence: row.rule === null ? `${line} of this file refused it.` : `${line} refused it: ${row.rule}`,
         recorded: null,
       };
@@ -273,7 +274,8 @@ export const UNMATCHED_WORDS = {
 
 // ------------------------------------------------------------------------------- What blocking a URL costs (step 3b)
 
-type Costs = Pick<RobotsBlockedUrl, 'linkingPages' | 'inSitemap' | 'sitemaps' | 'sitemap' | 'inMenu' | 'conflict'>;
+type Costs = Pick<RobotsBlockedUrl, 'linkingPages' | 'inSitemap' | 'sitemaps' | 'sitemap' | 'inMenu' | 'conflict'> &
+  Partial<Pick<RobotsBlockedUrl, 'usedOn'>>;
 
 /**
  * The Conflict cell: the site asks for a URL it blocks, by listing it in a sitemap or linking it from a menu. The same
@@ -292,9 +294,13 @@ export function conflictShortWords(row: Partial<Costs>): string | null {
   return row.inSitemap === true ? 'In sitemap' : 'In menu';
 }
 
-/** The Linked from cell: the pages linking to the URL. Null while the analysis hasn't counted them. */
-export function linkedFromWords(count: number | null | undefined): string | null {
+/**
+ * The Linked from cell: the pages linking to the URL, or, for a file no page links to but pages load (a script, an image),
+ * the pages that use it. Null while the analysis hasn't counted them.
+ */
+export function linkedFromWords(count: number | null | undefined, usedOn?: number | null): string | null {
   if (count === null || count === undefined) return null;
+  if (count === 0 && (usedOn ?? 0) > 0) return `Used by ${formatCountOf(usedOn ?? 0, 'page')}`;
   return count === 0 ? 'No pages' : formatCountOf(count, 'page');
 }
 

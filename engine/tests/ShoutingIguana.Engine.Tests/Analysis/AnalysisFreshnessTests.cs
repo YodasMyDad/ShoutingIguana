@@ -75,15 +75,27 @@ public sealed class AnalysisFreshnessTests
     }
 
     /// <summary>
-    /// Version 16 quotes in a detail what the check found (the heading too long or skipped to, the repeated share tags'
-    /// values, which JSON-LD block failed and where), and groups three checks by the fault their detail shows. An analysis
-    /// 15 stored is out of date.
+    /// Version 16 is the "can I fix it from this?" pass's (index part): the checks of the site's robots.txt and sitemaps store
+    /// the files they're about (<c>issue_files</c>), <c>blocked-by-robots</c> names the rule and its line, and the sitemap and
+    /// robots.txt details say more (the sitemaps listing a URL twice, the first wrong lastmod, an empty robots.txt). An
+    /// analysis 15 stored is out of date.
+    /// </summary>
+    [Fact]
+    public void AnAnalysisFromBeforeTheFilesAndRulesWereNamedIsOutOfDate()
+    {
+        Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 15 }, CRAWLED, new AnalysisSettings()));
+    }
+
+    /// <summary>
+    /// Version 18 (the page part's; 17 is the Shopify lane's phase B) quotes in a detail what the check found (the heading
+    /// too long or skipped to, the repeated share tags' values, which JSON-LD block failed and where), and groups three
+    /// checks by the fault their detail shows. An analysis 17 stored is out of date.
     /// </summary>
     [Fact]
     public void AnAnalysisFromBeforeTheQuotedDetailsIsOutOfDate()
     {
-        Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 15 }, CRAWLED, new AnalysisSettings()));
-        Assert.Empty(AnalysisFreshness.Check(Current() with { AnalysisVersion = 16 }, CRAWLED, new AnalysisSettings()));
+        Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 17 }, CRAWLED, new AnalysisSettings()));
+        Assert.Empty(AnalysisFreshness.Check(Current() with { AnalysisVersion = 18 }, CRAWLED, new AnalysisSettings()));
     }
 
     [Fact]

@@ -459,27 +459,56 @@ machine):
     Crawler access, one domain each, for up to 3 months. Screaming Frog, Sitebulb and Semrush all take one.
   - No reputable tool rotates user agents, headers or proxies to get past it, and Shopify treats that as evasion. We
     don't build it.
-  - **Lane `ui/3b-shopify`, phase A, under way:** a per-host signature that goes only to the host it was made for;
-    Shopify detected from headers and markup; refused pages "not checked: Shopify limits crawlers without a
-    signature", never broken; `--signature-file` on crawl and recheck; the app's form in both modes, kept in
-    Credential Manager only when Remember is ticked; and a test site that acts like Shopify.
   - The owner (2026-11-18): "The app should be smart enough to tell the user if it's a Shopify site and it's being
-    rejected and how to fix it." So: a live alert at the first refusal, with the fix in Shopify's own button names;
-    the signature can be added while the crawl runs; the next crawl of the site opens the Shopify part by itself; and
-    a signed crawl that's still refused says why.
-  - **Phase B, after the recheck fixes merge:** on an unsigned Shopify store, one retry after `Retry-After`, then
-    finish, instead of waiting out the 20-minute cap.
-  - The owner is asked to save a signature for `jitsunami.com` to `%USERPROFILE%\.shouting-iguana\shopify\`, never in
-    chat. One signed crawl is the real proof.
+    rejected and how to fix it."
+  - **Merged 324220b3 (`ui/3b-shopify` phase A at 237e15c):**
+    - The signature goes only over https, only to the exact host and port it was made for, and only until it expires.
+      It never crosses a redirect to another host, and never goes to the www/bare twin without its own. Crawl files,
+      exports and logs never keep it.
+    - Shopify detection: every Jitsunami response had `powered-by: Shopify`, and every page had `Shopify.theme`
+      (`x-shopid` never appeared). It's stored in `site_platform`.
+    - Refused pages are not checked, with Shopify's reason, never broken and never in the score. A signed refusal
+      names the likely cause: made under an hour ago, expired, or for the www/bare twin.
+    - `--signature-file` on crawl and recheck.
+    - The app has Shopify crawler access in the crawl options in both modes, and one live alert with Shopify's own
+      button names. A signature is added mid-crawl by stopping and then continuing. The Summary, problem page and
+      Overview prompt leads to "Recheck these N pages". The next crawl of the site opens the part with "Last time
+      Shopify refused N pages".
+    - Checks: engine 2,325, CLI 45, Sidecar 329; bench flat; readbench passed; Vitest 4,756; e2e 31; stories
+      axe-clean in all four modes.
+    - There's no app e2e for the signed flow, because the sidecar can't trust the test store's certificate. The
+      engine tests cover it.
+  - **Phase B, under way on the same branch:**
+    - stop early on an unsigned store (one retry after `Retry-After`, then finish);
+    - paused time doesn't count toward the cap;
+    - Shopify words in the end notice;
+    - cookies and security headers that Shopify sets are marked "Set by Shopify", out of the score;
+    - Simple's alert opens the form in Simple;
+    - a remembered signature fills in the next crawl of the host.
+  - The owner will add the Jitsunami signature in the app at the end. It's never pasted in chat.
+- **The "can I fix it from this?" pass (the owner, 2026-11-18).** "Not just display random data that doesn't help you
+  find where the issues are."
+  - Phase 1 (done): three auditors opened every check that fires on copies of the garden, Aptitude and Jitsunami
+    crawls and on the synthetic site, in both modes. Findings are in the scratchpad, `fixit-{links,page,index}/`.
+  - Phase 1 found 3 false or wrong pointers:
+    - `broken-fragment-links` names the working link;
+    - `image-no-srcset` flags `data-srcset`;
+    - `heading-too-long` shows the H1 on H2 rows.
+  - Other blockers:
+    - rows that "forward to" themselves;
+    - Simple telling a robots.txt block to "remove the links";
+    - `hreflang-inconsistent-code` hiding the code;
+    - Advanced cramped at 1440 px.
+  - Page counts agree across every view.
+  - **Phase 2, under way, split by file:**
+    - `ui/3b-fixit-links`: the Advanced issue screens, inspector, Links and presets, and the found-on reader;
+    - `ui/3b-fixit-page`: Simple's words for every check, the on-page evidence and the hand-over;
+    - `ui/3b-fixit-index`: the URLs grid, Sitemaps, robots.txt, the report and the workbook, and site-wide checks
+      naming their file (`issue_files`, the `about` and `files` fields).
 
 Next:
 
-- Merge `ui/3b-shopify`, then phase B (with paused time not counting toward the cap).
-- **Then the "can I fix it from this?" pass (the owner, 2026-11-18):** every check that fires on copies of the real
-  crawls and on the synthetic site, opened in the app in both modes and judged as a site owner. Does it show where
-  the problem is (the URL, the element or snippet, the page linking to it), the value against the limit, and what to
-  do? "Not just display random data that doesn't help you find where the issues are." Fix whatever fails, before the
-  gates.
+- Merge the three fixit lanes and Shopify phase B, renumbering `AnalysisFreshness`.
 - Then the round's gates on a quiet machine:
   - readbench first (if the links search misses again, it's investigated, not waved through);
   - the full app verify and `e2e:filled`;

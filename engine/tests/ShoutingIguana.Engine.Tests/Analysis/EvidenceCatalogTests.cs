@@ -30,7 +30,8 @@ public sealed class EvidenceCatalogTests
                 check.Id);
         }
 
-        Assert.Equal(50, IssueCatalog.All.Count(check => check.Evidence.Count > 0));
+        // 51: the fix-it pass gave not-in-sitemap its pages' title and depth (+2), and took heading-too-long's H1 (-1).
+        Assert.Equal(51, IssueCatalog.All.Count(check => check.Evidence.Count > 0));
         Assert.Equal(42, IssueCatalog.All.Count(check => check.TargetFacts.Count > 0));
         Assert.All(IssueCatalog.All.Where(check => check.References == IssueReferences.Targets), check => Assert.NotEmpty(check.TargetFacts));
     }

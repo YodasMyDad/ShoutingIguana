@@ -132,7 +132,7 @@ public sealed class IssueSubjectTests(GridCrawl crawl)
                     new($"{site.Site}/big.xml", 200, false, 60_000, null), new($"{site.Site}/near.xml", 200, false, 46_000, null),
                     new($"{site.Site}/empty.xml", 200, false, 0, null) { ListedSitemaps = 0 }
                 ], options, crawlComplete: true,
-                entries: new SitemapEntryFacts { Repeated = new Dictionary<int, int> { [blocked] = 2 }, Lastmods = [new($"{site.Site}/big.xml", 1, 0)] }).Finish(),
+                entries: new SitemapEntryFacts { Repeated = new Dictionary<int, IReadOnlyList<string>> { [blocked] = [$"{site.Site}/big.xml", $"{site.Site}/near.xml"] }, Lastmods = [new($"{site.Site}/big.xml", 1, 0)] }).Finish(),
             .. new RobotsTxtRules(urls, [new("https://example.com", 200, string.Empty, null, 0)], scope, new HashSet<string> { "https://example.com" },
                 sitemaps: [new($"{site.Site}/sitemap.xml", 200, false, 2, null, IsProbe: true)]).Finish(),
             .. new UrlTextRules(urls, [(tracked, $"{site.Site}/brochure.pdf?utm_source=news"), (repeated, $"{site.Site}/files/files/a.pdf")]).Finish()

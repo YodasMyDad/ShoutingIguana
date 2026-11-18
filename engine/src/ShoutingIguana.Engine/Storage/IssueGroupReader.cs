@@ -197,9 +197,17 @@ public static class IssueGroupReader
     /// pages by the hyperlinks to each, a check of any URL (a missing image, a redirect) by the pages that use it, then
     /// by clicks from the start and the URL; without a URL summary, which counts those, by clicks and URL alone.
     /// </summary>
-    public static IReadOnlyList<UrlSort> ImportanceOrder(IssueDefinition? check, bool summary) => summary
-        ? [new UrlSort(check?.Subject == IssueSubject.Url ? "usedOn" : "inlinks", Descending: true), new UrlSort("depth"), new UrlSort("url")]
-        : [new UrlSort("depth"), new UrlSort("url")];
+    /// <remarks>
+    /// A check whose rows come fewest links first (<see cref="IssueRowOrder.FewestLinksFirst"/>: pages missing from the
+    /// sitemaps) comes by its pages' hyperlinks, fewest first, then the most words; without a summary, deepest first.
+    /// </remarks>
+    public static IReadOnlyList<UrlSort> ImportanceOrder(IssueDefinition? check, bool summary) => (check?.RowOrder, summary) switch
+    {
+        (IssueRowOrder.FewestLinksFirst, true) => [new UrlSort("inlinks"), new UrlSort("wordCount", Descending: true), new UrlSort("url")],
+        (IssueRowOrder.FewestLinksFirst, false) => [new UrlSort("depth", Descending: true), new UrlSort("url")],
+        (_, true) => [new UrlSort(check?.Subject == IssueSubject.Url ? "usedOn" : "inlinks", Descending: true), new UrlSort("depth"), new UrlSort("url")],
+        _ => [new UrlSort("depth"), new UrlSort("url")]
+    };
 
     /// <summary>
     /// The check's groups counted, <c>(detail, related_url_id, pages)</c>, in no order, from where the analysis keeps them:
