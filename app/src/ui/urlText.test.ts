@@ -107,10 +107,10 @@ describe('originLength', () => {
 describe('fileLabelOf', () => {
   const SITE_ORIGIN = 'https://www.example.com';
 
-  it('leads with the file’s name, without its query, the query or the folder after it', () => {
+  it('leads with the file’s name, without its query, its folder and query after it', () => {
     expect(fileLabelOf(`${SITE_ORIGIN}/media/5265/harpswell-metal-patio-set-9.jpg?width=896`, SITE_ORIGIN)).toEqual({
       name: 'harpswell-metal-patio-set-9.jpg',
-      rest: '?width=896',
+      rest: '/media/5265/ ?width=896',
     });
     expect(fileLabelOf(`${SITE_ORIGIN}/wp-content/uploads/2024/05/hero.webp`, SITE_ORIGIN)).toEqual({
       name: 'hero.webp',
@@ -131,17 +131,54 @@ describe('fileLabelOf', () => {
     expect(fileLabelOf('https://cdn.example.net', SITE_ORIGIN)).toEqual({ name: 'cdn.example.net', rest: null });
   });
 
-  it('says another host’s file is on it, and cuts a long query', () => {
-    expect(fileLabelOf('https://cdn.example.net/assets/site.css?v=3', SITE_ORIGIN)).toEqual({
+  it('says another host’s file is on it, in its folder there, and cuts a long query', () => {
+    expect(fileLabelOf('https://cdn.example.net/assets/site.css?theme=dark', SITE_ORIGIN)).toEqual({
       name: 'site.css',
-      rest: 'cdn.example.net ?v=3',
+      rest: 'cdn.example.net/assets/ ?theme=dark',
     });
-    const long = `?mode=crop&center=0.50,0.50&width=1200&height=800&format=webp&quality=80&rnd=133784512345678901`;
+    expect(fileLabelOf('https://cdn.example.net/logo.png', SITE_ORIGIN)).toEqual({
+      name: 'logo.png',
+      rest: 'cdn.example.net',
+    });
+    const long = `?mode=crop&center=0.50,0.50&width=1200&height=800&format=webp&quality=80&anchor=topcenter`;
     const label = fileLabelOf(`${SITE_ORIGIN}/media/4364/rattan.jpg${long}`, SITE_ORIGIN);
     expect(label.name).toBe('rattan.jpg');
-    expect(label.rest?.length).toBeLessThanOrEqual(61);
-    expect(label.rest?.startsWith('?mode=crop&center=0.50,0.50')).toBe(true);
-    expect(label.rest?.endsWith(ELLIPSIS)).toBe(true);
+    // The folder whole, then the query's first 60 characters.
+    expect(label.rest).toBe(`/media/4364/ ${long.slice(0, 60)}${ELLIPSIS}`);
+  });
+
+  // The fixit audit's item 4: the garden site's ten different files were all "2.png ?width=896".
+  it('tells files of one name apart by their folder, though they have a query', () => {
+    const labels = ['/media/6965/2.png?width=896', '/media/6790/2.png?width=896'].map((path) =>
+      fileLabelOf(`${SITE_ORIGIN}${path}`, SITE_ORIGIN),
+    );
+    expect(labels).toEqual([
+      { name: '2.png', rest: '/media/6965/ ?width=896' },
+      { name: '2.png', rest: '/media/6790/ ?width=896' },
+    ]);
+  });
+
+  it('leaves a cache-buster out of the label, never out of the address', () => {
+    const shopify = 'https://jitsunami.com/cdn/shop/files/hero_1200x.png?v=1761041746';
+    expect(fileLabelOf(shopify, 'https://jitsunami.com')).toEqual({ name: 'hero_1200x.png', rest: '/cdn/shop/files/' });
+    // A number, a version or a hash is a cache-buster's value, under any of its usual names.
+    for (const query of [
+      '?ver=6.4.2',
+      '?_=1700000000000',
+      '?cb=a1b2c3d4',
+      '?t=1731900000',
+      '?ts=20261118',
+      '?rnd=1337',
+    ]) {
+      expect(fileLabelOf(`${SITE_ORIGIN}/wp-content/themes/shop/style.css${query}`, SITE_ORIGIN).rest).toBe(
+        '/wp-content/themes/shop/',
+      );
+    }
+    // The rest of the query stays, and so does a parameter of the same name whose value says something.
+    expect(fileLabelOf(`${SITE_ORIGIN}/img/a.jpg?width=896&v=3`, SITE_ORIGIN).rest).toBe('/img/ ?width=896');
+    expect(fileLabelOf(`${SITE_ORIGIN}/img/a.jpg?v=3&width=896`, SITE_ORIGIN).rest).toBe('/img/ ?width=896');
+    expect(fileLabelOf(`${SITE_ORIGIN}/img/a.jpg?t=dark`, SITE_ORIGIN).rest).toBe('/img/ ?t=dark');
+    expect(fileLabelOf(`${SITE_ORIGIN}/a.jpg?v=3`, SITE_ORIGIN).rest).toBeNull();
   });
 
   it('names an image written into the page, and keeps text that isn’t a URL as it is', () => {
