@@ -216,6 +216,10 @@ and is in the group without a related URL.
 | 52 | `h1-missing` | P/PD/– | – | – | Same (none, or "The H1 has no text") | imp · pages |
 | 53 | `h1-multiple` | P/N/– | – | – | "3 H1s" → `3 H1s: "Sofas" · "Example" · "Sign up"` | imp · – |
 | 54 | `h1-duplicate` | P/RU/– | `h1` | – | Same. The group is named by its `sharedText` | imp · pages |
+| 149 | `heading-levels-skipped` (new) | P/PD/– | – | – | The first skip from the first H1 on: `H1 → H3` (headings before the H1 aren't judged, as ruled) | imp · pages |
+| 150 | `h1-image-only` (new) | P/N/– | `h1` | – | `The H1 is an image: "Store logo"` | imp · – |
+| 151 | `heading-too-long` (new) | P/N/– | `h1` | – | The first: `H2 of 84 characters, over 70` | imp · – |
+| 152 | `h2-missing` (new) | P/N/– | `wordCount` | – | `620 words, no H2` | imp · – |
 
 ### Content
 
@@ -225,6 +229,9 @@ and is in the group without a related URL.
 | 56 | `duplicate-content` | P/RU/– | `indexability`, `canonicalUrl`, `inlinks` (which twin to keep) | – | Same ("2 other pages") | imp · pages |
 | 57 | `near-duplicate-content` | P/RU/– | `indexability`, `canonicalUrl`, `inlinks`, `wordCount` | – | Same ("2 similar pages") | imp · pages |
 | 58 | `duplicate-site-version` | U/RD/– | – | – | Same | once |
+| 153 | `placeholder-text` (new) | P/N/– | – | – | The first, quoted from there: `"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed…"` | imp · – |
+| 154 | `readability-low` (new) | P/N/– | – | – | `Reading ease 12, under 30 (very difficult)` | imp · – |
+| 155 | `boilerplate-heavy` (new) | P/N/– | – | – | `210 of 960 words are the page's own (22%)` | imp · – |
 
 ### Images
 
@@ -254,6 +261,11 @@ and is in the group without a related URL.
 | 69 | `hreflang-duplicate-code` | P/PD/– | – | – | "en-gb" → `en-gb: /uk/ · /gb/; de: /de/ · /at/`. Grouped by the codes alone (a new `FaultOf`: "en-gb, de", today's detail), so a template's conflict stays one group | imp · pages |
 | 70 | `hreflang-missing-x-default` | P/N/– | – | – | Same (none) | imp · – |
 | 71 | `hreflang-outside-head` | P/N/– | – | – | none → `2 entries in the body: <div id="gtm"> on line 12 ended the head early`; `2 entries in the body` for a page crawled before this was collected | imp · – |
+| 156 | `hreflang-inconsistent-code` (new) | P/RU/T | – | `statusCode`, `text` (the code this page gives it), `indexability` | The first: `Names /fr/ as "fr"; /fr/ calls itself "fr-CA"` | imp · pages |
+| 157 | `hreflang-header-mismatch` (new) | P/N/– | – | – | `The HTML names 3 versions, the header 2; only in the HTML: x-default` | imp · – |
+| 158 | `hreflang-unlinked` (new) | P/N/S | `inlinks`, `linkingPages` | – | `No link or sitemap entry leads here`; its found-on lists the pages whose hreflang names it | imp · – |
+| 159 | `hreflang-lang-mismatch` (new) | P/PD/– | `language` | – | `hreflang en, lang fr` | imp · pages |
+| 160 | `hreflang-self-only` (new) | P/N/– | – | – | – | imp · – |
 
 ### Structured data
 
@@ -272,7 +284,11 @@ and is in the group without a related URL.
 | 74 | `no-https` | P/N/– | – | – | Same | once |
 | 75 | `http-page` | P/N/**S** | – | – | Same (none). Its found-on gives the links to update | imp · – |
 | 76 | `mixed-content` | P/RU/T | – | `kind`, `statusCode`, `contentType`, `position`, `links` | Same ("2 HTTP resources") | imp · pages |
-| 77 | `security-headers-missing` | P/N/– | – | – | Same ("Missing X-Content-Type-Options, Referrer-Policy") | once |
+| 77 | `security-headers-missing` | P/N/– | – | – | Same ("Missing X-Content-Type-Options, Referrer-Policy") | once |
+| 138 | `security-headers-weak` (new) | P/N/– | – | – | `HSTS max-age 86400 (1 day), under a year; X-Content-Type-Options "none"` | once |
+| 139 | `cookies-insecure` (new) | P/PD/– | – | – | `sessionid: no Secure, no HttpOnly` (each cookie at fault, what it lacks) | imp · pages |
+| 140 | `form-not-secure` (new) | P/PD/– | – | – | `Sends to http://x/subscribe`, `A password form on an http:// page` | imp · pages |
+| 141 | `protocol-relative-links` (new) | P/N/– | – | – | `3 URLs, such as //cdn.example.com/app.js` | imp · – |
 
 ### URLs
 
@@ -280,7 +296,14 @@ and is in the group without a related URL.
 | --- | --- | --- | --- | --- | --- | --- |
 | 78 | `url-uppercase` | P/N/**S** | – | – | Same (none). Its found-on gives the links to update if it's renamed | imp · – |
 | 79 | `url-underscores` | P/N/**S** | – | – | Same (none). As 78 | imp · – |
-| 80 | `url-too-long` | P/N/– | – | – | "132 characters" → `132 characters, over 115` | imp · – |
+| 80 | `url-too-long` | P/N/– | – | – | "132 characters" → `132 characters, over 115` | imp · – |
+| 142 | `url-tracking-parameters` (new) | U/N/S | – | – | The parameters: `utm_source, utm_medium` (its found-on lists the linking pages) | use · – |
+| 143 | `url-multiple-slashes` (new) | P/N/S | – | – | – | imp · – |
+| 144 | `url-space` (new) | P/N/S | – | – | – | imp · – |
+| 145 | `url-parameters` (new) | P/N/S | – | – | The parameter names: `sort, page` | imp · – |
+| 146 | `url-non-ascii` (new) | P/N/S | – | – | – | imp · – |
+| 147 | `url-repetitive-path` (new) | U/N/S | – | – | – | use · – |
+| 148 | `url-internal-search` (new) | P/N/S | – | – | The parameter names, when any: `q` | imp · – |
 
 ### Performance
 
@@ -299,6 +322,16 @@ and is in the group without a related URL.
 | 85 | `lang-missing` | P/N/– | – | – | Same (none). Template hint | imp · – |
 | 86 | `charset-missing` | P/N/– | – | – | None → none, but a meta tag past the first 1024 bytes says where it ends (the check audit's): `A meta tag declares it, but ends at byte 1,180, past the first 1,024 bytes browsers read`. Template hint | imp · – |
 | 87 | `open-graph-missing` | P/PD/– | – | – | Same ("Missing og:image; empty og:description") | imp · pages |
+| 161 | `x-card-missing` (new) | P/N/– | – | – | – | imp · – |
+| 162 | `x-card-incomplete` (new) | P/PD/– | – | – | Each fault: `No title (twitter:title or og:title); No image (twitter:image or og:image)`, `Card type "photo" isn't one X shows`, `No twitter:player`, `twitter: tags written as property=, which X doesn't read` | imp · pages |
+| 163 | `social-image-relative` (new) | P/PD/– | – | – | The first: `og:image is /img/share.jpg` | imp · pages |
+| 164 | `og-url-not-canonical` (new) | P/PD/– | – | – | `og:url is https://x/` | imp · pages |
+| 165 | `social-tags-multiple` (new) | P/PD/– | – | – | `2 og:title, 2 twitter:card` | imp · pages |
+| 166 | `og-title-duplicate` (new) | P/RU/– | `title` | – | `1 other page`. The group is named by its `sharedText` (the share title, stored as `responses.og_title`) | imp · pages |
+| 167 | `og-description-duplicate` (new) | P/RU/– | `description` | – | As 166 (`responses.og_description`) | imp · pages |
+| 168 | `social-image-broken` (new) | P/RU/T | – | `statusCode`, `final`, `contentType` | The first: `og:image returns 404 Not Found`, `twitter:image is a page, not an image` | imp · pages |
+| 169 | `social-image-too-large` (new) | P/RU/T | – | `sizeBytes`, `contentType` | The first: `og:image is 6.2 MB, over 5 MB` | imp · pages |
+| 170 | `social-image-too-small` (new) | P/RU/T | – | `pixelWidth`, `pixelHeight` | The first: `og:image is 100 × 100 px, under 200 × 200`, `twitter:image is 280 × 280 px, under 300 × 157 (X's large card)` | imp · pages |
 | 117 | `head-tags-in-body` (new) | P/PD/– | – | – | `title, meta description and 3 Open Graph tags are in the body: <div id="promo"> on line 12 ended the head early`, or `… are in the body, after <body> on line 30`; grouped by the cause (`FaultOf`: the element, without its line, or "After <body>") | imp · pages |
 | 118 | `html-structure-errors` (new) | P/PD/– | – | – | `2 <head> tags; 2 <body> tags`, `<html> after content`, `<head> after content` | imp · pages |
 | 119 | `viewport-invalid` (new) | P/PD/– | – | – | `user-scalable=no; maximum-scale=1`, `no width or initial-scale`, `2 viewport tags that differ` | imp · pages |
@@ -308,6 +341,8 @@ and is in the group without a related URL.
 
 **New checks (step 3b, [v2-new-checks.md](v2-new-checks.md)):** rows 88 on, marked "(new)", each in its category's
 table. `canonical-unlinked` is P where the specification said U: it flags only indexable pages, as `orphan-page` does.
+`hreflang-unlinked` is P too, for the same reason. The crawl doesn't follow hreflang by default, so a version only
+hreflang leads to is left unread: where one is, the check is skipped (`hreflang-off`), as which are unlinked can't be told.
 `canonicalised-page` (27) no longer flags a page `canonical-to-first-page` or `canonical-other-domain` flags, and
 `canonical-to-non-indexable` (32) no page of a canonical loop. `meta-refresh` (11) also reads a `Refresh` response header:
 `The Refresh header moves to https://x/ after 5 seconds`.

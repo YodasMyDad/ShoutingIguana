@@ -332,13 +332,45 @@ machine):
   - The merged tree (S1 and S2 with batches 4 to 6) was built and tested: engine 2,081, CLI 34, sidecar 315; app
     typecheck, unit 3,994.
 
+- **`40f5e6b`: the owner's UX audit, screen and settings fixes** (`ui/3b-views` at `9bf5bd3`).
+  - Issues sorted by what matters (Fix first, Most URLs, Most points, Severity, Category; remembered per mode), with
+    the evidence above Why and How.
+  - Related checks as tested catalog data (`IssueDefinition.Clears`) with computed counts: "Fixing this also clears …"
+    in both modes, folded in Simple's What to fix.
+  - Headlines as things to change, and how many are in the template.
+  - Links grouped by target, with a grouped export, an Images preset, file-name labels and thumbnails (the broken
+    glyph only for images that failed), and the inspector's Images tab.
+  - robots.txt blocked URLs with Linked from, In a sitemap and conflicts, fitting at 960 px.
+  - Secrets go to Windows Credential Manager only when the owner ticks Remember; the words are truthful; SOCKS5 with
+    a login is tested.
+  - Checks on this merge's tree: engine 2,107 + 323 + 34; bench and readbench passed; unit 4,214; stories 571; e2e
+    275 passed.
+- **`8ca8a53`: new checks, batches 7 to 9; the catalog is 170** (`ui/3b-checks` at `68dcdd52`).
+  - Security and URLs, headings, content and hreflang, Open Graph and X cards. `title-same-as-h1` is not built, as
+    ruled.
+  - `heading-levels-skipped` judges from the first H1 on (the orchestrator's ruling: hidden theme headings before
+    the H1 aren't a skipped level).
+  - `hreflang-unlinked` flags pages only.
+  - Share-text duplicates never flag the page whose text is its own.
+  - The real-site audit was all correct after those fixes: HSTS under a year, cookies without Secure, heading jumps,
+    lorem ipsum, X cards, `og:url` on page 2s.
+  - `AnalysisFreshness` is 14.
+  - Checks on this merge's tree: engine 2,190, sidecar 323, CLI 34; bench ok; unit 4,214; stories 571 × 2; e2e 13
+    specs.
+  - Readbench missed two timing gates under load (the links search for a common word, 2,694 ms against 2,500; pages
+    by response time, 199 ms against 185). Batch 9 adds a share-image link from every page.
+
 Next:
 
-- U1 and U2 run side by side on `ui/3b-fixloop-ui`. They leave the screens the views lane changes until it merges;
-  the orchestrator then writes the `VIEWS-MERGED` flag in the scratchpad's `audit3b/`.
-- The views lane fixes the review's points (images named by file, thumbnails, the clipped robots column, the grouped
-  export), then merges `ui/step-3`.
-- Batches 7 to 9 continue in the checks lane.
+- U1 and U2 on `ui/3b-fixloop-ui`, now building on the merged views. Then the views lane's headline round: errors and
+  warnings first, notices apart.
+- Then the round's gates on a quiet machine:
+  - readbench first (if the links search misses again, it's investigated, not waved through);
+  - the full app verify and `e2e:filled`;
+  - the stories in forced colours and reduced motion;
+  - the release build, `smoke:shell`, the installer and `smoke:tauri`.
+- Then gallery 7 and the owner's look. Rechecking the garden site for real waits for the owner's word, and so does a
+  third Jitsunami crawl.
 
 1. ~~The installer from `35d4888`, `smoke:tauri`, and the owner's install upgraded with setup `/S` while the app is
    closed.~~ Done.

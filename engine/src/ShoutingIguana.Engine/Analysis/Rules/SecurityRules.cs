@@ -1,3 +1,4 @@
+using System.Globalization;
 using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Parsing.Models;
 
@@ -9,6 +10,12 @@ namespace ShoutingIguana.Engine.Analysis.Rules;
 /// </summary>
 internal sealed class SecurityRules(UrlTable urls) : IPageRule
 {
+    /// <summary>A year: hstspreload.org's least max-age, and so the least that keeps HSTS on between visits.</summary>
+    private const long HSTS_MIN_SECONDS = 31_536_000;
+
+    /// <summary>Parts of a session or login cookie's name (sessionid, PHPSESSID, auth_token, jwt…).</summary>
+    private static readonly string[] SESSION_NAMES = ["sess", "sid", "auth", "token", "login", "jwt"];
+
     public IEnumerable<IssueHit> Check(AnalyzedPage page)
     {
         var isHttps = page.Uri.Scheme == Uri.UriSchemeHttps;
@@ -24,10 +31,31 @@ internal sealed class SecurityRules(UrlTable urls) : IPageRule
             {
                 yield return new IssueHit(IssueCatalog.SECURITY_HEADERS_MISSING, page.UrlId, $"Missing {string.Join(", ", missing)}");
             }
+
+            if (WeakHeaders(page, isHttps) is { Count: > 0 } weak)
+            {
+                yield return new IssueHit(IssueCatalog.SECURITY_HEADERS_WEAK, page.UrlId, RuleText.Fit(string.Join("; ", weak)));
+            }
         }
         else if (!isHttps && urls[urls.HomeId].IsHttps)
         {
             yield return new IssueHit(IssueCatalog.HTTP_PAGE, page.UrlId);
+        }
+
+        if (InsecureCookies(page, isHttps) is { Count: > 0 } cookies)
+        {
+            yield return new IssueHit(IssueCatalog.COOKIES_INSECURE, page.UrlId, RuleText.Fit(string.Join("; ", cookies)));
+        }
+
+        if (InsecureForm(page.Facts.Forms, isHttps) is { } form)
+        {
+            yield return new IssueHit(IssueCatalog.FORM_NOT_SECURE, page.UrlId, form);
+        }
+
+        if (page.Facts.ProtocolRelativeUrls is { } relative)
+        {
+            yield return new IssueHit(IssueCatalog.PROTOCOL_RELATIVE_LINKS, page.UrlId,
+                RuleText.Fit($"{RuleText.Count(relative.Count, "URL", "URLs")}, such as {relative.First}"));
         }
 
         if (!isHttps)
@@ -50,6 +78,95 @@ internal sealed class SecurityRules(UrlTable urls) : IPageRule
             yield return new IssueHit(IssueCatalog.MIXED_CONTENT, page.UrlId,
                 RuleText.Count(insecure.Count, "HTTP resource", "HTTP resources"), insecure.First) { Targets = insecure.Ids };
         }
+    }
+
+    /// <summary>
+    /// Security headers there but set too weakly: Strict-Transport-Security (on HTTPS) without a max-age of a year or more,
+    /// as the preload list asks; X-Content-Type-Options other than nosniff, its one directive.
+    /// </summary>
+    private static List<string> WeakHeaders(AnalyzedPage page, bool isHttps)
+    {
+        List<string> weak = [];
+        if (isHttps && page.Header("strict-transport-security") is { } hsts)
+        {
+            var maxAge = hsts.Split(';').Select(part => part.Trim()).FirstOrDefault(part => part.StartsWith("max-age", StringComparison.OrdinalIgnoreCase));
+            var value = maxAge?.Split('=', 2) is [_, var written] ? written.Trim().Trim('"') : null;
+            if (!long.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var seconds))
+            {
+                weak.Add(maxAge is null ? "HSTS without max-age" : $"HSTS max-age {RuleText.Quote(value ?? string.Empty, 20)} unreadable");
+            }
+            else if (seconds < HSTS_MIN_SECONDS)
+            {
+                weak.Add(string.Create(CultureInfo.InvariantCulture, $"HSTS max-age {seconds} ({Duration(seconds)}), under a year"));
+            }
+        }
+
+        if (page.Header("x-content-type-options") is { } options && !options.Trim().Equals("nosniff", StringComparison.OrdinalIgnoreCase))
+        {
+            weak.Add($"X-Content-Type-Options {RuleText.Quote(options, 30)}");
+        }
+
+        return weak;
+    }
+
+    /// <summary>"1 day", "30 days", "6 hours", "0 seconds": how long a max-age keeps HSTS.</summary>
+    private static string Duration(long seconds) => seconds switch
+    {
+        >= 86_400 => RuleText.Count((int)(seconds / 86_400), "day", "days"),
+        >= 3_600 => RuleText.Count((int)(seconds / 3_600), "hour", "hours"),
+        _ => RuleText.Count((int)seconds, "second", "seconds")
+    };
+
+    /// <summary>
+    /// The page's cookies set without basic protection: on HTTPS without Secure; SameSite=None without Secure, which
+    /// browsers refuse; and a session or login cookie (by its name) without HttpOnly. "sessionid: no Secure, no HttpOnly".
+    /// </summary>
+    private static List<string> InsecureCookies(AnalyzedPage page, bool isHttps)
+    {
+        List<string> faults = [];
+        foreach (var cookie in page.Headers.Where(header => header.Name == "set-cookie").Select(header => header.Value))
+        {
+            var parts = cookie.Split(';').Select(part => part.Trim()).ToList();
+            var name = parts[0].Split('=', 2)[0].Trim();
+            if (name.Length == 0)
+            {
+                continue;
+            }
+
+            bool Has(string attribute) => parts.Skip(1).Any(part => part.Split('=', 2)[0].Trim().Equals(attribute, StringComparison.OrdinalIgnoreCase));
+            var secure = Has("Secure");
+            var sameSiteNone = parts.Skip(1).Any(part => part.Replace(" ", string.Empty, StringComparison.Ordinal).Equals("SameSite=None", StringComparison.OrdinalIgnoreCase));
+            List<string> lacking = [];
+            if (!secure && (isHttps || sameSiteNone))
+            {
+                lacking.Add(sameSiteNone ? "SameSite=None without Secure" : "no Secure");
+            }
+
+            if (!Has("HttpOnly") && SESSION_NAMES.Any(part => name.Contains(part, StringComparison.OrdinalIgnoreCase)))
+            {
+                lacking.Add("no HttpOnly");
+            }
+
+            if (lacking.Count > 0)
+            {
+                faults.Add($"{RuleText.Cut(name, 40)}: {string.Join(", ", lacking)}");
+            }
+        }
+
+        return faults;
+    }
+
+    /// <summary>A form sending what's typed over plain HTTP: from an HTTPS page to an http:// action, or a password form on an HTTP page.</summary>
+    private static string? InsecureForm(IReadOnlyList<FormFact> forms, bool isHttps)
+    {
+        if (isHttps)
+        {
+            return forms.FirstOrDefault(form => form.ActionUrl?.StartsWith("http://", StringComparison.OrdinalIgnoreCase) == true) is { } form
+                ? RuleText.Fit($"Sends to {form.ActionUrl}")
+                : null;
+        }
+
+        return forms.Any(form => form.HasPassword) ? "A password form on an http:// page" : null;
     }
 
     private static List<string> MissingHeaders(AnalyzedPage page, bool isHttps)

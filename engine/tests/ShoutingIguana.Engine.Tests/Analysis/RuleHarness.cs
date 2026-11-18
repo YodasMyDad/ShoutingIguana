@@ -51,7 +51,7 @@ internal sealed class RuleHarness(string site = "https://example.com")
     /// <param name="responseMs">How long the whole response took.</param>
     public int Fetched(string url, FetchOutcome outcome, int status, bool isHtml = false, IndexabilityReason reason = IndexabilityReason.None,
         string? redirectTo = null, long? size = null, bool inSitemap = false, string? contentType = null,
-        DiscoverySource source = DiscoverySource.Link, bool? isParsed = null, int responseMs = 0, int? pixelWidth = null)
+        DiscoverySource source = DiscoverySource.Link, bool? isParsed = null, int responseMs = 0, int? pixelWidth = null, int? pixelHeight = null)
     {
         var id = Id(url);
         contentType ??= isHtml ? "text/html; charset=utf-8" : null;
@@ -71,6 +71,7 @@ internal sealed class RuleHarness(string site = "https://example.com")
             ResponseMs = responseMs,
             ContentClass = outcome == FetchOutcome.Success ? ResourceTypes.ClassOf(ContentTypeHeader.MediaTypeOf(contentType)) : ContentClass.None,
             PixelWidth = pixelWidth,
+            PixelHeight = pixelHeight,
             IsLegacyImage = outcome == FetchOutcome.Success && ContentTypeHeader.MediaTypeOf(contentType) is "image/jpeg" or "image/png" or "image/gif" or "image/bmp"
         };
         return id;

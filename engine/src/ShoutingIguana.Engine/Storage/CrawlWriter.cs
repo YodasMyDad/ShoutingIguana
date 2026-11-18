@@ -976,7 +976,7 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
             LinkKind.Canonical when !_options.CrawlCanonicals => SkipReason.NotFollowedByOption,
             LinkKind.Hreflang when !_options.CrawlHreflang => SkipReason.NotFollowedByOption,
             LinkKind.Pagination when !_options.CrawlPagination => SkipReason.NotFollowedByOption,
-            LinkKind.Image or LinkKind.Script or LinkKind.Stylesheet or LinkKind.Media or LinkKind.Icon or LinkKind.Iframe
+            LinkKind.Image or LinkKind.Script or LinkKind.Stylesheet or LinkKind.Media or LinkKind.Icon or LinkKind.Iframe or LinkKind.SocialImage
                 when !_options.CheckResources => SkipReason.ResourcesDisabled,
             _ => SkipReason.None
         };

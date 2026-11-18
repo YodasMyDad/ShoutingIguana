@@ -75,6 +75,7 @@ export const KIND_WORDS: Record<LinkKind, string> = {
   pagination: 'Pagination',
   metaRefresh: 'Meta refresh',
   redirect: 'Redirect',
+  socialImage: 'Share image',
 };
 
 export const POSITION_WORDS: Record<LinkPosition, string> = {

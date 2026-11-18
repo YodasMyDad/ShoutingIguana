@@ -196,6 +196,18 @@ test('the inspector lists a page’s images, each file once, the largest first, 
   const grid = inspector.getByRole('grid', { name: 'Images' });
   await expect(grid).toHaveAttribute('aria-rowcount', String(images.rows.length + 1));
   await expect(grid.getByRole('row').nth(1).locator('.si-url__go')).toHaveAccessibleName(images.rows[0]!.url);
+  // On a narrow sheet a long name is cut at the end of its stem: every extension shows whole, inside its cell.
+  await page.setViewportSize({ width: 1024, height: 720 });
+  const cut = await grid.locator('.si-url').evaluateAll((urls) =>
+    urls.flatMap((url) => {
+      const ext = url.querySelector('.si-url__ext');
+      if (!ext) return [];
+      const [box, end] = [url.getBoundingClientRect(), ext.getBoundingClientRect()];
+      return end.width > 0 && end.right <= box.right + 0.5 && end.left >= box.left ? [] : [url.textContent];
+    }),
+  );
+  expect(cut).toEqual([]);
+  await page.setViewportSize({ width: 1280, height: 800 });
   for (const colorScheme of ['light', 'dark'] as const) {
     await page.emulateMedia({ colorScheme });
     await expectNoViolations(page);

@@ -130,15 +130,15 @@ describe.skipIf(TABLE_STUBBED)('What to fix', () => {
     await whatToFix();
     expect(
       main().getByText(
-        /6 problems to fix and 15 things worth a look on gardenfurnituresets\.co\.uk, from 120 checks on 265 pages\./,
+        /6 problems to fix and 22 more worth a look on gardenfurnituresets\.co\.uk, from 143 checks on 265 pages\./,
       ),
     ).toBeVisible();
     for (const [name, count] of [
       ['Serious', '2'],
       ['Worth fixing', '4'],
-      ['Worth a look', '15'],
-      ['Couldn’t check', '17'],
-      ['Nothing wrong', '99'],
+      ['Worth a look', '22'],
+      ['Couldn’t check', '27'],
+      ['Nothing wrong', '115'],
     ]) {
       expect(main().getByRole('heading', { level: 2, name: `${name} ${count}` })).toBeVisible();
     }
@@ -152,29 +152,29 @@ describe.skipIf(TABLE_STUBBED)('What to fix', () => {
   it('shows three things worth a look while anything needs fixing, then all of them; Nothing wrong is folded', async () => {
     await open(FIX);
     await whatToFix();
-    const looks = () => within(main().getByRole('region', { name: 'Worth a look 15' }));
+    const looks = () => within(main().getByRole('region', { name: 'Worth a look 22' }));
     expect(looks().getAllByRole('link')).toHaveLength(3);
     expect(await looks().findByText('One fix')).toBeVisible();
-    fireEvent.click(looks().getByRole('button', { name: 'Show all 15 things worth a look' }));
-    expect(looks().getAllByRole('link')).toHaveLength(15);
-    const passed = within(main().getByRole('region', { name: 'Nothing wrong 99' }));
+    fireEvent.click(looks().getByRole('button', { name: 'Show all 22 things worth a look' }));
+    expect(looks().getAllByRole('link')).toHaveLength(22);
+    const passed = within(main().getByRole('region', { name: 'Nothing wrong 115' }));
     expect(passed.queryAllByRole('link')).toHaveLength(0);
-    fireEvent.click(passed.getByRole('button', { name: 'Show the 99 checks that found nothing wrong' }));
-    expect(passed.getAllByRole('link')).toHaveLength(99);
+    fireEvent.click(passed.getByRole('button', { name: 'Show the 115 checks that found nothing wrong' }));
+    expect(passed.getAllByRole('link')).toHaveLength(115);
   });
 
-  it('opens the part a count lands on: all 15 worth a look, and the 99 that found nothing wrong', async () => {
+  it('opens the part a count lands on: all 22 worth a look, and the 115 that found nothing wrong', async () => {
     await open(`${FIX}#worth-a-look`);
     await whatToFix();
-    expect(within(main().getByRole('region', { name: 'Worth a look 15' })).getAllByRole('link')).toHaveLength(15);
-    await waitFor(() => expect(main().getByRole('heading', { name: 'Worth a look 15' })).toHaveFocus());
+    expect(within(main().getByRole('region', { name: 'Worth a look 22' })).getAllByRole('link')).toHaveLength(22);
+    await waitFor(() => expect(main().getByRole('heading', { name: 'Worth a look 22' })).toHaveFocus());
   });
 
   it('lists every check that couldn’t run, with its plain reason, and leaves hidden checks out with a line to show them', async () => {
     await open(FIX, GARDEN_ANALYSIS, ['image-too-large']);
     await whatToFix();
-    const skipped = within(main().getByRole('region', { name: 'Couldn’t check 17' }));
-    expect(skipped.getAllByText('Not checked')).toHaveLength(17);
+    const skipped = within(main().getByRole('region', { name: 'Couldn’t check 27' }));
+    expect(skipped.getAllByText('Not checked')).toHaveLength(27);
     expect(main().getByRole('heading', { name: 'Worth fixing 3' })).toBeVisible();
     expect(main().getByText(/1 check is hidden\./)).toBeVisible();
     fireEvent.click(main().getByRole('button', { name: 'Show' }));
@@ -308,6 +308,40 @@ describe.skipIf(TABLE_STUBBED)('one problem', () => {
     expect(main().getByRole('list', { name: 'Fixed along with it' })).toHaveTextContent(
       "Fixing Pages or files that can't be found fixes this too.",
     );
+  });
+
+  it('never shows a count over an empty list: with no groups to show, the addresses list on their own', async () => {
+    // The 404s' groups read finds none though the check flagged 9: the addresses still list, each found where it is.
+    await open(
+      `${FIX}/internal-client-error`,
+      GARDEN_ANALYSIS,
+      [],
+      [
+        ['POST', /\/issues\/internal-client-error\/groups$/, () => json(groupPage('internal-client-error', [], 9))],
+        [
+          'POST',
+          /\/issues\/internal-client-error\/rows$/,
+          () =>
+            json(
+              rowsPage(
+                [
+                  { ...page(35, '/edale-4-seater-sofa-set/', null), detail: '404 Not Found' },
+                  { ...page(186, '/outdoor-pe-rattan-dining-set-with-fire-pit-table/', null), detail: '404 Not Found' },
+                ],
+                9,
+              ),
+            ),
+        ],
+      ],
+    );
+    await problem("Pages or files that can't be found");
+    const where = main().getByRole('region', { name: 'Where it is' });
+    // Each address listed (a page without a title is named by its address, which may show twice in its line).
+    expect((await within(where).findAllByText('/edale-4-seater-sofa-set/', { exact: false }))[0]).toBeVisible();
+    expect(
+      within(where).getAllByText('/outdoor-pe-rattan-dining-set-with-fire-pit-table/', { exact: false })[0],
+    ).toBeVisible();
+    expect(within(where).queryByText(/0 causes/)).toBeNull();
   });
 
   it('lists where it is: each cause, its first pages by title then address, and Show them for the rest', async () => {

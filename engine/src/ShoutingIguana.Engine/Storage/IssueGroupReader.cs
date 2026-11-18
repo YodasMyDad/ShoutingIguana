@@ -157,6 +157,8 @@ public static class IssueGroupReader
         var column = check == IssueCatalog.TITLE_DUPLICATE ? "title"
             : check == IssueCatalog.DESCRIPTION_DUPLICATE ? "meta_description"
             : check == IssueCatalog.H1_DUPLICATE ? "h1"
+            : check == IssueCatalog.OG_TITLE_DUPLICATE ? "og_title"
+            : check == IssueCatalog.OG_DESCRIPTION_DUPLICATE ? "og_description"
             : null;
         return
         [
@@ -168,6 +170,15 @@ public static class IssueGroupReader
 
     private static string? SharedText(GridReadContext context, string column, int urlId)
     {
+        // A crawl made before the share columns has no share text to give.
+        using (var has = context.Command("SELECT COUNT(*) FROM pragma_table_info('responses') WHERE name = $column", [new("$column", column)]))
+        {
+            if (has.ExecuteScalar() is 0L)
+            {
+                return null;
+            }
+        }
+
         using var command = context.Command($"SELECT {column} FROM responses WHERE url_id = $id", [new("$id", urlId)]);
         return command.ExecuteScalar() as string;
     }

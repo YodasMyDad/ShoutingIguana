@@ -20,6 +20,8 @@ internal static class RecheckDuplicates
         _ when checkId == IssueCatalog.TITLE_DUPLICATE.Id => "r.title",
         _ when checkId == IssueCatalog.DESCRIPTION_DUPLICATE.Id => "r.meta_description",
         _ when checkId == IssueCatalog.H1_DUPLICATE.Id => "r.h1",
+        _ when checkId == IssueCatalog.OG_TITLE_DUPLICATE.Id => "r.og_title",
+        _ when checkId == IssueCatalog.OG_DESCRIPTION_DUPLICATE.Id => "r.og_description",
         _ when checkId == IssueCatalog.DUPLICATE_CONTENT.Id => "CAST(r.content_hash AS TEXT)",
         _ when checkId == IssueCatalog.NEAR_DUPLICATE_CONTENT.Id =>
             "r.simhash || ',' || COALESCE(r.simhash_1, '') || ',' || COALESCE(r.simhash_2, '') || ',' || COALESCE(r.simhash_3, '')",

@@ -28,6 +28,9 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
     private const int MAX_ICON_ATTRIBUTE_CHARS = 100;
     internal const int MAX_IDS = 5_000;
     private const int MAX_JSON_LD_BLOCKS = 50;
+
+    /// <summary>The forms a page's facts keep: enough for any page's search, sign-up and log-in.</summary>
+    private const int MAX_FORMS = 20;
     private const int MAX_PAGINATION_LINKS = 20;
     private const int MAX_UNCRAWLABLE_EXAMPLES = 3;
     private const int MAX_UNCRAWLABLE_TEXT = 60;
@@ -85,6 +88,17 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
 
     /// <summary>Every charset the page declares, in order (<see cref="PageFacts.CharsetDeclarations"/>).</summary>
     public List<string> CharsetDeclarations { get; } = [];
+
+    /// <summary>Words in the body's text the content leaves out (navigation, header, footer, asides).</summary>
+    public int TemplateWordCount { get; private set; }
+
+    /// <summary>The page's forms, up to <see cref="MAX_FORMS"/>.</summary>
+    public List<FormFact> Forms { get; } = [];
+
+    /// <summary>How many <c>href</c> and <c>src</c> values start <c>//</c>, and the first.</summary>
+    public int ProtocolRelativeCount { get; private set; }
+
+    public string? FirstProtocolRelative { get; private set; }
 
     /// <summary>The first separate mobile version the page names (<see cref="PageFacts.MobileAlternate"/>).</summary>
     public string? MobileAlternate { get; private set; }
@@ -152,6 +166,11 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
             {
                 text.Append(textNode.Data);
             }
+            else if (child is IText templateNode && !context.InHead)
+            {
+                // Text the content leaves out (menus, header, footer): words of the page all the same.
+                TemplateWordCount += TextMeasures.Words(templateNode.Data);
+            }
         }
     }
 
@@ -172,6 +191,24 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
         }
 
         var name = element.LocalName;
+
+        // An href or src written without its scheme ("//cdn.example.com/app.js") takes the page's.
+        foreach (var attribute in (string[])["href", "src"])
+        {
+            if (element.GetAttribute(attribute)?.TrimStart() is { } value && value.StartsWith("//", StringComparison.Ordinal) && value.Length > 2)
+            {
+                ProtocolRelativeCount++;
+                FirstProtocolRelative ??= value.Length > MAX_LABEL_CHARS ? value[..MAX_LABEL_CHARS] : value;
+            }
+        }
+
+        if (name == "form" && Forms.Count < MAX_FORMS)
+        {
+            var action = element.GetAttribute("action");
+            var target = string.IsNullOrWhiteSpace(action) ? baseUri : UrlNormalizer.TryResolve(baseUri, action, out var resolved) ? resolved : null;
+            Forms.Add(new FormFact(target is null ? null : UrlNormalizer.Normalize(target), NullIfBlank(element.GetAttribute("method"))?.Trim().ToLowerInvariant() ?? "get",
+                element.QuerySelector("input[type=password i]") is not null));
+        }
 
         // Only <a>, <area>, <link> and <base> take an href: on a <span> or <div>, one that leads somewhere is a link search
         // engines can't follow (a widget's href="javascript:void(0)" or "#reviews" leads nowhere they could go).
@@ -225,7 +262,8 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
             case "h1" or "h2" or "h3" or "h4" or "h5" or "h6":
                 if (Headings.Count < MAX_HEADINGS)
                 {
-                    Headings.Add(new HeadingFact(name[1] - '0', HeadingText(element)));
+                    var (headingText, fromImage) = HeadingText(element);
+                    Headings.Add(new HeadingFact(name[1] - '0', headingText) { FromImageAlt = fromImage });
                 }
 
                 break;
@@ -284,12 +322,12 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
     }
 
     /// <summary>A heading's text, or for a logo heading (an image and no text) the image's alt, as screen readers announce it.</summary>
-    private static string HeadingText(IElement heading)
+    private static (string Text, bool FromImageAlt) HeadingText(IElement heading)
     {
         var text = ReadableText(heading, MAX_HEADING_CHARS);
         return text.Length == 0 && heading.QuerySelector("img[alt]")?.GetAttribute("alt") is { } alt
-            ? Clean(alt, MAX_HEADING_CHARS)
-            : text;
+            ? (Clean(alt, MAX_HEADING_CHARS), true)
+            : (text, false);
     }
 
     /// <summary>
@@ -456,7 +494,16 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
         AddMetaTag(name, cleaned);
         if (property != name)
         {
-            AddMetaTag(property, cleaned);
+            AddMetaTag(property, cleaned, isProperty: true);
+        }
+
+        // A share image given as a full URL is fetched as a file, so its checks can judge it; one given in part is
+        // social-image-relative's, and isn't guessed at.
+        if (new[] { name, property }.FirstOrDefault(tag => tag is "og:image" or "og:image:url" or "og:image:secure_url" or "twitter:image") is { } imageTag &&
+            Uri.TryCreate(cleaned.Trim(), UriKind.Absolute, out var image) && image.Scheme is "http" or "https" &&
+            !cleaned.TrimStart().StartsWith("//", StringComparison.Ordinal))
+        {
+            AddLink(cleaned.Trim(), LinkKind.SocialImage, LinkFlags.None, LinkPosition.Head, imageTag);
         }
 
         // Search engines read the description and robots directives from name; property is RDFa, as Open Graph uses.
@@ -470,11 +517,11 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
         }
     }
 
-    private void AddMetaTag(string? name, string content)
+    private void AddMetaTag(string? name, string content, bool isProperty = false)
     {
         if (name is not null && MetaTags.Count < MAX_META_TAGS)
         {
-            MetaTags.Add(new MetaTagFact(name, content));
+            MetaTags.Add(new MetaTagFact(name, content) { IsProperty = isProperty });
         }
     }
 

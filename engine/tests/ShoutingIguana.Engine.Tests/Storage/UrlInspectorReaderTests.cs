@@ -70,8 +70,8 @@ public sealed class UrlInspectorReaderTests(GridCrawl crawl)
                 named += target.Id == id ? 0 : 1;
             }
 
-            // The synthetic site's URLs are plain ASCII without escapes: as long as they're written.
-            Assert.Equal(url.Url.Length, url.UrlLength);
+            // The synthetic site's URLs are ASCII, so as long as they read once their escapes are undone (with%20space, caf%C3%A9).
+            Assert.Equal(Uri.UnescapeDataString(url.Url).Length, url.UrlLength);
         }
 
         Assert.True(named > 50, $"Only {named} URLs were named by another");

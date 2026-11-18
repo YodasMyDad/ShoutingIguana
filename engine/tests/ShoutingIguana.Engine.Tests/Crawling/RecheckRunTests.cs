@@ -264,6 +264,28 @@ public sealed class RecheckRunTests(RecheckCrawls crawls) : IDisposable
         Assert.Equal((2, (RecheckOutcome?)RecheckOutcome.NotChecked), (recheck.Fetched, Outcomes(path, recheck.Id)["/p/185"]));
     }
 
+    /// <summary>
+    /// A share duplicate is judged by its own share title as the crawl stored it (batch 9). Revision 1 gives one page of a
+    /// pair its own: it's fixed, and its partner, unchanged, not checked. A page fetched before share titles were stored
+    /// (by an earlier engine: none stored) can't be said to have changed, so both are then not checked, never fixed.
+    /// </summary>
+    [Fact]
+    public async Task AShareDuplicateIsJudgedByItsOwnShareTitleAndNeverFixedWithoutOneStored()
+    {
+        var path = crawls.Copy(crawls.Then);
+        var (_, recheck) = await RecheckCrawls.RecheckAsync(path, new RecheckAsk("og-title-duplicate"));
+        var outcomes = Outcomes(path, recheck.Id);
+        Assert.Equal(((RecheckOutcome?)RecheckOutcome.Fixed, (RecheckOutcome?)RecheckOutcome.NotChecked),
+            (outcomes["/plants/og-title-copy-b"], outcomes["/plants/og-title-copy-a"]));
+
+        var earlier = crawls.Copy(crawls.Then);
+        GridQueries.Change(earlier, "UPDATE responses SET og_title = NULL");
+        (_, recheck) = await RecheckCrawls.RecheckAsync(earlier, new RecheckAsk("og-title-duplicate"));
+        outcomes = Outcomes(earlier, recheck.Id);
+        Assert.Equal(((RecheckOutcome?)RecheckOutcome.NotChecked, (RecheckOutcome?)RecheckOutcome.NotChecked),
+            (outcomes["/plants/og-title-copy-b"], outcomes["/plants/og-title-copy-a"]));
+    }
+
     private Dictionary<string, RecheckOutcome?> Outcomes(string path, int recheck) =>
         RecheckReader.ReadRows(path, recheck, null, [RecheckRole.Judged], 0, 100)!.Rows
             .ToDictionary(row => row.Url[(crawls.Server.BaseUri.AbsoluteUri.Length - 1)..], row => row.Outcome);

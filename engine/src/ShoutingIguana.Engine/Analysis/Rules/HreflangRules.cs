@@ -10,10 +10,16 @@ namespace ShoutingIguana.Engine.Analysis.Rules;
 /// as with Google, and only on indexable pages: Google reads hreflang on canonical pages, so a canonicalised variant
 /// that repeats its canonical's set is doing the recommended thing.
 /// </summary>
-internal sealed class HreflangRules(UrlTable urls) : IPageRule, ISiteRule
+internal sealed class HreflangRules(UrlTable urls, Func<int, string?>? readUrl = null) : IPageRule, ISiteRule
 {
     /// <summary>Every declared alternate as (page &lt;&lt; 32 | alternate): 8 bytes each, sorted for the return-link lookups.</summary>
     private readonly List<long> _alternates = [];
+
+    // Batch 8: the code each page names each alternate under, the codes each page names itself under, and every page
+    // named as an alternate.
+    private readonly Dictionary<long, string> _codes = [];
+    private readonly Dictionary<int, List<string>> _selfCodes = [];
+    private readonly HashSet<int> _named = [];
 
     public IEnumerable<IssueHit> Check(AnalyzedPage page)
     {
@@ -65,6 +71,25 @@ internal sealed class HreflangRules(UrlTable urls) : IPageRule, ISiteRule
             yield return new IssueHit(IssueCatalog.HREFLANG_MISSING_X_DEFAULT, page.UrlId);
         }
 
+        if (HeaderMismatch(honoured) is { } mismatch)
+        {
+            yield return new IssueHit(IssueCatalog.HREFLANG_HEADER_MISMATCH, page.UrlId, mismatch);
+        }
+
+        // Its own code, against <html lang>, both written well: Google reads neither for the language, so it's a sign one is wrong.
+        var selfCode = honoured.FirstOrDefault(hreflang => hreflang.Url == page.Url && !hreflang.Language.Equals("x-default", StringComparison.OrdinalIgnoreCase))?.Language;
+        var lang = page.Facts.Language?.Trim();
+        if (selfCode is not null && lang is not null && HreflangCodes.IsValid(selfCode) && HtmlRules.IsLanguageTag(lang) &&
+            !string.Equals(selfCode.Split('-')[0], lang.Split('-')[0], StringComparison.OrdinalIgnoreCase))
+        {
+            yield return new IssueHit(IssueCatalog.HREFLANG_LANG_MISMATCH, page.UrlId, $"hreflang {selfCode}, lang {lang}");
+        }
+
+        if (honoured.All(hreflang => hreflang.Url == page.Url))
+        {
+            yield return new IssueHit(IssueCatalog.HREFLANG_SELF_ONLY, page.UrlId);
+        }
+
         TargetSet broken = new(), nonIndexable = new();
         foreach (var target in HonouredTargets(page))
         {
@@ -100,7 +125,7 @@ internal sealed class HreflangRules(UrlTable urls) : IPageRule, ISiteRule
     }
 
     /// <summary>Of its checks, the one across pages: the rest it reports page by page, from <see cref="Check"/>.</summary>
-    public IReadOnlyList<IssueDefinition> Checks { get; } = [IssueCatalog.HREFLANG_MISSING_RETURN];
+    public IReadOnlyList<IssueDefinition> Checks { get; } = [IssueCatalog.HREFLANG_MISSING_RETURN, IssueCatalog.HREFLANG_INCONSISTENT_CODE, IssueCatalog.HREFLANG_UNLINKED];
 
     public void Observe(AnalyzedPage page)
     {
@@ -112,6 +137,19 @@ internal sealed class HreflangRules(UrlTable urls) : IPageRule, ISiteRule
         foreach (var target in HonouredTargets(page).Distinct())
         {
             _alternates.Add(Pair(page.UrlId, target));
+            _named.Add(target);
+        }
+
+        foreach (var link in page.Links.Where(link => link.Kind == LinkKind.Hreflang && !link.Flags.HasFlag(LinkFlags.OutsideHead) && link.Text is not null))
+        {
+            if (link.ToId == page.UrlId)
+            {
+                (_selfCodes.TryGetValue(page.UrlId, out var codes) ? codes : _selfCodes[page.UrlId] = []).Add(link.Text!);
+            }
+            else
+            {
+                _codes.TryAdd(Pair(page.UrlId, link.ToId), link.Text!);
+            }
         }
     }
 
@@ -139,8 +177,91 @@ internal sealed class HreflangRules(UrlTable urls) : IPageRule, ISiteRule
                     $"{RuleText.Count(missing.Count, "alternate doesn't", "alternates don't")} link back", missing.First) { Targets = missing.Ids };
             }
 
+            if (Inconsistent(pageId, start, end) is { } inconsistent)
+            {
+                yield return inconsistent;
+            }
+
             start = end;
         }
+
+        // A version no <a href> from a page the analysis read leads to, and no sitemap entry lists. Something else may reach
+        // it (a redirect, a canonical, a refresh), so the detail says what isn't there, not what is.
+        foreach (var named in _named.Order())
+        {
+            if (urls[named] is { IsInternal: true, IsIndexablePage: true, InSitemap: false } && urls.Inlinks(named) == 0)
+            {
+                yield return new IssueHit(IssueCatalog.HREFLANG_UNLINKED, named, "No link or sitemap entry leads here");
+            }
+        }
+    }
+
+    /// <summary>
+    /// The page's alternates that link back, but under another code than the one the page names them by: "Names /fr/ as
+    /// "fr"; /fr/ calls itself "fr-ca"". A return link that's missing is another check's.
+    /// </summary>
+    private IssueHit? Inconsistent(int pageId, int start, int end)
+    {
+        TargetSet differing = new();
+        string? first = null;
+        for (var index = start; index < end; index++)
+        {
+            var target = (int)_alternates[index];
+            if (!_codes.TryGetValue(Pair(pageId, target), out var named) || !_selfCodes.TryGetValue(target, out var own) ||
+                _alternates.BinarySearch(Pair(target, pageId)) < 0 || own.Contains(named, StringComparer.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            differing.Add(target);
+            if (first is null && readUrl is not null && readUrl(target) is { } targetUrl && readUrl(pageId) is { } pageUrl)
+            {
+                var near = RuleText.Near(targetUrl, pageUrl);
+                first = RuleText.Fit($"Names {near} as \"{named}\"; {near} calls itself \"{own[0]}\"");
+            }
+        }
+
+        return differing.Count == 0
+            ? null
+            : new IssueHit(IssueCatalog.HREFLANG_INCONSISTENT_CODE, pageId,
+                first ?? RuleText.Count(differing.Count, "alternate", "alternates"), differing.First) { Targets = differing.Ids };
+    }
+
+    /// <summary>
+    /// The page's hreflang in its HTML and in its Link header, when it has both and they name different sets: "The HTML
+    /// names 3 versions, the header 2; only in the HTML: de".
+    /// </summary>
+    private static string? HeaderMismatch(IReadOnlyList<HreflangFact> honoured)
+    {
+        static string Key(HreflangFact hreflang) => $"{hreflang.Language.ToLowerInvariant()} {hreflang.Url}";
+        var html = honoured.Where(hreflang => !hreflang.FromHttpHeader).ToList();
+        var header = honoured.Where(hreflang => hreflang.FromHttpHeader).ToList();
+        if (html.Count == 0 || header.Count == 0)
+        {
+            return null;
+        }
+
+        var htmlKeys = html.Select(Key).ToHashSet(StringComparer.Ordinal);
+        var headerKeys = header.Select(Key).ToHashSet(StringComparer.Ordinal);
+        if (htmlKeys.SetEquals(headerKeys))
+        {
+            return null;
+        }
+
+        List<string> parts = [$"The HTML names {RuleText.Count(htmlKeys.Count, "version", "versions")}, the header {headerKeys.Count:N0}"];
+        var onlyHtml = html.Where(hreflang => !headerKeys.Contains(Key(hreflang))).Select(hreflang => hreflang.Language).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var onlyHeader = header.Where(hreflang => !htmlKeys.Contains(Key(hreflang))).Select(hreflang => hreflang.Language).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (onlyHtml.Count > 0)
+        {
+            parts.Add($"only in the HTML: {string.Join(", ", onlyHtml)}");
+        }
+
+        if (onlyHeader.Count > 0)
+        {
+            parts.Add($"only in the header: {string.Join(", ", onlyHeader)}");
+        }
+
+        return RuleText.Fit(string.Join("; ", parts));
     }
 
     /// <summary>
