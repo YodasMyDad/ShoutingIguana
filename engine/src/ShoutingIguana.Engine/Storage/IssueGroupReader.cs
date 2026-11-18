@@ -213,7 +213,7 @@ public static class IssueGroupReader
             SELECT NULL AS detail, NULLIF(related_url_id, {IssueHit.NO_OTHER_URL}) AS related_url_id, COUNT(*) AS pages
             FROM issue_targets WHERE issue = $check GROUP BY issue_targets.related_url_id
             """,
-        IssueGrouping.PageDetail when context.HasIssueTargets && check.FaultOf is not null =>
+        IssueGrouping.PageDetail when context.GroupsByFault(check) =>
             "SELECT fault AS detail, NULL AS related_url_id, COUNT(*) AS pages FROM issue_faults WHERE issue = $check GROUP BY fault",
         IssueGrouping.RelatedUrl =>
             "SELECT NULL AS detail, related_url_id, COUNT(*) AS pages FROM issues WHERE issue = $check GROUP BY related_url_id",
@@ -228,7 +228,7 @@ public static class IssueGroupReader
     {
         IssueGrouping.RelatedUrl when context.HasIssueTargets =>
             $"SELECT NULL AS detail, NULLIF(related_url_id, {IssueHit.NO_OTHER_URL}) AS related_url_id, url_id FROM issue_targets WHERE issue = $check",
-        IssueGrouping.PageDetail when context.HasIssueTargets && check.FaultOf is not null =>
+        IssueGrouping.PageDetail when context.GroupsByFault(check) =>
             "SELECT fault AS detail, NULL AS related_url_id, url_id FROM issue_faults WHERE issue = $check",
         IssueGrouping.RelatedUrl => "SELECT NULL AS detail, related_url_id, url_id FROM issues WHERE issue = $check",
         _ => "SELECT detail, related_url_id, url_id FROM issues WHERE issue = $check"
@@ -269,8 +269,8 @@ public static class IssueGroupReader
                 return new IssueGroupKey(null, group == IssueHit.NO_OTHER_URL ? null : group);
             case IssueGrouping.RelatedUrl:
                 return new IssueGroupKey(null, relatedUrlId);
-            case IssueGrouping.PageDetail when context.HasIssueTargets && check.FaultOf is { } faultOf:
-                return detail is null ? null : new IssueGroupKey(faultOf(detail), null);
+            case IssueGrouping.PageDetail when context.GroupsByFault(check):
+                return detail is null ? null : new IssueGroupKey(check.FaultOf!(detail), null);
             default:
                 return new IssueGroupKey(detail, relatedUrlId);
         }

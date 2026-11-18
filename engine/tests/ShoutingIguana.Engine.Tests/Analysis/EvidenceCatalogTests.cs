@@ -30,9 +30,19 @@ public sealed class EvidenceCatalogTests
                 check.Id);
         }
 
-        Assert.Equal(51, IssueCatalog.All.Count(check => check.Evidence.Count > 0));
+        Assert.Equal(50, IssueCatalog.All.Count(check => check.Evidence.Count > 0));
         Assert.Equal(42, IssueCatalog.All.Count(check => check.TargetFacts.Count > 0));
         Assert.All(IssueCatalog.All.Where(check => check.References == IssueReferences.Targets), check => Assert.NotEmpty(check.TargetFacts));
+    }
+
+    /// <summary>
+    /// A heading too long may be an H2: the page's H1 beside it would be the wrong heading, so no column shows one, and the
+    /// detail quotes the heading at fault (the real-site audit's case).
+    /// </summary>
+    [Fact]
+    public void AHeadingTooLongShowsNoH1Column()
+    {
+        Assert.Empty(IssueCatalog.HEADING_TOO_LONG.Evidence);
     }
 
     [Fact]

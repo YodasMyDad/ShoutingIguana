@@ -49,7 +49,7 @@ public sealed class AnalysisFreshnessTests
     [Fact]
     public void AnAnalysisFromBeforeTheNewChecksIsOutOfDate()
     {
-        Assert.Equal(15, AnalysisFreshness.VERSION);
+        Assert.Equal(16, AnalysisFreshness.VERSION);
         Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 12 }, CRAWLED, new AnalysisSettings()));
     }
 
@@ -72,7 +72,18 @@ public sealed class AnalysisFreshnessTests
     public void AnAnalysisFromBeforeOneNoteForEachReasonIsOutOfDate()
     {
         Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 14 }, CRAWLED, new AnalysisSettings()));
-        Assert.Empty(AnalysisFreshness.Check(Current() with { AnalysisVersion = 15 }, CRAWLED, new AnalysisSettings()));
+    }
+
+    /// <summary>
+    /// Version 16 quotes in a detail what the check found (the heading too long or skipped to, the repeated share tags'
+    /// values, which JSON-LD block failed and where), and groups three checks by the fault their detail shows. An analysis
+    /// 15 stored is out of date.
+    /// </summary>
+    [Fact]
+    public void AnAnalysisFromBeforeTheQuotedDetailsIsOutOfDate()
+    {
+        Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 15 }, CRAWLED, new AnalysisSettings()));
+        Assert.Empty(AnalysisFreshness.Check(Current() with { AnalysisVersion = 16 }, CRAWLED, new AnalysisSettings()));
     }
 
     [Fact]
