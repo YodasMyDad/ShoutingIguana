@@ -156,7 +156,7 @@ function readCheckSort(value: unknown): Settings['checkSort'] {
   return {
     advanced: oneOf(
       stored.advanced,
-      ['fixFirst', 'count', 'points', 'severity', 'category'],
+      ['fixFirst', 'count', 'points', 'severity', 'category', 'change'],
       DEFAULT_SETTINGS.checkSort.advanced,
     ),
     simple: oneOf(stored.simple, ['fixFirst', 'points', 'count'], DEFAULT_SETTINGS.checkSort.simple),

@@ -4,7 +4,10 @@
 // - skipped checks are always listed, in their category, with their reason: hiding them would read as clean;
 // - checks that passed are listed only when asked for, and each category says how many passed;
 // - the severity and text filters narrow what's listed, and hidden checks stay out unless shown.
+import type { CheckChange } from '../../api/fixLoop';
 import type { Analysis, Check, CheckCategory, Checks, ClearedCheck, Severity } from '../../api/types';
+import { CHANGED_STATES, countDrop } from '../../changes/changes';
+import type { ChangeFilterSearch } from '../../routing/search';
 import { formatCount, formatCountOf } from '../../lib/format';
 import { SEVERITIES, type CheckOutcome } from '../../ui/severity';
 
@@ -43,7 +46,7 @@ export interface CheckCategoryEntry {
  * The order the checks list is in: the engine's order to fix them (the default, as Overview's Fix first), the most URLs
  * flagged, the most points off the score, by severity, or by category in catalog order (the list as it first was).
  */
-export type CheckSort = 'fixFirst' | 'count' | 'points' | 'severity' | 'category';
+export type CheckSort = 'fixFirst' | 'count' | 'points' | 'severity' | 'category' | 'change';
 
 /** The orders Simple's What to fix offers within each of its parts, which are the severities already. */
 export type PlainCheckSort = 'fixFirst' | 'points' | 'count';
@@ -54,6 +57,8 @@ export const CHECK_SORTS: readonly { value: CheckSort; label: string }[] = [
   { value: 'points', label: 'Most points' },
   { value: 'severity', label: 'Severity' },
   { value: 'category', label: 'Category' },
+  // The fix loop: offered only while the crawl is compared with another.
+  { value: 'change', label: 'Change' },
 ];
 
 /** How the list is ordered, and what the order goes by. */
@@ -63,6 +68,8 @@ export interface CheckListOrder {
   fixFirst?: readonly string[] | null | undefined;
   /** Points off the score by check id (the score's lines); a check without a line takes none. */
   points?: ReadonlyMap<string, number> | undefined;
+  /** The fix loop: each check's change since the crawl compared with, which `change` sorts by. */
+  changes?: ReadonlyMap<string, CheckChange> | null | undefined;
 }
 
 export interface CheckListFilters {
@@ -80,6 +87,21 @@ export interface CheckListFilters {
   showHidden: boolean;
   /** Checks the user hid. */
   hidden: ReadonlySet<string>;
+  /**
+   * The fix loop: each check's change since the crawl compared with. A check fixed since then (found nothing now) is
+   * listed apart from those that passed, under `fixedTitle` ("Fixed since 17 Oct").
+   */
+  changes?: ReadonlyMap<string, CheckChange> | null | undefined;
+  fixedTitle?: string | undefined;
+  /** Only the checks that moved this way, or any way (`changed`). */
+  change?: ChangeFilterSearch | undefined;
+}
+
+/** Whether a check's change is what the change filter keeps. */
+function keptByChange(change: CheckChange | undefined, filter: ChangeFilterSearch | undefined): boolean {
+  if (!filter) return true;
+  if (!change) return false;
+  return filter === 'changed' ? CHANGED_STATES.includes(change.state) : change.state === filter;
 }
 
 export interface CheckList {
@@ -377,11 +399,16 @@ export function sortChecks(entries: readonly CheckEntry[], order: CheckListOrder
     return severity(a) - severity(b) || (b.count ?? 0) - (a.count ?? 0);
   };
   const points = (entry: CheckEntry) => order.points?.get(entry.check.id) ?? 0;
+  const drop = (entry: CheckEntry) => {
+    const change = order.changes?.get(entry.check.id);
+    return change ? countDrop(change) : 0;
+  };
   const compare: Record<Exclude<CheckSort, 'category'>, (a: CheckEntry, b: CheckEntry) => number> = {
     fixFirst,
     count: (a, b) => (b.count ?? 0) - (a.count ?? 0) || fixFirst(a, b),
     points: (a, b) => points(b) - points(a) || fixFirst(a, b),
     severity: (a, b) => severity(a) - severity(b) || fixFirst(a, b),
+    change: (a, b) => drop(b) - drop(a) || fixFirst(a, b),
   };
   return [...entries.filter(found).sort(compare[order.sort]), ...entries.filter((entry) => !found(entry))];
 }
@@ -398,16 +425,21 @@ const SORTED_PARTS: Record<CheckOutcome, string> = {
  * A sorted list's parts: one of the checks that found issues, in the order asked for, or one a severity when sorted by
  * severity; then the skipped checks and the ones that passed, each in catalog order.
  */
-function sortedParts(listed: readonly CheckEntry[], order: CheckListOrder): CheckCategoryEntry[] {
+function sortedParts(
+  listed: readonly CheckEntry[],
+  order: CheckListOrder,
+  fixed: ReadonlySet<string>,
+  fixedTitle: string,
+): CheckCategoryEntry[] {
   const parts = new Map<string, CheckCategoryEntry>();
   for (const entry of sortChecks(listed, order)) {
     const found = entry.outcome !== 'passed' && entry.outcome !== 'skipped';
-    const key = found && order.sort !== 'severity' ? 'found' : entry.outcome;
+    const key = fixed.has(entry.check.id) ? 'fixed' : found && order.sort !== 'severity' ? 'found' : entry.outcome;
     let part = parts.get(key);
     if (!part) {
       part = {
         id: `sorted-${key}`,
-        title: key === 'found' ? 'Found issues' : SORTED_PARTS[entry.outcome],
+        title: key === 'found' ? 'Found issues' : key === 'fixed' ? fixedTitle : SORTED_PARTS[entry.outcome],
         passed: 0,
         entries: [],
       };
@@ -415,7 +447,7 @@ function sortedParts(listed: readonly CheckEntry[], order: CheckListOrder): Chec
     }
     part.entries.push(entry);
   }
-  const rank = ['found', 'error', 'warning', 'notice', 'skipped', 'passed'];
+  const rank = ['found', 'error', 'warning', 'notice', 'fixed', 'skipped', 'passed'];
   return [...parts.entries()].sort(([a], [b]) => rank.indexOf(a) - rank.indexOf(b)).map(([, part]) => part);
 }
 
@@ -451,25 +483,33 @@ export function buildCheckList(
   let passedCount = 0;
   let unfiltered = 0;
   const matching: CheckEntry[] = [];
+  // The fix loop: checks that found nothing now and something then are fixed, listed apart from those that passed.
+  const fixed = new Set(
+    entries
+      .filter((entry) => entry.outcome === 'passed' && filters.changes?.get(entry.check.id)?.state === 'fixed')
+      .map((entry) => entry.check.id),
+  );
   for (const entry of entries) {
     const category = categories.get(entry.check.category);
     if (!category) continue;
+    const isFixed = fixed.has(entry.check.id);
     // The text and category filters together: what the severity then chooses among.
     const text = inCategory(entry) && matchesText(entry, category.title, words);
-    if (text && severities.has(entry.check.severity)) matching.push(entry);
-    if (entry.outcome === 'passed' && !entry.hidden) {
+    const moved = keptByChange(filters.changes?.get(entry.check.id), filters.change);
+    if (text && moved && severities.has(entry.check.severity)) matching.push(entry);
+    if (entry.outcome === 'passed' && !entry.hidden && !isFixed) {
       category.passed++;
       passedCount++;
     }
-    // Shown at all: found and skipped checks always, passed ones when asked for, hidden ones when shown.
-    const listed = entry.outcome !== 'passed' || filters.showPassed;
+    // Shown at all: found, skipped and fixed checks always, passed ones when asked for, hidden ones when shown.
+    const listed = entry.outcome !== 'passed' || isFixed || filters.showPassed;
     if (!listed) continue;
     if (entry.hidden && !filters.showHidden) {
-      if (text && severities.has(entry.check.severity)) hiddenCount++;
+      if (text && moved && severities.has(entry.check.severity)) hiddenCount++;
       continue;
     }
     unfiltered++;
-    if (!text || !severities.has(entry.check.severity)) continue;
+    if (!text || !moved || !severities.has(entry.check.severity)) continue;
     category.entries.push(entry);
   }
 
@@ -483,7 +523,9 @@ export function buildCheckList(
       ? byCategory
       : sortedParts(
           byCategory.flatMap((category) => category.entries),
-          view,
+          { ...view, changes: view.changes ?? filters.changes },
+          fixed,
+          filters.fixedTitle ?? 'Fixed',
         );
   const visible = shown.flatMap((category) => category.entries);
   return {

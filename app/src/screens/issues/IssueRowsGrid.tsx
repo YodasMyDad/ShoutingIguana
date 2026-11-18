@@ -22,6 +22,15 @@ import { IssuePageMenu } from './IssuePageMenu';
 import { WhereFoundLine } from './WhereFoundLine';
 import { referencesOf } from './whereFound';
 import { evidenceFrameClass } from './evidenceFrame';
+import { periodLabel, rowChangeCell, type ComparedPeriod } from '../compare/changeCell';
+
+/** The fix loop: the rows compared with another crawl, each with how it stood then. */
+export interface RowsCompare {
+  compareWith: string;
+  period: ComparedPeriod;
+}
+
+const CHANGE_WIDTH = 132;
 
 /** An issue's identity among a check's rows: a URL can be flagged more than once, by detail or by related URL. */
 function issueRowKey(row: IssueRow): string {
@@ -55,6 +64,8 @@ export interface IssueRowsGridProps {
   onInspect: (urlId: number) => void;
   /** While the inspector is open: the URL under the grid's cursor, which it follows. */
   onFollow?: ((urlId: number) => void) | undefined;
+  /** The fix loop: a column of how each row stood in the crawl compared with. Left out, none. */
+  compare?: RowsCompare | null | undefined;
 }
 
 /**
@@ -72,7 +83,9 @@ export function IssueRowsGrid({
   onSortChange,
   onInspect,
   onFollow,
+  compare = null,
 }: IssueRowsGridProps) {
+  const compareWith = compare?.compareWith ?? null;
   const { rowHeight, headerHeight } = useGridMetrics();
   const [measure, width] = useElementWidth();
   // The URL, the detail, the check's evidence and what orders the rows: one key per set, so a check's own are cached.
@@ -80,13 +93,25 @@ export function IssueRowsGrid({
   const extra = useMemo(() => asked.filter((id) => id !== 'url' && id !== 'detail'), [asked]);
   const catalogue = useQuery(urlColumnsQuery()).data;
   const queryKey = useMemo(
-    () => [...queryKeys.issueRowsGrid(crawlId, check.id, sort), asked] as const,
-    [crawlId, check.id, sort, asked],
+    () => [...queryKeys.issueRowsGrid(crawlId, check.id, sort), asked, compareWith ?? 'none'] as const,
+    [crawlId, check.id, sort, asked, compareWith],
   );
   const fetchPage = useCallback(
     (offset: number, limit: number, signal: AbortSignal) =>
-      api.issueRows(crawlId, check.id, { columns: asked, filters: [], sort: [...sort], offset, limit }, signal),
-    [crawlId, check.id, sort, asked],
+      api.issueRows(
+        crawlId,
+        check.id,
+        {
+          columns: asked,
+          filters: [],
+          sort: [...sort],
+          offset,
+          limit,
+          ...(compareWith ? { compareWith } : {}),
+        },
+        signal,
+      ),
+    [crawlId, check.id, sort, asked, compareWith],
   );
   const rows = usePagedRows<IssueRow>({ queryKey, fetchPage, rowHeight });
   const handoff = useHeaderHandoff(sort);
@@ -105,7 +130,7 @@ export function IssueRowsGrid({
   // title, a chain) share the rest, so a narrow window keeps every figure in view rather than scrolling to it.
   const words = drawn.filter((column) => !column.numeric).length;
   const fixed = drawn.filter((column) => column.numeric).reduce((sum, column) => sum + column.width, 0);
-  const available = (width ?? 720) - fixed - whereWidth - FRAME_SLACK;
+  const available = (width ?? 720) - fixed - whereWidth - (compare ? CHANGE_WIDTH : 0) - FRAME_SLACK;
   // Where the usual widths don't fit, the words take less: a figure is never scrolled out of view for them.
   const usual = extra.length > 1 ? DETAIL_WITH_EVIDENCE_WIDTH : DETAIL_WIDTH;
   const tight = words > 0 && available < usual + MIN_SHARED_URL_WIDTH + MIN_WORDS_WIDTH * words;
@@ -146,6 +171,22 @@ export function IssueRowsGrid({
         text: (row) => row.detail ?? '',
       },
       ...evidenceColumns,
+      // The fix loop: how the row stood in the crawl compared with (Still, New, New URL, Not compared).
+      ...(compare
+        ? [
+            {
+              id: 'change',
+              header: periodLabel(compare.period),
+              width: CHANGE_WIDTH,
+              cell: (row: IssueRow) => {
+                if (!row.change) return <span className="text-text-muted">–</span>;
+                const cell = rowChangeCell(row.change, compare.period);
+                return <span title={cell.title}>{cell.shown}</span>;
+              },
+              text: (row: IssueRow) => (row.change ? rowChangeCell(row.change, compare.period).shown : ''),
+            },
+          ]
+        : []),
       // Where each is found (or what each page names): read for the rows drawn, a page of them in one request.
       ...(references === 'none'
         ? []
@@ -167,7 +208,7 @@ export function IssueRowsGrid({
             },
           ]),
     ];
-  }, [sort, urlWidth, detailWidth, evidenceColumns, siteOrigin, references, crawlId, check]);
+  }, [sort, urlWidth, detailWidth, evidenceColumns, siteOrigin, references, crawlId, check, compare]);
   // The columns as the user laid them out (resized, moved, pinned), kept for this grid with the preferences.
   const laid = useColumnLayout('issues.rows', columns);
 
