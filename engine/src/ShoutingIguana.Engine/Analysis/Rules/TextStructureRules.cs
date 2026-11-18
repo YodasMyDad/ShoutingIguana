@@ -41,8 +41,9 @@ internal sealed class TextStructureRules(AnalysisSettings settings) : IPageRule
             .FirstOrDefault(heading => RuleText.Length(heading.Text) > settings.HeadingMaxLength);
         if (tooLong is not null)
         {
-            yield return new IssueHit(IssueCatalog.HEADING_TOO_LONG, page.UrlId,
-                $"H{tooLong.Level} of {RuleText.Over(RuleText.Characters(RuleText.Length(tooLong.Text)), settings.HeadingMaxLength)}");
+            // The heading itself, as much as fits: the one to shorten may be an H2, which nothing else on the row shows.
+            var measured = $"H{tooLong.Level} of {RuleText.Over(RuleText.Characters(RuleText.Length(tooLong.Text)), settings.HeadingMaxLength)}";
+            yield return new IssueHit(IssueCatalog.HEADING_TOO_LONG, page.UrlId, $"{measured}: {RuleText.Quote(tooLong.Text, RuleText.DETAIL_MAX - measured.Length - 4)}");
         }
 
         if (facts.WordCount >= settings.H2MinWords && headings.All(heading => heading.Level != 2))

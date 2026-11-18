@@ -1236,15 +1236,14 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition HEADING_TOO_LONG = new("heading-too-long", IssueCategory.Headings, IssueSeverity.Notice,
         "H1 or H2 over 70 characters",
-        """This indexable page's first H1, or one of its H2s, is longer than 70 characters (the default, which can be changed in the analysis settings). The detail gives the first, its level and its length.""",
+        """This indexable page's first H1, or one of its H2s, is longer than 70 characters (the default, which can be changed in the analysis settings). The detail gives the first: its level, its length and its text.""",
         """Shorten the heading to what the section is about, and move the rest into the text below it.""")
     {
         Why = """A heading is read as a label: a long one is harder to scan, and on a phone it wraps over several lines. Search engines read it whole, so this is about readers, not ranking.""",
         LearnMore = "https://www.w3.org/WAI/tutorials/page-structure/headings/",
         Subject = IssueSubject.Page,
         Recheck = [RecheckKind.Urls],
-        Grouping = IssueGrouping.None,
-        Evidence = ["h1"]
+        Grouping = IssueGrouping.None
     };
 
     public static readonly IssueDefinition H2_MISSING = new("h2-missing", IssueCategory.Headings, IssueSeverity.Notice,
