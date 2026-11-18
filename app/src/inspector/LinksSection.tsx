@@ -70,6 +70,27 @@ const POSITION_WIDTH = 104;
 const FOLLOW_WIDTH = 144;
 const MIN_URL_WIDTH = 240;
 const FRAME_SLACK = 24;
+/** One column a fact needs this much room: narrower (the inspector docked at the side), each link is stacked. */
+const WIDE_LAYOUT_WIDTH =
+  MIN_URL_WIDTH + STATUS_WIDTH + TEXT_WIDTH + KIND_WIDTH + POSITION_WIDTH + FOLLOW_WIDTH + FRAME_SLACK;
+/** The least a stacked link's column is given: with less, the grid scrolls. */
+const MIN_STACKED_WIDTH = 160;
+/** A stacked row's second line, beside the grid's row height. */
+const STACKED_EXTRA_HEIGHT = 16;
+
+/**
+ * What a link is, after its URL on a stacked row: its anchor or alt text (or that it has none), where on the page it
+ * is, its kind where it isn't a hyperlink, and its follow state where it isn't simply followed.
+ */
+function stackedFacts(row: LinkRow): { text: string | null; rest: string } {
+  const follow = followWords(row);
+  const rest = [
+    wordFor(POSITION_WORDS, row.position),
+    row.kind !== 'hyperlink' ? wordFor(KIND_WORDS, row.kind) : null,
+    follow && follow !== 'Followed' ? follow : null,
+  ].filter((part): part is string => part !== null && part !== '');
+  return { text: row.text ?? null, rest: rest.join(' · ') };
+}
 
 /**
  * The links to the URL, or from it: a server-paged grid of the other end of each, with its status, the anchor or alt
@@ -82,8 +103,13 @@ export function LinksSection({ direction }: { direction: LinkDirection }) {
   const item = useQuery(crawlQuery(crawlId)).data;
   const linkColumns = useQuery(linkColumnsQuery()).data;
   const ownUrl = useQuery(urlDetailQuery(crawlId, urlId)).data?.url;
-  const { rowHeight, headerHeight } = useGridMetrics();
+  const { rowHeight: gridRowHeight, headerHeight } = useGridMetrics();
   const [measure, width] = useElementWidth();
+  // Docked at the side, one column a fact would scroll sideways past the anchor and the position: each link is then
+  // its URL over what it is (its anchor, where it is), beside its status, on a row of two lines. A width of 0 is no
+  // layout at all (a hidden panel, a test's page): the wide grid stands.
+  const stacked = width !== null && width > 0 && width < WIDE_LAYOUT_WIDTH;
+  const rowHeight = stacked ? gridRowHeight + STACKED_EXTRA_HEIGHT : gridRowHeight;
   const [kind, setKind] = useState<KindChoice>(() => chosenLinkKind(direction));
   const kinds = useMemo<LinkKind[]>(() => (kind === 'all' ? [] : [kind]), [kind]);
 
@@ -145,67 +171,114 @@ export function LinksSection({ direction }: { direction: LinkDirection }) {
     MIN_URL_WIDTH,
     (width ?? 0) - STATUS_WIDTH - TEXT_WIDTH - KIND_WIDTH - POSITION_WIDTH - FOLLOW_WIDTH - FRAME_SLACK,
   );
+  const stackedWidth = Math.max(MIN_STACKED_WIDTH, (width ?? 0) - STATUS_WIDTH - FRAME_SLACK);
   const columns = useMemo<GridColumn<LinkRow>[]>(
-    () => [
-      {
-        id: 'url',
-        header: words.url,
-        width: urlWidth,
-        cell: (row) => (
-          <Url
-            url={row.url}
-            siteOrigin={siteOrigin}
-            tabbable={false}
-            onGo={() => walk(row.id)}
-            // An outlink to a file the page loads (an image, a script) is named by its file.
-            label={direction === 'outlinks' && row.kind && RESOURCE_LINK_KINDS.has(row.kind) ? 'file' : 'address'}
-          />
-        ),
-        text: (row) => row.url,
-      },
-      {
-        id: 'status',
-        header: 'Status',
-        width: STATUS_WIDTH,
-        cell: (row) => (
-          <StatusCode code={row.statusCode} reason={row.statusCode === null ? linkStatusWords(row) : undefined} />
-        ),
-        text: linkStatusWords,
-      },
-      {
-        id: 'text',
-        header: 'Anchor or alt text',
-        width: TEXT_WIDTH,
-        cell: (row) =>
-          row.text ? <span title={row.text}>{row.text}</span> : <span className="text-text-muted">None</span>,
-        text: (row) => row.text ?? '',
-      },
-      {
-        id: 'kind',
-        header: 'Kind',
-        width: KIND_WIDTH,
-        cell: (row) => wordFor(KIND_WORDS, row.kind),
-        text: (row) => wordFor(KIND_WORDS, row.kind),
-      },
-      {
-        id: 'position',
-        header: 'Position',
-        width: POSITION_WIDTH,
-        cell: (row) => wordFor(POSITION_WORDS, row.position),
-        text: (row) => wordFor(POSITION_WORDS, row.position),
-      },
-      {
-        id: 'follow',
-        header: 'Follow',
-        width: FOLLOW_WIDTH,
-        cell: (row) => followWords(row) || <span className="text-text-muted">–</span>,
-        text: followWords,
-      },
-    ],
-    [words.url, urlWidth, siteOrigin, walk, direction],
+    () =>
+      stacked
+        ? [
+            {
+              id: 'link',
+              header: words.url,
+              width: stackedWidth,
+              cell: (row) => {
+                const facts = stackedFacts(row);
+                return (
+                  <span className="flex min-w-0 flex-col">
+                    <Url
+                      url={row.url}
+                      siteOrigin={siteOrigin}
+                      tabbable={false}
+                      onGo={() => walk(row.id)}
+                      label={
+                        direction === 'outlinks' && row.kind && RESOURCE_LINK_KINDS.has(row.kind) ? 'file' : 'address'
+                      }
+                    />
+                    <span
+                      className="truncate text-12 text-text-secondary"
+                      title={[facts.text ?? 'No text', facts.rest].filter(Boolean).join(' · ')}
+                    >
+                      {facts.text ? <span className="text-text">{facts.text}</span> : 'No text'}
+                      {facts.rest ? ` · ${facts.rest}` : ''}
+                    </span>
+                  </span>
+                );
+              },
+              text: (row) => {
+                const facts = stackedFacts(row);
+                return [row.url, facts.text ?? 'No text', facts.rest].filter(Boolean).join(' · ');
+              },
+            },
+            {
+              id: 'status',
+              header: 'Status',
+              width: STATUS_WIDTH,
+              cell: (row) => (
+                <StatusCode code={row.statusCode} reason={row.statusCode === null ? linkStatusWords(row) : undefined} />
+              ),
+              text: linkStatusWords,
+            },
+          ]
+        : [
+            {
+              id: 'url',
+              header: words.url,
+              width: urlWidth,
+              cell: (row) => (
+                <Url
+                  url={row.url}
+                  siteOrigin={siteOrigin}
+                  tabbable={false}
+                  onGo={() => walk(row.id)}
+                  // An outlink to a file the page loads (an image, a script) is named by its file.
+                  label={direction === 'outlinks' && row.kind && RESOURCE_LINK_KINDS.has(row.kind) ? 'file' : 'address'}
+                />
+              ),
+              text: (row) => row.url,
+            },
+            {
+              id: 'status',
+              header: 'Status',
+              width: STATUS_WIDTH,
+              cell: (row) => (
+                <StatusCode code={row.statusCode} reason={row.statusCode === null ? linkStatusWords(row) : undefined} />
+              ),
+              text: linkStatusWords,
+            },
+            {
+              id: 'text',
+              header: 'Anchor or alt text',
+              width: TEXT_WIDTH,
+              cell: (row) =>
+                row.text ? <span title={row.text}>{row.text}</span> : <span className="text-text-muted">None</span>,
+              text: (row) => row.text ?? '',
+            },
+            {
+              id: 'kind',
+              header: 'Kind',
+              width: KIND_WIDTH,
+              cell: (row) => wordFor(KIND_WORDS, row.kind),
+              text: (row) => wordFor(KIND_WORDS, row.kind),
+            },
+            {
+              id: 'position',
+              header: 'Position',
+              width: POSITION_WIDTH,
+              cell: (row) => wordFor(POSITION_WORDS, row.position),
+              text: (row) => wordFor(POSITION_WORDS, row.position),
+            },
+            {
+              id: 'follow',
+              header: 'Follow',
+              width: FOLLOW_WIDTH,
+              cell: (row) => followWords(row) || <span className="text-text-muted">–</span>,
+              text: followWords,
+            },
+          ],
+    [words.url, urlWidth, stackedWidth, stacked, siteOrigin, walk, direction],
   );
-  // The columns as the user laid them out (resized, moved, pinned), kept for this grid with the preferences.
-  const laid = useColumnLayout('inspector.links', columns);
+  // The columns as the user laid them out (resized, moved, pinned), kept for this grid with the preferences: the
+  // stacked grid's apart, as its columns are others.
+  const laid = useColumnLayout(stacked ? 'inspector.links.stacked' : 'inspector.links', columns);
 
   const chooseKind = (next: KindChoice) => {
     chooseLinkKind(direction, next);
