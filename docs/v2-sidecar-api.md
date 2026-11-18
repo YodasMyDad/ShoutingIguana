@@ -1950,6 +1950,13 @@ snapshot per call, a request given up stops its read, reads queue, and an analys
   URL grid, because the same code reads them: a filter on them is run as a URL grid filter, and a link matches when
   its end is one of the URLs that filter matches. A filter or sort on one that needs the URL summary, without one, is
   refused with `needs-analysis`, the column named as it was asked for (`to.inlinks`).
+- **`check`** (step 3b, a filter, no column) holds **the links a check counts**: each link from a page the check
+  flagged to a URL that page's issue names (the analysis's `issue_targets`). It takes `in` and 1 to 100 check ids, and
+  no group. With `kind` `hyperlink` beside it, `check` in `broken-internal-links` and `broken-external-links` is exactly
+  the links those checks count (the Links screen's "Broken links": no external 403 the check lets go, a DNS failure it
+  counts, and never a redirect hop as the page a link is on), and `links-to-redirects` theirs ("Links to redirects").
+  A crawl whose analysis stored no issue targets (none yet, or an engine's from before them) is refused with
+  `needs-analysis` naming `check`.
 
   | Column | Type | Sorts | Is |
   | --- | --- | --- | --- |
