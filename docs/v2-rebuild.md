@@ -456,12 +456,20 @@ machine):
 Next:
 
 - Merge `ui/3b-recheck-fixes`, then `ui/3b-shopify`, then phase B.
+- **Then the "can I fix it from this?" pass (the owner, 2026-11-18):** every check that fires on copies of the real
+  crawls and on the synthetic site, opened in the app in both modes and judged as a site owner. Does it show where
+  the problem is (the URL, the element or snippet, the page linking to it), the value against the limit, and what to
+  do? "Not just display random data that doesn't help you find where the issues are." Fix whatever fails, before the
+  gates.
 - Then the round's gates on a quiet machine:
   - readbench first (if the links search misses again, it's investigated, not waved through);
   - the full app verify and `e2e:filled`;
   - the stories in forced colours and reduced motion;
   - the release build, `smoke:shell`, the installer and `smoke:tauri`.
 - Then gallery 7 and the owner's look. Any further real crawl or recheck needs the owner's word again.
+- **Last, the owner's plan:** upgrade the owner's install (setup `/S`, only while the app is closed), open the app, and
+  tell the owner what to enter so they add the Jitsunami signature themselves. Then one real signed crawl, together.
+  The signature is never pasted in chat.
 
 1. ~~The installer from `35d4888`, `smoke:tauri`, and the owner's install upgraded with setup `/S` while the app is
    closed.~~ Done.
