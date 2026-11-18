@@ -40,10 +40,12 @@ import {
   plainTitle,
   rowCountWords,
   rowPointsWords,
+  skippedGroupWords,
+  skippedListWords,
 } from './plainWords';
 import { ProblemScreen } from './ProblemScreen';
 import { useKeepsPlace } from './scrollPlace';
-import { plainResults, type PlainResults, type PlatformEntry } from './results';
+import { plainResults, type PlainResults, type PlatformEntry, type SkippedGroup } from './results';
 import { ProblemRow } from './SummaryParts';
 import { useOneFix } from './useOneFix';
 import { showAllHidden, useHiddenChecks } from '../settings/hiddenChecks';
@@ -329,12 +331,18 @@ function FixLists({
   const nothingAbove = results.counts.error + results.counts.warning === 0;
   const [allLooks, setAllLooks] = useState(landed === 'notice');
   const [passedOpen, setPassedOpen] = useState(landed === 'passed');
+  // A reason more than one check couldn't run for lists its checks on demand; landing on the part opens them all.
+  const everySkipped = () => new Set(results.skipped.map(skippedKey));
+  const [skippedOpen, setSkippedOpen] = useState<ReadonlySet<string>>(() =>
+    landed === 'skipped' ? everySkipped() : new Set(),
+  );
   // Landing on a part of the list (a count on the Summary): it opens if it folds, and comes into view with focus.
   const [lastHash, setLastHash] = useState(hash);
   if (hash !== lastHash) {
     setLastHash(hash);
     if (landed === 'notice') setAllLooks(true);
     if (landed === 'passed') setPassedOpen(true);
+    if (landed === 'skipped') setSkippedOpen(everySkipped());
     if (hash.replace(/^#/, '') === FIXED_SECTION) setFixedOpen(true);
   }
   const headings = useRef(new Map<CheckOutcome, HTMLHeadingElement>());
@@ -527,24 +535,55 @@ function FixLists({
           {sectionHead('skipped', results.skippedCount)}
           <Card className="overflow-hidden">
             <PlainCheckList>
-              {results.skipped.flatMap((group) =>
-                group.entries.map((entry) => (
-                  <li key={entry.check.id}>
-                    <PlainCheckRow
-                      asChild
-                      outcome="skipped"
-                      quiet
-                      title={looksForWords(entry.check)}
-                      summary={[group.reason?.plainText ?? group.reason?.text, group.reason?.plainAction]
-                        .filter(Boolean)
-                        .join(' ')}
-                      count="Not checked"
-                    >
-                      <Link to={ROUTE} params={{ crawl: crawlId, check: entry.check.id }} />
-                    </PlainCheckRow>
-                  </li>
-                )),
-              )}
+              {results.skipped.flatMap((group) => {
+                const key = skippedKey(group);
+                const open = skippedOpen.has(key);
+                const many = group.entries.length > 1;
+                const toggle = () =>
+                  setSkippedOpen((current) => {
+                    const next = new Set(current);
+                    if (next.has(key)) next.delete(key);
+                    else next.add(key);
+                    return next;
+                  });
+                // One check: its row says why. More: the reason once, on a row of its own, and their rows on demand.
+                const rows =
+                  !many || open
+                    ? group.entries.map((entry) => (
+                        <li key={entry.check.id} className={many ? 'si-plain-list__nested' : undefined}>
+                          <PlainCheckRow
+                            asChild
+                            outcome="skipped"
+                            quiet
+                            className={many ? 'si-plain-row--nested' : undefined}
+                            title={looksForWords(entry.check)}
+                            summary={many ? undefined : skippedReason(group)}
+                            count="Not checked"
+                          >
+                            <Link to={ROUTE} params={{ crawl: crawlId, check: entry.check.id }} />
+                          </PlainCheckRow>
+                        </li>
+                      ))
+                    : [];
+                return many
+                  ? [
+                      <li key={`reason-${key}`}>
+                        <PlainCheckRow
+                          outcome="skipped"
+                          quiet
+                          title={skippedGroupWords(group.entries.length)}
+                          summary={skippedReason(group)}
+                          count={
+                            <Button variant="ghost" size="sm" icon={ChevronDown} aria-expanded={open} onClick={toggle}>
+                              {skippedListWords(group.entries.length, open)}
+                            </Button>
+                          }
+                        />
+                      </li>,
+                      ...rows,
+                    ]
+                  : rows;
+              })}
             </PlainCheckList>
           </Card>
         </section>
@@ -590,6 +629,14 @@ function FixLists({
       ) : null}
     </>
   );
+}
+
+/** A reason checks couldn't run for, by its code: what keeps its checks' rows open. */
+const skippedKey = (group: SkippedGroup) => group.code ?? '';
+
+/** Why a reason's checks couldn't run, and what would let them, in Simple's words. */
+function skippedReason(group: SkippedGroup): string {
+  return [group.reason?.plainText ?? group.reason?.text, group.reason?.plainAction].filter(Boolean).join(' ');
 }
 
 /** What the site's platform sets, a part a platform ("Shopify"), in the list's order. */
@@ -652,9 +699,15 @@ async function copyWhatToFix(
   if (results.skippedCount > 0) {
     lines.push(`${HEADINGS.skipped} (${formatCount(results.skippedCount)})`);
     for (const group of results.skipped) {
-      for (const entry of group.entries) {
-        lines.push(`- ${looksForWords(entry.check)}: ${group.reason?.plainText ?? group.reason?.text ?? ''}`.trimEnd());
+      const reason = group.reason?.plainText ?? group.reason?.text ?? '';
+      const [only] = group.entries;
+      if (group.entries.length === 1 && only) {
+        lines.push(`- ${looksForWords(only.check)}: ${reason}`.trimEnd());
+        continue;
       }
+      // A reason many share, once, with its checks under it.
+      lines.push(`- ${skippedGroupWords(group.entries.length)}: ${reason}`.trimEnd());
+      for (const entry of group.entries) lines.push(`  - ${looksForWords(entry.check)}`);
     }
   }
   const copied = await copyText(lines.join('\n').trimEnd());

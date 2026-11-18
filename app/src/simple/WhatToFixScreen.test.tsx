@@ -177,11 +177,27 @@ describe.skipIf(TABLE_STUBBED)('What to fix', () => {
     await waitFor(() => expect(main().getByRole('heading', { name: 'Worth a look 22' })).toHaveFocus());
   });
 
+  it('opens every check that couldn’t run when its count is landed on', async () => {
+    await open(`${FIX}#couldnt-check`);
+    await whatToFix();
+    const skipped = within(main().getByRole('region', { name: 'Couldn’t check 27' }));
+    expect(skipped.getAllByRole('link')).toHaveLength(27);
+    expect(skipped.getAllByText(/made with an older version of Shouting Iguana/)).toHaveLength(1);
+  });
+
   it('lists every check that couldn’t run, with its plain reason, and leaves hidden checks out with a line to show them', async () => {
     await open(FIX, GARDEN_ANALYSIS, ['image-too-large']);
     await whatToFix();
     const skipped = within(main().getByRole('region', { name: 'Couldn’t check 27' }));
+    // After the Shopify merge: a reason many share is said once, its checks on demand, never the sentence 24 times.
+    expect(skipped.getByText('24 checks couldn’t run')).toBeVisible();
+    expect(skipped.getByText('2 checks couldn’t run')).toBeVisible();
+    expect(skipped.getAllByText('Not checked')).toHaveLength(1);
+    fireEvent.click(skipped.getByRole('button', { name: 'Show the 24 checks' }));
+    fireEvent.click(skipped.getByRole('button', { name: 'Show the 2 checks' }));
     expect(skipped.getAllByText('Not checked')).toHaveLength(27);
+    expect(skipped.getAllByText(/made with an older version of Shouting Iguana/)).toHaveLength(1);
+    expect(skipped.getByRole('button', { name: 'Hide the 24 checks' })).toHaveAttribute('aria-expanded', 'true');
     expect(main().getByRole('heading', { name: 'Worth fixing 3' })).toBeVisible();
     expect(main().getByText(/1 check is hidden\./)).toBeVisible();
     fireEvent.click(main().getByRole('button', { name: 'Show' }));
@@ -238,6 +254,11 @@ describe.skipIf(TABLE_STUBBED)('What to fix', () => {
       "- Pages or files that can't be found: 9 addresses, 6 points back. Some addresses on your site answer with an error",
     );
     expect(writes[0]).toContain('  - Fixed along with it: Links that lead to broken pages, 5 pages.\n');
+    // A reason many checks share, once, with the checks under it.
+    expect(writes[0]).toMatch(
+      /\n- 24 checks couldn’t run: This site check was made with an older version[^\n]*\n {2}- /,
+    );
+    expect(writes[0]!.match(/made with an older version/g)).toHaveLength(1);
   });
 });
 

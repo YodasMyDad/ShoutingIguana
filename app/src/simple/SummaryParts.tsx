@@ -1,7 +1,7 @@
 import { Link } from '@tanstack/react-router';
-import { ChevronRight, CircleCheck, CircleDashed, Download, FileText } from 'lucide-react';
+import { ChevronDown, ChevronRight, CircleCheck, CircleDashed, Download, FileText } from 'lucide-react';
 import type { PlatformOwner, Score, Severity } from '../api/types';
-import type { ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { formatCount } from '../lib/format';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
@@ -24,10 +24,12 @@ import {
   plainTitle,
   rowCountWords,
   rowPointsWords,
+  skippedGroupWords,
+  skippedListWords,
   skippedTitles,
   summarySentence,
 } from './plainWords';
-import { FIX_FIRST_COUNT, siteWideLead, type PlainResults } from './results';
+import { FIX_FIRST_COUNT, siteWideLead, type PlainResults, type SkippedGroup } from './results';
 import { ScoreRing } from '../ui/ScoreRing';
 import { openedHereState } from './scoreHistory';
 import { platformLines } from './summaryWords';
@@ -346,6 +348,52 @@ function fixFirstJobs(results: PlainResults, score: Score | null): FixRow[] {
   );
 }
 
+/**
+ * A reason checks couldn't run for, with what would let them: one check named before it; more than one counted ("24
+ * checks couldn’t run."), the reason said once, and their names on demand (after the Shopify merge, never two dozen
+ * names run together).
+ */
+function SkippedReason({ group }: { group: SkippedGroup }) {
+  const [open, setOpen] = useState(false);
+  const listId = useId();
+  const reason = [
+    group.reason?.plainText ?? group.reason?.text ?? 'An earlier version didn’t say why.',
+    group.reason?.plainAction,
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const titles = group.entries.map((entry) => looksForWords(entry.check));
+  if (titles.length === 1) {
+    return (
+      <div>
+        <b className="font-medium text-text">{skippedTitles(titles)}.</b> {reason}
+      </div>
+    );
+  }
+  return (
+    <div>
+      <b className="font-medium text-text">{skippedGroupWords(titles.length)}.</b> {reason}{' '}
+      <Button
+        variant="ghost"
+        size="sm"
+        icon={ChevronDown}
+        aria-expanded={open}
+        aria-controls={open ? listId : undefined}
+        onClick={() => setOpen((value) => !value)}
+      >
+        {skippedListWords(titles.length, open)}
+      </Button>
+      {open ? (
+        <ul id={listId} aria-label={`The ${formatCount(titles.length)} checks`} className="mt-1 list-disc pl-5">
+          {group.entries.map((entry) => (
+            <li key={entry.check.id}>{looksForWords(entry.check)}</li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 function worthALookBelow(notices: number): string {
   if (notices === 1) return 'There is 1 thing worth a look below';
   return notices > FIX_FIRST_COUNT
@@ -410,13 +458,7 @@ export function SummaryCards({ crawlId, results }: { crawlId: string; results: P
             {results.skipped.map((group) => (
               <li key={group.code ?? 'unknown'} className="grid grid-cols-(--check-row-columns) gap-2">
                 <SeverityWord severity="skipped" variant="mark" size="sm" className="mt-0.5" />
-                <span>
-                  <b className="font-medium text-text">
-                    {skippedTitles(group.entries.map((entry) => looksForWords(entry.check)))}.
-                  </b>{' '}
-                  {group.reason?.plainText ?? group.reason?.text ?? 'An earlier version didn’t say why.'}{' '}
-                  {group.reason?.plainAction ?? ''}
-                </span>
+                <SkippedReason group={group} />
               </li>
             ))}
           </ul>

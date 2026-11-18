@@ -288,3 +288,16 @@ export function skippedTitles(titles: readonly string[]): string {
     titles.map((title, index) => (index === 0 ? title : title.charAt(0).toLowerCase() + title.slice(1))),
   );
 }
+
+/**
+ * A reason more than one check couldn't run for, said once (after the Shopify merge: never the same sentence a check,
+ * nor two dozen names run together): "24 checks couldn’t run". Its checks are listed on demand.
+ */
+export function skippedGroupWords(count: number): string {
+  return `${formatCount(count)} checks couldn’t run`;
+}
+
+/** The disclosure of a reason's checks: "Show the 24 checks", "Hide the 24 checks". */
+export function skippedListWords(count: number, open: boolean): string {
+  return `${open ? 'Hide' : 'Show'} the ${formatCount(count)} checks`;
+}

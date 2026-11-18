@@ -164,6 +164,26 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
     expect(skipped.getByText(/No sitemap, the list of your pages for search engines, could be read/)).toBeVisible();
   });
 
+  // After the Shopify merge: a reason many checks share is one short line with its checks on demand, never 24 of their
+  // names run together before it.
+  it('says a reason many checks share once, in a short line, with its checks on demand', async () => {
+    await open(GARDEN_ANALYSIS);
+    await site();
+    const skipped = within(main().getByRole('region', { name: 'Couldn’t be checked' }));
+    expect(skipped.getByText('24 checks couldn’t run.')).toBeVisible();
+    expect(skipped.getAllByText(/made with an older version of Shouting Iguana/)).toHaveLength(1);
+    expect(skipped.queryByRole('list', { name: 'The 24 checks' })).toBeNull();
+    const show = skipped.getByRole('button', { name: 'Show the 24 checks' });
+    expect(show).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(show);
+    expect(skipped.getByRole('button', { name: 'Hide the 24 checks' })).toHaveAttribute('aria-expanded', 'true');
+    expect(within(skipped.getByRole('list', { name: 'The 24 checks' })).getAllByRole('listitem')).toHaveLength(24);
+    // Two that share a reason fold the same way; one alone is named, as before.
+    expect(skipped.getByText('2 checks couldn’t run.')).toBeVisible();
+    expect(skipped.getByRole('button', { name: 'Show the 2 checks' })).toBeVisible();
+    expect(skipped.getAllByRole('button', { name: /^Show the/ })).toHaveLength(1);
+  });
+
   it('opens the score’s breakdown on score=1, and Esc closes it and takes it off the address', async () => {
     const router = await open(GARDEN_ANALYSIS);
     await site();
