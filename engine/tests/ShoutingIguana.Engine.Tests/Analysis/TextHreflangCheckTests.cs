@@ -70,7 +70,7 @@ public sealed class TextHreflangCheckTests
         Assert.Equal("H1 → H4: \"Out Of Stock\"", detail);
         Assert.Equal("H1 → H4", IssueCatalog.HEADING_LEVELS_SKIPPED.FaultOf!(detail!));
         Assert.Equal("H1 → H4", IssueCatalog.HEADING_LEVELS_SKIPPED.FaultOf!("H1 → H4"));
-        Assert.Equal(16, IssueCatalog.HEADING_LEVELS_SKIPPED.FaultsSince);
+        Assert.Equal(18, IssueCatalog.HEADING_LEVELS_SKIPPED.FaultsSince);
 
         // A heading with no text has nothing to quote; a long one is cut.
         Assert.Equal("H2 → H4", Detail("<h1>Main</h1><h2>Part</h2><h4></h4>", IssueCatalog.HEADING_LEVELS_SKIPPED));

@@ -32,7 +32,7 @@ public sealed class SocialCheckTests
             IssueCatalog.SOCIAL_TAGS_MULTIPLE);
         Assert.Equal("3 og:title: \"Sofas\" · \"Sofas | Shop\"", detail);
         Assert.Equal("3 og:title", IssueCatalog.SOCIAL_TAGS_MULTIPLE.FaultOf!(detail!));
-        Assert.Equal(16, IssueCatalog.SOCIAL_TAGS_MULTIPLE.FaultsSince);
+        Assert.Equal(18, IssueCatalog.SOCIAL_TAGS_MULTIPLE.FaultsSince);
 
         var long1 = string.Join(' ', Enumerable.Repeat("Garden", 20));
         var long2 = string.Join(' ', Enumerable.Repeat("Bench", 20));

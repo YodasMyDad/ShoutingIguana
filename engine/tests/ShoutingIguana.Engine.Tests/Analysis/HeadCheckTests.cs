@@ -75,7 +75,7 @@ public sealed class HeadCheckTests
         Assert.Equal("2 <head> tags; 3 <body> tags", IssueCatalog.HTML_STRUCTURE_ERRORS.FaultOf!(detail!));
         Assert.Equal("<html> after content; <head> after content", IssueCatalog.HTML_STRUCTURE_ERRORS.FaultOf!("<html> after content (on line 2); <head> after content (on line 2)"));
         Assert.Equal("2 <head> tags; 2 <body> tags", IssueCatalog.HTML_STRUCTURE_ERRORS.FaultOf!("2 <head> tags; 2 <body> tags"));
-        Assert.Equal(16, IssueCatalog.HTML_STRUCTURE_ERRORS.FaultsSince);
+        Assert.Equal(18, IssueCatalog.HTML_STRUCTURE_ERRORS.FaultsSince);
 
         // Content before the page's own head: its <head> tag is the first, after content; a second is the page's second.
         Assert.Equal("2 <head> tags (the second on line 3)", Detail(IssueCatalog.HTML_STRUCTURE_ERRORS, Html(document:
