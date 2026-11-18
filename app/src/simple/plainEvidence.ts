@@ -7,8 +7,9 @@ import type { ImgFacts, IssueTarget, LinkPosition, RedirectChain, TargetEnd, Url
 import type { Check } from '../api/types';
 import type { ShownAt } from '../crawl/evidence';
 import { reasonPhrase } from '../inspector/words';
-import { formatBytes, formatCount, formatMilliseconds } from '../lib/format';
+import { formatBytes, formatCount } from '../lib/format';
 import { sourcePages } from '../screens/issues/whereFound';
+import { plainFetchError, plainFileKind, plainSeconds } from './plainAnswers';
 import { plainDetailWords } from './plainDetails';
 
 /** An address as Simple names it: its path on the site's own origin, else in full. */
@@ -304,12 +305,34 @@ function plainRule(rule: RobotsRule): string {
   return 'The rules file kept the check out';
 }
 
+/** What kind of file an address is, by the URL grid's `type`: "It’s an image". Null for one of no particular kind. */
+const URL_TYPES: Readonly<Record<string, string>> = {
+  page: 'It’s a page',
+  image: 'It’s an image',
+  script: 'It’s a script, code the pages run',
+  stylesheet: 'It’s a style sheet, which sets how the pages look',
+  font: 'It’s a font',
+  media: 'It’s a sound or video file',
+  pdf: 'It’s a PDF',
+};
+
+/** A count of something: "No pages link here", "1 page links here", "4 pages link here". */
+function counting(value: number, none: string, one: string, many: (count: string) => string): string {
+  return value === 0 ? none : value === 1 ? one : many(formatCount(value));
+}
+
 /**
  * One of a page's evidence columns in plain words, for its line under the page in "Where it is": "Main heading:
- * “Sofas”", "The page says “noindex”", "Forwards to /b/, then /new/, which works", "120 words". Null for no value,
- * and for what the line says another way (the title is the page's name; a length is its detail's).
+ * “Sofas”", "The page says “noindex”", "Forwards to /b/, then /new/, which works", "120 words", "2 clicks from the home
+ * page". Null for no value, for what the line says another way (the title is the page's name; a length is its
+ * detail's), and for the page's own address as where it forwards or its main address (`url`, the row's: X1).
  */
-export function plainEvidence(column: string, value: unknown, origin: string | null): string | null {
+export function plainEvidence(
+  column: string,
+  value: unknown,
+  origin: string | null,
+  url: string | null = null,
+): string | null {
   if (value === null || value === undefined || value === '' || SAID_ELSEWHERE.has(column)) return null;
   if (column === 'redirectChain' && typeof value === 'object')
     return plainChain(value as RedirectChain, origin) || null;
@@ -319,13 +342,26 @@ export function plainEvidence(column: string, value: unknown, origin: string | n
       case 'wordCount':
         return value === 1 ? '1 word' : `${formatCount(value)} words`;
       case 'inlinks':
-        return value === 1 ? '1 link to it' : `${formatCount(value)} links to it`;
+        return counting(value, 'No pages link here', '1 link to it', (count) => `${count} links to it`);
+      case 'linkingPages':
+        return counting(value, 'No pages link here', '1 page links here', (count) => `${count} pages link here`);
+      case 'outlinks':
+        return counting(value, 'No links on the page', '1 link on the page', (count) => `${count} links on the page`);
+      case 'depth':
+        return value === 0
+          ? 'It’s the page the check started from'
+          : `${value === 1 ? '1 click' : `${formatCount(value)} clicks`} from the home page`;
       case 'usedOn':
         return value === 1 ? 'Used on 1 page' : `Used on ${formatCount(value)} pages`;
       case 'responseMs':
-        return `Took ${formatMilliseconds(value)} to answer`;
+        // Nothing answered in no time: an address that never answered keeps 0.
+        return value > 0 ? `Checking it took ${plainSeconds(value)}` : null;
+      case 'sizeBytes':
+        // Never a count of bytes: a file under 1 KB is said as that.
+        return `The file is ${value < 1024 ? 'under 1 KB' : formatBytes(value)}`;
       default:
-        return formatCount(value);
+        // A bare number says nothing in Simple.
+        return null;
     }
   }
   if (typeof value !== 'string') return null;
@@ -343,15 +379,19 @@ export function plainEvidence(column: string, value: unknown, origin: string | n
     case 'redirectKind':
       return plainRedirectKind(value);
     case 'canonicalUrl':
-      return `Main address: ${plainAddress(value, origin)}`;
+      return value === url ? null : `Main address: ${plainAddress(value, origin)}`;
     case 'finalUrl':
-      return `Forwards to ${plainAddress(value, origin)}`;
+      return value === url ? null : `Forwards to ${plainAddress(value, origin)}`;
     case 'indexability':
       return value === 'none'
         ? 'Can appear in search results'
         : (plainNotInSearch(value as IndexabilityReason) ?? null);
     case 'fetchError':
-      return value;
+      return plainFetchError(value);
+    case 'type':
+      return URL_TYPES[value] ?? null;
+    case 'contentType':
+      return `The server says it’s ${plainFileKind(value)}`;
     default:
       return value;
   }

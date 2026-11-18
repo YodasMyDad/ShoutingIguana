@@ -5,8 +5,9 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import type { IndexabilityReason } from '../api/grids';
 import { plainDetailWords } from './plainDetails';
-import { plainDetail } from './plainEvidence';
+import { plainDetail, plainEvidence } from './plainEvidence';
 
 const CATALOG = path.join(
   __dirname,
@@ -550,6 +551,76 @@ describe('every check’s detail in plain words', () => {
   });
 });
 
+describe('every check’s evidence in plain words', () => {
+  const VALUES: Readonly<Record<string, readonly unknown[]>> = {
+    type: ['page', 'image', 'script', 'stylesheet', 'font', 'media', 'pdf', 'other'],
+    fetchError: [
+      'An error occurred while sending the request.',
+      'DNS lookup failed',
+      'Could not connect: No connection could be made because the target machine actively refused it. (127.0.0.1:9)',
+      'TLS handshake failed: Cannot determine the frame size or a corrupted frame was received.',
+      'No response within 20 seconds',
+      'Timed out',
+    ],
+    responseMs: [0, 312, 1_200, 20_000],
+    contentType: [
+      'text/javascript',
+      'text/plain; charset=utf-8',
+      'application/octet-stream',
+      'image/webp',
+      'text/html',
+    ],
+    sizeBytes: [2_244_033, 812],
+    depth: [0, 1, 5],
+    inlinks: [0, 1, 12],
+    linkingPages: [0, 1, 4],
+    outlinks: [0, 1, 1_026],
+    wordCount: [1, 1_036],
+    h1: ['Sofas'],
+    title: ['Sofas | Example'],
+    description: ['Garden sofas for every season.'],
+    metaRobots: ['noindex, follow'],
+    xRobotsTag: ['noindex'],
+    language: ['en_GB'],
+    redirectKind: ['httpToHttps,addsWww', 'other'],
+    indexability: ['none', 'noindex', 'canonicalised', 'redirected', 'clientError', 'serverError', 'blockedByRobots'],
+    finalUrl: ['https://example.com/new/', 'https://example.com/old/'],
+    canonicalUrl: ['https://example.com/main/', 'https://example.com/old/'],
+    titleInResults: ['Garden sofas…'],
+    titleWidth: [612],
+    titleLength: [78],
+    descriptionInResults: ['Garden sofas…'],
+    descriptionWidth: [612],
+    descriptionLength: [78],
+    redirectChain: [
+      {
+        hops: [{ id: 2, url: 'https://example.com/b/', statusCode: 301, outcome: 'redirect', via: 'http' }],
+        final: { id: 2, url: 'https://example.com/b/', statusCode: 200, outcome: 'success' },
+        loop: false,
+        tooLong: false,
+      },
+    ],
+    robotsRule: [{ origin: 'https://example.com', reason: 'rule', line: 12, rule: 'Disallow: /cart/' }],
+  };
+
+  it.each(catalogChecks().filter((check) => check.evidence.length > 0))(
+    'says $id’s evidence plainly, with no jargon and no bare value',
+    ({ evidence }) => {
+      for (const column of evidence) {
+        const values = VALUES[column];
+        expect(values, `a representative value of ${column}`).toBeDefined();
+        for (const value of values ?? []) {
+          const said = plainEvidence(column, value, 'https://example.com', 'https://example.com/old/');
+          if (said === null) continue;
+          expect(jargonIn(said), `${column}: ${JSON.stringify(value)} → ${said}`).toEqual([]);
+          // Never the raw value alone: "page", "other", "0", "text/javascript".
+          expect(said, column).not.toBe(String(value));
+        }
+      }
+    },
+  );
+});
+
 describe('a check’s detail, plainly: the forms the fixit audit named', () => {
   const say = (id: string, detail: string) => plainDetail({ id }, { detail });
 
@@ -704,5 +775,63 @@ describe('a check’s detail, plainly: the forms the fixit audit named', () => {
       '5 clicks from the home page; at most 4 is advised',
     );
     expect(say('noindex-near-home', '1 click from the start')).toBe('1 click from the home page');
+  });
+});
+
+describe('a page’s evidence, plainly: no bare values', () => {
+  const ORIGIN = 'https://example.com';
+  const say = (column: string, value: unknown, url: string | null = null) => plainEvidence(column, value, ORIGIN, url);
+
+  it('never says an address forwards to itself, or is its own main address (X1)', () => {
+    expect(say('finalUrl', `${ORIGIN}/p/81`, `${ORIGIN}/p/81`)).toBeNull();
+    expect(say('canonicalUrl', `${ORIGIN}/p/81`, `${ORIGIN}/p/81`)).toBeNull();
+    expect(say('finalUrl', `${ORIGIN}/new/`, `${ORIGIN}/old/`)).toBe('Forwards to /new/');
+    expect(say('canonicalUrl', `${ORIGIN}/main/`, `${ORIGIN}/old/`)).toBe('Main address: /main/');
+  });
+
+  it('says depth, links and linking pages in words (X6)', () => {
+    expect(say('depth', 2)).toBe('2 clicks from the home page');
+    expect(say('depth', 1)).toBe('1 click from the home page');
+    expect(say('depth', 0)).toBe('It’s the page the check started from');
+    expect(say('linkingPages', 0)).toBe('No pages link here');
+    expect(say('linkingPages', 1)).toBe('1 page links here');
+    expect(say('linkingPages', 4)).toBe('4 pages link here');
+    expect(say('inlinks', 0)).toBe('No pages link here');
+    expect(say('outlinks', 1_026)).toBe('1,026 links on the page');
+  });
+
+  it('says what kind of file an address is, never a bare type', () => {
+    expect(say('type', 'page')).toBe('It’s a page');
+    expect(say('type', 'image')).toBe('It’s an image');
+    expect(say('type', 'other')).toBeNull();
+    expect(say('contentType', 'text/javascript')).toBe('The server says it’s a script');
+    expect(say('contentType', 'text/plain; charset=utf-8')).toBe('The server says it’s plain text');
+    expect(say('sizeBytes', 2_244_033)).toBe('The file is 2.1 MB');
+    expect(say('sizeBytes', 812)).toBe('The file is under 1 KB');
+  });
+
+  it('says why an address couldn’t be reached, never the raw error', () => {
+    expect(say('fetchError', 'DNS lookup failed')).toBe('Its site couldn’t be found');
+    expect(say('fetchError', 'An error occurred while sending the request.')).toBe('It couldn’t be reached');
+    expect(
+      say(
+        'fetchError',
+        'Could not connect: No connection could be made because the target machine actively refused it.',
+      ),
+    ).toBe('Its server refused the connection');
+    expect(say('fetchError', 'TLS handshake failed: Cannot determine the frame size.')).toBe(
+      'A secure connection to it couldn’t be made',
+    );
+    expect(say('fetchError', 'Timed out')).toBe('It didn’t answer in time');
+    expect(say('responseMs', 0)).toBeNull();
+    expect(say('responseMs', 1_200)).toBe('Checking it took 1.2 seconds');
+  });
+});
+
+describe('a reason an address isn’t in search results, as a value', () => {
+  it('says each reason plainly', () => {
+    for (const reason of ['noindex', 'canonicalised', 'clientError', 'serverError'] as IndexabilityReason[]) {
+      expect(plainEvidence('indexability', reason, null)).toMatch(/^It can’t appear in search results: /);
+    }
   });
 });
