@@ -7,15 +7,9 @@
   "outOfDate": false,
   "outOfDateReasons": [],
   "notes": [
-    "Sitemap lastmod invalid or in the future wasn\u0027t checked: this crawl was made by an earlier version, which didn\u0027t record what the check needs. Crawl again to check it.",
     "No sitemap could be read, so orphan pages and pages missing from the sitemaps weren\u0027t checked.",
     "The site\u0027s other versions (www or not, http or https) weren\u0027t all checked, so duplicate versions of the site weren\u0027t looked for.",
-    "Near-duplicate content wasn\u0027t checked: this crawl was made by an earlier version, which didn\u0027t record what the check needs. Crawl again to check it.",
-    "9 checks weren\u0027t run: this crawl was made by an earlier version, which didn\u0027t record what they need. Crawl again to run them.",
-    "3 checks weren\u0027t run: this crawl was made by an earlier version, which didn\u0027t record what they need. Crawl again to run them.",
-    "2 checks weren\u0027t run: this crawl was made by an earlier version, which didn\u0027t record what they need. Crawl again to run them.",
-    "4 checks weren\u0027t run: this crawl was made by an earlier version, which didn\u0027t record what they need. Crawl again to run them.",
-    "4 checks weren\u0027t run: this crawl was made by an earlier version, which didn\u0027t record what they need. Crawl again to run them."
+    "24 checks weren\u0027t run: this crawl was made by an earlier version, which didn\u0027t record what they need. Crawl again to run them."
   ],
   "counts": [
     {
