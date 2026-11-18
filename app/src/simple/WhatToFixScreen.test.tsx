@@ -297,6 +297,25 @@ describe.skipIf(TABLE_STUBBED)('What to fix, with what the site’s platform set
     expect(looks.queryByRole('link', { name: /security settings|Cookies your site/ })).toBeNull();
   });
 
+  it('says once, at the top, that Shopify turned pages away, and on no row', async () => {
+    const refused = {
+      host: 'shop.example',
+      signal: 'powered-by: Shopify',
+      notCheckedUnsigned: 8,
+      notCheckedSigned: 0,
+      urlIds: [11, 12, 13, 14, 15, 16, 17, 18],
+      reasons: [],
+    };
+    await open(FIX, GARDEN_ANALYSIS, [], [['GET', /^\/api\/crawls\/[0-9a-f]{16}\/shopify$/, () => json(refused)]]);
+    await whatToFix();
+    const prompts = await main().findAllByText(
+      '8 pages couldn’t be read: Shopify turns away checks without a signature',
+    );
+    expect(prompts).toHaveLength(1);
+    const first = main().getByRole('heading', { level: 2, name: /^Serious/ });
+    expect(prompts[0]!.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('copies what Shopify sets apart, with its reason', async () => {
     const writes: string[] = [];
     Object.defineProperty(navigator, 'clipboard', {

@@ -50,6 +50,7 @@ import { ProblemRow } from './SummaryParts';
 import { useOneFix, useOneFixCovers } from './useOneFix';
 import { showAllHidden, useHiddenChecks } from '../settings/hiddenChecks';
 import { updateSettings, useSettings } from '../settings/settingsStore';
+import { ShopifyPrompt } from '../shopify/ShopifyPrompt';
 import { fixRows, PLAIN_CHECK_SORTS, type FixRow } from './fixRows';
 
 const ROUTE = '/crawls/$crawl/issues/{-$check}';
@@ -261,6 +262,8 @@ function WhatToFix({ crawlId }: { crawlId: string }) {
             </div>
           ) : null}
         </header>
+        {/* Once, at the top: Shopify turned pages away from the whole check (owner's ruling, 2026-11-18). */}
+        <ShopifyPrompt crawlId={crawlId} mode="simple" className="mb-4" />
         {body}
       </div>
     </div>
