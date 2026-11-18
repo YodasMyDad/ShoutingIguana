@@ -88,6 +88,7 @@ import {
   urlQueryColumns,
 } from './urls/urlColumns';
 import { useUrlFilterWords } from './urls/useUrlFilterWords';
+import { RecheckMenuItem } from './rechecks/RecheckMenuItem';
 
 const ROUTE = '/crawls/$crawl/urls';
 
@@ -1005,6 +1006,14 @@ export function UrlsScreen() {
         >
           Show its inlinks in Links
         </MenuItem>
+        {/* The fix loop: the row, or the selection, fetched again into the crawl (at most 1,000). */}
+        <RecheckMenuItem<UrlRow>
+          crawlId={crawlId}
+          count={menuCount}
+          rows={() => rowMenu.state?.menu.rows() ?? Promise.resolve([])}
+          idOf={(row) => row.id}
+          disabled={crawling}
+        />
       </RowMenu>
       <ViewNameDialog
         mode={naming}

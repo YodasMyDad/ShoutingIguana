@@ -259,6 +259,7 @@ export function IssueRowsGrid({
         foundIn={menuRow && references === 'sources' ? linksOfUrl('inlinks', menuRow.id, 'all') : null}
         urlOf={(row) => row.url}
         onInspect={onInspect}
+        recheck={{ checkId: check.id, idOf: (row) => row.id }}
       />
     </div>
   );

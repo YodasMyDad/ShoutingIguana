@@ -10,6 +10,7 @@ import {
   Image as ImageIcon,
   PanelBottom,
   PanelRight,
+  RefreshCw,
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
@@ -62,6 +63,7 @@ import { StructuredDataSection } from './StructuredDataSection';
 import { SummarySection } from './SummarySection';
 import { TYPE_WORDS, depthInBrief } from './words';
 import { useHiddenChecks } from '../settings/hiddenChecks';
+import { isRecheckRunning, startRecheck, useRecheckRun } from '../crawl/recheck';
 
 /** Ctrl+F (Cmd+F on macOS): on the Source tab, the source's search. */
 const FIND = parseChord('mod+f');
@@ -363,6 +365,8 @@ export function Inspector({ crawlId, urlId, onClose }: InspectorProps) {
   }, [state, totalsKnown, inlinks, outlinks, images, choose, urlId, searchRequest, searchFocused, hiddenChecks]);
 
   const refreshing = query.isFetching && !waiting && !crawling;
+  // The fix loop: this URL fetched again into the crawl, and the crawl analysed (not while it runs, nor during a recheck).
+  const rechecking = isRecheckRunning(useRecheckRun(crawlId));
   const compact = dock === 'bottom';
   // Ctrl+F on the Source tab, from its tab, its panel or anywhere in the sheet, searches the source (docs/v2-ui-ia.md,
   // Keyboard, "In the inspector"), never the grid behind. The pane takes the key itself with focus inside it (and
@@ -388,6 +392,14 @@ export function Inspector({ crawlId, urlId, onClose }: InspectorProps) {
         <div className={clsx('flex flex-wrap items-center gap-x-3 px-5', compact ? 'pt-2 pb-1' : 'pt-3 pb-2')}>
           <Kind detail={own} loading={state.status === 'loading'} crawling={crawling} compact={compact} />
           <div className={clsx('ml-auto flex shrink-0 gap-0.5', compact && 'order-3')}>
+            <IconButton
+              label="Recheck this URL"
+              tooltip={rechecking ? 'A recheck of this crawl is running' : 'Recheck this URL'}
+              icon={RefreshCw}
+              size="sm"
+              disabled={crawling || rechecking || notFound || detail === undefined}
+              onClick={() => void startRecheck(crawlId, { urlIds: [urlId] })}
+            />
             <IconButton label="Open in the browser" icon={ExternalLink} size="sm" disabled={!web} onClick={openUrl} />
             <IconButton
               label="Copy the URL"

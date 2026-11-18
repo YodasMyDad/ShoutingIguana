@@ -1031,6 +1031,7 @@ export function IssueGroups({
           menuRow?.kind === 'page' && references === 'sources' ? linksOfUrl('inlinks', menuRow.row.id, 'all') : null
         }
         imagesIn={menuRow?.kind === 'page' && check.category === 'images' ? imagesOfPage(menuRow.row.id) : null}
+        recheck={{ checkId: check.id, idOf: urlIdOf }}
         group={
           menuRow && (menuRow.kind === 'group' || menuRow.kind === 'more')
             ? {
