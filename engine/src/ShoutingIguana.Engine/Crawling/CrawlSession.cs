@@ -79,9 +79,11 @@ internal sealed class CrawlSession
     private readonly Channel<FrontierItem> _internalQueue;
     private readonly Channel<FrontierItem> _externalQueue;
 
-    // A recheck's run (the fix loop): its plan, and how long a site that stops answering is waited for.
+    // A recheck's run (the fix loop): its plan, how long a site that stops answering is waited for, and (tests only)
+    // where it is made to fail.
     private readonly RecheckPlan? _recheck;
     private readonly TimeSpan _giveUpAfter;
+    private readonly Action<RecheckStage>? _atStage;
 
     // Held back with how they ended, which is what gets recorded if their origin is written off before their one more try.
     private readonly ConcurrentQueue<PageRecord> _deferred = new();
@@ -106,10 +108,12 @@ internal sealed class CrawlSession
     private int _rateLimited;
     private string? _rateLimitedHost;
 
-    private CrawlSession(CrawlRequest request, RecheckPlan? recheck, ICrawlObserver observer, ILoggerFactory loggerFactory, TimeProvider timeProvider)
+    private CrawlSession(CrawlRequest request, RecheckPlan? recheck, ICrawlObserver observer, ILoggerFactory loggerFactory, TimeProvider timeProvider,
+        Action<RecheckStage>? atStage = null)
     {
         _request = request;
         _recheck = recheck;
+        _atStage = atStage;
         _giveUpAfter = recheck is null ? RetryingFetcher.GIVE_UP_AFTER : RECHECK_GIVE_UP_AFTER;
         _options = request.Options;
         _timeProvider = timeProvider;
@@ -128,7 +132,7 @@ internal sealed class CrawlSession
 
         _writer = recheck is null
             ? CrawlWriter.Open(request.DatabasePath, _options, request.Resume, _counters, loggerFactory.CreateLogger<CrawlWriter>())
-            : CrawlWriter.OpenForRecheck(request.DatabasePath, _options, recheck, _counters, loggerFactory.CreateLogger<CrawlWriter>());
+            : CrawlWriter.OpenForRecheck(request.DatabasePath, _options, recheck, _counters, loggerFactory.CreateLogger<CrawlWriter>(), atStage);
 
         // Every notice is kept with the crawl, then handed on: the host hears of it with the id the file keeps it under.
         _observer = new NoticeRecorder(new SafeCrawlObserver(observer, _logger), _writer, timeProvider);
@@ -174,7 +178,8 @@ internal sealed class CrawlSession
             throw new InvalidOperationException(refused.Title);
         }
 
-        return new CrawlSession(new CrawlRequest(request.Options, request.DatabasePath, Resume: true), request.Plan, observer, loggerFactory, timeProvider);
+        return new CrawlSession(new CrawlRequest(request.Options, request.DatabasePath, Resume: true), request.Plan, observer, loggerFactory, timeProvider,
+            request.AtStage);
     }
 
     public void Pause()
@@ -476,7 +481,7 @@ internal sealed class CrawlSession
         {
             if (!_writer.Completion.IsCompleted)
             {
-                await _writer.UpdateStatusAsync(_status, _status == CrawlStatus.Completed, CancellationToken.None).ConfigureAwait(false);
+                await _writer.UpdateStatusAsync(_status, _status == CrawlStatus.Completed, CancellationToken.None, _fetcher.Requests).ConfigureAwait(false);
             }
         }
         catch (ChannelClosedException)
@@ -629,6 +634,12 @@ internal sealed class CrawlSession
             foreach (var item in claim.External)
             {
                 await _externalQueue.Writer.WriteAsync(item, cancellationToken).ConfigureAwait(false);
+            }
+
+            // Tests only: a recheck made to fail with some of its URLs stored and others still to fetch.
+            if (_atStage is not null && _writer.RecheckProgress is { Done: > 0 } recheck && recheck.Done < recheck.Total)
+            {
+                _atStage(RecheckStage.Fetching);
             }
 
             if (claim.Internal.Count + claim.External.Count == 0)

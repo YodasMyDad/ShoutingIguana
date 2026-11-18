@@ -8,4 +8,8 @@ namespace ShoutingIguana.Engine.Crawling.Models;
 /// The crawl's stored options with the secrets it doesn't keep given again (<see cref="CrawlOptions.PlanResume"/>), so a
 /// recheck asks the site as the crawl did.
 /// </param>
-public sealed record RecheckRequest(string DatabasePath, RecheckPlan Plan, CrawlOptions Options);
+public sealed record RecheckRequest(string DatabasePath, RecheckPlan Plan, CrawlOptions Options)
+{
+    /// <summary>Tests only: called at each <see cref="RecheckStage"/> of the run, to make it fail there.</summary>
+    internal Action<RecheckStage>? AtStage { get; init; }
+}

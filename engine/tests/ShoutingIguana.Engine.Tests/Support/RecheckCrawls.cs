@@ -55,6 +55,12 @@ public sealed class RecheckCrawls : IAsyncLifetime
     {
         var plan = RecheckPlanReader.Plan(path, ask, new AnalysisSettings(), limit);
         Assert.Null(plan.Refused);
+        return await RecheckAsync(path, plan, options);
+    }
+
+    /// <summary>Runs a recheck of <paramref name="plan"/> on <paramref name="path"/>, analyses the crawl, and returns the run's summary and the recheck as settled.</summary>
+    public static async Task<(CrawlSummary Run, RecheckRecord Recheck)> RecheckAsync(string path, RecheckPlan plan, Func<CrawlOptions, CrawlOptions>? options = null)
+    {
         var stored = CrawlDatabase.ReadOptions(path);
         await using var job = new CrawlEngine(NullLoggerFactory.Instance).Recheck(new RecheckRequest(path, plan, options?.Invoke(stored) ?? stored));
         var run = await job.Completion.WaitAsync(TestCrawls.TIMEOUT);

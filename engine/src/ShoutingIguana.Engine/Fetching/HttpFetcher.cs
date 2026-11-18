@@ -26,6 +26,7 @@ internal sealed class HttpFetcher : IDisposable
     private const string ACCEPT = "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8";
 
     private readonly HttpClient _client;
+    private long _requests;
     private readonly CrawlOptions _options;
     private readonly CrawlScope _scope;
     private readonly bool _startsOnHttps;
@@ -80,6 +81,12 @@ internal sealed class HttpFetcher : IDisposable
 
     /// <summary>What keeps a crawl of a public site off private network addresses.</summary>
     public PrivateNetworkGuard Guard { get; }
+
+    /// <summary>
+    /// The requests sent so far, every kind (pages, robots.txt, sitemaps, the icon), each try counted: none for a URL failed
+    /// without one. Read from any thread.
+    /// </summary>
+    public long Requests => Interlocked.Read(ref _requests);
 
     public async Task<FetchResponse> FetchAsync(Uri uri, FetchBody body, CancellationToken cancellationToken, int? maxBodyBytes = null)
     {
@@ -204,6 +211,7 @@ internal sealed class HttpFetcher : IDisposable
             throw new HttpRequestException(PrivateNetworkGuard.ERROR, new PrivateNetworkAddressException(uri.IdnHost));
         }
 
+        Interlocked.Increment(ref _requests);
         return await _client.SendAsync(CreateRequest(uri), HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
     }
 

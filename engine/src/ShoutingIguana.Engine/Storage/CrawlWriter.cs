@@ -84,6 +84,9 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
     private TimeSpan _logFoldTime;
     private SqliteTransaction? _transaction;
     private Task _loop = Task.CompletedTask;
+
+    // Tests only: where a recheck is made to fail.
+    private Action<RecheckStage>? _atStage;
     private int _nextUrlId = 1;
     private long _lastNoticeId;
     private int _inFlight;
@@ -141,23 +144,10 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
                 throw new InvalidOperationException($"'{databasePath}' already holds a crawl. Resume it or choose a new file.");
             }
 
-            // A file from before notices were kept gets their table now, as it is continued.
-            CrawlDatabase.Execute(connection, CrawlSchema.NOTICES);
-            CheckNoticesTable(connection, databasePath);
-
-            // And one from before the time spent crawling was kept, its table: what it spent before isn't known.
-            CrawlDatabase.Execute(connection, CrawlSchema.RUN_TIME);
-
-            // The columns for lanes 1 to 3 of the content fingerprint are added here, to a new file as to one an earlier engine
-            // made, whose pages so far have none.
-            AddMissingColumns(connection, "responses", CrawlSchema.RESPONSE_COLUMNS);
-
-            // And the count of the sitemaps an index's file lists, its size, and each entry's lastmod.
-            AddMissingColumns(connection, "sitemaps", CrawlSchema.SITEMAP_COLUMNS);
-            AddMissingColumns(connection, "sitemap_urls", CrawlSchema.SITEMAP_URL_COLUMNS);
-
-            // And the table for the site's icon: a continued crawl keeps the one it has.
-            CrawlDatabase.Execute(connection, CrawlSchema.FAVICON);
+            // Every table and column added since the schema's first file, to a new file as to one an earlier engine made (its
+            // rows so far keep none): the notices, the time spent crawling (what an earlier run spent isn't known), the site's
+            // icon (a continued crawl keeps the one it has), the rechecks, and the columns of each.
+            CrawlSchemaUpgrade.Apply(connection, databasePath);
             var writer = new CrawlWriter(connection, fileLock, options, counters, logger);
             writer.RestoreFavicon();
             if (created)
@@ -185,63 +175,6 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
 
             fileLock.Dispose();
             throw;
-        }
-    }
-
-    /// <summary>
-    /// The notices table may be another program's: CREATE TABLE IF NOT EXISTS keeps whatever is there. Every notice is stored
-    /// into the columns this engine made, so a table missing one, keyed by something other than the id, or with a column
-    /// of its own that must have a value, would fail the crawl at its first notice. Refused before anything is written,
-    /// in words that say why, as a file with views or triggers is.
-    /// </summary>
-    /// <exception cref="InvalidOperationException">The table isn't one this engine can store notices in.</exception>
-    private static void CheckNoticesTable(SqliteConnection connection, string databasePath)
-    {
-        Dictionary<string, (string Type, bool NotNull, bool HasDefault, bool IsKey)> columns = new(StringComparer.OrdinalIgnoreCase);
-        using (var command = connection.CreateCommand())
-        {
-            command.CommandText = "SELECT name, type, \"notnull\", dflt_value IS NOT NULL, pk FROM pragma_table_info('notices')";
-            using var reader = command.ExecuteReader();
-            while (reader.Read())
-            {
-                columns[reader.GetString(0)] = (reader.GetString(1), reader.GetBoolean(2), reader.GetBoolean(3), reader.GetInt32(4) > 0);
-            }
-        }
-
-        var hasEveryColumn = CrawlSchema.NOTICE_COLUMNS.All(columns.ContainsKey);
-        var keyedById = hasEveryColumn && columns["id"].IsKey && columns["id"].Type.Equals("INTEGER", StringComparison.OrdinalIgnoreCase) &&
-                        columns.Values.Count(column => column.IsKey) == 1;
-        var dataMayBeLeftOut = hasEveryColumn && !columns["data"].NotNull;
-        var othersNeedNothing = columns
-            .Where(column => !CrawlSchema.NOTICE_COLUMNS.Contains(column.Key, StringComparer.OrdinalIgnoreCase))
-            .All(column => !column.Value.NotNull || column.Value.HasDefault);
-        if (!(keyedById && dataMayBeLeftOut && othersNeedNothing))
-        {
-            throw new InvalidOperationException(
-                $"'{databasePath}' can't be continued: another program changed the table it keeps its alerts in (notices), so new ones couldn't be stored there.");
-        }
-    }
-
-    /// <summary>
-    /// Adds the columns of a crawl-time table that a file made by an earlier engine lacks (<see cref="CrawlSchema.RESPONSE_COLUMNS"/>,
-    /// <see cref="CrawlSchema.SITEMAP_COLUMNS"/>): each may be null, so the rows the file has keep none.
-    /// </summary>
-    private static void AddMissingColumns(SqliteConnection connection, string table, (string Name, string Type)[] columns)
-    {
-        HashSet<string> existing = new(StringComparer.OrdinalIgnoreCase);
-        using (var command = connection.CreateCommand())
-        {
-            command.CommandText = $"SELECT name FROM pragma_table_info('{table}')";
-            using var reader = command.ExecuteReader();
-            while (reader.Read())
-            {
-                existing.Add(reader.GetString(0));
-            }
-        }
-
-        foreach (var (name, type) in columns.Where(column => !existing.Contains(column.Name)))
-        {
-            CrawlDatabase.Execute(connection, $"ALTER TABLE {table} ADD COLUMN {name} {type}");
         }
     }
 
@@ -283,8 +216,9 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
     public ValueTask MarkSitemapsDoneAsync(CancellationToken cancellationToken) =>
         _commands.Writer.WriteAsync(new MarkSitemapsDoneCommand(), cancellationToken);
 
-    public ValueTask UpdateStatusAsync(CrawlStatus status, bool isFinished, CancellationToken cancellationToken) =>
-        _commands.Writer.WriteAsync(new UpdateCrawlStatusCommand(status, isFinished), cancellationToken);
+    /// <param name="requests">For a recheck's run, the requests it sent the site, which its record keeps.</param>
+    public ValueTask UpdateStatusAsync(CrawlStatus status, bool isFinished, CancellationToken cancellationToken, long requests = 0) =>
+        _commands.Writer.WriteAsync(new UpdateCrawlStatusCommand(status, isFinished) { Requests = requests }, cancellationToken);
 
     /// <summary>
     /// Gives the notice the crawl's next id and stores it with the crawl, within a second or so, from any thread, without
@@ -319,6 +253,13 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
         try
         {
             await _loop.ConfigureAwait(false);
+
+            // A recheck whose run never said how it ended didn't end: it is as if it failed.
+            if (_recheck is { Ended: false })
+            {
+                DiscardRecheck();
+            }
+
             StoreWhatIsLeft();
         }
         catch (Exception exception) when (_loop.IsFaulted)
@@ -354,6 +295,13 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
             {
                 while (reader.TryRead(out var command))
                 {
+                    // A recheck that failed stores nothing more.
+                    if (_recheck is { Discarded: true })
+                    {
+                        FailReply(command, new InvalidOperationException("The recheck failed; nothing more is stored."));
+                        continue;
+                    }
+
                     if (_transaction is null)
                     {
                         BeginTransaction();
@@ -364,27 +312,28 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
 
                     if (++commandsInTransaction >= MAX_COMMANDS_PER_TRANSACTION || transactionAge.Elapsed >= MAX_TRANSACTION_AGE)
                     {
-                        StoreNotices();
-                        StoreRunTime();
-                        CommitTransaction();
-                        FoldLargeLog();
+                        EndBatch();
                         commandsInTransaction = 0;
+                        transactionAge.Restart();
                     }
                 }
 
                 if (_transaction is not null)
                 {
-                    StoreNotices();
-                    StoreRunTime();
-                    CommitTransaction();
-                    FoldLargeLog();
+                    EndBatch();
                     commandsInTransaction = 0;
+                    transactionAge.Restart();
                 }
             }
         }
         catch (Exception exception)
         {
             _logger.LogError(exception, "Crawl database writer failed; the crawl cannot continue");
+            if (_recheck is not null)
+            {
+                DiscardRecheck();
+            }
+
             RollBackTransaction();
             _commands.Writer.TryComplete(exception);
             while (reader.TryRead(out var pending))
@@ -394,6 +343,29 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
 
             throw;
         }
+    }
+
+    /// <summary>
+    /// The batch is done: the notices and the time it brought are stored with it, and it commits. A recheck's run is one
+    /// transaction, committed only as it ends (<see cref="EndRecheck"/>): till then its counts are published as they stand.
+    /// </summary>
+    private void EndBatch()
+    {
+        if (_transaction is null)
+        {
+            return;
+        }
+
+        StoreNotices();
+        StoreRunTime();
+        if (_recheck is { Ended: false })
+        {
+            _counters.Publish();
+            return;
+        }
+
+        CommitTransaction();
+        FoldLargeLog();
     }
 
     private void Apply(WriterCommand command)
@@ -425,6 +397,7 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
                     break;
                 case RecordRobotsCommand robots:
                     _statements.UpsertRobots(robots.Record);
+                    _atStage?.Invoke(RecheckStage.RobotsStored);
                     break;
                 case RecordFaviconCommand favicon:
                     ApplyFavicon(favicon.Record);
@@ -447,7 +420,7 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
                     SitemapsDone = true;
                     break;
                 case UpdateCrawlStatusCommand status when _recheck is not null:
-                    EndRecheck(status.Status);
+                    EndRecheck(status.Status, status.Requests);
                     break;
                 case UpdateCrawlStatusCommand status:
                     _statements.UpdateCrawlStatus(status.Status, status.IsFinished, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
@@ -1123,7 +1096,7 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
     /// </summary>
     private void StoreWhatIsLeft()
     {
-        if (_notices.IsEmpty && _runTime.IsEmpty && !_crawlStamped)
+        if (_recheck is { Discarded: true } || (_notices.IsEmpty && _runTime.IsEmpty && !_crawlStamped))
         {
             return;
         }
@@ -1189,9 +1162,11 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
     /// that doesn't keep it ran the crawl since), a row without a time says so for good: the crawl's time then isn't
     /// known, however many runs are timed from here on.
     /// </summary>
-    private void RestoreRunTime(CrawlRuns? earlier)
+    /// <param name="within">A transaction under way to take it up in (a recheck's), which commits it; else it commits its own.</param>
+    private void RestoreRunTime(CrawlRuns? earlier, SqliteTransaction? within = null)
     {
-        using var transaction = _connection.BeginTransaction();
+        using var own = within is null ? _connection.BeginTransaction() : null;
+        var transaction = within ?? own!;
         _keepsRunTime = RunTime("SELECT group_concat(name, ',') FROM (SELECT name FROM pragma_table_info('run_time') ORDER BY cid)", transaction) as string
                         == CrawlSchema.RUN_TIME_COLUMNS;
         if (!_keepsRunTime)
@@ -1223,7 +1198,7 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
 
         TimeCrawledBefore = earlier?.TimeCrawling ?? (neverCrawled ? TimeSpan.Zero : null);
         _run = lastRun + 1;
-        transaction.Commit();
+        own?.Commit();
     }
 
     /// <summary>
@@ -1366,9 +1341,10 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
     {
         try
         {
+            // A recheck's failure was rolled back whole: the file is as it was, with nothing to record.
             if (_recheck is not null)
             {
-                RecordRecheckFailure();
+                DiscardRecheck();
                 return;
             }
 

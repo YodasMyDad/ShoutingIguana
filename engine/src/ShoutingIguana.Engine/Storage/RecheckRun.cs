@@ -20,6 +20,9 @@ internal sealed class RecheckRun(RecheckPlan plan)
     // its scope led to, whose own links are recorded and not followed.
     private readonly Dictionary<int, int> _steps = [];
     private readonly Dictionary<int, (FetchOutcome Outcome, int? StatusCode)> _firstAnswers = [];
+
+    // How the site last answered each URL handed out.
+    private readonly Dictionary<int, RecheckAnswer> _answers = [];
     private int _done;
     private int _total;
     private int _phase = 1;
@@ -46,6 +49,12 @@ internal sealed class RecheckRun(RecheckPlan plan)
     /// <summary>The URLs it fetched, so a redirect is followed into each once.</summary>
     public HashSet<int> Fetched { get; } = [];
 
+    /// <summary>Its run has said how it ended: from here on, nothing it stores waits for more.</summary>
+    public bool Ended { get; set; }
+
+    /// <summary>It failed, and was rolled back whole: nothing more is stored.</summary>
+    public bool Discarded { get; set; }
+
     public int Phase => Volatile.Read(ref _phase);
 
     public RecheckProgress Progress => new(Volatile.Read(ref _phase), Volatile.Read(ref _done), Volatile.Read(ref _total));
@@ -53,6 +62,9 @@ internal sealed class RecheckRun(RecheckPlan plan)
     public int Done => Volatile.Read(ref _done);
 
     public int StepOf(int id) => _steps.GetValueOrDefault(id);
+
+    /// <summary>How the site answered a URL it judges: never asked, unless a fetch of it came back.</summary>
+    public RecheckAnswer AnswerOf(int id) => _answers.GetValueOrDefault(id, RecheckAnswer.NotAsked);
 
     /// <summary>Hands a URL out at <paramref name="step"/>, once.</summary>
     public bool Enqueue(FrontierItem item, int step)
@@ -84,6 +96,7 @@ internal sealed class RecheckRun(RecheckPlan plan)
     {
         Fetched.Add(item.Id);
         Interlocked.Increment(ref _done);
+        _answers[item.Id] = RecheckAnswers.Of(response);
         if (_phase == 1)
         {
             _firstAnswers.TryAdd(item.Id, (response.Outcome, response.StatusCode));

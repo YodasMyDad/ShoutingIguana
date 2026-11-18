@@ -20,7 +20,8 @@ public sealed class RecheckKindsTests(RecheckCrawls crawls, RecheckKindsTests.Ht
 {
     /// <summary>
     /// Revision 1 drops the missing file from the sitemap index: reading the sitemaps again finds every file there, and
-    /// the file nothing lists any more goes, so the sitemap error is fixed. Nothing else is fetched.
+    /// the file nothing lists any more goes, so the sitemap error is fixed. Nothing else is fetched: its requests, each
+    /// counted as the site sees them, are robots.txt and the sitemaps, and no page.
     /// </summary>
     [Fact]
     public async Task ASitemapErrorIsRecheckedByReadingTheSitemapsAgain()
@@ -28,13 +29,18 @@ public sealed class RecheckKindsTests(RecheckCrawls crawls, RecheckKindsTests.Ht
         var path = crawls.Copy(crawls.Then);
         var missing = $"{crawls.Server.BaseUri}sitemaps/missing.xml";
         Assert.Equal(1, TestCrawls.Count(path, $"SELECT COUNT(*) FROM sitemaps WHERE url = '{missing}'"));
+        var seen = crawls.Server.Requests.Watch("User-Agent");
+        var seenBefore = seen.Count;
 
         var (run, recheck) = await RecheckCrawls.RecheckAsync(path, new RecheckAsk("sitemap-error"));
 
         Assert.Equal((CrawlStatus.Completed, RecheckStatus.Completed, 1, 1, 0), (run.Status, recheck.Status, recheck.Judged, recheck.Result!.Fixed, recheck.Result.Still));
         Assert.Equal(0, TestCrawls.Count(path, $"SELECT COUNT(*) FROM sitemaps WHERE url = '{missing}'"));
         Assert.Empty(IssueReader.ReadIssues(path, "sitemap-error", 10));
-        Assert.Equal(0, recheck.Fetched);
+        Assert.Equal(seen.Count - seenBefore, recheck.Fetched);
+        // robots.txt, the /sitemap.xml it names (which redirects to the index), and each sitemap.
+        Assert.Equal(1 + 1 + TestCrawls.Count(path, "SELECT COUNT(*) FROM sitemaps"), recheck.Fetched);
+        Assert.Equal(0, TestCrawls.Count(path, $"SELECT COUNT(*) FROM responses WHERE fetched_at >= {recheck.StartedAt.ToUnixTimeMilliseconds()}"));
     }
 
     /// <summary>
