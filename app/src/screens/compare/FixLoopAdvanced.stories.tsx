@@ -20,6 +20,8 @@ import { overviewRoutes } from '../../test/overviewSidecar';
 import { ownSidecar, ScreenApp } from '../../test/ScreenStory';
 import { GARDEN_ANALYSIS, simpleRoutes } from '../../test/simpleSidecar';
 import { StoryFrame, StorySection } from '../../test/StoryFrame';
+import type { ChangesAnswer } from '../../api/fixLoop';
+import { ComparisonCard } from './ComparisonCard';
 import { CompareWithMenu } from './CompareWithMenu';
 import { useComparison } from './useComparison';
 
@@ -250,3 +252,108 @@ export const PickerOnlyCrawl: Story = {
   ],
   render: () => <PickerStory crawlId={EARLIER_ID} />,
 };
+
+// ---------------------------------------------------------------------------------------------- The comparison card
+
+function CardOf({ crawlId }: { crawlId: string }) {
+  return <ComparisonCard crawlId={crawlId} comparison={useComparison(crawlId)} />;
+}
+
+function CardStory({ crawlId = GARDEN.id }: { crawlId?: string }) {
+  const [queryClient] = useState(() => createQueryClient());
+  return (
+    <QueryClientProvider client={queryClient}>
+      <StoryFrame>
+        <CardOf crawlId={crawlId} />
+      </StoryFrame>
+    </QueryClientProvider>
+  );
+}
+
+/** The card's sidecar: the library, the catalog, and `/changes` answering as given (or failing, or never). */
+function cardRoutes(answer: ChangesAnswer | 'never' | Response, library: CrawlListItem[] = LIBRARY): FakeRoute[] {
+  return [
+    ['GET', /^\/api\/crawls$/, () => json(library)],
+    [
+      'GET',
+      /^\/api\/crawls\/([0-9a-f]{16})$/,
+      (_, match) => json(library.find((item) => item.id === match[1]) ?? GARDEN),
+    ],
+    answer instanceof Response ? ['GET', /\/changes/, () => answer.clone()] : changesRoute(answer),
+    ...simpleRoutes(GARDEN, GARDEN_ANALYSIS),
+  ];
+}
+
+const cardStory = (answer: ChangesAnswer | 'never' | Response, compareWith: Record<string, string> = {}): Story => ({
+  loaders: [
+    () => {
+      ownSidecar(cardRoutes(answer, [LATER, ...LIBRARY]));
+      updateSettings({ compareWithByCrawl: compareWith });
+    },
+  ],
+  render: () => <CardStory />,
+});
+
+/** Like for like: the score and each severity then and now with their moves, the checks and the issues as they moved. */
+export const CardFull: Story = cardStory(gardenComparison());
+
+/** Partial: the crawls covered different things; the differences folded under the figures (opened by a click). */
+export const CardPartial: Story = cardStory(
+  gardenComparison({
+    comparable: 'partial',
+    differences: [
+      { code: 'stoppedEarly', side: 'now' },
+      { code: 'limits', field: 'maxUrls', then: null, now: 5_000 },
+      { code: 'client', field: 'userAgent', then: 'chrome', now: 'googlebot' },
+    ],
+  }),
+);
+
+/** Counts only: another start origin, so no URL can be matched: no issues' line, the differences open. */
+export const CardCountsOnly: Story = cardStory(
+  gardenComparison({
+    comparable: 'countsOnly',
+    differences: [
+      {
+        code: 'startOrigin',
+        then: 'http://www.gardenfurnituresets.co.uk/',
+        now: 'https://www.gardenfurnituresets.co.uk/',
+      },
+    ],
+  }),
+);
+
+/** The other crawl was analysed by an earlier version: counts only, with Analyse it again. */
+export const CardNeedsAnalysis: Story = cardStory(
+  gardenComparison({ comparable: 'countsOnly', previousNeedsAnalysis: ['engineChanged'] }),
+);
+
+/** The comparison on its way: the card's skeleton under its head. */
+export const CardLoading: Story = cardStory('never');
+
+/** A crawl picked that can't be compared now: the sidecar's words, and the way back to the previous crawl. */
+export const CardFailed: Story = cardStory(
+  new Response(
+    JSON.stringify({ type: 'crawl-not-comparable', title: 'That crawl can’t be compared with this one.', status: 409 }),
+    { status: 409, headers: { 'Content-Type': 'application/problem+json' } },
+  ),
+  { [GARDEN.id]: EARLIER_ID },
+);
+
+/** A later crawl picked: "Until 14 Nov", the comparison read forward from this crawl to that one. */
+export const CardUntil: Story = cardStory(
+  gardenComparison({
+    with: {
+      id: LATER.id,
+      startedAt: LATER.startedAt,
+      finishedAt: '2026-11-14T09:02:00Z',
+      status: 'completed',
+      startUrl: LATER.startUrl,
+      analyzedAt: '2026-11-14T09:03:00Z',
+      pagesAnalyzed: 265,
+      crawledUrlCount: 4_530,
+      chosen: 'picked',
+    },
+  }),
+  { [GARDEN.id]: LATER.id },
+);
