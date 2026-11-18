@@ -24,7 +24,8 @@ import { StatusCode } from '../../ui/StatusCode';
 import { Url } from '../../ui/Url';
 import { isResourceType, urlDisplay } from '../../ui/urlText';
 import { treeLayout, type OpenGroup } from '../issues/groupTree';
-import { linkFollowWords } from './linkColumns';
+import { fittedGroupWidths, groupColumnNeeds } from './groupColumns';
+import { linkFollowWords, linkTextMeasure } from './linkColumns';
 import {
   FIRST_TARGET_LINKS,
   GROUP_COLUMN_SORTS,
@@ -63,7 +64,6 @@ function wrap<K extends object>(cache: WeakMap<K, GroupTreeRow>, key: K, make: (
 const CHILD_COLUMNS = ['from.id', 'from.url', 'text', 'position', 'kind', 'followed', 'noFollow', 'sponsored', 'ugc'];
 
 const FRAME_SLACK = 24;
-const TARGET_MIN_WIDTH = 220;
 const WIDTHS: Record<string, number> = {
   status: 128,
   size: 96,
@@ -290,10 +290,33 @@ export function LinkGroupsGrid({
     ],
     [images, unmeasured],
   );
-  const widths = images ? IMAGE_WIDTHS : WIDTHS;
-  const targetWidth = Math.max(
-    TARGET_MIN_WIDTH,
-    (width ?? 1000) - FRAME_SLACK - shownColumns.slice(1).reduce((sum, id) => sum + (widths[id] ?? 120), 0),
+  // The room shared by what the first page's targets, texts and places take, as the flat grid shares it: read once a
+  // view, so scrolling never moves a column, and a target's address is never cut while the grid has room for it.
+  const groupsInView = first?.rows;
+  // The fonts the widths are measured in may still be on their way (an address measured in a fallback monospace is
+  // narrower than it draws): measured again as each arrives.
+  const [fontsLoaded, setFontsLoaded] = useState(0);
+  useEffect(() => {
+    if (typeof document.fonts === 'undefined') return undefined;
+    let current = true;
+    const loaded = () => {
+      if (current) setFontsLoaded((count) => count + 1);
+    };
+    void document.fonts.ready.then(loaded);
+    document.fonts.addEventListener('loadingdone', loaded);
+    return () => {
+      current = false;
+      document.fonts.removeEventListener('loadingdone', loaded);
+    };
+  }, []);
+  const needs = useMemo(
+    () => groupColumnNeeds(groupsInView ?? [], images, siteOrigin, linkTextMeasure()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the fonts arriving change what's measured
+    [groupsInView, images, siteOrigin, fontsLoaded],
+  );
+  const widths = useMemo(
+    () => fittedGroupWidths(shownColumns, images ? IMAGE_WIDTHS : WIDTHS, (width ?? 1000) - FRAME_SLACK, needs),
+    [shownColumns, images, width, needs],
   );
   const columns = useMemo<GridColumn<GroupTreeRow>[]>(() => {
     const group = (row: GroupTreeRow) => (row.kind === 'group' ? row.group : null);
@@ -306,7 +329,7 @@ export function LinkGroupsGrid({
       return {
         id,
         header,
-        width: id === 'target' ? targetWidth : (widths[id] ?? 120),
+        width: widths[id] ?? 120,
         ...(key
           ? {
               sortable: true,
@@ -446,7 +469,7 @@ export function LinkGroupsGrid({
       }),
     };
     return shownColumns.flatMap((id) => all[id] ?? []);
-  }, [shownColumns, images, order, siteOrigin, onInspect, targetWidth, widths]);
+  }, [shownColumns, images, order, siteOrigin, onInspect, widths]);
 
   // An open target's links span the row: the page each is on, what it says, where it sits, whether it's followed.
   const spanRow = useCallback(
