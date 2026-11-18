@@ -52,6 +52,12 @@ public static class SkippedCheckReasons
     public const string RESOURCES_OFF = "resources-off";
 
     /// <summary>
+    /// The crawl was told not to follow hreflang links (the default), and a language version they name was left unread
+    /// for it: a version nothing else leads to is one of those, so which are unlinked can't be told.
+    /// </summary>
+    public const string HREFLANG_OFF = "hreflang-off";
+
+    /// <summary>
     /// The crawl was told to ignore robots.txt: it asked for every URL, so none was refused, and it read robots.txt only
     /// where sitemap discovery asked for it (the start URL's origin, with sitemaps on). What robots.txt blocks, and
     /// whether it answers where the crawl never read it, can't be judged.

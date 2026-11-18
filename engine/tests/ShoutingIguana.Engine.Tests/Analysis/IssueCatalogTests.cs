@@ -46,7 +46,13 @@ public sealed class IssueCatalogTests
         "viewport-invalid", "charset-invalid", "lang-invalid", "mobile-alternate",
         "robots-txt-no-sitemap", "sitemap-over-limit", "sitemap-near-limit", "sitemap-empty", "sitemap-url-repeated", "sitemap-lastmod-invalid",
         "structured-data-schema-errors", "structured-data-missing-recommended", "structured-data-on-noindex",
-        "image-missing-src", "image-no-srcset", "image-legacy-format", "image-alt-unhelpful", "image-hotlinked", "image-inline-large"
+        "image-missing-src", "image-no-srcset", "image-legacy-format", "image-alt-unhelpful", "image-hotlinked", "image-inline-large",
+        "security-headers-weak", "cookies-insecure", "form-not-secure", "protocol-relative-links", "url-tracking-parameters", "url-multiple-slashes",
+        "url-space", "url-parameters", "url-non-ascii", "url-repetitive-path", "url-internal-search",
+        "heading-levels-skipped", "h1-image-only", "heading-too-long", "h2-missing", "placeholder-text", "readability-low", "boilerplate-heavy",
+        "hreflang-inconsistent-code", "hreflang-header-mismatch", "hreflang-unlinked", "hreflang-lang-mismatch", "hreflang-self-only",
+        "x-card-missing", "x-card-incomplete", "social-image-relative", "og-url-not-canonical", "social-tags-multiple", "og-title-duplicate",
+        "og-description-duplicate", "social-image-broken", "social-image-too-large", "social-image-too-small"
     ];
 
     [Fact]
@@ -199,7 +205,7 @@ public sealed class IssueCatalogTests
     [Fact]
     public void TheSiteWideChecksAreTheFaultsOfTheWholeSite()
     {
-        Assert.Equal(137, IssueCatalog.All.Count);
+        Assert.Equal(170, IssueCatalog.All.Count);
         Assert.Equal(["duplicate-site-version", "no-https", "robots-txt-unreachable", "robots-txt-unreachable-other-origin", "site-hidden-from-search"],
             IssueCatalog.All.Where(check => check.SiteWide).Select(check => check.Id).Order(StringComparer.Ordinal));
         Assert.Equal(
@@ -249,12 +255,13 @@ public sealed class IssueCatalogTests
         }
 
         Assert.Equal(["links-to-redirects", "pagination-broken"], IssueCatalog.REDIRECT_CHAIN.Clears);
+        // A share image that 404s, or redirects to a URL that does, is social-image-broken's as an image is image-broken's (batch 9).
         Assert.Equal(
-            ["broken-internal-links", "image-broken", "broken-resources", "canonical-broken", "hreflang-broken-target", "pagination-broken"],
+            ["broken-internal-links", "image-broken", "broken-resources", "canonical-broken", "hreflang-broken-target", "pagination-broken", "social-image-broken"],
             IssueCatalog.INTERNAL_CLIENT_ERROR.Clears);
         Assert.Equal(IssueCatalog.INTERNAL_CLIENT_ERROR.Clears, IssueCatalog.INTERNAL_SERVER_ERROR.Clears);
         Assert.Equal(IssueCatalog.INTERNAL_CLIENT_ERROR.Clears, IssueCatalog.INTERNAL_UNREACHABLE.Clears);
-        Assert.Equal(["broken-internal-links", "image-broken", "broken-resources", "canonical-broken"], IssueCatalog.REDIRECT_BROKEN.Clears);
+        Assert.Equal(["broken-internal-links", "image-broken", "broken-resources", "canonical-broken", "social-image-broken"], IssueCatalog.REDIRECT_BROKEN.Clears);
 
         // A canonical loop's pages aren't reported as canonicalised to a non-indexable page too, and a canonical header on a
         // redirect is the redirect's own fault: neither clears another check, so neither names one.
@@ -280,7 +287,7 @@ public sealed class IssueCatalogTests
             .GroupBy(check => string.Join(",", check.Recheck), StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.Select(check => check.Id).Order(StringComparer.Ordinal).ToList(), StringComparer.Ordinal);
         Assert.Equal(["", "RobotsTxt", "RobotsTxt,Sitemaps", "SiteVersions", "Sitemaps", "Urls", "Urls,Sitemaps"], byKinds.Keys.Order(StringComparer.Ordinal));
-        Assert.Equal(["canonical-unlinked", "deep-page", "no-https", "non-indexable-inlinks-only", "orphan-page"], byKinds[""]);
+        Assert.Equal(["canonical-unlinked", "deep-page", "hreflang-unlinked", "no-https", "non-indexable-inlinks-only", "orphan-page"], byKinds[""]);
         Assert.Equal(["not-in-sitemap", "sitemap-non-indexable", "sitemap-url-other-host"], byKinds["Urls,Sitemaps"]);
         Assert.Equal(["sitemap-empty", "sitemap-error", "sitemap-lastmod-invalid", "sitemap-missing", "sitemap-near-limit", "sitemap-over-limit", "sitemap-url-repeated"],
             byKinds["Sitemaps"]);
@@ -289,7 +296,7 @@ public sealed class IssueCatalogTests
         Assert.Equal(["robots-txt-no-sitemap"], byKinds["RobotsTxt,Sitemaps"]);
         Assert.Equal(["robots-txt-missing", "robots-txt-unreachable", "robots-txt-unreachable-other-origin"], byKinds["RobotsTxt"]);
         Assert.Equal(["duplicate-site-version"], byKinds["SiteVersions"]);
-        Assert.Equal(IssueCatalog.All.Count - 20, byKinds["Urls"].Count);
+        Assert.Equal(IssueCatalog.All.Count - 21, byKinds["Urls"].Count);
     }
 
     /// <summary>Hosts show the titles as they are, so every category needs a plain name of its own, never its identifier.</summary>

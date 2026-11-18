@@ -1,18 +1,21 @@
 {
-  "analyzedAt": "2026-11-17T23:46:57.668Z",
+  "analyzedAt": "2026-11-18T01:27:05.825Z",
   "engineVersion": "2.0.0-alpha.1",
   "pagesAnalyzed": 265,
-  "durationMs": 437,
+  "durationMs": 353,
   "isPartial": true,
   "outOfDate": false,
   "outOfDateReasons": [],
   "notes": [
-    "Sitemap lastmod invalid or in the future wasn't checked: this crawl was made by an earlier version, which didn't record what the check needs. Crawl again to check it.",
-    "No sitemap could be read, so orphan pages and pages missing from the sitemaps weren't checked.",
-    "The site's other versions (www or not, http or https) weren't all checked, so duplicate versions of the site weren't looked for.",
-    "Near-duplicate content wasn't checked: this crawl was made by an earlier version, which didn't record what the check needs. Crawl again to check it.",
-    "9 checks weren't run: this crawl was made by an earlier version, which didn't record what they need. Crawl again to run them.",
-    "3 checks weren't run: this crawl was made by an earlier version, which didn't record what they need. Crawl again to run them."
+    "Sitemap lastmod invalid or in the future wasn\u0027t checked: this crawl was made by an earlier version, which didn\u0027t record what the check needs. Crawl again to check it.",
+    "No sitemap could be read, so orphan pages and pages missing from the sitemaps weren\u0027t checked.",
+    "The site\u0027s other versions (www or not, http or https) weren\u0027t all checked, so duplicate versions of the site weren\u0027t looked for.",
+    "Near-duplicate content wasn\u0027t checked: this crawl was made by an earlier version, which didn\u0027t record what the check needs. Crawl again to check it.",
+    "9 checks weren\u0027t run: this crawl was made by an earlier version, which didn\u0027t record what they need. Crawl again to run them.",
+    "3 checks weren\u0027t run: this crawl was made by an earlier version, which didn\u0027t record what they need. Crawl again to run them.",
+    "2 checks weren\u0027t run: this crawl was made by an earlier version, which didn\u0027t record what they need. Crawl again to run them.",
+    "4 checks weren\u0027t run: this crawl was made by an earlier version, which didn\u0027t record what they need. Crawl again to run them.",
+    "4 checks weren\u0027t run: this crawl was made by an earlier version, which didn\u0027t record what they need. Crawl again to run them."
   ],
   "counts": [
     {
@@ -21,13 +24,7 @@
       "likelyTemplate": false,
       "causes": 9,
       "templateCauses": 0,
-      "clears": [
-        {
-          "checkId": "broken-internal-links",
-          "pages": 5,
-          "all": true
-        }
-      ]
+      "clears": [{ "checkId": "broken-internal-links", "pages": 5, "all": true }]
     },
     {
       "checkId": "internal-server-error",
@@ -629,14 +626,7 @@
       "templateCauses": 0,
       "clears": []
     },
-    {
-      "checkId": "h1-missing",
-      "count": 1,
-      "likelyTemplate": false,
-      "causes": 1,
-      "templateCauses": 0,
-      "clears": []
-    },
+    { "checkId": "h1-missing", "count": 1, "likelyTemplate": false, "causes": 1, "templateCauses": 0, "clears": [] },
     {
       "checkId": "h1-multiple",
       "count": 0,
@@ -647,6 +637,30 @@
     },
     {
       "checkId": "h1-duplicate",
+      "count": 0,
+      "likelyTemplate": false,
+      "causes": null,
+      "templateCauses": null,
+      "clears": []
+    },
+    {
+      "checkId": "heading-levels-skipped",
+      "count": 63,
+      "likelyTemplate": false,
+      "causes": 63,
+      "templateCauses": 0,
+      "clears": []
+    },
+    {
+      "checkId": "heading-too-long",
+      "count": 53,
+      "likelyTemplate": false,
+      "causes": 53,
+      "templateCauses": 0,
+      "clears": []
+    },
+    {
+      "checkId": "h2-missing",
       "count": 0,
       "likelyTemplate": false,
       "causes": null,
@@ -798,6 +812,46 @@
       "clears": []
     },
     {
+      "checkId": "hreflang-inconsistent-code",
+      "count": 0,
+      "likelyTemplate": false,
+      "causes": null,
+      "templateCauses": null,
+      "clears": []
+    },
+    {
+      "checkId": "hreflang-header-mismatch",
+      "count": 0,
+      "likelyTemplate": false,
+      "causes": null,
+      "templateCauses": null,
+      "clears": []
+    },
+    {
+      "checkId": "hreflang-unlinked",
+      "count": 0,
+      "likelyTemplate": false,
+      "causes": null,
+      "templateCauses": null,
+      "clears": []
+    },
+    {
+      "checkId": "hreflang-lang-mismatch",
+      "count": 0,
+      "likelyTemplate": false,
+      "causes": null,
+      "templateCauses": null,
+      "clears": []
+    },
+    {
+      "checkId": "hreflang-self-only",
+      "count": 0,
+      "likelyTemplate": false,
+      "causes": null,
+      "templateCauses": null,
+      "clears": []
+    },
+    {
       "checkId": "structured-data-invalid",
       "count": 0,
       "likelyTemplate": false,
@@ -870,6 +924,22 @@
       "clears": []
     },
     {
+      "checkId": "security-headers-weak",
+      "count": 1,
+      "likelyTemplate": false,
+      "causes": 1,
+      "templateCauses": 0,
+      "clears": []
+    },
+    {
+      "checkId": "cookies-insecure",
+      "count": 2,
+      "likelyTemplate": false,
+      "causes": 2,
+      "templateCauses": 0,
+      "clears": []
+    },
+    {
       "checkId": "url-uppercase",
       "count": 0,
       "likelyTemplate": false,
@@ -894,13 +964,62 @@
       "clears": []
     },
     {
-      "checkId": "slow-response",
+      "checkId": "url-tracking-parameters",
+      "count": 0,
+      "likelyTemplate": false,
+      "causes": null,
+      "templateCauses": null,
+      "clears": []
+    },
+    {
+      "checkId": "url-multiple-slashes",
+      "count": 0,
+      "likelyTemplate": false,
+      "causes": null,
+      "templateCauses": null,
+      "clears": []
+    },
+    {
+      "checkId": "url-space",
+      "count": 0,
+      "likelyTemplate": false,
+      "causes": null,
+      "templateCauses": null,
+      "clears": []
+    },
+    {
+      "checkId": "url-parameters",
       "count": 3,
       "likelyTemplate": false,
       "causes": 3,
       "templateCauses": 0,
       "clears": []
     },
+    {
+      "checkId": "url-non-ascii",
+      "count": 0,
+      "likelyTemplate": false,
+      "causes": null,
+      "templateCauses": null,
+      "clears": []
+    },
+    {
+      "checkId": "url-repetitive-path",
+      "count": 0,
+      "likelyTemplate": false,
+      "causes": null,
+      "templateCauses": null,
+      "clears": []
+    },
+    {
+      "checkId": "url-internal-search",
+      "count": 0,
+      "likelyTemplate": false,
+      "causes": null,
+      "templateCauses": null,
+      "clears": []
+    },
+    { "checkId": "slow-response", "count": 3, "likelyTemplate": false, "causes": 3, "templateCauses": 0, "clears": [] },
     {
       "checkId": "large-page",
       "count": 0,
@@ -958,6 +1077,54 @@
       "clears": []
     },
     {
+      "checkId": "x-card-missing",
+      "count": 3,
+      "likelyTemplate": false,
+      "causes": 3,
+      "templateCauses": 0,
+      "clears": []
+    },
+    {
+      "checkId": "social-image-relative",
+      "count": 0,
+      "likelyTemplate": false,
+      "causes": null,
+      "templateCauses": null,
+      "clears": []
+    },
+    {
+      "checkId": "og-url-not-canonical",
+      "count": 2,
+      "likelyTemplate": false,
+      "causes": 2,
+      "templateCauses": 0,
+      "clears": []
+    },
+    {
+      "checkId": "social-tags-multiple",
+      "count": 0,
+      "likelyTemplate": false,
+      "causes": null,
+      "templateCauses": null,
+      "clears": []
+    },
+    {
+      "checkId": "og-title-duplicate",
+      "count": 0,
+      "likelyTemplate": false,
+      "causes": null,
+      "templateCauses": null,
+      "clears": []
+    },
+    {
+      "checkId": "og-description-duplicate",
+      "count": 0,
+      "likelyTemplate": false,
+      "causes": null,
+      "templateCauses": null,
+      "clears": []
+    },
+    {
       "checkId": "viewport-invalid",
       "count": 0,
       "likelyTemplate": false,
@@ -989,15 +1156,15 @@
         "code": "no-sitemap",
         "text": "No sitemap could be read.",
         "plainText": "No sitemap, the list of your pages for search engines, could be read, so there was nothing to compare with.",
-        "plainAction": "Add a sitemap, or fix the one that can't be read, then check the site again."
+        "plainAction": "Add a sitemap, or fix the one that can\u0027t be read, then check the site again."
       }
     },
     {
       "checkId": "uncrawlable-links",
       "reason": {
         "code": "earlier-version",
-        "text": "This crawl was made by an earlier version, which didn't record what this check needs. Crawl again to check it.",
-        "plainText": "This site check was made with an older version of Shouting Iguana, which didn't save what this check compares.",
+        "text": "This crawl was made by an earlier version, which didn\u0027t record what this check needs. Crawl again to check it.",
+        "plainText": "This site check was made with an older version of Shouting Iguana, which didn\u0027t save what this check compares.",
         "plainAction": "Check the site again to include it."
       }
     },
@@ -1005,8 +1172,8 @@
       "checkId": "pagination-not-linked",
       "reason": {
         "code": "earlier-version",
-        "text": "This crawl was made by an earlier version, which didn't record what this check needs. Crawl again to check it.",
-        "plainText": "This site check was made with an older version of Shouting Iguana, which didn't save what this check compares.",
+        "text": "This crawl was made by an earlier version, which didn\u0027t record what this check needs. Crawl again to check it.",
+        "plainText": "This site check was made with an older version of Shouting Iguana, which didn\u0027t save what this check compares.",
         "plainAction": "Check the site again to include it."
       }
     },
@@ -1014,8 +1181,8 @@
       "checkId": "pagination-broken",
       "reason": {
         "code": "earlier-version",
-        "text": "This crawl was made by an earlier version, which didn't record what this check needs. Crawl again to check it.",
-        "plainText": "This site check was made with an older version of Shouting Iguana, which didn't save what this check compares.",
+        "text": "This crawl was made by an earlier version, which didn\u0027t record what this check needs. Crawl again to check it.",
+        "plainText": "This site check was made with an older version of Shouting Iguana, which didn\u0027t save what this check compares.",
         "plainAction": "Check the site again to include it."
       }
     },
@@ -1023,8 +1190,8 @@
       "checkId": "pagination-to-non-indexable",
       "reason": {
         "code": "earlier-version",
-        "text": "This crawl was made by an earlier version, which didn't record what this check needs. Crawl again to check it.",
-        "plainText": "This site check was made with an older version of Shouting Iguana, which didn't save what this check compares.",
+        "text": "This crawl was made by an earlier version, which didn\u0027t record what this check needs. Crawl again to check it.",
+        "plainText": "This site check was made with an older version of Shouting Iguana, which didn\u0027t save what this check compares.",
         "plainAction": "Check the site again to include it."
       }
     },
@@ -1032,8 +1199,8 @@
       "checkId": "pagination-sequence-error",
       "reason": {
         "code": "earlier-version",
-        "text": "This crawl was made by an earlier version, which didn't record what this check needs. Crawl again to check it.",
-        "plainText": "This site check was made with an older version of Shouting Iguana, which didn't save what this check compares.",
+        "text": "This crawl was made by an earlier version, which didn\u0027t record what this check needs. Crawl again to check it.",
+        "plainText": "This site check was made with an older version of Shouting Iguana, which didn\u0027t save what this check compares.",
         "plainAction": "Check the site again to include it."
       }
     },
@@ -1041,8 +1208,8 @@
       "checkId": "canonical-invalid-attribute",
       "reason": {
         "code": "earlier-version",
-        "text": "This crawl was made by an earlier version, which didn't record what this check needs. Crawl again to check it.",
-        "plainText": "This site check was made with an older version of Shouting Iguana, which didn't save what this check compares.",
+        "text": "This crawl was made by an earlier version, which didn\u0027t record what this check needs. Crawl again to check it.",
+        "plainText": "This site check was made with an older version of Shouting Iguana, which didn\u0027t save what this check compares.",
         "plainAction": "Check the site again to include it."
       }
     },
@@ -1052,15 +1219,24 @@
         "code": "no-sitemap",
         "text": "No sitemap could be read.",
         "plainText": "No sitemap, the list of your pages for search engines, could be read, so there was nothing to compare with.",
-        "plainAction": "Add a sitemap, or fix the one that can't be read, then check the site again."
+        "plainAction": "Add a sitemap, or fix the one that can\u0027t be read, then check the site again."
       }
     },
     {
       "checkId": "sitemap-lastmod-invalid",
       "reason": {
         "code": "earlier-version",
-        "text": "This crawl was made by an earlier version, which didn't record what this check needs. Crawl again to check it.",
-        "plainText": "This site check was made with an older version of Shouting Iguana, which didn't save what this check compares.",
+        "text": "This crawl was made by an earlier version, which didn\u0027t record what this check needs. Crawl again to check it.",
+        "plainText": "This site check was made with an older version of Shouting Iguana, which didn\u0027t save what this check compares.",
+        "plainAction": "Check the site again to include it."
+      }
+    },
+    {
+      "checkId": "h1-image-only",
+      "reason": {
+        "code": "earlier-version",
+        "text": "This crawl was made by an earlier version, which didn\u0027t record what this check needs. Crawl again to check it.",
+        "plainText": "This site check was made with an older version of Shouting Iguana, which didn\u0027t save what this check compares.",
         "plainAction": "Check the site again to include it."
       }
     },
@@ -1068,8 +1244,8 @@
       "checkId": "near-duplicate-content",
       "reason": {
         "code": "earlier-version",
-        "text": "This crawl was made by an earlier version, which didn't record what this check needs. Crawl again to check it.",
-        "plainText": "This site check was made with an older version of Shouting Iguana, which didn't save what this check compares.",
+        "text": "This crawl was made by an earlier version, which didn\u0027t record what this check needs. Crawl again to check it.",
+        "plainText": "This site check was made with an older version of Shouting Iguana, which didn\u0027t save what this check compares.",
         "plainAction": "Check the site again to include it."
       }
     },
@@ -1077,8 +1253,35 @@
       "checkId": "duplicate-site-version",
       "reason": {
         "code": "site-versions-unchecked",
-        "text": "The site's other versions (www or not, http or https) weren't all checked.",
-        "plainText": "The site's other addresses (with and without www, http and https) couldn't all be tried.",
+        "text": "The site\u0027s other versions (www or not, http or https) weren\u0027t all checked.",
+        "plainText": "The site\u0027s other addresses (with and without www, http and https) couldn\u0027t all be tried.",
+        "plainAction": "Check the site again to include it."
+      }
+    },
+    {
+      "checkId": "placeholder-text",
+      "reason": {
+        "code": "earlier-version",
+        "text": "This crawl was made by an earlier version, which didn\u0027t record what this check needs. Crawl again to check it.",
+        "plainText": "This site check was made with an older version of Shouting Iguana, which didn\u0027t save what this check compares.",
+        "plainAction": "Check the site again to include it."
+      }
+    },
+    {
+      "checkId": "readability-low",
+      "reason": {
+        "code": "earlier-version",
+        "text": "This crawl was made by an earlier version, which didn\u0027t record what this check needs. Crawl again to check it.",
+        "plainText": "This site check was made with an older version of Shouting Iguana, which didn\u0027t save what this check compares.",
+        "plainAction": "Check the site again to include it."
+      }
+    },
+    {
+      "checkId": "boilerplate-heavy",
+      "reason": {
+        "code": "earlier-version",
+        "text": "This crawl was made by an earlier version, which didn\u0027t record what this check needs. Crawl again to check it.",
+        "plainText": "This site check was made with an older version of Shouting Iguana, which didn\u0027t save what this check compares.",
         "plainAction": "Check the site again to include it."
       }
     },
@@ -1086,8 +1289,8 @@
       "checkId": "image-missing-src",
       "reason": {
         "code": "earlier-version",
-        "text": "This crawl was made by an earlier version, which didn't record what this check needs. Crawl again to check it.",
-        "plainText": "This site check was made with an older version of Shouting Iguana, which didn't save what this check compares.",
+        "text": "This crawl was made by an earlier version, which didn\u0027t record what this check needs. Crawl again to check it.",
+        "plainText": "This site check was made with an older version of Shouting Iguana, which didn\u0027t save what this check compares.",
         "plainAction": "Check the site again to include it."
       }
     },
@@ -1095,8 +1298,8 @@
       "checkId": "image-no-srcset",
       "reason": {
         "code": "earlier-version",
-        "text": "This crawl was made by an earlier version, which didn't record what this check needs. Crawl again to check it.",
-        "plainText": "This site check was made with an older version of Shouting Iguana, which didn't save what this check compares.",
+        "text": "This crawl was made by an earlier version, which didn\u0027t record what this check needs. Crawl again to check it.",
+        "plainText": "This site check was made with an older version of Shouting Iguana, which didn\u0027t save what this check compares.",
         "plainAction": "Check the site again to include it."
       }
     },
@@ -1104,8 +1307,62 @@
       "checkId": "image-inline-large",
       "reason": {
         "code": "earlier-version",
-        "text": "This crawl was made by an earlier version, which didn't record what this check needs. Crawl again to check it.",
-        "plainText": "This site check was made with an older version of Shouting Iguana, which didn't save what this check compares.",
+        "text": "This crawl was made by an earlier version, which didn\u0027t record what this check needs. Crawl again to check it.",
+        "plainText": "This site check was made with an older version of Shouting Iguana, which didn\u0027t save what this check compares.",
+        "plainAction": "Check the site again to include it."
+      }
+    },
+    {
+      "checkId": "form-not-secure",
+      "reason": {
+        "code": "earlier-version",
+        "text": "This crawl was made by an earlier version, which didn\u0027t record what this check needs. Crawl again to check it.",
+        "plainText": "This site check was made with an older version of Shouting Iguana, which didn\u0027t save what this check compares.",
+        "plainAction": "Check the site again to include it."
+      }
+    },
+    {
+      "checkId": "protocol-relative-links",
+      "reason": {
+        "code": "earlier-version",
+        "text": "This crawl was made by an earlier version, which didn\u0027t record what this check needs. Crawl again to check it.",
+        "plainText": "This site check was made with an older version of Shouting Iguana, which didn\u0027t save what this check compares.",
+        "plainAction": "Check the site again to include it."
+      }
+    },
+    {
+      "checkId": "x-card-incomplete",
+      "reason": {
+        "code": "earlier-version",
+        "text": "This crawl was made by an earlier version, which didn\u0027t record what this check needs. Crawl again to check it.",
+        "plainText": "This site check was made with an older version of Shouting Iguana, which didn\u0027t save what this check compares.",
+        "plainAction": "Check the site again to include it."
+      }
+    },
+    {
+      "checkId": "social-image-broken",
+      "reason": {
+        "code": "earlier-version",
+        "text": "This crawl was made by an earlier version, which didn\u0027t record what this check needs. Crawl again to check it.",
+        "plainText": "This site check was made with an older version of Shouting Iguana, which didn\u0027t save what this check compares.",
+        "plainAction": "Check the site again to include it."
+      }
+    },
+    {
+      "checkId": "social-image-too-large",
+      "reason": {
+        "code": "earlier-version",
+        "text": "This crawl was made by an earlier version, which didn\u0027t record what this check needs. Crawl again to check it.",
+        "plainText": "This site check was made with an older version of Shouting Iguana, which didn\u0027t save what this check compares.",
+        "plainAction": "Check the site again to include it."
+      }
+    },
+    {
+      "checkId": "social-image-too-small",
+      "reason": {
+        "code": "earlier-version",
+        "text": "This crawl was made by an earlier version, which didn\u0027t record what this check needs. Crawl again to check it.",
+        "plainText": "This site check was made with an older version of Shouting Iguana, which didn\u0027t save what this check compares.",
         "plainAction": "Check the site again to include it."
       }
     },
@@ -1113,8 +1370,8 @@
       "checkId": "head-tags-in-body",
       "reason": {
         "code": "earlier-version",
-        "text": "This crawl was made by an earlier version, which didn't record what this check needs. Crawl again to check it.",
-        "plainText": "This site check was made with an older version of Shouting Iguana, which didn't save what this check compares.",
+        "text": "This crawl was made by an earlier version, which didn\u0027t record what this check needs. Crawl again to check it.",
+        "plainText": "This site check was made with an older version of Shouting Iguana, which didn\u0027t save what this check compares.",
         "plainAction": "Check the site again to include it."
       }
     },
@@ -1122,8 +1379,8 @@
       "checkId": "html-structure-errors",
       "reason": {
         "code": "earlier-version",
-        "text": "This crawl was made by an earlier version, which didn't record what this check needs. Crawl again to check it.",
-        "plainText": "This site check was made with an older version of Shouting Iguana, which didn't save what this check compares.",
+        "text": "This crawl was made by an earlier version, which didn\u0027t record what this check needs. Crawl again to check it.",
+        "plainText": "This site check was made with an older version of Shouting Iguana, which didn\u0027t save what this check compares.",
         "plainAction": "Check the site again to include it."
       }
     },
@@ -1131,8 +1388,8 @@
       "checkId": "mobile-alternate",
       "reason": {
         "code": "earlier-version",
-        "text": "This crawl was made by an earlier version, which didn't record what this check needs. Crawl again to check it.",
-        "plainText": "This site check was made with an older version of Shouting Iguana, which didn't save what this check compares.",
+        "text": "This crawl was made by an earlier version, which didn\u0027t record what this check needs. Crawl again to check it.",
+        "plainText": "This site check was made with an older version of Shouting Iguana, which didn\u0027t save what this check compares.",
         "plainAction": "Check the site again to include it."
       }
     }
@@ -1150,16 +1407,23 @@
     "image-missing-dimensions",
     "description-too-long",
     "title-too-long",
+    "heading-levels-skipped",
+    "heading-too-long",
     "description-missing",
     "open-graph-missing",
     "canonical-missing",
     "description-duplicate",
     "title-too-short",
     "low-word-count",
+    "url-parameters",
+    "x-card-missing",
     "non-indexable-inlinks-only",
+    "cookies-insecure",
+    "og-url-not-canonical",
     "sitemap-missing",
     "h1-missing",
-    "security-headers-missing"
+    "security-headers-missing",
+    "security-headers-weak"
   ],
   "score": {
     "version": 1,
@@ -1172,8 +1436,8 @@
     "covers": {
       "pages": 265,
       "urls": 4521,
-      "checksRun": 120,
-      "checksSkipped": 17,
+      "checksRun": 143,
+      "checksSkipped": 27,
       "complete": true,
       "reason": null,
       "blockedByRobots": 0
@@ -1279,6 +1543,24 @@
         "points": 0
       },
       {
+        "checkId": "heading-levels-skipped",
+        "severity": "notice",
+        "count": 63,
+        "of": 265,
+        "unit": "pages",
+        "extent": "many",
+        "points": 0
+      },
+      {
+        "checkId": "heading-too-long",
+        "severity": "notice",
+        "count": 53,
+        "of": 265,
+        "unit": "pages",
+        "extent": "many",
+        "points": 0
+      },
+      {
         "checkId": "description-missing",
         "severity": "notice",
         "count": 11,
@@ -1333,7 +1615,43 @@
         "points": 0
       },
       {
+        "checkId": "url-parameters",
+        "severity": "notice",
+        "count": 3,
+        "of": 265,
+        "unit": "pages",
+        "extent": "some",
+        "points": 0
+      },
+      {
+        "checkId": "x-card-missing",
+        "severity": "notice",
+        "count": 3,
+        "of": 265,
+        "unit": "pages",
+        "extent": "some",
+        "points": 0
+      },
+      {
         "checkId": "non-indexable-inlinks-only",
+        "severity": "notice",
+        "count": 2,
+        "of": 265,
+        "unit": "pages",
+        "extent": "few",
+        "points": 0
+      },
+      {
+        "checkId": "cookies-insecure",
+        "severity": "notice",
+        "count": 2,
+        "of": 265,
+        "unit": "pages",
+        "extent": "few",
+        "points": 0
+      },
+      {
+        "checkId": "og-url-not-canonical",
         "severity": "notice",
         "count": 2,
         "of": 265,
@@ -1361,6 +1679,15 @@
       },
       {
         "checkId": "security-headers-missing",
+        "severity": "notice",
+        "count": 1,
+        "of": 265,
+        "unit": "pages",
+        "extent": "few",
+        "points": 0
+      },
+      {
+        "checkId": "security-headers-weak",
         "severity": "notice",
         "count": 1,
         "of": 265,

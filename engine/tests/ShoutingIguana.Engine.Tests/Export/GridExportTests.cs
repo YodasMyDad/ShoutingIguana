@@ -559,7 +559,7 @@ public sealed class GridExportTests : IDisposable
             {
                 ["hyperlink"] = "Hyperlink", ["image"] = "Image", ["script"] = "Script", ["stylesheet"] = "Stylesheet", ["iframe"] = "Frame", ["media"] = "Media",
                 ["icon"] = "Icon", ["canonical"] = "Canonical", ["hreflang"] = "Hreflang", ["pagination"] = "Pagination", ["metaRefresh"] = "Meta refresh",
-                ["redirect"] = "Redirect"
+                ["redirect"] = "Redirect", ["socialImage"] = "Share image"
             },
             ["position"] = new()
             {

@@ -30,7 +30,7 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
     private const string RULE_FAILED_TEXT = "The check failed during the analysis, so it has no results. The log says why.";
 
     /// <summary>Checks besides the orphans' that need every page that could link to a page, sitemaps aside: skipped as orphans are when the crawl didn't read them all.</summary>
-    private static readonly IssueDefinition[] LinkingPageChecks = [IssueCatalog.CANONICAL_UNLINKED, IssueCatalog.NON_INDEXABLE_INLINKS_ONLY];
+    private static readonly IssueDefinition[] LinkingPageChecks = [IssueCatalog.CANONICAL_UNLINKED, IssueCatalog.NON_INDEXABLE_INLINKS_ONLY, IssueCatalog.HREFLANG_UNLINKED];
 
     /// <summary>The orphan check is skipped once 1 in this many of the pages the crawl tried to read couldn't be read (<see cref="SkippedCheckReasons.PAGES_UNREAD"/>).</summary>
     private const int UNREAD_PAGES_ONE_IN = 20;
@@ -170,11 +170,24 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
                     IssueCatalog.BROKEN_EXTERNAL_LINKS, IssueCatalog.SLOW_EXTERNAL_LINKS);
             }
 
+            // A version only hreflang names is never read when hreflang isn't followed, so which are unlinked can't be told;
+            // unless the check is skipped already, for pages the crawl didn't read at all.
+            if (!options.CrawlHreflang && !skipped.ContainsKey(IssueCatalog.HREFLANG_UNLINKED) &&
+                reader.ReadUnreadHreflangTargets() is > 0 and var unread)
+            {
+                var versions = unread == 1 ? "1 language version" : string.Create(CultureInfo.InvariantCulture, $"{unread:N0} language versions");
+                Skip(notes, skipped, $"Hreflang links weren't followed in this crawl, so language versions nothing else leads to weren't looked for.",
+                    SkippedCheckReasons.HREFLANG_OFF,
+                    $"Hreflang links weren't followed in this crawl, and {versions} they name {(unread == 1 ? "wasn't" : "weren't")} read.",
+                    IssueCatalog.HREFLANG_UNLINKED);
+            }
+
             if (!options.CheckResources)
             {
                 Skip(notes, skipped, "Images weren't fetched in this crawl, so broken and oversized images weren't looked for.",
                     SkippedCheckReasons.RESOURCES_OFF, "Images weren't fetched in this crawl.",
-                    IssueCatalog.IMAGE_BROKEN, IssueCatalog.IMAGE_TOO_LARGE, IssueCatalog.IMAGE_NO_SRCSET, IssueCatalog.IMAGE_LEGACY_FORMAT);
+                    IssueCatalog.IMAGE_BROKEN, IssueCatalog.IMAGE_TOO_LARGE, IssueCatalog.IMAGE_NO_SRCSET, IssueCatalog.IMAGE_LEGACY_FORMAT,
+                    IssueCatalog.SOCIAL_IMAGE_BROKEN, IssueCatalog.SOCIAL_IMAGE_TOO_LARGE, IssueCatalog.SOCIAL_IMAGE_TOO_SMALL);
                 Skip(notes, skipped, note: null,
                     SkippedCheckReasons.RESOURCES_OFF, "Scripts, stylesheets and other files weren't fetched in this crawl.",
                     IssueCatalog.BROKEN_RESOURCES, IssueCatalog.CONTENT_TYPE_MISMATCH, IssueCatalog.RESOURCE_PAST_CRAWL_LIMIT);
@@ -252,13 +265,14 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
                 }
             }
 
-            var hreflang = new HreflangRules(urls);
+            var hreflang = new HreflangRules(urls, reader.ReadUrl);
             var indexability = new IndexabilityRules();
             var robotsToken = UserAgents.Resolve(options.UserAgent, options.CustomUserAgent).RobotsToken;
             IPageRule[] pageRules =
             [
                 new TitleRules(settings), new DescriptionRules(settings), new HeadingRules(), new ContentRules(settings),
-                new ImageRules(settings, urls, reader.ReadUrlId, scope, PrivateNetworkGuard.IsPrivateLiteral(new Uri(startUrl)), reader.ReadUrl), new LinkRules(urls), new CanonicalRules(urls, reader.ReadUrl, reader.ReadFacts), indexability,
+                new ImageRules(settings, urls, reader.ReadUrlId, scope, PrivateNetworkGuard.IsPrivateLiteral(new Uri(startUrl)), reader.ReadUrl),
+                new TextStructureRules(settings), new SocialRules(urls), new LinkRules(urls), new CanonicalRules(urls, reader.ReadUrl, reader.ReadFacts), indexability,
                 new DirectiveRules(urls, robotsToken), new LinkStructureRules(settings, urls, reader.ReadUrl, new Uri(startUrl)), hreflang, new StructuredDataRules(),
                 new SecurityRules(urls), new UrlRules(settings), new PerformanceRules(settings), new HtmlRules()
             ];
@@ -282,7 +296,8 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
                     }),
                 new RobotsTxtRules(urls, robots, scope, mainOrigins, reader.ReadSiteVersionOnlyOrigins(), sitemaps), siteVersions,
                 new SiteVisibilityRules(urls), new RedirectHeaderRules(urls, reader.ReadRedirectHeaders, reader.ReadUrl),
-                new PaginationRules(urls, reader.ReadUrlId, reader.ReadUrl), new ResourceRules(urls, reader.ReadContentType)
+                new PaginationRules(urls, reader.ReadUrlId, reader.ReadUrl), new ResourceRules(urls, reader.ReadContentType),
+                new UrlTextRules(urls, reader.ReadInternalUrls())
             ];
 
             // Pages parsed before each collection of facts that a check needs (CollectedFacts), counted as they're read.

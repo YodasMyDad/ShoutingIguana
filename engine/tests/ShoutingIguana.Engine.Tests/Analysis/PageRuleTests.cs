@@ -287,7 +287,7 @@ public sealed class PageRuleTests
     public void UppercaseIgnoresPercentEscapes()
     {
         var site = new RuleHarness();
-        var rules = new UrlRules(SETTINGS);
+        var rules = new FirstUrlRules();
 
         Assert.Empty(Issues(rules, site.Page($"{site.Site}/caf%C3%A9/a%2Fb", RuleHarness.Html())));
         Assert.Equal([IssueCatalog.URL_UPPERCASE, IssueCatalog.URL_UNDERSCORES], Issues(rules, site.Page($"{site.Site}/About_Us", RuleHarness.Html())));
@@ -568,7 +568,7 @@ public sealed class PageRuleTests
 
         // 80 readable characters of path, but 480 once percent-encoded.
         Assert.True(cyrillic.Url.Length > 400);
-        Assert.Empty(Issues(new UrlRules(SETTINGS), cyrillic));
+        Assert.Empty(Issues(new FirstUrlRules(), cyrillic));
     }
 
     private static List<IssueDefinition> Issues(IPageRule rule, AnalyzedPage page) => rule.Check(page).Select(hit => hit.Issue).ToList();
@@ -577,6 +577,13 @@ public sealed class PageRuleTests
     /// The structured data rules' first two checks, invalid JSON-LD and missing required properties, which these tests are
     /// about: batch 5's (schema.org faults, recommended properties, noindex) are StructuredDataCheckTests'.
     /// </summary>
+    /// <summary>The URL rules' first three checks (uppercase, underscores, length), which these tests are about: batch 7's are SecurityUrlCheckTests'.</summary>
+    private sealed class FirstUrlRules : IPageRule
+    {
+        public IEnumerable<IssueHit> Check(AnalyzedPage page) => new UrlRules(SETTINGS).Check(page)
+            .Where(hit => hit.Issue == IssueCatalog.URL_UPPERCASE || hit.Issue == IssueCatalog.URL_UNDERSCORES || hit.Issue == IssueCatalog.URL_TOO_LONG);
+    }
+
     private sealed class SyntaxAndRequiredRules : IPageRule
     {
         public IEnumerable<IssueHit> Check(AnalyzedPage page) => new StructuredDataRules().Check(page)

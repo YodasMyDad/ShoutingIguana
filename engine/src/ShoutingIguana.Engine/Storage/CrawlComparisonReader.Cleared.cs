@@ -92,6 +92,13 @@ public static partial class CrawlComparisonReader
         }
 
         var column = SharedTextColumn(check);
+        if (column is not null)
+        {
+            // A crawl made before the share columns: its clusters' share text wasn't stored.
+            using var has = then.Command("SELECT COUNT(*) FROM pragma_table_info('responses') WHERE name = $column", [new("$column", column)]);
+            column = has.ExecuteScalar() is 0L ? null : column;
+        }
+
         List<ClearedGroup> groups = [];
         using var shared = column is null ? null : then.Command($"SELECT {column} FROM responses WHERE url_id = $id", [new("$id", 0)]);
         foreach (var group in pass.Cleared.Skip(query.Offset).Take(query.Limit))
@@ -181,5 +188,7 @@ public static partial class CrawlComparisonReader
         check == IssueCatalog.TITLE_DUPLICATE ? "title"
         : check == IssueCatalog.DESCRIPTION_DUPLICATE ? "meta_description"
         : check == IssueCatalog.H1_DUPLICATE ? "h1"
+        : check == IssueCatalog.OG_TITLE_DUPLICATE ? "og_title"
+        : check == IssueCatalog.OG_DESCRIPTION_DUPLICATE ? "og_description"
         : null;
 }

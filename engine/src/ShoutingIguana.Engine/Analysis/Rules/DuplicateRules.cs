@@ -37,13 +37,21 @@ internal sealed class DuplicateRules(AnalysisSettings settings) : ISiteRule
     private readonly List<(ulong Hash, int Id)> _descriptions = [];
     private readonly List<(ulong Hash, int Id)> _h1s = [];
     private readonly List<(ulong Hash, int Id)> _content = [];
+
+    // Batch 9: each page's share title and description (Open Graph's, else X's), beside its own title and description.
+    private readonly List<(ulong Hash, ulong Own, int Id)> _shareTitles = [];
+    private readonly List<(ulong Hash, ulong Own, int Id)> _shareDescriptions = [];
     private readonly List<PageFingerprint> _fingerprints = [];
     private readonly List<(int From, int To)> _pagination = [];
 
     // The fingerprints of a bucket too full to compare in full, gathered in its order (see CompareBucket).
     private PageFingerprint[] _bucket = [];
 
-    public IReadOnlyList<IssueDefinition> Checks { get; } = [IssueCatalog.TITLE_DUPLICATE, IssueCatalog.DESCRIPTION_DUPLICATE, IssueCatalog.H1_DUPLICATE, IssueCatalog.DUPLICATE_CONTENT, IssueCatalog.NEAR_DUPLICATE_CONTENT];
+    public IReadOnlyList<IssueDefinition> Checks { get; } =
+    [
+        IssueCatalog.TITLE_DUPLICATE, IssueCatalog.DESCRIPTION_DUPLICATE, IssueCatalog.H1_DUPLICATE, IssueCatalog.DUPLICATE_CONTENT, IssueCatalog.NEAR_DUPLICATE_CONTENT,
+        IssueCatalog.OG_TITLE_DUPLICATE, IssueCatalog.OG_DESCRIPTION_DUPLICATE
+    ];
 
     /// <summary>
     /// Pages the near-duplicate check would compare without the whole of their fingerprint, because an earlier version
@@ -78,6 +86,8 @@ internal sealed class DuplicateRules(AnalysisSettings settings) : ISiteRule
         AddText(_titles, facts.Titles.FirstOrDefault(), page.UrlId);
         AddText(_descriptions, facts.MetaDescriptions.FirstOrDefault(), page.UrlId);
         AddText(_h1s, facts.Headings.FirstOrDefault(heading => heading.Level == 1 && heading.Text.Length > 0)?.Text, page.UrlId);
+        AddShared(_shareTitles, SocialText.ShareTitle(facts), facts.Titles.FirstOrDefault(), page.UrlId);
+        AddShared(_shareDescriptions, SocialText.ShareDescription(facts), facts.MetaDescriptions.FirstOrDefault(), page.UrlId);
         if (facts.WordCount >= settings.DuplicateMinWordCount)
         {
             _content.Add((facts.ContentHash, page.UrlId));
@@ -97,7 +107,9 @@ internal sealed class DuplicateRules(AnalysisSettings settings) : ISiteRule
             .Concat(Groups(_descriptions, IssueCatalog.DESCRIPTION_DUPLICATE))
             .Concat(Groups(_h1s, IssueCatalog.H1_DUPLICATE, SeriesOf()))
             .Concat(Groups(_content, IssueCatalog.DUPLICATE_CONTENT))
-            .Concat(PagesWithoutFingerprint == 0 ? NearDuplicates() : []);
+            .Concat(PagesWithoutFingerprint == 0 ? NearDuplicates() : [])
+            .Concat(SharedGroups(_shareTitles, IssueCatalog.OG_TITLE_DUPLICATE))
+            .Concat(SharedGroups(_shareDescriptions, IssueCatalog.OG_DESCRIPTION_DUPLICATE));
 
     /// <summary>
     /// Which paginated series a page belongs to: a key shared by every page joined to it through rel=next/prev, or the
@@ -128,9 +140,61 @@ internal sealed class DuplicateRules(AnalysisSettings settings) : ISiteRule
             return;
         }
 
-        // Case and spacing don't make two titles different to a reader.
+        entries.Add((Hash(text), id));
+    }
+
+    private static void AddShared(List<(ulong Hash, ulong Own, int Id)> entries, string? shared, string? own, int id)
+    {
+        if (!string.IsNullOrWhiteSpace(shared))
+        {
+            // A page with no text of its own (no title) counts as one more, with nothing: two such pages don't differ.
+            entries.Add((Hash(shared), string.IsNullOrWhiteSpace(own) ? 0 : Hash(own), id));
+        }
+    }
+
+    /// <summary>Case and spacing don't make two titles different to a reader.</summary>
+    private static ulong Hash(string text)
+    {
         var normalized = string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)).ToLowerInvariant();
-        entries.Add((XxHash3.HashToUInt64(MemoryMarshal.AsBytes(normalized.AsSpan())), id));
+        return XxHash3.HashToUInt64(MemoryMarshal.AsBytes(normalized.AsSpan()));
+    }
+
+    /// <summary>
+    /// Pages sharing a share title (or description) while their own titles (or descriptions) differ: those whose own
+    /// are the same too are the plain duplicate check's, and their share text usually follows. Each page of such a group
+    /// names its first page, as <see cref="Groups"/> does, so the cluster is named after it.
+    /// </summary>
+    private static IEnumerable<IssueHit> SharedGroups(List<(ulong Hash, ulong Own, int Id)> entries, IssueDefinition issue)
+    {
+        entries.Sort();
+        for (var start = 0; start < entries.Count;)
+        {
+            var end = start + 1;
+            while (end < entries.Count && entries[end].Hash == entries[start].Hash)
+            {
+                end++;
+            }
+
+            // Sorted by their own text within the group: it differs when the first and last do. A page whose share text is
+            // its own (a home page's description, which a platform gives every page without one) is the one the others
+            // copied: they're flagged, not it. The cluster is named after its first page flagged, as Groups names it.
+            if (end - start > 1 && entries[start].Own != entries[end - 1].Own)
+            {
+                var group = entries.GetRange(start, end - start);
+                var flagged = group.Where(entry => entry.Own != entry.Hash).Select(entry => entry.Id).Order().ToList();
+                var first = flagged.Count > 0 ? flagged[0] : 0;
+                foreach (var id in flagged)
+                {
+                    var related = id != first ? first : flagged.Count > 1 ? flagged[1] : group.Where(entry => entry.Id != first).Min(entry => entry.Id);
+                    yield return new IssueHit(issue, id, RuleText.Count(group.Count - 1, "other page", "other pages"), related)
+                    {
+                        Targets = related == first ? null : [first]
+                    };
+                }
+            }
+
+            start = end;
+        }
     }
 
     /// <param name="seriesOf">

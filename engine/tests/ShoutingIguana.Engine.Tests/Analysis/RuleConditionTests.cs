@@ -172,8 +172,9 @@ public sealed class RuleConditionTests
 
         Assert.Empty(Check("/en", Alternate("en", "/en") + Alternate("fr", "/fr") + Alternate("x-default", "/en")));
         Assert.Empty(Check("/plain", string.Empty));
-        Assert.Equal([IssueCatalog.HREFLANG_INVALID_CODE], Check("/uk", Alternate("en-UK", "/uk") + Alternate("x-default", "/uk")));
-        Assert.Equal([IssueCatalog.HREFLANG_INVALID_CODE], Check("/latam", Alternate("es-419", "/latam") + Alternate("x-default", "/latam")));
+        // Naming only themselves, these are hreflang-self-only's too.
+        Assert.Equal([IssueCatalog.HREFLANG_INVALID_CODE, IssueCatalog.HREFLANG_SELF_ONLY], Check("/uk", Alternate("en-UK", "/uk") + Alternate("x-default", "/uk")));
+        Assert.Equal([IssueCatalog.HREFLANG_INVALID_CODE, IssueCatalog.HREFLANG_SELF_ONLY], Check("/latam", Alternate("es-419", "/latam") + Alternate("x-default", "/latam")));
         Assert.Equal([IssueCatalog.HREFLANG_MISSING_SELF], Check("/no-self", Alternate("fr", "/fr") + Alternate("x-default", "/fr")));
         Assert.Equal([IssueCatalog.HREFLANG_DUPLICATE_CODE],
             Check("/twice", Alternate("en", "/twice") + Alternate("fr", "/fr") + Alternate("fr", "/fr-ca") + Alternate("x-default", "/twice")));
@@ -206,7 +207,12 @@ public sealed class RuleConditionTests
         }
 
         // /de and /it don't link back, and the issue names both; /fr does; /es isn't indexable, which is reported on its own.
-        Assert.Equal([new IssueHit(IssueCatalog.HREFLANG_MISSING_RETURN, en.UrlId, "2 alternates don't link back", de.UrlId) { Targets = [de.UrlId, it.UrlId] }],
+        // No page links to another here, so every indexable version is hreflang-unlinked's too.
+        Assert.Equal(
+            [
+                new IssueHit(IssueCatalog.HREFLANG_MISSING_RETURN, en.UrlId, "2 alternates don't link back", de.UrlId) { Targets = [de.UrlId, it.UrlId] },
+                .. new[] { en, fr, de, it }.Select(page => page.UrlId).Order().Select(id => new IssueHit(IssueCatalog.HREFLANG_UNLINKED, id, "No link or sitemap entry leads here"))
+            ],
             rules.Finish());
     }
 

@@ -25,7 +25,7 @@ public sealed class ReportedOnceTests
         Assert.Equal(
         [
             "duplicate-site-version", "no-https", "robots-txt-missing", "robots-txt-no-sitemap", "robots-txt-unreachable", "robots-txt-unreachable-other-origin",
-            "security-headers-missing", "site-hidden-from-search", "sitemap-empty", "sitemap-error", "sitemap-lastmod-invalid", "sitemap-missing",
+            "security-headers-missing", "security-headers-weak", "site-hidden-from-search", "sitemap-empty", "sitemap-error", "sitemap-lastmod-invalid", "sitemap-missing",
             "sitemap-near-limit", "sitemap-over-limit"
         ], IssueCatalog.All.Where(check => check.ReportedOnce).Select(check => check.Id).Order(StringComparer.Ordinal));
 
@@ -50,7 +50,9 @@ public sealed class ReportedOnceTests
 
         // An HTTPS site of four pages, every one noindex, the home page among them, and none sending a security header.
         var site = new RuleHarness();
-        var home = site.Page($"{site.Site}/", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex);
+        // Its home page sends two security headers, both too weakly.
+        var home = site.Page($"{site.Site}/", RuleHarness.Html(NOINDEX), IndexabilityReason.Noindex,
+            [new("strict-transport-security", "max-age=60"), new("x-content-type-options", "none")]);
         AnalyzedPage[] pages =
         [
             home,
@@ -109,7 +111,7 @@ public sealed class ReportedOnceTests
         Assert.Equal(
         [
             "robots-txt-missing", "robots-txt-no-sitemap", "robots-txt-unreachable", "robots-txt-unreachable-other-origin", "security-headers-missing",
-            "site-hidden-from-search", "sitemap-empty", "sitemap-error", "sitemap-lastmod-invalid", "sitemap-missing", "sitemap-near-limit", "sitemap-over-limit"
+            "security-headers-weak", "site-hidden-from-search", "sitemap-empty", "sitemap-error", "sitemap-lastmod-invalid", "sitemap-missing", "sitemap-near-limit", "sitemap-over-limit"
         ], onHome.Select(hit => hit.Issue.Id).Order(StringComparer.Ordinal));
         Assert.All(onHome, hit => Assert.Equal(home.UrlId, hit.UrlId));
         Assert.Equal("https://example.com/robots.txt (503 Service Unavailable), https://www.example.com/robots.txt (500 Internal Server Error)",

@@ -270,9 +270,10 @@ Built in stages:
   them: this check's `references` is `sources` (it flags URLs others refer to) and each check named is a `targets` check
   of pages, grouped by `relatedUrl` (it flags the pages that refer to them). `internal-client-error`,
   `internal-server-error` and `internal-unreachable` clear `broken-internal-links`, `image-broken`, `broken-resources`,
-  `canonical-broken`, `hreflang-broken-target` and `pagination-broken`; `redirect-chain` clears `links-to-redirects` and
-  `pagination-broken`; `redirect-loop` clears `broken-internal-links` and `canonical-broken`; `redirect-broken`
-  `broken-internal-links`, `image-broken`, `broken-resources` and `canonical-broken`. Empty for the rest: a canonical
+  `canonical-broken`, `hreflang-broken-target`, `pagination-broken` and `social-image-broken`; `redirect-chain` clears
+  `links-to-redirects` and `pagination-broken`; `redirect-loop` clears `broken-internal-links` and `canonical-broken`;
+  `redirect-broken` `broken-internal-links`, `image-broken`, `broken-resources`, `canonical-broken` and
+  `social-image-broken`. Empty for the rest: a canonical
   loop's pages aren't also reported as canonicalised to a non-indexable page, and a canonical header on a redirect is
   the redirect's own fault.
   What a fix clears **on a crawl** is counted, never assumed: the analysis's `counts[].clears`. Only how a check is
@@ -1025,6 +1026,7 @@ one moment is never set against a total from another, and the app, the report an
 | `start-not-root` | The crawl didn't start at the site's root (its start URL has a path other than `/`), so its first page isn't known to be the site's home page: `site-hidden-from-search` can't be judged |
 | `external-links-off` | The crawl was told not to check links to other sites |
 | `resources-off` | The crawl was told not to fetch images and other files |
+| `hreflang-off` | The crawl wasn't told to follow hreflang links (the default), and a language version they name was left unread, so which versions nothing else leads to can't be told |
 | `robots-txt-ignored` | The crawl was told to ignore robots.txt. It asked for every URL, so none was refused (`blocked-by-robots`); it read no other origin's robots.txt (`robots-txt-unreachable-other-origin`); and it read the site's own only for sitemap discovery, so with sitemaps off `robots-txt-unreachable` and `robots-txt-missing` are skipped too |
 | `site-versions-unchecked` | The site's other versions (www or not, http or https) weren't all checked |
 | `rule-failed` | The check's rule failed once every page was read, so it has no results (the log says why) |
@@ -1057,7 +1059,7 @@ what each analysis stores in its crawl file.
 
 - **`settings`** is each limit's value by name: the body `PUT` and `validate` take. **`limits`** lists every limit in
   the order Settings shows them, each with its `value` (the same number), the engine's `default`, its `unit`
-  (`characters`, `pixels` for text, `px` for an image's width, `words`, `bits`, `bytes`, `ms`, `links` or `clicks`), the
+  (`characters`, `pixels` for text, `px` for an image's width, `words`, `bits`, `bytes`, `ms`, `links`, `clicks` or `points`), the
   `min` and `max` it may be set within, and a
   `description`: one sentence saying what it does, to show as it is. A width in `pixels` also has
   **`pixelsPerCharacter`** (9.4 for a title, 6.2 for a description; no other limit has the field): an ordinary
@@ -1601,7 +1603,7 @@ page's links to itself left out, in the order they were found:
   that robots.txt refused, that timed out or that wasn't checked says which, where `statusCode` is null for each of
   them as it is for a URL never fetched (`outcome` null).
   `kinds` filters by the kind of link (`hyperlink`, `image`, `script`, `stylesheet`, `iframe`, `media`, `icon`,
-  `canonical`, `hreflang`, `pagination`, `metaRefresh`, `redirect`; every kind by default).
+  `canonical`, `hreflang`, `pagination`, `metaRefresh`, `redirect`, `socialImage` (an og:image or twitter:image given as a full URL); every kind by default).
 - `text` is the anchor text of a hyperlink, the alt text of an image, or the language of an hreflang link. `position`
   is `content`, `navigation`, `header`, `footer`, `sidebar` or `head`. `flags` are among `noFollow`, `sponsored`,
   `ugc`, `imageLink`, `outsideHead`, `samePage` and `fromHttpHeader`; `followed` is whether search engines follow a
@@ -1918,7 +1920,7 @@ snapshot per call, a request given up stops its read, reads queue, and an analys
   | Column | Type | Sorts | Is |
   | --- | --- | --- | --- |
   | `id` | number | Yes | The link's id: the order the crawl stored links in. The default sort |
-  | `kind` | enum | | `hyperlink`, `image`, `script`, `stylesheet`, `iframe`, `media`, `icon`, `canonical`, `hreflang`, `pagination`, `metaRefresh` or `redirect` |
+  | `kind` | enum | | `hyperlink`, `image`, `script`, `stylesheet`, `iframe`, `media`, `icon`, `canonical`, `hreflang`, `pagination`, `metaRefresh`, `redirect` or `socialImage` |
   | `text` | text | | The anchor text of a hyperlink, the alt text of an image, or the language of an hreflang link |
   | `position` | enum | | Where on the page: `content`, `navigation`, `header`, `footer`, `sidebar` or `head` |
   | `noFollow`, `sponsored`, `ugc` | boolean | | The link's own `rel` says it |
