@@ -20,6 +20,8 @@ namespace ShoutingIguana.Engine.Storage;
 /// <item><b>Not rechecked</b>: past the cap, or not reached before the run ended.</item>
 /// <item><b>New</b>: a URL in its scope the check didn't flag before and flags now.</item>
 /// </list>
+/// The cookie check is settled by cookie rather than by page (<see cref="RecheckCookies"/>): a recheck's fresh session
+/// cookie lands on another page than the crawl's did.
 /// </summary>
 internal static class RecheckSettlement
 {
@@ -51,6 +53,10 @@ internal static class RecheckSettlement
             var check = recheck.CheckId is null ? null : IssueCatalog.Find(recheck.CheckId);
             SetOutcomes(connection, transaction, recheck.Id, recheck.StartedAt, check, check is not null && skippedChecks.Contains(check.Id),
                 fetchesUrls: recheck.Kinds.Split(',').Contains(nameof(RecheckKind.Urls)), readOnlyCompleted: status == RecheckStatus.Completed);
+            if (check == IssueCatalog.COOKIES_INSECURE && !skippedChecks.Contains(check.Id))
+            {
+                RecheckCookies.Settle(connection, transaction, recheck.Id, recheck.StartedAt);
+            }
 
             using var counts = Command(connection, transaction, $"""
                 UPDATE rechecks SET
@@ -62,7 +68,7 @@ internal static class RecheckSettlement
                         + MAX(0, judged - (SELECT COUNT(*) FROM recheck_urls WHERE recheck_id = $id AND role = {(int)RecheckRole.Judged})),
                     new = (SELECT COUNT(*) FROM recheck_urls WHERE recheck_id = $id AND outcome = {(int)RecheckOutcome.New})
                         + (SELECT COUNT(*) FROM recheck_urls ru WHERE ru.recheck_id = $id AND ru.role <> {(int)RecheckRole.Judged} AND ru.flagged_before = 0
-                           AND EXISTS (SELECT 1 FROM issues i WHERE i.issue = $check AND i.url_id = ru.url_id)),
+                           AND ru.outcome IS NULL AND EXISTS (SELECT 1 FROM issues i WHERE i.issue = $check AND i.url_id = ru.url_id)),
                     score_after = $score,
                     settled_at = $now
                 WHERE id = $id
