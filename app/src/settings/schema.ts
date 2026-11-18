@@ -47,6 +47,12 @@ export interface Settings {
    * that crawl's Issues list, counts and exports leave out (docs/v2-ui-discovery.md, decision 2).
    */
   hiddenChecksByCrawl: Record<string, string[]>;
+  /**
+   * The crawl each crawl is compared with when it isn't its previous crawl (by the crawl's id): another crawl of its
+   * site picked in Advanced's Compare with…, or `none` ("Don't compare"). A crawl not in it is compared with its previous
+   * crawl (docs/v2-fix-loop.md, "Comparing with another crawl").
+   */
+  compareWithByCrawl: Record<string, string>;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -67,6 +73,7 @@ export const DEFAULT_SETTINGS: Settings = {
   exportFormat: 'xlsx',
   gridColumns: {},
   hiddenChecksByCrawl: {},
+  compareWithByCrawl: {},
 };
 
 export const INSPECTOR_WIDTH_RANGE = { min: 320, max: 960 } as const;
@@ -119,6 +126,23 @@ function readHiddenByCrawl(value: unknown): Record<string, string[]> {
   return byCrawl;
 }
 
+/** The crawls whose comparison is kept: the most recently changed, as their hidden checks are. */
+const MAX_CRAWLS_COMPARING = 100;
+const CRAWL_ID = /^[0-9a-f]{16}$/;
+
+function readCompareWith(value: unknown): Record<string, string> {
+  const byCrawl: Record<string, string> = {};
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return byCrawl;
+  const kept = Object.entries(value).filter(
+    ([crawl, other]) =>
+      CRAWL_ID.test(crawl) &&
+      typeof other === 'string' &&
+      (other === 'none' || (CRAWL_ID.test(other) && other !== crawl)),
+  );
+  for (const [crawl, other] of kept.slice(-MAX_CRAWLS_COMPARING)) byCrawl[crawl] = other as string;
+  return byCrawl;
+}
+
 /** Reads stored settings of any shape (or none) into valid ones. */
 export function readSettings(value: unknown): Settings {
   const hadSettings = typeof value === 'object' && value !== null;
@@ -165,5 +189,6 @@ export function readSettings(value: unknown): Settings {
     exportFormat: oneOf(stored.exportFormat, ['csv', 'xlsx'], DEFAULT_SETTINGS.exportFormat),
     gridColumns: readColumnLayouts(stored.gridColumns),
     hiddenChecksByCrawl: readHiddenByCrawl(stored.hiddenChecksByCrawl),
+    compareWithByCrawl: readCompareWith(stored.compareWithByCrawl),
   };
 }
