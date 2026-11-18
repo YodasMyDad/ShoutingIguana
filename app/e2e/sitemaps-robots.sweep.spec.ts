@@ -279,7 +279,9 @@ test('sweep: every count on Sitemaps lands on exactly its URLs', async ({ page }
       await expect(main(page).getByText(/^The analysis didn’t count the site’s pages no sitemap lists/)).toBeVisible();
       await expect(main(page).getByText(/in (a|any) sitemap\./)).toHaveCount(0);
     } else if (facets.matching === 0) {
-      await expect(main(page).getByText(/^The crawl found no pages on this site that can appear in search/)).toBeVisible();
+      await expect(
+        main(page).getByText(/^The crawl found no pages on this site that can appear in search/),
+      ).toBeVisible();
     } else {
       // "N of the site's M indexable pages": M is the crawl's pages that can appear in search, some of the library's.
       expect(facets.matching).toBeLessThanOrEqual(crawl.pageCount);
