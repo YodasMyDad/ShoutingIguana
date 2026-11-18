@@ -1,7 +1,7 @@
 // The fix loop's words for a recheck, in both modes (docs/v2-fix-loop.md, section 4, the problem page's card and
 // "Every result"; Advanced's head and banner): what it will do and how long it takes, its progress, and what it found
 // ("4 of 5 fixed. 1 still has it"). "Couldn't be rechecked" and "not rechecked" are never fixed. Pure.
-import type { RecheckPlan, RecheckRefusal, RecheckResult, RecheckStatus } from '../api/fixLoop';
+import type { RecheckAnswers, RecheckPlan, RecheckRefusal, RecheckResult, RecheckStatus } from '../api/fixLoop';
 import type { CheckReferences, CheckSubject } from '../api/types';
 import { formatCount, formatCountOf } from '../lib/format';
 import type { ChangeMode } from './changes';
@@ -277,6 +277,39 @@ export function simpleResultWords(args: {
   return lines;
 }
 
+/**
+ * Why the site's pages couldn't be rechecked, when it turned them away again, in Simple's words: "the site turned them
+ * away again: it asked us to slow down"; "…: its security stopped us"; "…: its robots.txt doesn't allow it"; "the site
+ * didn't answer"; or, for more than one reason, "the site turned them away again, or didn't answer". Null when none were
+ * (or the recheck is from before answers were kept).
+ */
+export function refusedAgainWords(answers: RecheckAnswers | null): string | null {
+  if (!answers || answers.refused === 0) return null;
+  const them = answers.refused === 1 ? 'it' : 'them';
+  const reasons = [
+    answers.rateLimited > 0 ? 'it asked us to slow down' : null,
+    answers.blocked > 0 ? 'its security stopped us' : null,
+    answers.robotsTxt > 0 ? 'its robots.txt doesn’t allow it' : null,
+  ].filter((reason): reason is string => reason !== null);
+  if (answers.noAnswer === answers.refused) return 'the site didn’t answer';
+  if (reasons.length === 1 && answers.noAnswer === 0) return `the site turned ${them} away again: ${reasons[0]}`;
+  return answers.noAnswer > 0
+    ? `the site turned ${them} away again, or didn’t answer`
+    : `the site turned ${them} away again`;
+}
+
+/** Advanced's why for refusals: "429", "blocked", "robots.txt", "no answer", joined. */
+function refusedAgainCodes(answers: RecheckAnswers): string {
+  return [
+    answers.rateLimited > 0 ? '429' : null,
+    answers.blocked > 0 ? 'blocked' : null,
+    answers.robotsTxt > 0 ? 'robots.txt' : null,
+    answers.noAnswer > 0 ? 'no answer' : null,
+  ]
+    .filter(Boolean)
+    .join(', ');
+}
+
 /** The score before and after a recheck: "Score 85 → 88." Null when either is missing. */
 export function recheckScoreWords(result: Pick<RecheckResult, 'scoreBefore' | 'scoreAfter'>): string | null {
   if (result.scoreBefore === null || result.scoreAfter === null) return null;
@@ -291,7 +324,8 @@ export function recheckedWhenWords(endedAt: string | null, now: number = Date.no
 
 /**
  * Advanced's result line: "Rechecked 17 Nov 14:02: 4 of 5 fixed, 1 still (/sofas/), 0 new. Score 85 → 88". `stillPaths`
- * names the URLs still flagged when there are few.
+ * names the URLs still flagged when there are few; `answers`, the ones the site refused again: "2 not checked (2 refused
+ * again: 429)".
  */
 export function advancedResultWords(args: {
   endedAt: string | null;
@@ -299,8 +333,9 @@ export function advancedResultWords(args: {
   judged: number;
   result: RecheckResult;
   stillPaths?: readonly string[];
+  answers?: RecheckAnswers | null;
 }): string {
-  const { endedAt, status, judged, result, stillPaths = [] } = args;
+  const { endedAt, status, judged, result, stillPaths = [], answers = null } = args;
   const when = endedAt ? `${changeDate(endedAt)} ${clockWords(endedAt)}`.trim() : '';
   const lead = status === 'stopped' ? 'Stopped' : status === 'interrupted' ? 'Cut short' : 'Rechecked';
   const paths = result.still > 0 && stillPaths.length > 0 ? ` (${stillPaths.join(', ')})` : '';
@@ -308,11 +343,30 @@ export function advancedResultWords(args: {
     `${formatCount(result.fixed)} of ${formatCount(judged)} fixed`,
     `${formatCount(result.still)} still${paths}`,
   ];
-  if (result.notChecked > 0) parts.push(`${formatCount(result.notChecked)} not checked`);
+  if (result.notChecked > 0) {
+    const refused =
+      answers && answers.refused > 0
+        ? ` (${formatCount(answers.refused)} refused again: ${refusedAgainCodes(answers)})`
+        : '';
+    parts.push(`${formatCount(result.notChecked)} not checked${refused}`);
+  }
   if (result.notRechecked > 0) parts.push(`${formatCount(result.notRechecked)} not rechecked`);
   parts.push(`${formatCount(result.new)} new`);
   const score = recheckScoreWords(result);
   return `${lead}${when ? ` ${when}` : ''}: ${parts.join(', ')}.${score ? ` ${score.slice(0, -1)}` : ''}`;
+}
+
+/**
+ * Advanced's banner for a recheck that ended without a result: one that didn't run ("The recheck didn’t run: Recheck works
+ * on the site’s latest check."), or one that failed, which kept nothing ("The recheck failed, so nothing it fetched was
+ * kept: the disk is full").
+ */
+export function advancedEndedWords(status: RecheckStatus | null, error: string | null): string {
+  if (status === 'failed') {
+    const reason = error?.replace(/^The recheck failed: /, '') ?? null;
+    return `The recheck failed, so nothing it fetched was kept${reason ? `: ${reason}` : '.'}`;
+  }
+  return `The recheck didn’t run${error ? `: ${error}` : '.'}`;
 }
 
 /** The toast when a recheck ends: "Recheck done: 4 of 5 fixed"; "Recheck stopped: 2 of 5 fixed". */
