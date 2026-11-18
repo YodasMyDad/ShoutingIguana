@@ -80,20 +80,32 @@ test.describe('Advanced', () => {
     await expectNoViolations(page);
   });
 
-  test('the answer leads with the things to change, and a fix says what else it clears', async ({ page }) => {
+  test('the answer leads with the things to fix, then the notices, and a fix says what else it clears', async ({
+    page,
+  }) => {
     const { crawl, found, related, byId } = await facts();
-    const sameJob = new Set(related.filter(({ cleared }) => cleared.all).map(({ cleared }) => cleared.checkId));
-    const causes = found
+    // What moves the score: the errors' and warnings' things, a check another one's fix clears entirely being its job.
+    const moves = found.filter((count) => byId.get(count.checkId)?.severity !== 'notice');
+    const ids = new Set(moves.map((count) => count.checkId));
+    const sameJob = new Set(
+      related
+        .filter(({ fixer, cleared }) => cleared.all && ids.has(fixer.checkId) && ids.has(cleared.checkId))
+        .map(({ cleared }) => cleared.checkId),
+    );
+    const causes = moves
       .filter((count) => !sameJob.has(count.checkId))
       .reduce((sum, count) => sum + (count.causes ?? 0), 0);
+    const notices = found.length - moves.length;
     expect(found.every((count) => count.causes !== null && count.causes <= count.count)).toBe(true);
 
     await page.goto(`/crawls/${crawl.id}/overview`);
-    await expect(
-      page
-        .getByRole('main')
-        .getByText(new RegExp(`^${causes === 1 ? '1 thing' : `About ${number(causes)} things`} to change`)),
-    ).toBeVisible();
+    const lead =
+      causes === 0 ? 'Nothing to fix' : causes === 1 ? '1 thing to fix' : `About ${number(causes)} things to fix`;
+    const noticesWords =
+      notices === 0 ? '' : ` · ${number(notices)} ${notices === 1 ? 'notice' : 'notices'} worth a look`;
+    await expect(page.getByRole('main').locator('.si-page-header__subtitle')).toHaveText(
+      new RegExp(`^${lead}[^·]*${noticesWords} · [0-9]+ checks found`),
+    );
 
     // The seeded crawl links to its 404s: restoring them clears those links.
     const fix = related.find(({ fixer }) => fixer.checkId === 'internal-client-error');

@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { ELLIPSIS, fileLabelOf, isResourceType, middleTruncate, originLength, urlDisplay } from './urlText';
+import {
+  ELLIPSIS,
+  fileLabelOf,
+  isResourceType,
+  middleTruncate,
+  originLength,
+  splitExtension,
+  urlDisplay,
+} from './urlText';
 
 /** Monospace: every character the same width. */
 const mono = (text: string) => text.length * 8;
@@ -156,5 +164,23 @@ describe('isResourceType', () => {
       false,
       false,
     ]);
+  });
+});
+
+describe('splitExtension', () => {
+  it('parts a name from its extension, so a cut name keeps it', () => {
+    expect(splitExtension('harpswell-metal-patio-set-9.jpg')).toEqual({
+      stem: 'harpswell-metal-patio-set-9',
+      ext: '.jpg',
+    });
+    expect(splitExtension('archive.tar.gz')).toEqual({ stem: 'archive.tar', ext: '.gz' });
+    expect(splitExtension('hero.WEBP')).toEqual({ stem: 'hero', ext: '.WEBP' });
+  });
+
+  it('leaves a name without an extension whole', () => {
+    expect(splitExtension('index')).toEqual({ stem: 'index', ext: '' });
+    expect(splitExtension('folder/')).toEqual({ stem: 'folder/', ext: '' });
+    expect(splitExtension('.htaccess')).toEqual({ stem: '.htaccess', ext: '' });
+    expect(splitExtension('notes.markdown2')).toEqual({ stem: 'notes.markdown2', ext: '' });
   });
 });

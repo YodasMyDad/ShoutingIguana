@@ -53,7 +53,7 @@ export function SeverityFigures({
                 ? 'None found an issue'
                 : figure.causes === null
                   ? `${formatCountOf(figure.issues, 'issue')} between them`
-                  : `${capitalised(causeWords(figure.causes, figure.templateCauses))}, from ${formatCountOf(figure.issues, 'issue')}`
+                  : `${capitalised(causeWords(figure.causes, figure.templateCauses, figure.severity === 'notice' ? 'change' : 'fix'))}, from ${formatCountOf(figure.issues, 'issue')}`
             }
           />
         ))}

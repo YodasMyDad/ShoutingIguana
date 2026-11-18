@@ -2183,7 +2183,8 @@
   }
 
   /* A file named by its name (an image, a stylesheet): the name leads, its query or folder after it, muted; each cut at
-     its end where there isn't room, the name last of all. */
+     its end where there isn't room, the name last of all, and the name at the end of its stem, so its extension always
+     shows ("harpswell-metal-pat….jpg"). The full URL is on hover and copy. */
   .si-url__shown--file {
     display: flex;
     gap: var(--space-1-5);
@@ -2191,11 +2192,23 @@
   }
 
   .si-url__file {
+    display: flex;
     flex: 0 0 auto;
     max-width: 100%;
-    overflow: hidden;
+    min-width: 0;
     color: var(--color-text);
+  }
+
+  .si-url__stem {
+    min-width: 0;
+    overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .si-url__ext {
+    flex: none;
+    white-space: nowrap;
   }
 
   .si-url__rest {

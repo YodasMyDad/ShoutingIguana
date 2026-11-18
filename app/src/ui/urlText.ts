@@ -171,6 +171,16 @@ const decoded = (text: string): string => {
  * that. A path that ends in `/` is named by its last folder, one with none by its host. The whole URL is never lost:
  * it's what hover, copy and a screen reader get. Text that isn't a URL is its own name.
  */
+/**
+ * A file's name in two parts, so a name too long for its room is cut at the end of its stem and its extension always
+ * shows: "harpswell-metal-pat….jpg", never "harpswell-metal-patio-set-9.j…". An extension is a dot and one to five
+ * letters or digits after a name; a name without one ("index", "folder/", ".htaccess") is all stem.
+ */
+export function splitExtension(name: string): { stem: string; ext: string } {
+  const ext = /.(\.[A-Za-z0-9]{1,5})$/.exec(name)?.[1] ?? '';
+  return { stem: name.slice(0, name.length - ext.length), ext };
+}
+
 export function fileLabelOf(url: string, siteOrigin?: string | null): FileLabel {
   if (/^data:/i.test(url)) {
     const type = /^data:([^;,]*)/i.exec(url)?.[1]?.toLowerCase() ?? '';

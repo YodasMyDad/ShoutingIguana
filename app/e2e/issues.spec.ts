@@ -34,11 +34,10 @@ async function openIssues(page: Page) {
 
 test('triage: pick a check, read it, open a group, its URLs, inspect one, then Esc and Alt+Left', async ({ page }) => {
   await openIssues(page);
-  await expect(
-    page.getByText(
-      /^(About [\d,]+ things to change|1 thing to change)[^:]*: \d+ checks found [\d,]+ issues on this crawl\./,
-    ),
-  ).toBeVisible();
+  // What moves the score leads the answer, then the notices worth a look and the counts (round 3).
+  await expect(page.locator('.si-page-header__subtitle')).toHaveText(
+    /^(About [\d,]+ things to fix|1 thing to fix|Nothing to fix)[^·]*( · [\d,]+ notices? worth a look)? · \d+ checks found [\d,]+ issues on this crawl\./,
+  );
 
   await page.getByRole('option', { name: /Duplicate title/ }).click();
   await expect(page).toHaveURL(/\/issues\/title-duplicate$/);
