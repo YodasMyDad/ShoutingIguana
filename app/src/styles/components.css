@@ -2760,6 +2760,42 @@
     color: var(--color-text-secondary);
   }
 
+  /* Advanced's score at a crawl's end in the switcher (the fix loop): the number, "so far" under it. */
+  .si-switcher-menu__score {
+    display: inline-flex;
+    flex: none;
+    flex-direction: column;
+    align-items: flex-end;
+    margin-left: var(--space-2);
+    font-weight: var(--font-weight-medium);
+  }
+
+  /* Advanced's Compare with… (the fix loop): a crawl's start over its status, URLs and score, as the switcher's rows. */
+  .si-compare-menu {
+    width: var(--switcher-menu-width);
+    max-width: calc(100vw - 2 * var(--space-2));
+  }
+
+  .si-compare-menu .si-menu-item[role='menuitemradio'] {
+    height: auto;
+    min-height: var(--list-row-height);
+    padding-block: var(--space-1-5);
+  }
+
+  .si-compare-menu__tag,
+  .si-compare-menu__meta {
+    color: var(--color-text-muted);
+  }
+
+  .si-compare-menu__meta {
+    font-size: var(--text-12);
+    line-height: var(--leading-12);
+  }
+
+  .si-menu-item[data-highlighted] :is(.si-compare-menu__tag, .si-compare-menu__meta) {
+    color: var(--color-text-secondary);
+  }
+
   /*
     The workspace panel: right of the sidebar, inset from the window's edges (--frame-inset), its own edge and corners.
     The top bar sits at its top; the screen scrolls inside it below; the inspector docks inside it. With no inset left

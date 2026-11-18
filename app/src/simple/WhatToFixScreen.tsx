@@ -2,8 +2,14 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useParams, useRouterState } from '@tanstack/react-router';
 import { ArrowDownWideNarrow, ChevronDown, Copy, FileText } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { analysisQuery, checksQuery, crawlQuery } from '../api/queries';
-import { isCrawling, type Analysis, type Severity } from '../api/types';
+import { analysisQuery, checksQuery, crawlQuery, rechecksQuery } from '../api/queries';
+import type { Recheck } from '../api/fixLoop';
+import { isRecheckRunning, useRecheckRun } from '../crawl/recheck';
+import { fixedGroupTitle } from '../changes/changeWords';
+import { FixedSince } from './FixedSince';
+import { FIXED_SECTION, clearedByRechecks, fixedSinceEntries, type FixedEntry } from './fixedSinceEntries';
+import { useSimpleChanges, type SimpleChanges } from './useSimpleChanges';
+import { isCrawling, type Analysis, type Check, type Severity } from '../api/types';
 import { crawlName, crawlControls, effectiveStatus } from '../crawl/status';
 import { announce } from '../feedback/announce';
 import { ErrorState } from '../feedback/ErrorState';
@@ -82,7 +88,9 @@ function WhatToFix({ crawlId }: { crawlId: string }) {
   const liveStatus = useLive((state) => state.crawls[crawlId]?.status);
   const status = effectiveStatus(item, liveStatus === undefined ? undefined : { status: liveStatus });
   const crawling = status !== null && isCrawling(status);
-  const analysing = status === 'analyzing';
+  // A recheck's analyses (before and after it) are the recheck's: the list stays, and changes in place when it's done.
+  const rechecking = isRecheckRunning(useRecheckRun(crawlId));
+  const analysing = status === 'analyzing' && !rechecking;
   const controls = crawlControls(status, item);
   const readable = item !== undefined && status !== 'unreadable';
   const checks = useQuery(checksQuery());
@@ -104,6 +112,14 @@ function WhatToFix({ crawlId }: { crawlId: string }) {
   const hiddenCount = showHidden
     ? (checks.data?.checks.filter((check) => hiddenIds.includes(check.id)).length ?? 0)
     : (results?.hidden.length ?? 0);
+  // The fix loop: what changed since the site's last check; a first check's rechecks for its Fixed group.
+  const changes = useSimpleChanges(crawlId, item, status);
+  const firstCheck = item !== undefined && !item.previous;
+  const rechecks = useQuery({ ...rechecksQuery(crawlId), enabled: firstCheck && Boolean(item.analyzedAt) });
+  const fixed = useMemo(
+    () => fixedOf(changes, rechecks.data?.rechecks, checks.data?.checks, results, hidden),
+    [changes, rechecks.data, checks.data, results, hidden],
+  );
   const screenRef = useRef<HTMLDivElement>(null);
   useFocusRescue(screenRef, () => titleRef.current);
 
@@ -201,13 +217,15 @@ function WhatToFix({ crawlId }: { crawlId: string }) {
         showHidden={showHidden}
         onShowHidden={setShowHidden}
         onUnhide={() => showAllHidden(crawlId)}
+        changes={changes}
+        fixed={fixed}
       />
     );
   }
 
   const copyList = () => {
     if (!results || !item || !analysis.data) return;
-    void copyWhatToFix(results, partsOf(results, analysis.data, sort), crawlName(item));
+    void copyWhatToFix(results, partsOf(results, analysis.data, sort), crawlName(item), changes.copyWordsOf);
   };
 
   return (
@@ -246,6 +264,23 @@ function WhatToFix({ crawlId }: { crawlId: string }) {
   );
 }
 
+/** The Fixed group: what's fixed since the last check, or, for a first check, what its rechecks cleared. */
+function fixedOf(
+  changes: SimpleChanges,
+  rechecks: readonly Recheck[] | undefined,
+  checks: readonly Check[] | undefined,
+  results: PlainResults | null,
+  hidden: ReadonlySet<string>,
+): { title: string; entries: FixedEntry[] } | null {
+  if (!checks || !results) return null;
+  if (changes.comparison) {
+    return { title: fixedGroupTitle(changes.since), entries: fixedSinceEntries(changes.comparison, checks, hidden) };
+  }
+  if (!rechecks) return null;
+  const passed = new Set(results.passed.map((entry) => entry.check.id));
+  return { title: 'Fixed by a recheck', entries: clearedByRechecks(rechecks, checks, passed, hidden) };
+}
+
 /** The parts' rows, in the order asked for, related problems folded (`fixRows`). */
 function partsOf(results: PlainResults, analysis: Analysis, sort: PlainCheckSort): Record<Severity, FixRow[]> {
   const points = new Map((analysis.score?.lines ?? []).map((line) => [line.checkId, line.points]));
@@ -267,6 +302,8 @@ function FixLists({
   showHidden,
   onShowHidden,
   onUnhide,
+  changes,
+  fixed,
 }: {
   crawlId: string;
   results: PlainResults;
@@ -276,9 +313,18 @@ function FixLists({
   showHidden: boolean;
   onShowHidden: (show: boolean) => void;
   onUnhide: () => void;
+  /** The fix loop: each row's change since the site's last check. */
+  changes: SimpleChanges;
+  /** The fix loop: the Fixed group, or null for none. */
+  fixed: { title: string; entries: FixedEntry[] } | null;
 }) {
   const hash = useRouterState({ select: (state) => state.location.hash });
   const landed = fixSectionOf(hash);
+  // The fix loop: the Summary's "3 problems fixed" lands on the Fixed group (it opens), its "1 new" on the new problems.
+  const landedOnFixed = hash.replace(/^#/, '') === FIXED_SECTION;
+  const landedOnNew = hash.replace(/^#/, '') === 'new-since';
+  const [fixedOpen, setFixedOpen] = useState(landedOnFixed);
+  const fixedHeading = useRef<HTMLHeadingElement>(null);
   const nothingAbove = results.counts.error + results.counts.warning === 0;
   const [allLooks, setAllLooks] = useState(landed === 'notice');
   const [passedOpen, setPassedOpen] = useState(landed === 'passed');
@@ -288,6 +334,7 @@ function FixLists({
     setLastHash(hash);
     if (landed === 'notice') setAllLooks(true);
     if (landed === 'passed') setPassedOpen(true);
+    if (hash.replace(/^#/, '') === FIXED_SECTION) setFixedOpen(true);
   }
   const headings = useRef(new Map<CheckOutcome, HTMLHeadingElement>());
   useLayoutEffect(() => {
@@ -323,6 +370,26 @@ function FixLists({
   useEffect(() => {
     links.current.length = shown.length;
   }, [shown.length]);
+  // Landing on the Fixed group: it comes into view with focus, once it's there to land on.
+  const fixedShown = (fixed?.entries.length ?? 0) > 0;
+  useLayoutEffect(() => {
+    if (!landedOnFixed || !fixedShown) return;
+    fixedHeading.current?.scrollIntoView({ block: 'start' });
+    fixedHeading.current?.focus({ preventScroll: true });
+  }, [landedOnFixed, fixedShown, hash]);
+  // Landing on the new problems: the keys are on the first, as J would put them, once the changes are read.
+  const firstNew = shown.findIndex((entry) => changes.changeOf(entry.check.id)?.state === 'new');
+  const [newLandedOn, setNewLandedOn] = useState<string | null>(null);
+  if (landedOnNew && firstNew >= 0 && newLandedOn !== hash) {
+    setNewLandedOn(hash);
+    setCurrent(firstNew);
+  }
+  useLayoutEffect(() => {
+    if (!landedOnNew || firstNew < 0) return;
+    const link = links.current[firstNew];
+    link?.scrollIntoView({ block: 'center' });
+    link?.focus({ preventScroll: true });
+  }, [landedOnNew, firstNew, hash]);
 
   const rowFor = (entry: CheckEntry, index: number, points: number | null, nested = false) => (
     <li key={entry.check.id} className={nested ? 'si-plain-list__nested' : undefined}>
@@ -333,6 +400,7 @@ function FixLists({
         oneFix={oneFix.has(entry.check.id)}
         points={points}
         nested={nested}
+        change={changes.wordsOf(entry.check.id)}
         ref={(element: HTMLAnchorElement | null) => {
           links.current[index] = element;
         }}
@@ -412,6 +480,16 @@ function FixLists({
             ) : null}
           </Card>
         </section>
+      ) : null}
+      {fixed ? (
+        <FixedSince
+          crawlId={crawlId}
+          title={fixed.title}
+          entries={fixed.entries}
+          open={fixedOpen}
+          onOpenChange={setFixedOpen}
+          headingRef={fixedHeading}
+        />
       ) : null}
       {results.skippedCount > 0 ? (
         <section aria-labelledby={FIX_SECTIONS.skipped} className="mb-6">
@@ -496,7 +574,12 @@ function OutcomeMark({ outcome }: { outcome: CheckOutcome }) {
  * Copy this list: the titles, counts, points back and one-line summaries, as text, in the list's order, a folded
  * problem under the one it's folded under.
  */
-async function copyWhatToFix(results: PlainResults, parts: Record<Severity, FixRow[]>, site: string): Promise<void> {
+async function copyWhatToFix(
+  results: PlainResults,
+  parts: Record<Severity, FixRow[]>,
+  site: string,
+  changeOf: (checkId: string) => string = () => '',
+): Promise<void> {
   const lines = [`What to fix on ${site}`, ''];
   const severities: Severity[] = ['error', 'warning', 'notice'];
   for (const severity of severities) {
@@ -505,11 +588,11 @@ async function copyWhatToFix(results: PlainResults, parts: Record<Severity, FixR
     for (const row of parts[severity]) {
       const back = rowPointsWords(row.points);
       lines.push(
-        `- ${plainTitle(row.entry.check)}: ${rowCountWords(row.entry.check, row.entry.count ?? 0).text}${back ? `, ${back}` : ''}. ${plainSummary(row.entry.check)}`,
+        `- ${plainTitle(row.entry.check)}: ${rowCountWords(row.entry.check, row.entry.count ?? 0).text}${changeOf(row.entry.check.id)}${back ? `, ${back}` : ''}. ${plainSummary(row.entry.check)}`,
       );
       for (const nested of row.nested) {
         lines.push(
-          `  - Fixed along with it: ${plainTitle(nested.check)}, ${rowCountWords(nested.check, nested.count ?? 0).text}.`,
+          `  - Fixed along with it: ${plainTitle(nested.check)}, ${rowCountWords(nested.check, nested.count ?? 0).text}${changeOf(nested.check.id)}.`,
         );
       }
     }

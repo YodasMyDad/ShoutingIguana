@@ -10,6 +10,7 @@ import { formatCount } from '../../lib/format';
 import { MenuItem, MenuSeparator } from '../../ui/Menu';
 import { urlDisplay } from '../../ui/urlText';
 import { oneUrlFilter } from '../urls/urlPlaces';
+import { RecheckMenuItem } from '../rechecks/RecheckMenuItem';
 
 export interface IssuePageMenuProps<Row> {
   crawlId: string;
@@ -36,6 +37,8 @@ export interface IssuePageMenuProps<Row> {
    * order), which "Show its images in Links" opens. Null or left out for any other row.
    */
   imagesIn?: { filter: GridFilter[]; cols: string[]; sort: GridSort[] } | null | undefined;
+  /** The fix loop: Recheck the row or the selection, judged by this check; each row's URL id. */
+  recheck?: { checkId: string; idOf: (row: Row) => number | null; fullCheck?: boolean } | null | undefined;
 }
 
 export function IssuePageMenu<Row>({
@@ -49,6 +52,7 @@ export function IssuePageMenu<Row>({
   onInspect,
   foundIn,
   imagesIn,
+  recheck,
 }: IssuePageMenuProps<Row>) {
   const navigate = useNavigate();
   const count = state?.menu.indices.length ?? 1;
@@ -90,6 +94,16 @@ export function IssuePageMenu<Row>({
             >
               Show where it’s found in Links
             </MenuItem>
+          ) : null}
+          {recheck && state ? (
+            <RecheckMenuItem<Row>
+              crawlId={crawlId}
+              checkId={recheck.checkId}
+              count={count}
+              rows={() => state.menu.rows()}
+              idOf={recheck.idOf}
+              fullCheck={recheck.fullCheck}
+            />
           ) : null}
           {imagesIn ? (
             <MenuItem

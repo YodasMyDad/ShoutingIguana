@@ -16,6 +16,19 @@ import {
 import { currentHiddenChecks } from '../settings/hiddenChecks';
 import type { ExportJob, ExportRequest, ReportOptions } from './exports';
 import type {
+  ChangesAnswer,
+  FixedPage,
+  FixedQuery,
+  Recheck,
+  RecheckAsk,
+  RecheckList,
+  RecheckPlan,
+  RecheckRowsPage,
+  RecheckRowsQuery,
+  StartRecheckRequest,
+  StartedRecheck,
+} from './fixLoop';
+import type {
   FacetsPage,
   FacetsQuery,
   GridPage,
@@ -85,6 +98,21 @@ export async function call<T>(request: TransportRequest): Promise<T> {
   }
   const text = await response.text();
   if (text.length === 0) return undefined as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new UnexpectedResponseError(response.status, `The body isn't JSON: ${text.slice(0, 200)}`);
+  }
+}
+
+/**
+ * Sends one call whose success is 202 Accepted with a body (a recheck started: its number and plan), and reads it. Any
+ * other success with a body is read the same way.
+ */
+export async function callAccepted<T>(request: TransportRequest): Promise<T> {
+  const response = await getTransport().send(request);
+  if (!response.ok) throw await toError(response);
+  const text = await response.text();
   try {
     return JSON.parse(text) as T;
   } catch {
@@ -415,6 +443,47 @@ export const api = {
    */
   report: (id: string, options: ReportOptions = {}, signal?: Signal) =>
     callText({ method: 'GET', path: `${crawl(id)}/report${reportQuery(options)}`, signal }),
+
+  // The fix loop (docs/v2-sidecar-api.md, "Changes since another crawl" and "Rechecks").
+  /**
+   * The crawl compared with its previous crawl (`with` left out), or with another crawl of its site by id. A crawl with
+   * no previous one answers `{ crawlId, with: null }`: show nothing. `crawl-not-comparable` for another site's crawl, or
+   * one that can't be compared; `not-analyzed` for a crawl never analysed.
+   */
+  changes: (id: string, withId?: string, signal?: Signal) =>
+    get<ChangesAnswer>(`${crawl(id)}/changes${withId ? `?with=${encodeURIComponent(withId)}` : ''}`, signal),
+  /** What a check flagged in the other crawl and doesn't flag now, by URL (`rows`) or by cause (`groups`). */
+  fixed: (id: string, checkId: string, query: FixedQuery = {}, signal?: Signal) =>
+    post<FixedPage>(`${crawl(id)}/issues/${encodeURIComponent(checkId)}/fixed`, query, signal),
+  /** What a recheck would do, and why it can't run now (`refused`), without doing anything. */
+  recheckPlan: (id: string, ask: RecheckAsk, signal?: Signal) =>
+    post<RecheckPlan>(`${crawl(id)}/rechecks/plan`, ask, signal),
+  /**
+   * Starts a recheck: 202 with its number and its plan. Its refusals are problems (`crawl-busy`, `site-busy`,
+   * `recheck-not-latest`...), and `needs-secrets` as Continue gives it: in the app, what the crawl was last given is sent
+   * from the credential store first, so it's asked for only when nothing was kept.
+   */
+  startRecheck: async (id: string, request: StartRecheckRequest) => {
+    const started = await callAccepted<StartedRecheck>({
+      method: 'POST',
+      path: `${crawl(id)}/rechecks`,
+      // The ask stays as it is; Continue's rule adds what was kept: the proxy, and the headers unless skipped or given.
+      body: { ...request, ...continueWithSecrets(request, await keptSecrets(`crawl:${id}`)) },
+    });
+    if (request.proxyUrl !== undefined || request.extraHeaders !== undefined) {
+      // Where the crawl's secrets already were: remembered, or this session's (as Continue keeps them).
+      await keepCrawlSecrets(id, { proxyUrl: request.proxyUrl ?? null, extraHeaders: request.extraHeaders ?? null });
+    }
+    return started;
+  },
+  /** The crawl's rechecks, newest first. */
+  rechecks: (id: string, signal?: Signal) => get<RecheckList>(`${crawl(id)}/rechecks`, signal),
+  /** One recheck by its number; `recheck-not-found` for one the file doesn't have. */
+  recheck: (id: string, recheckId: number, signal?: Signal) =>
+    get<Recheck>(`${crawl(id)}/rechecks/${recheckId}`, signal),
+  /** The URLs of one recheck, judged first, narrowed by outcome and role. */
+  recheckRows: (id: string, recheckId: number, query: RecheckRowsQuery = {}, signal?: Signal) =>
+    post<RecheckRowsPage>(`${crawl(id)}/rechecks/${recheckId}/rows`, query, signal),
 };
 
 export type Api = typeof api;

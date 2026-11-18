@@ -2,6 +2,7 @@
 // is checked. Score 85: 6 problems to fix". The toast and the shell's system notification say the same (the shell's
 // copy is in src-tauri/src/live/notify.rs). Pure.
 import type { ScoreSummary } from '../api/types';
+import { moveGlyph, problemsMovedWords, changeDate } from '../changes/changeWords';
 import { formatCount } from '../lib/format';
 
 export interface FinishedWords {
@@ -26,6 +27,7 @@ export function simpleFinishedWords({
   score,
   problems,
   pageCount,
+  change,
 }: {
   site: string;
   crawled: boolean;
@@ -33,11 +35,19 @@ export function simpleFinishedWords({
   /** The checks with issues that are Serious or Worth fixing, the hidden ones left out; null when not known. */
   problems: number | null;
   pageCount: number | null;
+  /**
+   * The fix loop: what changed since the site's last check, as Simple counts it (problems, hidden ones left out): the
+   * score's change (null when it can't be said), and the problems fixed and new. Left out for a first check.
+   */
+  change?: { since: string | null; score: number | null; fixed: number; new: number } | null | undefined;
 }): FinishedWords {
   const title = crawled ? `${site} is checked` : `The results for ${site} are updated`;
   if (score) {
-    const value = `Score ${formatCount(score.value)}${score.partial ? ' so far' : ''}`;
-    return { title, description: problems === null ? value : `${value}: ${problemsToFix(problems)}` };
+    const moved = change ? problemsMovedWords(change) : null;
+    const since = change && change.score !== null ? ` (${scoreMoveWords(change.score, change.since)})` : '';
+    const value = `Score ${formatCount(score.value)}${score.partial ? ' so far' : ''}${since}`;
+    const after = moved ?? (problems === null ? null : problemsToFix(problems));
+    return { title, description: after === null ? value : `${value}: ${after}` };
   }
   if (pageCount === 0) return { title, description: 'No pages could be read, so there’s no score.' };
   if (problems !== null) {
@@ -45,6 +55,12 @@ export function simpleFinishedWords({
     return { title, description: `${words.charAt(0).toUpperCase()}${words.slice(1)}.` };
   }
   return { title, description: 'The results are ready.' };
+}
+
+/** "▲14 since 3 Nov", or "same as 3 Nov": the toast's brackets after the score. */
+function scoreMoveWords(change: number, since: string | null): string {
+  const date = changeDate(since) || 'your last check';
+  return change === 0 ? `same as ${date}` : `${moveGlyph(change)} since ${date}`;
 }
 
 /**

@@ -180,6 +180,125 @@ export const YourSites: Story = {
   render: () => <ScreenApp path="/" mode="simple" />,
 };
 
+// ------------------------------------------------------------------------------------------- The fix loop
+
+/** The catalog's severities for the changes the garden row counts: three problems fixed, one new. */
+const FIX_LOOP_CHECKS = {
+  categories: [],
+  checks: [
+    { id: 'internal-server-error', severity: 'error' },
+    { id: 'title-missing', severity: 'error' },
+    { id: 'redirect-chain', severity: 'warning' },
+    { id: 'canonical-to-first-page', severity: 'warning' },
+    { id: 'h1-multiple', severity: 'notice' },
+  ],
+};
+
+/**
+ * The garden crawl compared with its site's earlier check (17 Oct, 72): ▲14, three problems fixed and one new, and a
+ * recheck of five pages since. Its earlier check is folded under it, with nothing to compare with: no line, no zeros.
+ */
+const COMPARED_SITES: CrawlListItem[] = SITES.flatMap((item) =>
+  item.id === '62cb879ef60639d5'
+    ? [
+        {
+          ...item,
+          score: { value: 86, band: 'good', partial: false },
+          previous: {
+            id: '1717171717171717',
+            startedAt: '2026-10-17T14:13:00Z',
+            score: { value: 72, band: 'good', partial: false },
+            comparable: 'full',
+            needsAnalysis: false,
+          },
+          changes: {
+            score: 14,
+            partial: false,
+            fixed: ['internal-server-error', 'title-missing', 'redirect-chain', 'h1-multiple'],
+            new: ['canonical-to-first-page'],
+            fewer: [],
+            more: [],
+            newCheck: [],
+            notCheckedNow: [],
+          },
+          rechecks: {
+            count: 1,
+            last: { id: 1, endedAt: '2026-10-31T16:02:00Z', checkId: 'broken-internal-links', judged: 5, fixed: 4 },
+          },
+        },
+        testCrawlItem({
+          ...item,
+          id: '1717171717171717',
+          fileName: 'gardenfurnituresets.co.uk-earlier.sicrawl',
+          startedAt: '2026-10-17T14:13:00Z',
+          finishedAt: '2026-10-17T14:40:00Z',
+          score: { value: 72, band: 'good', partial: false },
+          issues: { error: 4, warning: 4, notice: 13 },
+          previous: null,
+          changes: null,
+        }),
+      ]
+    : item.id === RUNNING_ID
+      ? []
+      : [item],
+);
+
+function fixLoopRoutes(library: CrawlListItem[]): FakeRoute[] {
+  return [['GET', /^\/api\/checks$/, () => json(FIX_LOOP_CHECKS)], ...routes(library)];
+}
+
+/** What changed since each site's last check: "▲14 since 17 Oct" by the ring, "3 fixed · 1 new" under To fix. */
+export const SinceTheLastCheck: Story = {
+  loaders: [() => ownSidecar(fixLoopRoutes(COMPARED_SITES))],
+  render: () => <ScreenApp path="/" mode="simple" />,
+};
+
+/** The garden crawl stopped early: its changes are "so far". */
+export const SinceTheLastCheckSoFar: Story = {
+  loaders: [
+    () =>
+      ownSidecar(
+        fixLoopRoutes(
+          COMPARED_SITES.map((item) =>
+            item.id === '62cb879ef60639d5'
+              ? { ...item, status: 'stopped' as const, score: { value: 86, band: 'good' as const, partial: true } }
+              : item,
+          ),
+        ),
+      ),
+  ],
+  render: () => <ScreenApp path="/" mode="simple" />,
+};
+
+/** The garden crawl being rechecked: pinned as checking now, with the recheck's own count. */
+export const Rechecking: Story = {
+  loaders: [
+    () => {
+      ownSidecar(
+        fixLoopRoutes(
+          COMPARED_SITES.map((item) =>
+            item.id === '62cb879ef60639d5' ? { ...item, status: 'rechecking' as const, outOfDate: true } : item,
+          ),
+        ),
+      );
+      liveStore.ingest(message('hello', { live: ['62cb879ef60639d5'] }));
+      liveStore.ingest(message('crawl', { crawlId: '62cb879ef60639d5', status: 'rechecking' }));
+      liveStore.ingest(
+        message('recheck', {
+          crawlId: '62cb879ef60639d5',
+          recheckId: 2,
+          status: 'running',
+          phase: 1,
+          done: 3,
+          total: 8,
+          result: null,
+        }),
+      );
+    },
+  ],
+  render: () => <ScreenApp path="/" mode="simple" />,
+};
+
 /** A first start, with no checks: three steps, then where Advanced and a crawl file are. */
 export const FirstStart: Story = {
   loaders: [() => ownSidecar(routes([]))],

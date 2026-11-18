@@ -157,8 +157,10 @@ test('the checks list runs on the keyboard: arrows move the selection and the ro
   await page.keyboard.press('End');
   await expect(list.getByRole('option').last()).toHaveAttribute('aria-selected', 'true');
   await page.keyboard.press('Tab');
-  // Out of the list, into the selected check: its first action.
-  await expect(page.locator(':focus')).toHaveAccessibleName(/Copy URLs|Hide this check|Show this check|Learn more/);
+  // Out of the list, into the selected check: its first action (the fix loop's Recheck leads them).
+  await expect(page.locator(':focus')).toHaveAccessibleName(
+    /^Recheck|Check the site again|Copy URLs|Hide this check|Show this check|Learn more/,
+  );
   await page.keyboard.press('Control+f');
   await expect(page.getByRole('searchbox', { name: 'Filter checks' })).toBeFocused();
   await page.keyboard.type('sitemap');

@@ -8,8 +8,24 @@ import type { CrawlListItem } from '../api/types';
 
 export const TEST_CRAWL_ID = '0123456789abcdef';
 
+/**
+ * The item's `siteKey` as the sidecar gives it (`PreviousCrawls.SiteKeyOf`): its `site` (the start URL's host without
+ * `www.`), then `:port` when the start URL has a port of its own; null without a site. Worked out here because this is
+ * a sidecar: the app itself never works it out.
+ */
+export function sidecarSiteKey(item: Pick<CrawlListItem, 'site' | 'startUrl'>): string | null {
+  if (!item.site) return null;
+  let port: string;
+  try {
+    port = item.startUrl ? new URL(item.startUrl).port : '';
+  } catch {
+    port = '';
+  }
+  return port ? `${item.site}:${port}` : item.site;
+}
+
 export function testCrawlItem(overrides: Partial<CrawlListItem> = {}): CrawlListItem {
-  return {
+  const item: CrawlListItem = {
     id: TEST_CRAWL_ID,
     path: 'C:\\crawls\\example.com.sicrawl',
     fileName: 'example.com.sicrawl',
@@ -29,6 +45,7 @@ export function testCrawlItem(overrides: Partial<CrawlListItem> = {}): CrawlList
     error: null,
     ...overrides,
   };
+  return 'siteKey' in overrides ? item : { ...item, siteKey: sidecarSiteKey(item) };
 }
 
 export const TEST_URL_ROWS: UrlRow[] = [

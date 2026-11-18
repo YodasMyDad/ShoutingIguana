@@ -1,4 +1,4 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
 import {
@@ -17,8 +17,10 @@ import {
 } from 'lucide-react';
 import { useId, useMemo, useState } from 'react';
 import { api } from '../../api/client';
-import { queryKeys } from '../../api/queries';
+import { checksQuery, queryKeys } from '../../api/queries';
 import type { CrawlListItem } from '../../api/types';
+import { severitiesOf } from '../../changes/changes';
+import { recheckProgressWords } from '../../changes/recheckWords';
 import { CrawlFavicon } from '../../crawl/CrawlFavicon';
 import { analyseCrawl, cancelAnalysis, continueCrawl, saidWhileAnalysing } from '../../crawl/actions';
 import { openCrawlPaths } from '../../crawl/openFiles';
@@ -28,6 +30,7 @@ import { notifyError, notifyUndo } from '../../feedback/notify';
 import { formatCount } from '../../lib/format';
 import { isTauri } from '../../lib/platform';
 import { useLiveCrawl } from '../../live/liveStore';
+import { useHiddenChecks } from '../../settings/hiddenChecks';
 import { crawledSoFar } from '../../screens/overview/liveFigures';
 import { pickCrawlFiles, showInFolder } from '../../shell/os';
 import { Button } from '../../ui/Button';
@@ -44,6 +47,7 @@ import { deleteQuestion } from '../../screens/home/libraryActions';
 import {
   problemCounts,
   problemWords,
+  rowChanges,
   rowKind,
   rowMeta,
   rowScore,
@@ -97,6 +101,7 @@ export function SiteRow({ item, earlier = [], nested = false }: SiteRowProps) {
   const problems = useRowProblems(item);
   const controls = crawlControls(status, item);
   const partial = score?.partial ?? stoppedEarly(status);
+  const changes = useRowChanges(item, status);
 
   const action =
     kind === 'missing' ? (
@@ -189,10 +194,10 @@ export function SiteRow({ item, earlier = [], nested = false }: SiteRowProps) {
         </div>
 
         {kind === 'live' ? (
-          <LiveProgress item={item} analysing={status === 'analyzing'} />
+          <LiveProgress item={item} analysing={status === 'analyzing'} rechecking={status === 'rechecking'} />
         ) : (
           <>
-            <div className={clsx('min-w-0', FOLDS)}>
+            <div className={clsx('flex min-w-0 flex-col gap-0.5', FOLDS)}>
               <ScoreRing
                 value={kind === 'scored' && score ? score.value : null}
                 band={score?.band ?? null}
@@ -200,9 +205,12 @@ export function SiteRow({ item, earlier = [], nested = false }: SiteRowProps) {
                 size="sm"
                 word
               />
+              {/* The fix loop: the score's change, as neutral text with its glyph, never colour alone. */}
+              {kind === 'scored' && changes.score ? <ChangeLine>{changes.score}</ChangeLine> : null}
             </div>
-            <div className={clsx('min-w-0 text-13', FOLDS)}>
+            <div className={clsx('flex min-w-0 flex-col gap-0.5 text-13', FOLDS)}>
               <FixCell kind={kind} problems={problems} partial={partial} />
+              {kind === 'scored' && changes.fixes ? <ChangeLine>{changes.fixes}</ChangeLine> : null}
             </div>
             <div className="text-13 text-text-secondary @max-sites/sites:hidden">
               {/* When the check started, as the breadcrumb and the sidebar say it: one time for a check everywhere. */}
@@ -235,6 +243,24 @@ export function SiteRow({ item, earlier = [], nested = false }: SiteRowProps) {
       ) : null}
     </li>
   );
+}
+
+/**
+ * What changed since the site's last check, for the row (the fix loop): the catalog's severities, so Simple counts
+ * problems, and the checks the user has hidden, left out as everywhere.
+ */
+function useRowChanges(item: CrawlListItem, status: Parameters<typeof rowChanges>[1]) {
+  const checks = useQuery({ ...checksQuery(), enabled: Boolean(item.changes) }).data;
+  const hidden = useHiddenChecks(item.id);
+  return useMemo(
+    () => rowChanges(item, status, checks ? severitiesOf(checks.checks) : null, new Set(hidden)),
+    [item, status, checks, hidden],
+  );
+}
+
+/** A change's line under a cell: muted, small, never cut. */
+function ChangeLine({ children }: { children: string }) {
+  return <span className="text-12 whitespace-nowrap text-text-muted">{children}</span>;
 }
 
 /** What needs fixing, in counts with their marks, or what the check can't say yet. */
@@ -280,12 +306,37 @@ function FixCell({
 }
 
 /** A check running now: its progress across the score's and the fixes' columns, and when its results come. */
-function LiveProgress({ item, analysing }: { item: CrawlListItem; analysing: boolean }) {
+function LiveProgress({
+  item,
+  analysing,
+  rechecking,
+}: {
+  item: CrawlListItem;
+  analysing: boolean;
+  rechecking: boolean;
+}) {
   const live = useLiveCrawl(item.id);
   const progress = live?.progress ?? null;
   const checked = progress ? crawledSoFar(progress) : crawledUrls(item);
   const queued = progress?.queued ?? null;
   const total = checked !== null && queued !== null ? checked + queued : null;
+  if (rechecking) {
+    // The fix loop: a recheck's own count, never the crawl's whole.
+    const recheck = live?.recheck ?? null;
+    const words = recheckProgressWords(recheck, 'simple');
+    return (
+      <div className="col-span-3 flex min-w-0 flex-col gap-1.5 @max-sites/sites:col-span-1 @max-sites/sites:col-start-1">
+        <ProgressBar
+          thin
+          label="Rechecking"
+          value={recheck && recheck.total > 0 ? recheck.done : null}
+          max={recheck && recheck.total > 0 ? recheck.total : 100}
+          valueText={words}
+        />
+        <span className="text-12 text-text-muted">{words}. The results change when it’s done.</span>
+      </div>
+    );
+  }
   return (
     <div className="col-span-3 flex min-w-0 flex-col gap-1.5 @max-sites/sites:col-span-1 @max-sites/sites:col-start-1">
       <ProgressBar

@@ -271,6 +271,29 @@ Simple and in the report.
 The last six are how a check's plain text names a thing before giving its term once in brackets. The rules for
 those texts are in [Simple mode](v2-ui-simple.md#plain-words).
 
+### The fix loop
+
+Added on 2026-11-17 with [the fix loop](v2-fix-loop.md#words) (step 3b): a crawl compared with the site's previous
+crawl, and a problem's pages rechecked. The app's words are written once, in `app/src/changes/` (`changeWords.ts`,
+`recheckWords.ts`), for both modes.
+
+| Term | Meaning | Not |
+| --- | --- | --- |
+| Previous crawl (Simple: your last check) | The crawl a crawl is compared with: the site's last before it, or the one picked | baseline, last run |
+| Compare with | Advanced's control that picks it | diff |
+| Recheck | Fetch some of a crawl's URLs again and update its results | re-crawl, re-spider, verify, retest |
+| New | Flagged now, not then | added |
+| Fixed | Flagged then; read again now and not flagged | resolved, removed, closed |
+| No longer linked / No longer found | Flagged then; this crawl didn't find the URL (for a 404 or redirect, the fix; for a page, it's gone). Simple says "No longer linked from any page" | missing |
+| Still there | Flagged then and now (Advanced: Still) | remaining, open |
+| Not checked this time | Flagged then; not read now, so not known. Never fixed | unknown, skipped |
+| Fewer, More | A check's count went down or up (Advanced: −5, +5) | improved, worse |
+| Not looked for last time | A check that didn't run on the previous crawl (Advanced: New check). Never a new problem | new problem |
+
+A change is text with a glyph, never colour alone: "▲14 since 3 Nov", "▼3", a tick for fixed. The score's movement is
+neutral text, neither green nor red. Simple counts problems (Serious and Worth fixing) in its change counts, as it
+does everywhere; Advanced counts every check. Hidden checks are left out of every count.
+
 ## Backlog: checks from the old app
 
 The owner's decision is that these come after step 3, substantive checks first. The dropped heuristics at the end

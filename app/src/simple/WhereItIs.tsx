@@ -1,3 +1,6 @@
+import { groupChangeWords, rowChangeWords } from '../changes/changeWords';
+import type { SimpleChanges } from './useSimpleChanges';
+import { CausesFixedSince } from './WhereItIsSince';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
 import { ArrowUpRight, ChevronDown, Copy, FileSpreadsheet } from 'lucide-react';
@@ -37,21 +40,47 @@ function rowColumns(check: Pick<Check, 'evidence'>): string[] {
   return [...ROW_COLUMNS, ...evidenceOf(check).filter((id) => !ROW_COLUMNS.includes(id))];
 }
 
-const groupsQuery = (crawlId: string, checkId: string, limit: number) => ({
-  queryKey: [...queryKeys.crawl(crawlId), 'issues', checkId, 'simple-groups', limit] as const,
+/** The fix loop: compared with the site's last check (each cause and page then gains its `change`), or not. */
+type Compare = 'previous' | null;
+
+const groupsQuery = (crawlId: string, checkId: string, limit: number, compare: Compare = null) => ({
+  queryKey: [...queryKeys.crawl(crawlId), 'issues', checkId, 'simple-groups', limit, compare] as const,
   queryFn: ({ signal }: { signal: AbortSignal }): Promise<IssueGroupPage> =>
-    api.issueGroups(crawlId, checkId, { offset: 0, limit }, signal),
+    api.issueGroups(crawlId, checkId, { offset: 0, limit, ...(compare ? { compareWith: compare } : {}) }, signal),
   staleTime: Infinity,
 });
 
-const rowsQuery = (crawlId: string, check: Check, group: CheckGroupRef | null, limit: number) => ({
+const rowsQuery = (
+  crawlId: string,
+  check: Check,
+  group: CheckGroupRef | null,
+  limit: number,
+  compare: Compare = null,
+) => ({
   // The check's evidence decides the columns: its id and its evidence are the key.
-  queryKey: [...queryKeys.crawl(crawlId), 'issues', check.id, 'simple-rows', group, limit, rowColumns(check)] as const,
+  queryKey: [
+    ...queryKeys.crawl(crawlId),
+    'issues',
+    check.id,
+    'simple-rows',
+    group,
+    limit,
+    rowColumns(check),
+    compare,
+  ] as const,
   queryFn: ({ signal }: { signal: AbortSignal }): Promise<GridPage<IssueRow>> =>
     api.issueRows(
       crawlId,
       check.id,
-      { columns: rowColumns(check), filters: [], sort: [], offset: 0, limit, ...(group ? { group } : {}) },
+      {
+        columns: rowColumns(check),
+        filters: [],
+        sort: [],
+        offset: 0,
+        limit,
+        ...(group ? { group } : {}),
+        ...(compare ? { compareWith: compare } : {}),
+      },
       signal,
     ),
   staleTime: Infinity,
@@ -76,6 +105,11 @@ function EvidenceLines({ row, check, origin }: { row: IssueRow; check: Check; or
       ))}
     </span>
   );
+}
+
+/** The fix loop: a cause's or a page's change since the site's last check, muted under it. */
+function ChangeLine({ words }: { words: string }) {
+  return <span className="mt-1 block text-12 text-text-muted">{words}</span>;
 }
 
 /** An address as Where it is shows it: its path on the site's own origin, else in full; the full one is read. */
@@ -143,6 +177,7 @@ export function WhereItIs({
   total,
   onCopy,
   onSave,
+  changes,
 }: {
   crawlId: string;
   item: CrawlListItem;
@@ -151,12 +186,17 @@ export function WhereItIs({
   total: number;
   onCopy: () => void;
   onSave: () => void;
+  /** The fix loop: what changed since the site's last check; each cause and page says whether it's new or still there. */
+  changes?: SimpleChanges | undefined;
 }) {
   const router = useRouter();
   const [limit, setLimit] = useState(WHERE_STEP);
   const groupedCheck = check.grouping !== 'none';
+  // Counts only (another start address, other rules): no cause or page can be matched, so none is marked.
+  const compare: Compare = changes?.comparison && changes.comparison.comparable !== 'countsOnly' ? 'previous' : null;
+  const since = changes?.since ?? null;
   const groups = useQuery({
-    ...groupsQuery(crawlId, check.id, limit),
+    ...groupsQuery(crawlId, check.id, limit, compare),
     enabled: groupedCheck,
     placeholderData: keepPreviousData,
   });
@@ -164,7 +204,7 @@ export function WhereItIs({
   // addresses list on their own, so a count is never over an empty list (round 4).
   const grouped = groupedCheck && !(groups.data?.groupCount === 0 && total > 0);
   const rows = useQuery({
-    ...rowsQuery(crawlId, check, null, limit),
+    ...rowsQuery(crawlId, check, null, limit, compare),
     enabled: !grouped,
     placeholderData: keepPreviousData,
   });
@@ -225,12 +265,14 @@ export function WhereItIs({
                     group={group}
                     origin={origin}
                     noun={noun}
+                    since={since}
                   />
                 ))
               : (rows.data?.rows ?? []).map((row) => (
                   <tr key={row.id}>
                     <td>
                       <PageLine row={row} origin={origin} />
+                      {row.change ? <ChangeLine words={rowChangeWords(row.change.state, since, 'simple')} /> : null}
                       <FoundOnWords crawlId={crawlId} check={check} urlId={row.id} origin={origin} />
                     </td>
                     <td className="text-text-secondary">
@@ -243,6 +285,7 @@ export function WhereItIs({
           </tbody>
         </table>
       )}
+      {changes ? <CausesFixedSince crawlId={crawlId} item={item} check={check} changes={changes} /> : null}
       {read ? (
         <div className="flex flex-wrap items-center gap-3 border-t border-border-subtle bg-surface-sunken px-6 py-3 text-14 text-text-secondary">
           <span>
@@ -283,12 +326,15 @@ function GroupRow({
   group,
   origin,
   noun,
+  since,
 }: {
   crawlId: string;
   check: Check;
   group: IssueGroup;
   origin: string | null;
   noun: (count: number) => string;
+  /** The fix loop: when the site's last check was, for the cause's "Still there since 3 Nov". */
+  since: string | null;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -363,6 +409,9 @@ function GroupRow({
         ) : (
           <span>{group.detail ?? ''}</span>
         )}
+        {group.change ? (
+          <ChangeLine words={groupChangeWords(group.change, group.urls ?? group.pages, since, 'simple')} />
+        ) : null}
       </td>
       <td>
         {many ? (

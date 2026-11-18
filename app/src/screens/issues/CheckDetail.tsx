@@ -1,4 +1,4 @@
-import { ArrowDown, Copy, Eye, EyeOff, ExternalLink } from 'lucide-react';
+import { ArrowDown, Check as Tick, Copy, Eye, EyeOff, ExternalLink } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
 import { useId, useRef, type ReactNode, type Ref } from 'react';
 import type { CheckGroupRef, GridSort } from '../../api/grids';
@@ -22,6 +22,23 @@ import { namesFileSize } from '../../crawl/evidence';
 import { importanceWords } from './evidenceColumns';
 import { IssueGroups } from './IssueGroups';
 import { IssueRowsGrid } from './IssueRowsGrid';
+import type { CheckChange } from '../../api/fixLoop';
+import { Tabs } from '../../ui/Tabs';
+import { checkChangeCell, periodLabel, type ComparedPeriod } from '../compare/changeCell';
+import { FixedList } from '../compare/FixedList';
+import { RecheckBanner } from '../rechecks/RecheckBanner';
+import { RecheckControl, type OpenGroup } from '../rechecks/RecheckControl';
+
+/** The fix loop: the check compared with another crawl, for its head, its Fixed tab and its grids. */
+export interface CheckCompare {
+  /** Its change; null when the comparison doesn't list it. */
+  change: CheckChange | null;
+  period: ComparedPeriod;
+  /** `compareWith` for its grids and its Fixed tab. */
+  compareWith: string;
+  /** Rows can be marked: not with counts only. */
+  marksRows: boolean;
+}
 
 export interface CheckDetailProps {
   crawlId: string;
@@ -54,6 +71,12 @@ export interface CheckDetailProps {
    * clears its pages. Left out, none is said.
    */
   related?: { clears: readonly RelatedCheck[]; clearedBy: readonly RelatedCheck[] } | undefined;
+  /** The fix loop: the comparison of this check with another crawl; left out, nothing is compared. */
+  compare?: CheckCompare | null | undefined;
+  /** The fix loop: the open group, as a recheck asks for it, with its URLs. */
+  recheckGroup?: OpenGroup | null | undefined;
+  /** Names a check by its id: a recheck of another check of the crawl, over this one. */
+  titleOf?: ((checkId: string) => string | null) | undefined;
 }
 
 /** "groups, by detail", "groups, by related URL", "by image" (the image checks): what the third figure counts. */
@@ -91,6 +114,9 @@ export function CheckDetail({
   onLearnMore,
   titleRef,
   related,
+  compare = null,
+  recheckGroup = null,
+  titleOf = () => null,
 }: CheckDetailProps) {
   const titleId = useId();
   const explainRef = useRef<HTMLDivElement>(null);
@@ -106,9 +132,20 @@ export function CheckDetail({
   // A check that doesn't group, on nearly every page analysed: probably the site's template (the engine's judgement).
   const likelyTemplate =
     !groups && analysis.counts.find((candidate) => candidate.checkId === check.id)?.likelyTemplate === true;
+  // The fix loop: its change since the crawl compared with, and what it no longer flags.
+  const change = compare?.change ?? null;
+  const changeCell = change && compare ? checkChangeCell(change, compare.period) : null;
+  const fixedCheck = outcome === 'passed' && change?.state === 'fixed';
+  const cleared = change ? (change.fixed ?? 0) + (change.gone ?? 0) : 0;
+  const notChecked = change?.notChecked ?? 0;
+  const fixedTab = compare !== null && compare.marksRows && (cleared > 0 || notChecked > 0);
 
   return (
     <article aria-labelledby={titleId} className="flex flex-col">
+      {/* A recheck of the crawl, as it runs and once it's done: over the detail, until dismissed. */}
+      <div className="px-6 pt-4 empty:hidden">
+        <RecheckBanner crawlId={crawlId} checkId={check.id} titleOf={titleOf} />
+      </div>
       <header className="px-6 pt-6 pb-5">
         <div className="mb-3 flex flex-wrap items-center gap-3 text-13 text-text-muted">
           <SeverityBadge severity={check.severity} />
@@ -133,7 +170,8 @@ export function CheckDetail({
           >
             {check.title}
           </h2>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex max-w-full min-w-0 flex-wrap items-start justify-end gap-2">
+            {found ? <RecheckControl crawlId={crawlId} check={check} group={recheckGroup} /> : null}
             {found ? (
               <Button size="sm" icon={Copy} command="issues.copyUrls" loading={copying} onClick={onCopy}>
                 Copy URLs
@@ -171,6 +209,20 @@ export function CheckDetail({
               search={{ filter: [{ column: 'check', op: 'in', values: [check.id] }] }}
             />
             {share ? <Stat compact size="md" label={share.label} value={share.value} context={share.context} /> : null}
+            {changeCell && change && compare ? (
+              // "9 on 17 Oct": the count then, and how it moved, in words.
+              <Stat
+                compact
+                size="md"
+                label={periodLabel({ ...compare.period, later: false }).replace(/^Since /, 'On ')}
+                value={change.then === null ? '–' : <Num value={change.then} />}
+                context={
+                  <span title={changeCell.title}>
+                    {changeCell.spoken.replace(/^./, (first) => first.toUpperCase())}
+                  </span>
+                }
+              />
+            ) : null}
             {groups ? (
               <Stat
                 compact
@@ -233,6 +285,31 @@ export function CheckDetail({
             }
           />
         </div>
+      ) : fixedCheck && compare ? (
+        // Fixed since the crawl compared with: it flagged URLs then and none now. What it flagged, and how each went.
+        <section aria-labelledby={`${titleId}-fixed`} className="flex flex-col gap-3 px-6 pb-6">
+          <EmptyState
+            title={`Fixed ${periodLabel(compare.period)
+              .replace(/^Since/, 'since')
+              .replace(/^Until/, 'by')}`}
+            icon={<Tick aria-hidden className="size-(--icon-lg)" />}
+            layout="row"
+            level="none"
+          >
+            {`It flagged ${formatCount(change.then ?? 0)} ${change.then === 1 ? words.noun : words.plural} then, and flags none now.`}
+          </EmptyState>
+          <h3 id={`${titleId}-fixed`} className="text-14 font-semibold">
+            What it no longer flags
+          </h3>
+          <FixedList
+            crawlId={crawlId}
+            check={check}
+            compareWith={compare.compareWith}
+            period={compare.period}
+            siteOrigin={siteOrigin}
+            onInspect={onInspect}
+          />
+        </section>
       ) : outcome === 'passed' ? (
         <div className="px-6 pb-5">
           <EmptyState
@@ -266,29 +343,70 @@ export function CheckDetail({
               it’s likely in the site’s template: one fix clears them all.
             </Callout>
           ) : null}
-          {groups ? (
-            <IssueGroups
-              crawlId={crawlId}
-              check={check}
-              total={count}
-              siteOrigin={siteOrigin}
-              open={group}
-              onOpenChange={onGroupChange}
-              onInspect={onInspect}
-              onFollow={onFollow}
-            />
-          ) : (
-            <IssueRowsGrid
-              crawlId={crawlId}
-              check={check}
-              total={count}
-              siteOrigin={siteOrigin}
-              sort={sort}
-              onSortChange={onSortChange}
-              onInspect={onInspect}
-              onFollow={onFollow}
-            />
-          )}
+          {(() => {
+            const marked = compare?.marksRows ? { compareWith: compare.compareWith, period: compare.period } : null;
+            const now = groups ? (
+              <IssueGroups
+                crawlId={crawlId}
+                check={check}
+                total={count}
+                siteOrigin={siteOrigin}
+                open={group}
+                onOpenChange={onGroupChange}
+                onInspect={onInspect}
+                onFollow={onFollow}
+                compare={marked}
+              />
+            ) : (
+              <IssueRowsGrid
+                crawlId={crawlId}
+                check={check}
+                total={count}
+                siteOrigin={siteOrigin}
+                sort={sort}
+                onSortChange={onSortChange}
+                onInspect={onInspect}
+                onFollow={onFollow}
+                compare={marked}
+              />
+            );
+            if (!fixedTab) return now;
+            // Now, and what it no longer flags since the crawl compared with: fixed or gone (counted), and not
+            // checked this time (listed, never counted as fixed).
+            return (
+              <Tabs
+                label="What it flags now, and what it no longer flags"
+                flush
+                tabs={[
+                  { value: 'now', label: 'Now', count, content: now },
+                  {
+                    value: 'fixed',
+                    label: `Fixed ${periodLabel(compare.period)
+                      .replace(/^Since/, 'since')
+                      .replace(/^Until/, 'by')}`,
+                    count: cleared,
+                    content: (
+                      <div className="flex flex-col gap-2 pt-3">
+                        {notChecked > 0 ? (
+                          <p className="text-13 text-text-secondary">
+                            {`${formatCount(notChecked)} more ${notChecked === 1 ? 'was' : 'were'} not checked this time: listed with why, never counted as fixed.`}
+                          </p>
+                        ) : null}
+                        <FixedList
+                          crawlId={crawlId}
+                          check={check}
+                          compareWith={compare.compareWith}
+                          period={compare.period}
+                          siteOrigin={siteOrigin}
+                          onInspect={onInspect}
+                        />
+                      </div>
+                    ),
+                  },
+                ]}
+              />
+            );
+          })()}
         </section>
       ) : null}
 

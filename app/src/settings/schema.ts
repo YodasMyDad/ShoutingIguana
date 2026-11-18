@@ -49,6 +49,12 @@ export interface Settings {
    */
   hiddenChecksByCrawl: Record<string, string[]>;
   /**
+   * The crawl each crawl is compared with when it isn't its previous crawl (by the crawl's id): another crawl of its
+   * site picked in Advanced's Compare with…, or `none` ("Don't compare"). A crawl not in it is compared with its previous
+   * crawl (docs/v2-fix-loop.md, "Comparing with another crawl").
+   */
+  compareWithByCrawl: Record<string, string>;
+  /**
    * The order checks are listed in, remembered for each mode: Advanced's Issues list (fix first, by count, by points, by
    * severity or by category), and the order within each part of Simple's What to fix (fix first, by points or by count).
    */
@@ -73,6 +79,7 @@ export const DEFAULT_SETTINGS: Settings = {
   exportFormat: 'xlsx',
   gridColumns: {},
   hiddenChecksByCrawl: {},
+  compareWithByCrawl: {},
   checkSort: { advanced: 'fixFirst', simple: 'fixFirst' },
 };
 
@@ -126,13 +133,30 @@ function readHiddenByCrawl(value: unknown): Record<string, string[]> {
   return byCrawl;
 }
 
+/** The crawls whose comparison is kept: the most recently changed, as their hidden checks are. */
+const MAX_CRAWLS_COMPARING = 100;
+const CRAWL_ID = /^[0-9a-f]{16}$/;
+
+function readCompareWith(value: unknown): Record<string, string> {
+  const byCrawl: Record<string, string> = {};
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return byCrawl;
+  const kept = Object.entries(value).filter(
+    ([crawl, other]) =>
+      CRAWL_ID.test(crawl) &&
+      typeof other === 'string' &&
+      (other === 'none' || (CRAWL_ID.test(other) && other !== crawl)),
+  );
+  for (const [crawl, other] of kept.slice(-MAX_CRAWLS_COMPARING)) byCrawl[crawl] = other as string;
+  return byCrawl;
+}
+
 /** Each mode's order of checks; anything unusable is the default, the order to fix them in. */
 function readCheckSort(value: unknown): Settings['checkSort'] {
   const stored = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
   return {
     advanced: oneOf(
       stored.advanced,
-      ['fixFirst', 'count', 'points', 'severity', 'category'],
+      ['fixFirst', 'count', 'points', 'severity', 'category', 'change'],
       DEFAULT_SETTINGS.checkSort.advanced,
     ),
     simple: oneOf(stored.simple, ['fixFirst', 'points', 'count'], DEFAULT_SETTINGS.checkSort.simple),
@@ -185,6 +209,7 @@ export function readSettings(value: unknown): Settings {
     exportFormat: oneOf(stored.exportFormat, ['csv', 'xlsx'], DEFAULT_SETTINGS.exportFormat),
     gridColumns: readColumnLayouts(stored.gridColumns),
     hiddenChecksByCrawl: readHiddenByCrawl(stored.hiddenChecksByCrawl),
+    compareWithByCrawl: readCompareWith(stored.compareWithByCrawl),
     checkSort: readCheckSort(stored.checkSort),
   };
 }

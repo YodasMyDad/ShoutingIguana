@@ -77,7 +77,8 @@ test.describe('Simple Home', () => {
         response,
         json: library.map((item) =>
           item.id === seeded.id
-            ? { ...item, site: SITE, startUrl: `https://${SITE}/`, status: 'stopped' as const }
+            ? // The sidecar keys the site by its start URL (the fix loop's `siteKey`): the app names a row by it.
+              { ...item, site: SITE, siteKey: SITE, startUrl: `https://${SITE}/`, status: 'stopped' as const }
             : item,
         ),
       });

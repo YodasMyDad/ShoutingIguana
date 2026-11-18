@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router';
 import { ChevronRight, CircleCheck, CircleDashed, Download, FileText } from 'lucide-react';
 import type { Score, Severity } from '../api/types';
+import type { ReactNode } from 'react';
 import { formatCount } from '../lib/format';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
@@ -37,7 +38,18 @@ const FIX = '/crawls/$crawl/issues/{-$check}';
  * The score: its ring, its word, the sentence and what it covers, with "How the score is worked out"; beside it, five
  * counts, each opening its part of What to fix.
  */
-export function ScoreHero({ crawlId, score, results }: { crawlId: string; score: Score; results: PlainResults }) {
+export function ScoreHero({
+  crawlId,
+  score,
+  results,
+  change,
+}: {
+  crawlId: string;
+  score: Score;
+  results: PlainResults;
+  /** The fix loop: what changed since the site's last check, under the sentence (./SummaryChange). */
+  change?: ReactNode;
+}) {
   const band = bandWord(score.band, score.partial);
   const sentence = summarySentence({
     band: score.band,
@@ -70,6 +82,7 @@ export function ScoreHero({ crawlId, score, results }: { crawlId: string; score:
             {band}
           </h2>
           <p className="mt-2 max-w-(--measure-explain) text-18 text-text">{sentence}</p>
+          {change}
           <p className="mt-3 text-14 leading-body text-text-secondary">{coverageSentences(score.covers).join(' ')}</p>
           <p className="mt-2 text-14">
             <Link
@@ -136,6 +149,7 @@ export function ProblemRow({
   oneFix,
   points,
   nested = false,
+  change,
   ref,
   ...rest
 }: {
@@ -149,6 +163,8 @@ export function ProblemRow({
   points?: number | null | undefined;
   /** Folded under the row above: a fix of that one clears it. */
   nested?: boolean | undefined;
+  /** The fix loop: its change since the site's last check, under its count ("9 on 3 Nov"); left out or null, none. */
+  change?: string | null | undefined;
   ref?: React.Ref<HTMLAnchorElement> | undefined;
 } & Omit<React.HTMLAttributes<HTMLAnchorElement>, 'title' | 'results'>) {
   const share = rowCountWords(entry.check, entry.count ?? 0);
@@ -179,6 +195,12 @@ export function ProblemRow({
               <span className="si-plain-row__points">{back}</span>
             </>
           ) : null}
+          {change ? (
+            <>
+              {' '}
+              <span className="si-plain-row__change">{change}</span>
+            </>
+          ) : null}
         </>
       }
     >
@@ -192,10 +214,13 @@ export function FixFirstCard({
   crawlId,
   results,
   score,
+  changeOf = () => null,
 }: {
   crawlId: string;
   results: PlainResults;
   score: Score | null;
+  /** The fix loop: a check's change since the site's last check, for its count's second line ("9 on 3 Nov"). */
+  changeOf?: ((checkId: string) => string | null) | undefined;
 }) {
   const problems = results.counts.error + results.counts.warning;
   const notices = results.counts.notice;
@@ -223,6 +248,7 @@ export function FixFirstCard({
                 number={index + 1}
                 oneFix={oneFix.has(entry.check.id)}
                 points={score?.lines.find((line) => line.checkId === entry.check.id)?.points}
+                change={changeOf(entry.check.id)}
               />
             </li>
           ))}
@@ -244,7 +270,13 @@ export function FixFirstCard({
             <PlainCheckList className="border-t border-border-subtle">
               {worthALook.map((entry) => (
                 <li key={entry.check.id}>
-                  <ProblemRow crawlId={crawlId} entry={entry} results={results} oneFix={oneFix.has(entry.check.id)} />
+                  <ProblemRow
+                    crawlId={crawlId}
+                    entry={entry}
+                    results={results}
+                    oneFix={oneFix.has(entry.check.id)}
+                    change={changeOf(entry.check.id)}
+                  />
                 </li>
               ))}
             </PlainCheckList>

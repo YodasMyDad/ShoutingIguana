@@ -8,6 +8,13 @@ describe('the sidebar’s heading over the crawls running now', () => {
     expect(runningTitle(['paused'], 'simple')).toBe('Paused');
     expect(runningTitle(['stopping'], 'simple')).toBe('Stopping');
     expect(runningTitle(['paused', 'analyzing'], 'simple')).toBe('Checking now');
+    // The fix loop: a recheck is a check of some of the site's pages, and each row says "Rechecking" itself.
+    expect(runningTitle(['rechecking'], 'simple')).toBe('Checking now');
+  });
+
+  it('counts a recheck as rechecking in Advanced, never as crawling', () => {
+    expect(runningTitle(['rechecking'], 'advanced')).toBe('1 rechecking');
+    expect(runningTitle(['running', 'rechecking'], 'advanced')).toBe('1 crawling, 1 rechecking');
   });
 
   /** The closing audit: the sidebar said "1 crawling" for a paused crawl. */
