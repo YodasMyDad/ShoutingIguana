@@ -184,13 +184,6 @@ export interface Check {
    * from before it, which reads as empty.
    */
   clears?: string[];
-  /**
-   * The site's file a site-wide check is about (X4): `robotsTxt` for robots-txt-unreachable(-other-origin),
-   * robots-txt-missing and robots-txt-no-sitemap, `sitemap` for the sitemap checks of the whole site; null for every
-   * other check. Its issue stays on the home page; the analysis's `counts[].files` names the files. Left out by a sidecar
-   * from before it.
-   */
-  about?: 'robotsTxt' | 'sitemap' | null;
 }
 
 /**
