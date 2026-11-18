@@ -124,6 +124,15 @@ export interface AnalysisTotals {
   causes?: number | null;
   /** Of `causes`, those likely in the site's template. */
   templateCauses?: number;
+  /**
+   * The headline's part (round 3): the errors' and warnings' things to change, what moves the score; null as `causes`
+   * is. Left out where only the counts are known.
+   */
+  fixCauses?: number | null;
+  /** Of `fixCauses`, those likely in the site's template. */
+  fixTemplateCauses?: number;
+  /** Notices that found something: "14 notices worth a look", as Simple's "14 things worth a look" counts them. */
+  notices?: number;
 }
 
 /** What each check came to on this crawl, in catalog order. */
@@ -216,29 +225,51 @@ export function analysisTotals(entries: readonly CheckEntry[]): AnalysisTotals {
   let issues = 0;
   let passed = 0;
   let skipped = 0;
-  let causes: number | null = 0;
-  let templateCauses = 0;
-  // A check another one's fix clears entirely is the same job: its things to change are that one's.
-  const isFound = (entry: CheckEntry) => entry.outcome !== 'passed' && entry.outcome !== 'skipped';
-  const foundIds = new Set(entries.filter(isFound).map((entry) => entry.check.id));
-  const sameJob = new Set(
-    entries
-      .filter(isFound)
-      .flatMap((entry) => entry.clears.filter((cleared) => cleared.all && foundIds.has(cleared.checkId)))
-      .map((cleared) => cleared.checkId),
-  );
+  let notices = 0;
   for (const entry of entries) {
     if (entry.outcome === 'skipped') skipped++;
     else if (entry.outcome === 'passed') passed++;
     else {
       found++;
       issues += entry.count ?? 0;
-      if (sameJob.has(entry.check.id)) continue;
-      causes = causes === null || entry.causes === null ? null : causes + entry.causes;
-      templateCauses += entry.templateCauses ?? 0;
+      if (entry.outcome === 'notice') notices++;
     }
   }
-  return { found, issues, passed, skipped, causes, templateCauses };
+  const all = workOf(entries);
+  const fix = workOf(entries.filter((entry) => entry.outcome === 'error' || entry.outcome === 'warning'));
+  return {
+    found,
+    issues,
+    passed,
+    skipped,
+    causes: all.causes,
+    templateCauses: all.templateCauses,
+    fixCauses: fix.causes,
+    fixTemplateCauses: fix.templateCauses,
+    notices,
+  };
+}
+
+/**
+ * The things to change among the entries that found something, and those in the template; a check another one of them
+ * clears entirely by its fix is the same job, so its own aren't added. Null when one has none (an earlier sidecar's).
+ */
+function workOf(entries: readonly CheckEntry[]): { causes: number | null; templateCauses: number } {
+  const found = entries.filter((entry) => entry.outcome !== 'passed' && entry.outcome !== 'skipped');
+  const foundIds = new Set(found.map((entry) => entry.check.id));
+  const sameJob = new Set(
+    found
+      .flatMap((entry) => entry.clears.filter((cleared) => cleared.all && foundIds.has(cleared.checkId)))
+      .map((cleared) => cleared.checkId),
+  );
+  let causes: number | null = 0;
+  let templateCauses = 0;
+  for (const entry of found) {
+    if (sameJob.has(entry.check.id)) continue;
+    causes = causes === null || entry.causes === null ? null : causes + entry.causes;
+    templateCauses += entry.templateCauses ?? 0;
+  }
+  return { causes, templateCauses };
 }
 
 /**
@@ -246,24 +277,58 @@ export function analysisTotals(entries: readonly CheckEntry[]): AnalysisTotals {
  * 3 of them in the site’s template", "1 thing to change, in the site’s template". "About", as which issues share a
  * cause is the engine's judgement from how they group; never for one.
  */
-export function causeWords(causes: number, templateCauses: number): string {
-  const things = causes === 1 ? '1 thing to change' : `about ${formatCount(causes)} things to change`;
+export function causeWords(causes: number, templateCauses: number, to: 'change' | 'fix' = 'change'): string {
+  const things = causes === 1 ? `1 thing to ${to}` : `about ${formatCount(causes)} things to ${to}`;
   if (templateCauses <= 0) return things;
   if (causes === 1) return `${things}, in the site’s template`;
   return `${things}, ${templateCauses === causes ? 'all' : formatCount(templateCauses)} of them in the site’s template`;
 }
 
+/** The header's answer in its parts (`answerParts`): what moves the score, the notices, then the counts. */
+export interface AnswerParts {
+  /** "About 77 things to fix, 3 of them in the site’s template", or "Nothing to fix"; null without things counted. */
+  fix: string | null;
+  /** "14 notices worth a look"; null with none, or without things counted. */
+  notices: string | null;
+  /** "21 checks found 1,124 issues on this crawl. 116 passed and 4 were skipped." */
+  counts: string;
+}
+
+const capitalised = (text: string) => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
+
 /**
- * The header's answer, from counts only, leading with the work when the analysis counts it: "About 40 things to change,
- * 3 of them in the site’s template: 19 checks found 933 issues on this crawl. 63 passed and 3 were skipped." Without
- * it (an earlier sidecar's analysis): "19 checks found 933 issues on this crawl. 63 passed and 3 were skipped."
+ * The header's answer, leading with what moves the score when the analysis counts its things to change (round 3): the
+ * errors' and warnings' things to fix and how many are in the template; then the notices, quieter, as checks worth a
+ * look (Simple's "14 things worth a look"); then the counts. Without things counted (an earlier sidecar's analysis),
+ * only the counts: "19 checks found 933 issues on this crawl. 63 passed and 3 were skipped."
  */
-export function answerSentence({ found, issues, passed, skipped, causes, templateCauses }: AnalysisTotals): string {
-  const work = found > 0 && causes !== null && causes !== undefined ? causeWords(causes, templateCauses ?? 0) : null;
+export function answerParts(totals: AnalysisTotals): AnswerParts {
+  const { found, causes, fixCauses, fixTemplateCauses, notices } = totals;
+  // Counted only when every check that found something has its things counted: an analysis that counts none has 0
+  // errors' things too when only notices found something, which isn't "nothing to fix".
+  const counted = found > 0 && causes !== null && causes !== undefined && fixCauses !== null && fixCauses !== undefined;
+  return {
+    fix: counted
+      ? fixCauses === 0
+        ? 'Nothing to fix'
+        : capitalised(causeWords(fixCauses, fixTemplateCauses ?? 0, 'fix'))
+      : null,
+    notices: counted && notices ? `${formatCount(notices)} ${notices === 1 ? 'notice' : 'notices'} worth a look` : null,
+    counts: countsSentence(totals),
+  };
+}
+
+/** The answer as one line of text: its parts, " · " between them (the window title, a copy, a test). */
+export function answerSentence(totals: AnalysisTotals): string {
+  const { fix, notices, counts } = answerParts(totals);
+  return [fix, notices, counts].filter(Boolean).join(' · ');
+}
+
+function countsSentence({ found, issues, passed, skipped }: AnalysisTotals): string {
   const first =
     found === 0
       ? 'No check found an issue on this crawl.'
-      : `${work ? `${work.charAt(0).toUpperCase()}${work.slice(1)}: ` : ''}${formatCountOf(found, 'check')} found ${formatCountOf(issues, 'issue')} on this crawl.`;
+      : `${formatCountOf(found, 'check')} found ${formatCountOf(issues, 'issue')} on this crawl.`;
   const were = (count: number) => (count === 1 ? 'was' : 'were');
   const second =
     passed > 0 && skipped > 0
