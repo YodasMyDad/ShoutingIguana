@@ -101,7 +101,7 @@ export const EveryState: Story = {
 export const Narrow: Story = {
   render: () => (
     <StoryFrame>
-      <div className="w-80">
+      <div className="flex w-(--settings-section-narrow) flex-col gap-6">
         <Panel
           state={{ step: 'downloading', update: UPDATE, progress: { downloaded: 4_400_000, total: 13_400_000 } }}
         />

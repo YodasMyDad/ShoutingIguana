@@ -128,7 +128,7 @@ export const EveryState: Story = {
 export const Narrow: Story = {
   render: () => (
     <StoryFrame>
-      <div className="w-80">
+      <div className="w-(--settings-section-narrow)">
         <View
           state={{ kind: 'result', result: RESULTS.tls }}
           start={`https://${'very-long-subdomain.'.repeat(4)}example.com/a/long/path/to/start/from`}

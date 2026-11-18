@@ -508,6 +508,9 @@
      site's icon and its gap). */
   --library-nested: calc(var(--space-5) + var(--favicon-md) + var(--space-3));
   --settings-nav-width: 192px;
+  /* About what a Settings section has at 200% zoom on a 1280 px window (the sidebar as icons, Settings' list beside
+     it): the stories' narrow panels show a section this wide. */
+  --settings-section-narrow: 320px;
   --choice-card-min: 200px; /* a choice card's least width (the speed presets): narrower, they stack */
   --choice-columns: repeat(auto-fit, minmax(var(--choice-card-min), 1fr)); /* as many cards a row as fit */
   --form-max: 760px; /* the crawl settings form and a settings section: lines a reader can follow */
