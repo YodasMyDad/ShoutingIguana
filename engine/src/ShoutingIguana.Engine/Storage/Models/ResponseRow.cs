@@ -32,10 +32,11 @@ internal sealed record ResponseRow
     public string? Error { get; init; }
 
     /// <summary>
-    /// The request carried the crawl's signature for its host. Not stored: the writer says it in the error of a URL the
-    /// site refused anyway (<c>Fetching.ShopifySignals.SIGNED_REFUSAL</c>).
+    /// For a URL the site refused with 429: what the crawl's signature had to do with it, in the words that end its error
+    /// (<c>Fetching.ShopifySignals.Explain</c>), or null when it had nothing to do with one. Not stored apart: the writer
+    /// says it at the end of the error.
     /// </summary>
-    public bool Signed { get; init; }
+    public string? RefusalNote { get; init; }
     public bool IsHtml { get; init; }
     public string? Title { get; init; }
     public int TitleCount { get; init; }

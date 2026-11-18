@@ -184,6 +184,32 @@ public sealed class WebBotSignatureTests
     }
 
     [Fact]
+    public void ARefusalNamesWhatWasWrongWithTheSignatureWhenItCanTell()
+    {
+        var made = DateTimeOffset.FromUnixTimeSeconds(FakeSignatures.CREATED);
+        var clock = new FakeTimeProvider(made + TimeSpan.FromMinutes(12));
+        var signatures = new Dictionary<string, CrawlSignature>
+        {
+            ["shop.example"] = FakeSignatures.Valid(),
+            ["old.example"] = FakeSignatures.Valid(expires: FakeSignatures.CREATED + 60)
+        };
+        var book = new SignatureBook(signatures, clock);
+        string? Explain(string url) => ShopifySignals.Explain(book.Explain(new Uri(url)), clock.GetUtcNow());
+
+        Assert.Equal("Shopify refused the crawler's signature: it was made 12 minutes ago, and a new one can take up to an hour to start working",
+            Explain("https://shop.example/products/a"));
+        Assert.Equal("Shopify limits crawlers without a signature: the signature for old.example expired on 1 January 2026", Explain("https://old.example/"));
+        Assert.Equal("Shopify limits crawlers without a signature: the signature is for shop.example, not www.shop.example, and each domain needs its own",
+            Explain("https://www.shop.example/"));
+        Assert.Null(Explain("https://other.example/"));
+        Assert.Null(Explain("http://shop.example/"));
+
+        clock.Advance(TimeSpan.FromHours(1));
+        Assert.Equal("Shopify refused the crawler's signature: it may not be active yet (a new one can take up to an hour), may have expired, or may be for another domain",
+            Explain("https://shop.example/products/a"));
+    }
+
+    [Fact]
     public void ASignatureNeverPrintsItsValues() =>
         Assert.DoesNotContain(FakeSignatures.MARKER, FakeSignatures.Valid().ToString());
 }

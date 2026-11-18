@@ -25,7 +25,8 @@ public sealed class ShopifyCrawlTests : IDisposable
 {
     private const string PRODUCTS = "FROM responses r JOIN urls u ON u.id = r.url_id WHERE u.is_internal = 1 AND u.url LIKE '%/p/%'";
     private static readonly string REFUSED_UNSIGNED = $"{RetryingFetcher.RATE_LIMITED_ERROR} (429 Too Many Requests): {ShopifySignals.UNSIGNED_REFUSAL}";
-    private static readonly string REFUSED_SIGNED = $"{RetryingFetcher.RATE_LIMITED_ERROR} (429 Too Many Requests): {ShopifySignals.SIGNED_REFUSAL}";
+    private static readonly string REFUSED_SIGNED = $"{RetryingFetcher.RATE_LIMITED_ERROR} (429 Too Many Requests): {ShopifySignals.SIGNED_REFUSAL}: " +
+                                                    "it may not be active yet (a new one can take up to an hour), may have expired, or may be for another domain";
 
     private readonly CrawlFiles _files = new();
 
@@ -54,11 +55,20 @@ public sealed class ShopifyCrawlTests : IDisposable
         Assert.Equal(ShopifySignals.PLATFORM, platform?.Name);
         Assert.Equal("powered-by: Shopify", platform?.Signal);
 
-        // Said while the crawl ran, once, with what to do.
-        var notice = Assert.Single(observer.Notices, notice => notice.Code == "shopify-unsigned");
+        // Said as it happened, in plain words with what to do: one alert, said again only as its count grew, never a page's.
+        var notices = observer.Notices.Where(notice => notice.Code == "shopify-unsigned").ToList();
+        var notice = notices[0];
         Assert.Equal(CrawlNoticeLevel.Warning, notice.Level);
-        Assert.Contains("Shopify limits crawlers that don't send a signature", notice.Message, StringComparison.Ordinal);
-        Assert.Contains("Online Store › Preferences › Crawler access", notice.Message, StringComparison.Ordinal);
+        // Product pages are asked in parallel, so the first alert may already count more than one.
+        Assert.Matches($"^{System.Text.RegularExpressions.Regex.Escape(server.BaseUri.Host)} runs on Shopify, and Shopify is refusing some of its pages because the crawl isn't signed: " +
+                       $"{notice.Data!.Count} so far[.] They'll be marked not checked, not broken[.] To fix it, in Shopify admin go to Online Store › Preferences › Crawler access, " +
+                       "choose Create signature", notice.Message);
+        Assert.DoesNotContain("429", notice.Message, StringComparison.Ordinal);
+        Assert.Null(notice.Data!.Reason);
+        var counts = notices.Select(said => said.Data!.Count!.Value).ToList();
+        Assert.Equal(counts.Order(), counts);
+        Assert.Equal(counts.Distinct().Count(), counts.Count);
+        Assert.InRange(counts[^1], 1, refused);
         Assert.Equal(0, observer.Count("shopify-signature-refused"));
 
         // What the results need: how many weren't checked, why, and which to recheck.
@@ -145,12 +155,46 @@ public sealed class ShopifyCrawlTests : IDisposable
         Assert.True(refused > 0, $"{refused} refused");
         Assert.Equal(0, TestCrawls.Count(path, $"SELECT COUNT(*) {PRODUCTS} AND r.error = '{REFUSED_UNSIGNED.Replace("'", "''", StringComparison.Ordinal)}'"));
         var notice = Assert.Single(observer.Notices, notice => notice.Code == "shopify-signature-refused");
-        Assert.Contains("may be invalid, expired or for another domain", notice.Message, StringComparison.Ordinal);
-        Assert.Contains("up to an hour", notice.Message, StringComparison.Ordinal);
+        Assert.Equal(
+            $"{server.BaseUri.Host} runs on Shopify, and Shopify refused pages even with the signature: it may not be active yet (a new one can take up to an hour), " +
+            "may have expired, or may be for another domain. The crawl asks again for them at its end; any still refused are marked not checked, not broken.",
+            notice.Message);
         Assert.Equal(0, observer.Count("shopify-unsigned"));
         var access = ShopifyAccessReader.Read(path)!;
         Assert.Equal(refused, access.NotCheckedSigned);
         Assert.Equal(0, access.NotCheckedUnsigned);
+        Assert.Equal(["it may not be active yet (a new one can take up to an hour), may have expired, or may be for another domain"], access.Reasons);
+    }
+
+    [Fact]
+    public async Task ASignatureForTheWwwTwinIsNamedAsTheReasonTheStoreStillRefuses()
+    {
+        await using var server = await StartStoreAsync();
+        var path = _files.NewPath();
+        var time = new FakeTimeProvider();
+        var observer = new RecordingObserver(time);
+        var twin = $"www.{server.BaseUri.Authority}";
+        var options = Options(server) with
+        {
+            Signatures = new Dictionary<string, CrawlSignature>
+            {
+                [twin] = new() { SignatureInput = SyntheticShopify.SIGNATURE_INPUT, Signature = SyntheticShopify.SIGNATURE }
+            }
+        };
+
+        await CrawlAsync(options, path, time, observer);
+
+        var reason = $"the signature is for {twin}, not {server.BaseUri.Authority}, and each domain needs its own";
+        var refused = TestCrawls.Count(path, $"SELECT COUNT(*) {PRODUCTS} AND r.error = '{RetryingFetcher.RATE_LIMITED_ERROR} (429 Too Many Requests): {ShopifySignals.UNSIGNED_REFUSAL}: {reason}'");
+        Assert.True(refused > 0, $"{refused} refused");
+        var notice = observer.Notices.First(notice => notice.Code == "shopify-unsigned");
+        Assert.Contains($"because the crawl isn't signed ({reason})", notice.Message, StringComparison.Ordinal);
+        Assert.Equal(reason, notice.Data!.Reason);
+        // A product the section held back and gave up on without asking again has Shopify's limit alone as its reason.
+        var access = ShopifyAccessReader.Read(path)!;
+        Assert.Equal(TestCrawls.Count(path, $"SELECT COUNT(*) {PRODUCTS} AND r.error LIKE '%{ShopifySignals.UNSIGNED_REFUSAL}%'"), access.NotCheckedUnsigned);
+        Assert.Equal([reason], access.Reasons);
+        Assert.Equal(0, server.ShopifySigned);
     }
 
     [Fact]

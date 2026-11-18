@@ -1,3 +1,4 @@
+using System.Globalization;
 using ShoutingIguana.Engine.Fetching.Models;
 
 namespace ShoutingIguana.Engine.Fetching;
@@ -13,14 +14,40 @@ public static class ShopifySignals
     public const string PLATFORM = "shopify";
 
     /// <summary>
-    /// Ends the error of a URL a Shopify store refused with 429 when the crawl sent no signature for its host: "Not
-    /// checked: the site asked the crawler to slow down (429 Too Many Requests): " and this. Shopify limits unsigned
-    /// crawlers on purpose, so it is no fault of the page's, and a signature is the way through.
+    /// Begins the Shopify part of the error of a URL a store refused with 429 when its request carried no signature:
+    /// "Not checked: the site asked the crawler to slow down (429 Too Many Requests): " and this, then why none was sent
+    /// when the crawl had one it couldn't send (<see cref="Explain"/>). Shopify limits unsigned crawlers on purpose, so it
+    /// is no fault of the page's, and a signature is the way through.
     /// </summary>
     public const string UNSIGNED_REFUSAL = "Shopify limits crawlers without a signature";
 
-    /// <summary>Ends the error of a URL refused with 429 though its request carried the crawl's signature.</summary>
-    public const string SIGNED_REFUSAL = "Shopify refused the crawler's signature, which may be invalid, expired or for another domain (a new one can take up to an hour to start working)";
+    /// <summary>Begins the Shopify part of the error of a URL refused though its request carried the crawl's signature.</summary>
+    public const string SIGNED_REFUSAL = "Shopify refused the crawler's signature";
+
+    /// <summary>How long a new signature can take to start working, as Screaming Frog's users found.</summary>
+    public static readonly TimeSpan ACTIVATION = TimeSpan.FromHours(1);
+
+    /// <summary>
+    /// The Shopify part of a refusal's error, naming which problem it is when the crawl can tell: a signature made less
+    /// than an hour ago, which may not be active yet; one that had expired; one for the www twin or the bare domain.
+    /// Null for a request that had nothing to do with a signature: the writer says Shopify's limit for it once it knows
+    /// the site is a store.
+    /// </summary>
+    public static string? Explain(SignatureSituation situation, DateTimeOffset now) => situation.Kind switch
+    {
+        SignatureSituationKind.Signed when situation.At is { } created && now >= created && now - created < ACTIVATION =>
+            $"{SIGNED_REFUSAL}: it was made {Minutes(now - created)} ago, and a new one can take up to an hour to start working",
+        SignatureSituationKind.Signed =>
+            $"{SIGNED_REFUSAL}: it may not be active yet (a new one can take up to an hour), may have expired, or may be for another domain",
+        SignatureSituationKind.Expired when situation.At is { } expires =>
+            $"{UNSIGNED_REFUSAL}: the signature for {situation.Host} expired on {expires.UtcDateTime.ToString("d MMMM yyyy", CultureInfo.InvariantCulture)}",
+        SignatureSituationKind.OtherHost =>
+            $"{UNSIGNED_REFUSAL}: the signature is for {situation.SignedHost}, not {situation.Host}, and each domain needs its own",
+        _ => null
+    };
+
+    private static string Minutes(TimeSpan span) =>
+        span.TotalMinutes < 1.5 ? "a minute" : $"{Math.Round(span.TotalMinutes).ToString(CultureInfo.InvariantCulture)} minutes";
 
     /// <summary>Headers only a Shopify storefront sends, whatever their value.</summary>
     private static readonly string[] HEADERS = ["x-shopid", "x-shopify-stage", "x-sorting-hat-shopid", "shopify-complexity-score"];

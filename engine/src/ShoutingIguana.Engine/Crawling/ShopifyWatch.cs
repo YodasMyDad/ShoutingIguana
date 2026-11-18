@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using ShoutingIguana.Engine.Fetching;
+using ShoutingIguana.Engine.Fetching.Models;
 
 namespace ShoutingIguana.Engine.Crawling;
 
@@ -12,6 +13,7 @@ namespace ShoutingIguana.Engine.Crawling;
 internal sealed class ShopifyWatch(SignatureBook signatures)
 {
     private readonly ConcurrentDictionary<string, string> _hosts = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<int, bool> _refused = new();
 
     /// <summary>Any of the site's hosts is a Shopify store's.</summary>
     public bool IsDetected => !_hosts.IsEmpty;
@@ -24,4 +26,17 @@ internal sealed class ShopifyWatch(SignatureBook signatures)
 
     /// <summary>The URL's host is a Shopify store's, and the crawl has no signature it can send there now (none given, or expired).</summary>
     public bool IsUnsignedShopify(Uri uri) => IsShopify(uri) && signatures.For(uri) is null;
+
+    /// <summary>What the crawl's signatures had to do with a request to <paramref name="uri"/> now (<see cref="SignatureBook.Explain"/>).</summary>
+    public SignatureSituation Explain(Uri uri) => signatures.Explain(uri);
+
+    /// <summary>The site's URLs a store refused this run without a signature, each counted once however often it was asked.</summary>
+    public int Refused => _refused.Count;
+
+    /// <summary>Counts a URL a store refused without a signature; the count so far.</summary>
+    public int NoteRefused(int urlId)
+    {
+        _refused.TryAdd(urlId, true);
+        return _refused.Count;
+    }
 }

@@ -7,10 +7,11 @@ namespace ShoutingIguana.Sidecar.Api.Models;
 /// store's (a signature is made for it), <c>signal</c> what told it was a store (null when only a refused signature
 /// did), <c>notCheckedUnsigned</c> the site's URLs Shopify refused for want of a signature, <c>notCheckedSigned</c> those
 /// it refused though the crawl sent one, and <c>urlIds</c> both kinds' ids, most important first, at most a recheck's
-/// 1,000: what "Recheck these pages" asks for. The answer is <c>null</c> for any other site.
+/// 1,000: what "Recheck these pages" asks for, and <c>reasons</c> what was wrong with the crawl's signature where it could
+/// tell (expired on a date, for the www twin, made under an hour ago). The answer is <c>null</c> for any other site.
 /// </summary>
-internal sealed record ShopifyAccessDto(string Host, string? Signal, int NotCheckedUnsigned, int NotCheckedSigned, IReadOnlyList<int> UrlIds)
+internal sealed record ShopifyAccessDto(string Host, string? Signal, int NotCheckedUnsigned, int NotCheckedSigned, IReadOnlyList<int> UrlIds, IReadOnlyList<string> Reasons)
 {
     public static ShopifyAccessDto From(ShopifyAccess access) =>
-        new(access.Host, access.Signal, access.NotCheckedUnsigned, access.NotCheckedSigned, access.NotCheckedUrlIds);
+        new(access.Host, access.Signal, access.NotCheckedUnsigned, access.NotCheckedSigned, access.NotCheckedUrlIds, access.Reasons);
 }

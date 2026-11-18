@@ -573,18 +573,19 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
 
     /// <summary>
     /// A URL the site refused with 429 is not checked; on a Shopify store, that is Shopify's limit on crawlers without a
-    /// signature, and with one, the signature may be at fault. Said at the end of the stored error, so everything that
-    /// tells a refusal by the error's start (<see cref="RetryingFetcher.RATE_LIMITED_ERROR"/>) still does.
+    /// signature, and where the crawl had a signature for it, what was wrong with it as far as the crawl can tell
+    /// (<see cref="ResponseRow.RefusalNote"/>). Said at the end of the stored error, so everything that tells a refusal by
+    /// the error's start (<see cref="RetryingFetcher.RATE_LIMITED_ERROR"/>) still does.
     /// </summary>
     private ResponseRow ExplainRefusal(ResponseRow response)
     {
         if (response.Error is not { } error || !error.StartsWith(RetryingFetcher.RATE_LIMITED_ERROR, StringComparison.Ordinal) ||
-            error.EndsWith(ShopifySignals.UNSIGNED_REFUSAL, StringComparison.Ordinal) || error.EndsWith(ShopifySignals.SIGNED_REFUSAL, StringComparison.Ordinal))
+            error.Contains(ShopifySignals.UNSIGNED_REFUSAL, StringComparison.Ordinal) || error.Contains(ShopifySignals.SIGNED_REFUSAL, StringComparison.Ordinal))
         {
             return response;
         }
 
-        return response.Signed ? response with { Error = $"{error}: {ShopifySignals.SIGNED_REFUSAL}" }
+        return response.RefusalNote is { } note ? response with { Error = $"{error}: {note}" }
             : _platform is not null ? response with { Error = $"{error}: {ShopifySignals.UNSIGNED_REFUSAL}" }
             : response;
     }

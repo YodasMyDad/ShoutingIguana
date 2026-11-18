@@ -24,7 +24,13 @@ public static class ShopifyAccessReader
         WHERE u.is_internal = 1 AND substr(r.error, 1, $prefixLength) = $prefix
         """;
 
-    private const string SIGNED = "substr(r.error, -$signedLength) = $signed";
+    private const string SIGNED = "instr(r.error, $signed) > 0";
+
+    /// <summary>A refusal the writer gave Shopify's reason: without a platform kept, one a signature had to do with.</summary>
+    private const string UNSIGNED = "instr(r.error, $unsigned) > 0";
+
+    /// <summary>The most reasons it gives: each is one of a few kinds, so more would repeat.</summary>
+    private const int MAX_REASONS = 3;
 
     /// <exception cref="InvalidOperationException">The file isn't a crawl, or was written with another schema.</exception>
     public static ShopifyAccess? Read(string databasePath, CancellationToken cancellationToken = default) =>
@@ -34,13 +40,14 @@ public static class ShopifyAccessReader
     {
         var platform = SitePlatformReader.Read(connection, transaction) ?? FromFirstPage(connection, transaction);
         var signed = Count(connection, transaction, $"SELECT COUNT(*) {REFUSED} AND {SIGNED}");
-        if (platform is null && signed == 0)
+        var unsignedFilter = platform is null ? $"AND {UNSIGNED}" : string.Empty;
+        var unsigned = Count(connection, transaction, $"SELECT COUNT(*) {REFUSED} AND NOT {SIGNED} {unsignedFilter}");
+        if (platform is null && signed == 0 && unsigned == 0)
         {
             return null;
         }
 
-        var unsigned = platform is null ? 0 : Count(connection, transaction, $"SELECT COUNT(*) {REFUSED} AND NOT {SIGNED}");
-        var refusedFilter = platform is null ? $"AND {SIGNED}" : string.Empty;
+        var refusedFilter = platform is null ? $"AND ({SIGNED} OR {UNSIGNED})" : string.Empty;
         using var ids = Command(connection, transaction, $"SELECT r.url_id {REFUSED} {refusedFilter} ORDER BY u.depth, u.id LIMIT {MAX_URL_IDS}");
         List<int> urlIds = [];
         using (var reader = ids.ExecuteReader())
@@ -51,7 +58,37 @@ public static class ShopifyAccessReader
             }
         }
 
-        return new ShopifyAccess(platform?.Host ?? StartHost(connection, transaction), platform?.Signal, unsigned, signed, urlIds);
+        return new ShopifyAccess(platform?.Host ?? StartHost(connection, transaction), platform?.Signal, unsigned, signed, urlIds,
+            Reasons(connection, transaction));
+    }
+
+    /// <summary>
+    /// What was wrong with the crawl's signature, as the refusals' errors say it after Shopify's part ("the signature for
+    /// shop.example expired on 1 March 2027"), each once, in the order first met. None when every refusal was only Shopify's
+    /// limit on unsigned crawlers.
+    /// </summary>
+    private static IReadOnlyList<string> Reasons(SqliteConnection connection, SqliteTransaction? transaction)
+    {
+        using var command = Command(connection, transaction, $"""
+            SELECT substr(r.error, instr(r.error, 'Shopify ')) AS part {REFUSED} AND ({SIGNED} OR {UNSIGNED})
+            GROUP BY part ORDER BY MIN(r.url_id)
+            """);
+        List<string> reasons = [];
+        using var reader = command.ExecuteReader();
+        while (reader.Read() && reasons.Count < MAX_REASONS)
+        {
+            var part = reader.GetString(0);
+            var start = part.StartsWith(ShopifySignals.SIGNED_REFUSAL, StringComparison.Ordinal)
+                ? ShopifySignals.SIGNED_REFUSAL.Length
+                : ShopifySignals.UNSIGNED_REFUSAL.Length;
+            var reason = part[start..].TrimStart(':', ',', ' ');
+            if (reason.Length > 0)
+            {
+                reasons.Add(reason);
+            }
+        }
+
+        return reasons;
     }
 
     /// <summary>For a crawl made before the fact was kept: the headers of the first of the site's pages it read.</summary>
@@ -92,7 +129,7 @@ public static class ShopifyAccessReader
         command.Parameters.AddWithValue("$prefix", RetryingFetcher.RATE_LIMITED_ERROR);
         command.Parameters.AddWithValue("$prefixLength", RetryingFetcher.RATE_LIMITED_ERROR.Length);
         command.Parameters.AddWithValue("$signed", ShopifySignals.SIGNED_REFUSAL);
-        command.Parameters.AddWithValue("$signedLength", ShopifySignals.SIGNED_REFUSAL.Length);
+        command.Parameters.AddWithValue("$unsigned", ShopifySignals.UNSIGNED_REFUSAL);
         return command;
     }
 }
