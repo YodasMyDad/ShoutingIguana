@@ -395,9 +395,12 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
                 case NextRecheckPhaseCommand next:
                     next.Reply.TrySetResult(ApplyNextRecheckPhase());
                     break;
+                case RecordRobotsCommand robots when _recheck is not null:
+                    ApplyRecheckRobots(robots.Record);
+                    _atStage?.Invoke(RecheckStage.RobotsStored);
+                    break;
                 case RecordRobotsCommand robots:
                     _statements.UpsertRobots(robots.Record);
-                    _atStage?.Invoke(RecheckStage.RobotsStored);
                     break;
                 case RecordFaviconCommand favicon:
                     ApplyFavicon(favicon.Record);
@@ -407,6 +410,9 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
                     break;
                 case RegisterSitemapCommand register:
                     register.Reply.TrySetResult(_statements.RegisterSitemap(register.Url, register.ParentId));
+                    break;
+                case CompleteSitemapCommand complete when _recheck is not null:
+                    ApplyRecheckSitemap(complete.Record);
                     break;
                 case CompleteSitemapCommand complete:
                     _statements.UpdateSitemap(complete.Record);

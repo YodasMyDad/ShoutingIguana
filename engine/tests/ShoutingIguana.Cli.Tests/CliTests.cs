@@ -84,7 +84,7 @@ public sealed class CliTests : IAsyncLifetime
         var recheck = await RunAsync("recheck", crawl, "--urls", list);
 
         Assert.True(recheck.ExitCode == 0, recheck.Error);
-        Assert.Matches(@"\] Rechecking: \d+ of \d+ fetched", recheck.Output);
+        Assert.Matches(@"\] Rechecking: \d+ of \d+ URLs fetched", recheck.Output);
         Assert.Contains("Asked for 4 URLs: 1 read, 2 refused again (1 blocked by a firewall or bot check, 1 disallowed by robots.txt), 1 never asked.", recheck.Output);
         var record = Assert.Single(RecheckReader.ReadAll(crawl));
         Assert.Equal(new RecheckAnswerCounts(Read: 1, RateLimited: 0, Blocked: 1, RobotsTxt: 1, NoAnswer: 0, NotAsked: 1), record.Answers);

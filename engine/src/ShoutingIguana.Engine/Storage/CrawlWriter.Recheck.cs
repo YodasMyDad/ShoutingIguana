@@ -372,8 +372,11 @@ internal sealed partial class CrawlWriter
         foreach (var url in recheck.Plan.Scope.Where(url => url.Role == RecheckRole.Judged))
         {
             RunTime("UPDATE recheck_urls SET answer = $answer WHERE recheck_id = $id AND url_id = $url", _transaction,
-                ("$answer", (int)recheck.AnswerOf(url.Id)), ("$id", recheck.Id), ("$url", url.Id));
+                ("$answer", (int)recheck.AnswerOf(url.Id, status == CrawlStatus.Completed)), ("$id", recheck.Id), ("$url", url.Id));
         }
+
+        // A sitemap whose read never came back (it was stopped) is as the crawl read it.
+        KeepUnreadSitemaps();
 
         // A URL it found and didn't get to (it was stopped) is recorded as found by it, not queued: the crawl's queue is as it was.
         foreach (var id in recheck.Found.Where(id => !recheck.Fetched.Contains(id)))
@@ -445,15 +448,37 @@ internal sealed partial class CrawlWriter
     }
 
     /// <summary>
-    /// A sitemap the recheck reads again (the sitemaps kind): its entries as read now replace those read before, which go
-    /// as it is registered, before its URLs come.
+    /// A robots.txt the recheck reads again: stored over the crawl's when the site answered. One it gave no answer to (the
+    /// connection failed, or it timed out) says nothing new of the file, so the crawl's stays; unless the check is whether
+    /// robots.txt can be read, which that is the answer to.
+    /// </summary>
+    private void ApplyRecheckRobots(RobotsRecord record)
+    {
+        if (record.StatusCode is null && !Analysis.Rules.RobotsTxtRules.TooManyRedirects(record) && !_recheck!.JudgesRobotsReach)
+        {
+            _recheck.Unanswered++;
+            return;
+        }
+
+        _statements.UpsertRobots(record);
+    }
+
+    /// <summary>
+    /// A sitemap the recheck reads again (the sitemaps kind): its entries as read now replace those read before, which are
+    /// put aside as it is registered (their sitemap's id negated), before its URLs come, and go once it's read.
     /// </summary>
     private int RegisterRecheckSitemap(string url, int? parentId)
     {
+        var known = RunTime("SELECT id FROM sitemaps WHERE url = $url", _transaction, ("$url", url)) is not null;
         var id = _statements.RegisterSitemap(url, parentId);
         if (_recheck!.SitemapsRead.Add(id))
         {
-            RunTime("DELETE FROM sitemap_urls WHERE sitemap_id = $id", _transaction, ("$id", id));
+            if (!known)
+            {
+                _recheck.SitemapsNew.Add(id);
+            }
+
+            RunTime("UPDATE sitemap_urls SET sitemap_id = -sitemap_id WHERE sitemap_id = $id", _transaction, ("$id", id));
             _atStage?.Invoke(RecheckStage.SitemapCleared);
         }
 
@@ -461,13 +486,58 @@ internal sealed partial class CrawlWriter
     }
 
     /// <summary>
+    /// A sitemap read again came back. Answered, its entries as read now stand and those put aside go. Given no answer (the
+    /// connection failed, or it timed out), it says nothing new: it is as the crawl read it.
+    /// </summary>
+    private void ApplyRecheckSitemap(SitemapRecord record)
+    {
+        var recheck = _recheck!;
+        recheck.SitemapsDone.Add(record.Id);
+        if (record.StatusCode is null)
+        {
+            recheck.Unanswered++;
+            KeepSitemapAsItWas(record.Id);
+            return;
+        }
+
+        RunTime("DELETE FROM sitemap_urls WHERE sitemap_id = $parked", _transaction, ("$parked", -record.Id));
+        _statements.UpdateSitemap(record);
+    }
+
+    /// <summary>A sitemap the recheck couldn't read again: what came of it goes, and its entries are put back; one the crawl didn't have goes.</summary>
+    private void KeepSitemapAsItWas(int id)
+    {
+        RunTime("DELETE FROM sitemap_urls WHERE sitemap_id = $id", _transaction, ("$id", id));
+        if (_recheck!.SitemapsNew.Contains(id))
+        {
+            RunTime("DELETE FROM sitemaps WHERE id = $id", _transaction, ("$id", id));
+            return;
+        }
+
+        RunTime("UPDATE sitemap_urls SET sitemap_id = -sitemap_id WHERE sitemap_id = $parked", _transaction, ("$parked", -id));
+    }
+
+    /// <summary>The sitemaps registered whose read never came back are as the crawl read them.</summary>
+    private void KeepUnreadSitemaps()
+    {
+        var recheck = _recheck!;
+        foreach (var id in recheck.SitemapsRead.Where(id => recheck.SitemapsDone.Add(id)).ToList())
+        {
+            KeepSitemapAsItWas(id);
+        }
+    }
+
+    /// <summary>
     /// The sitemaps were read again in full: one the crawl had that nothing lists any more (a file dropped from the index)
-    /// is no sitemap of the site's now, and goes, with its entries.
+    /// is no sitemap of the site's now, and goes, with its entries. Only when every read got an answer: a robots.txt or
+    /// index that didn't may list what wasn't read.
     /// </summary>
     private void DropSitemapsNotReadAgain()
     {
-        var read = _recheck!.SitemapsRead;
-        if (read.Count == 0)
+        KeepUnreadSitemaps();
+        var recheck = _recheck!;
+        var read = recheck.SitemapsRead.Where(id => !recheck.SitemapsNew.Contains(id) || recheck.SitemapsDone.Contains(id)).ToList();
+        if (read.Count == 0 || recheck.Unanswered > 0)
         {
             return;
         }

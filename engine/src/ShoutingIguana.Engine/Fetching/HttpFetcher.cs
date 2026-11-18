@@ -83,8 +83,10 @@ internal sealed class HttpFetcher : IDisposable
     public PrivateNetworkGuard Guard { get; }
 
     /// <summary>
-    /// The requests sent so far, every kind (pages, robots.txt, sitemaps, the icon), each try counted: none for a URL failed
-    /// without one. Read from any thread.
+    /// The requests the sites were sent so far, every kind (pages, robots.txt, sitemaps, the icon), each try counted: those
+    /// answered, and those sent that got none (a timeout, a connection dropped part-way). None for a URL failed without one,
+    /// nor for a connection that couldn't be made (the name didn't resolve, nothing listened, the proxy or TLS failed), which
+    /// asked the site nothing. Read from any thread.
     /// </summary>
     public long Requests => Interlocked.Read(ref _requests);
 
@@ -211,8 +213,21 @@ internal sealed class HttpFetcher : IDisposable
             throw new HttpRequestException(PrivateNetworkGuard.ERROR, new PrivateNetworkAddressException(uri.IdnHost));
         }
 
-        Interlocked.Increment(ref _requests);
-        return await _client.SendAsync(CreateRequest(uri), HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var response = await _client.SendAsync(CreateRequest(uri), HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            Interlocked.Increment(ref _requests);
+            return response;
+        }
+        catch (Exception exception) when (exception is not HttpRequestException
+                                          {
+                                              HttpRequestError: HttpRequestError.NameResolutionError or HttpRequestError.ConnectionError or
+                                              HttpRequestError.SecureConnectionError or HttpRequestError.ProxyTunnelError
+                                          })
+        {
+            Interlocked.Increment(ref _requests);
+            throw;
+        }
     }
 
     /// <summary>

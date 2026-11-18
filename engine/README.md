@@ -705,7 +705,9 @@ result as a record in the file ("rechecked 5 pages on 17 Nov: 4 fixed"). The des
   crawl and a continue run too: every table and column added since the first schema 2 file), then the whole run is one
   transaction, committed as it ends: its "before", the stamp, every URL stored again, the let-go walk and its record.
   A run that fails anywhere is rolled back whole, so the file is as it was and its analysis still current; one stopped
-  keeps what it fetched.
+  keeps what it fetched. A robots.txt or sitemap read again that gets no answer leaves the crawl's as it was (a sitemap's
+  entries are put aside as it is read, and come back if it can't be), no sitemap is dropped then, and the URLs judged by
+  those reads couldn't be checked, never fixed.
 - **Let go.** A page fetched again may have dropped a link (the owner removed the footer link to a 404). At the end,
   each URL that lost a link is looked at, and what only it led to in turn: the part of the link graph the recheck
   changed. A URL there is kept if it's the start URL, a probe of the site's versions or in a sitemap, or a URL outside

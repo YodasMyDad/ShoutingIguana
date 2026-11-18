@@ -3187,7 +3187,9 @@ every address). It is the catalog's, as `references` is: not stored, not in the 
 - **All or nothing.** The run is stored in one transaction as it ends. A run that fails anywhere (the file, the
   network, the run) is rolled back whole: the file is as it was, its analysis still today's, and it has no recheck. The
   analysis after it isn't run; the `recheck` event says `failed` (no result) and the crawl event's `error` says why ("The
-  recheck failed: …"). A process that dies part-way leaves the file as it was too.
+  recheck failed: …"). A process that dies part-way leaves the file as it was too. A robots.txt or sitemap read again
+  that gets no answer (the connection failed, or it timed out) leaves the crawl's as it was, and the URL it judges
+  couldn't be checked (`answers.noAnswer`): never fixed.
 - **Pace** is the crawl's own options, through the same per-host pacing as a crawl. A site that stops answering ends a
   recheck after a minute (a crawl waits ten).
 - **Stop** is the crawl's: `POST /api/crawls/{id}/stop`. What was fetched stays, the analysis runs, and the recheck is
@@ -3231,7 +3233,7 @@ one (`recheck-not-found`, 404, for an id the file doesn't have):
   cap or the stop; `new` were in scope, not flagged before and flagged now.
 - **`crawlingMs`** is the recheck's own time. The crawl's `crawlingMs` leaves rechecks out.
 - **`fetched`** is the requests the run sent the site, each counted as the site sees it: its pages (each try, each hop
-  of a redirect), robots.txt and the sitemaps. A URL it never asked isn't one.
+  of a redirect), robots.txt and the sitemaps. A URL it never asked isn't one, nor a connection that couldn't be made.
 - **`answers`** is how the site answered it for the URLs it judges, kept as its run ended, with or without a check:
   `read` (an answer of the site's own: a page, a redirect, an error code); refused again, by why: `rateLimited` (429),
   `blocked` (a firewall or bot check), `robotsTxt` (disallowed, or robots.txt unreadable), `noAnswer`; and `notAsked`

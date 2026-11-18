@@ -32,10 +32,11 @@ internal sealed class ConsoleCrawlObserver(bool quiet) : ICrawlObserver
 
         Interlocked.Exchange(ref _lastPrintMs, now);
 
-        // A recheck's run counts its own fetches: those it has stored of those it has planned so far.
+        // A recheck's run counts its own fetches: those it has stored of those it has planned so far. The crawl's own counts
+        // (its errors, its blocked URLs) aren't the recheck's.
         var line = progress.Recheck is { } recheck
             ? string.Create(CultureInfo.InvariantCulture,
-                $"[{Format.Duration(progress.Elapsed)}] Rechecking: {recheck.Done:N0} of {recheck.Total:N0} fetched{(recheck.Phase == 2 ? " (the pages linking to those still failing)" : string.Empty)} | {progress.Errors:N0} errors | {progress.Blocked:N0} blocked")
+                $"[{Format.Duration(progress.Elapsed)}] Rechecking: {recheck.Done:N0} of {recheck.Total:N0} URLs fetched{(recheck is { Phase: 2, Total: > 0 } ? " (the pages linking to those still failing)" : string.Empty)}")
             : string.Create(CultureInfo.InvariantCulture,
                 $"[{Format.Duration(progress.Elapsed)}] {progress.Fetched:N0} fetched ({progress.PagesPerSecond:N0}/s) | {progress.HtmlPages:N0} pages | {progress.Queued:N0} queued | {progress.InFlight} in flight | {progress.Errors:N0} errors | {progress.Blocked:N0} blocked | {Format.Bytes(progress.BytesDownloaded)}");
 
