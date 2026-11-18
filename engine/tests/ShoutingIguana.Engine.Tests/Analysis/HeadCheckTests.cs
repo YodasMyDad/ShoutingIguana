@@ -50,15 +50,36 @@ public sealed class HeadCheckTests
     [Fact]
     public void ASecondHeadOrBodyOrAnHtmlTagAfterContentIsAStructureError()
     {
-        Assert.Equal("2 <head> tags; 2 <body> tags", Detail(IssueCatalog.HTML_STRUCTURE_ERRORS,
+        Assert.Equal("2 <head> tags (the second on line 1); 2 <body> tags (the second on line 1)", Detail(IssueCatalog.HTML_STRUCTURE_ERRORS,
             Html(document: "<!DOCTYPE html><html lang=\"en\"><head><title>A</title></head><head></head><body><body class=\"second\"><p>Text</p></body></html>")));
-        Assert.Equal("<html> after content; <head> after content", Detail(IssueCatalog.HTML_STRUCTURE_ERRORS,
-            Html(document: "Warning: something failed<!DOCTYPE html><html lang=\"en\"><head><title>A</title></head><body><p>Text</p></body></html>")));
+        Assert.Equal("<html> after content (on line 2); <head> after content (on line 2)", Detail(IssueCatalog.HTML_STRUCTURE_ERRORS,
+            Html(document: "Warning: something failed\n<!DOCTYPE html><html lang=\"en\"><head><title>A</title></head><body><p>Text</p></body></html>")));
 
         // Missing head and body tags are allowed, and a body the parser made up for a stray element in the head is the page's one body.
         Assert.Null(Detail(IssueCatalog.HTML_STRUCTURE_ERRORS, Html(document: "<!DOCTYPE html><html lang=\"en\"><title>A</title><p>Text</p></html>")));
         Assert.Null(Detail(IssueCatalog.HTML_STRUCTURE_ERRORS,
             Html(document: "<!DOCTYPE html><html lang=\"en\"><head><img src=\"/t.gif\" alt=\"\"><title>A</title></head><body><p>Text</p></body></html>")));
+    }
+
+    /// <summary>
+    /// The real-site audit's case: the detail named the fault but not where. Each says the line of the tag at fault, which
+    /// differs from page to page, so the group is the fault without it; an earlier engine's detail had no lines.
+    /// </summary>
+    [Fact]
+    public void AStructureErrorSaysOnWhichLine()
+    {
+        var detail = Detail(IssueCatalog.HTML_STRUCTURE_ERRORS, Html(document:
+            "<!DOCTYPE html>\n<html lang=\"en\">\n<head><title>A</title></head>\n<head>\n<meta name=\"x\" content=\"y\">\n</head>\n<body>\n<p>Text</p>\n" +
+            "<body class=\"second\">\n<p>More</p>\n<body class=\"third\">\n</body></html>"));
+        Assert.Equal("2 <head> tags (the second on line 4); 3 <body> tags (the second on line 9)", detail);
+        Assert.Equal("2 <head> tags; 3 <body> tags", IssueCatalog.HTML_STRUCTURE_ERRORS.FaultOf!(detail!));
+        Assert.Equal("<html> after content; <head> after content", IssueCatalog.HTML_STRUCTURE_ERRORS.FaultOf!("<html> after content (on line 2); <head> after content (on line 2)"));
+        Assert.Equal("2 <head> tags; 2 <body> tags", IssueCatalog.HTML_STRUCTURE_ERRORS.FaultOf!("2 <head> tags; 2 <body> tags"));
+        Assert.Equal(16, IssueCatalog.HTML_STRUCTURE_ERRORS.FaultsSince);
+
+        // Content before the page's own head: its <head> tag is the first, after content; a second is the page's second.
+        Assert.Equal("2 <head> tags (the second on line 3)", Detail(IssueCatalog.HTML_STRUCTURE_ERRORS, Html(document:
+            "<p>Warning</p>\n<head><title>A</title></head>\n<head></head><body><p>Text</p></body>")));
     }
 
     [Theory]

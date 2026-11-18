@@ -2118,14 +2118,14 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition SOCIAL_TAGS_MULTIPLE = new("social-tags-multiple", IssueCategory.Html, IssueSeverity.Notice,
         "Open Graph or X tag repeated",
-        """This indexable page gives og:title, og:description, og:url, og:type, twitter:card, twitter:title or twitter:description more than once, with different content. og:image and the other properties that take several values may repeat. The detail counts each, as "2 og:title".""",
+        """This indexable page gives og:title, og:description, og:url, og:type, twitter:card, twitter:title or twitter:description more than once, with different content. og:image and the other properties that take several values may repeat. The detail counts each and quotes its different values, as 2 og:title: "Sofas" · "Chairs".""",
         """Keep one of each: usually two plugins, or a plugin and the theme, both write them, and one can be turned off.""")
     {
         Why = """Each of these says one thing about the page; given twice with different values, each network picks one its own way, and it may not be the one you meant.""",
         LearnMore = "https://ogp.me/",
         Subject = IssueSubject.Page,
         Recheck = [RecheckKind.Urls],
-        Grouping = IssueGrouping.PageDetail
+        Grouping = IssueGrouping.PageDetail, FaultOf = IssueFaults.RepeatedTags, FaultsSince = 16
     };
 
     public static readonly IssueDefinition OG_TITLE_DUPLICATE = new("og-title-duplicate", IssueCategory.Html, IssueSeverity.Notice,
@@ -2210,14 +2210,14 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition HTML_STRUCTURE_ERRORS = new("html-structure-errors", IssueCategory.Html, IssueSeverity.Notice,
         "HTML document structure errors",
-        """The page's HTML has a second <head> or <body> start tag, an <html> tag after content, or a <head> after the body has begun, which the HTML standard counts as errors. A missing <head> or <body> tag isn't one: both are optional. The detail says which. A crawl made before the crawler noted them isn't checked.""",
+        """The page's HTML has a second <head> or <body> start tag, an <html> tag after content, or a <head> after the body has begun, which the HTML standard counts as errors. A missing <head> or <body> tag isn't one: both are optional. The detail says which, and on which line of the page's HTML the tag at fault is. A crawl made before the crawler noted them isn't checked.""",
         """Fix the template so the page has one <html>, one <head> and one <body>, in that order, with nothing before the <html>. Content printed before the page starts, such as a server warning, is a common cause.""")
     {
         Why = """Browsers recover from these the same way every time, merging or dropping the extra tags, so visitors rarely notice. But the attributes on the second tag are lost, and the same fault can move tags out of the head.""",
         LearnMore = "https://html.spec.whatwg.org/multipage/parsing.html#parse-errors",
         Subject = IssueSubject.Page,
         Recheck = [RecheckKind.Urls],
-        Grouping = IssueGrouping.PageDetail
+        Grouping = IssueGrouping.PageDetail, FaultOf = IssueFaults.StructureFaults, FaultsSince = 16
     };
 
     public static readonly IssueDefinition VIEWPORT_INVALID = new("viewport-invalid", IssueCategory.Html, IssueSeverity.Warning,

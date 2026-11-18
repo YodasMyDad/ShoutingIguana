@@ -102,9 +102,31 @@ internal static partial class IssueFaults
         return quote < 0 ? detail : detail[..quote];
     }
 
+    /// <summary>
+    /// The share tags a page gives more than once, counted, without their values: "2 og:title: "Sofas" · "Chairs"; 2
+    /// twitter:card: …" is "2 og:title, 2 twitter:card", as an earlier engine's detail was. Two plugins writing the same
+    /// tags on every page write different values on each.
+    /// </summary>
+    public static string RepeatedTags(string detail) =>
+        string.Join(", ", RepeatedTag().Matches(detail).Select(match => match.Groups["tag"].Value));
+
     public static string HreflangCodes(string detail) =>
         string.Join(", ", detail.Split("; ").Select(part => (part.IndexOf(": ", StringComparison.Ordinal) is var colon and >= 0 ? part[..colon] : part).TrimEnd('…'))
             .Where(code => code.Length > 0));
+
+    /// <summary>
+    /// A document structure error's faults, without the line each is on: "2 &lt;head&gt; tags (the second on line 14); 2
+    /// &lt;body&gt; tags (the second on line 40)" is "2 &lt;head&gt; tags; 2 &lt;body&gt; tags", as an earlier engine's detail was.
+    /// </summary>
+    public static string StructureFaults(string detail) => StructureLine().Replace(detail, string.Empty);
+
+    /// <summary>A structure error's line: " (on line 2)", " (the second on line 1,204)".</summary>
+    [GeneratedRegex(@" \((?:the second )?on line [0-9][0-9,]*\)", RegexOptions.CultureInvariant)]
+    private static partial Regex StructureLine();
+
+    /// <summary>A share tag counted at the start of a social-tags-multiple detail's part: "2 og:title" before ": "", ", " or the end.</summary>
+    [GeneratedRegex("""(?:^|; |, )(?<tag>[0-9][0-9,]* (?:og|twitter):[a-z_:]+)(?=: "|, |$)""", RegexOptions.CultureInvariant)]
+    private static partial Regex RepeatedTag();
 
     /// <summary>Which JSON-LD block of a page failed, and where in it: "Block 2 of 3, line 1, position 55: ".</summary>
     [GeneratedRegex(@"^Block [\d,]+ of [\d,]+(?:, line [\d,]+, position [\d,]+)?: ", RegexOptions.CultureInvariant)]

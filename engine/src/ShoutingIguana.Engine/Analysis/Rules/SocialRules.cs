@@ -24,6 +24,9 @@ internal sealed class SocialRules(UrlTable urls) : IPageRule
     private static readonly string[] SINGLE_TAGS =
         ["og:title", "og:description", "og:url", "og:type", "twitter:card", "twitter:title", "twitter:description"];
 
+    /// <summary>The fewest characters a quoted value is cut to: a word or two of it.</summary>
+    private const int MIN_QUOTE = 8;
+
     private static readonly string[] OPEN_GRAPH_IMAGE_TAGS = ["og:image", "og:image:url", "og:image:secure_url"];
 
     public IEnumerable<IssueHit> Check(AnalyzedPage page)
@@ -59,11 +62,10 @@ internal sealed class SocialRules(UrlTable urls) : IPageRule
         var repeated = SINGLE_TAGS
             .Select(name => (Name: name, Values: tags.Where(tag => tag.Name == name).Select(tag => Normal(tag.Content)).ToList()))
             .Where(tag => tag.Values.Count > 1 && tag.Values.Distinct(StringComparer.Ordinal).Count() > 1)
-            .Select(tag => string.Create(CultureInfo.InvariantCulture, $"{tag.Values.Count} {tag.Name}"))
             .ToList();
         if (repeated.Count > 0)
         {
-            yield return new IssueHit(IssueCatalog.SOCIAL_TAGS_MULTIPLE, page.UrlId, string.Join(", ", repeated));
+            yield return new IssueHit(IssueCatalog.SOCIAL_TAGS_MULTIPLE, page.UrlId, Repeated(repeated));
         }
 
         foreach (var hit in ImageHits(page, card))
@@ -207,6 +209,42 @@ internal sealed class SocialRules(UrlTable urls) : IPageRule
     /// <summary>A tag's first content that says something, or null.</summary>
     private static string? First(IReadOnlyList<MetaTagFact> tags, string name) =>
         tags.FirstOrDefault(tag => tag.Name == name && !string.IsNullOrWhiteSpace(tag.Content))?.Content;
+
+    /// <summary>
+    /// Each tag given more than once, counted, with its different values quoted in page order: "2 og:title: "Sofas" ·
+    /// "Chairs"; 2 twitter:card: "summary_large_image" · "summary"". The values share what the detail's 120 characters
+    /// leave, short ones whole, so every tag's count is in it (its group is the counts, IssueFaults.RepeatedTags).
+    /// </summary>
+    private static string Repeated(List<(string Name, List<string> Values)> repeated)
+    {
+        var shown = repeated.Select(tag => (Counted: string.Create(CultureInfo.InvariantCulture, $"{tag.Values.Count} {tag.Name}: "),
+            Values: tag.Values.Distinct(StringComparer.Ordinal).ToList())).ToList();
+        var quotes = shown.Sum(tag => tag.Values.Count);
+        var frame = shown.Sum(tag => tag.Counted.Length) + "; ".Length * (shown.Count - 1) + "\"\"".Length * quotes + " · ".Length * (quotes - shown.Count);
+        var cut = Math.Min(RuleText.QUOTE_MAX, ShareOf(RuleText.DETAIL_MAX - frame, [.. shown.SelectMany(tag => tag.Values).Select(RuleText.Length)]));
+        return RuleText.Fit(string.Join("; ", shown.Select(tag => tag.Counted + string.Join(" · ", tag.Values.Select(value => RuleText.Quote(value, cut))))));
+    }
+
+    /// <summary>
+    /// The longest any of these texts may be for all of them to fit <paramref name="room"/>: the short ones whole, the long
+    /// ones cut to an equal share of what's left, never under <see cref="MIN_QUOTE"/>.
+    /// </summary>
+    private static int ShareOf(int room, List<int> lengths)
+    {
+        lengths.Sort();
+        for (var index = 0; index < lengths.Count; index++)
+        {
+            var share = room / (lengths.Count - index);
+            if (lengths[index] > share)
+            {
+                return Math.Max(share, MIN_QUOTE);
+            }
+
+            room -= lengths[index];
+        }
+
+        return int.MaxValue;
+    }
 
     private static string Normal(string text) => string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 }
