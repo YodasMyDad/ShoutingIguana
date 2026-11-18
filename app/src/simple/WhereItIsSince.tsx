@@ -108,7 +108,7 @@ export function CausesFixedSince({
           onOpenChange={setFixedOpen}
           level={3}
         >
-          <ul aria-label={`Fixed ${since}`} className="flex flex-col gap-1.5 px-6 pb-4 text-14">
+          <ul aria-label={`Fixed ${since}`} className="flex flex-col gap-1.5 pb-4 text-14">
             {fixed.map((entry) => (
               <li key={entry.key} className="flex min-w-0 flex-wrap items-center gap-x-2">
                 <Icon icon={Tick} size="sm" className="text-text-secondary" />
@@ -131,7 +131,7 @@ export function CausesFixedSince({
           onOpenChange={setUnreadOpen}
           level={3}
         >
-          <ul aria-label="Not checked this time" className="flex flex-col gap-1.5 px-6 pb-4 text-14">
+          <ul aria-label="Not checked this time" className="flex flex-col gap-1.5 pb-4 text-14">
             {unread.map((entry) => (
               <li key={entry.key} className="flex min-w-0 flex-wrap items-center gap-x-2">
                 <span className="min-w-0 truncate font-mono text-13">{entry.name}</span>

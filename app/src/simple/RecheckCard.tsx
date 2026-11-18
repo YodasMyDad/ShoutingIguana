@@ -214,7 +214,7 @@ function Row({ words, actions }: { words: readonly string[]; actions: React.Reac
   return (
     <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
       {words.length > 0 ? (
-        <div className="basis-80 min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-(--simple-words-min)">
           {words.map((sentence, index) => (
             <p
               key={index}
@@ -314,7 +314,7 @@ function Running({ crawlId, state }: { crawlId: string; state: Extract<RecheckCa
   const counted = step === 'fetching' && progress !== null && progress.total > 0;
   return (
     <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
-      <div className="basis-80 flex min-w-0 flex-1 flex-col gap-2">
+      <div className="flex min-w-0 flex-1 basis-(--simple-words-min) flex-col gap-2">
         <p className="text-14 font-medium text-text" role="status" aria-live="polite">
           {words}
         </p>

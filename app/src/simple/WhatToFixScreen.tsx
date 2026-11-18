@@ -232,7 +232,7 @@ function WhatToFix({ crawlId }: { crawlId: string }) {
     <div ref={screenRef} className="@container">
       <div className="si-simple-page flex flex-col gap-2">
         <header className="mb-4 flex flex-wrap items-end gap-x-5 gap-y-3">
-          <div className="basis-80 min-w-0 flex-1">
+          <div className="min-w-0 flex-1 basis-(--simple-words-min)">
             <h1 ref={titleRef} tabIndex={-1} className="si-simple-title">
               What to fix
             </h1>

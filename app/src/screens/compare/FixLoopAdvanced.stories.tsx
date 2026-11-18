@@ -188,7 +188,7 @@ function Picker({ crawlId }: { crawlId: string }) {
   const comparison = useComparison(crawlId);
   const [open, setOpen] = useState(true);
   return (
-    <div className="pr-80 flex justify-end">
+    <div className="flex justify-end">
       <CompareWithMenu crawlId={crawlId} comparison={comparison} open={open} onOpenChange={setOpen} />
     </div>
   );

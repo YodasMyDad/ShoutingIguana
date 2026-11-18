@@ -98,7 +98,7 @@ export function FixedSinceNote({
             onOpenChange={setNotCheckedOpen}
             level={3}
           >
-            <ul aria-label="Not checked this time" className="flex flex-col gap-1.5 px-4 pb-3">
+            <ul aria-label="Not checked this time" className="flex flex-col gap-1.5 pb-3">
               {unread.map((row) => (
                 <ClearedLine key={row.thenUrlId} row={row} item={item} check={check} />
               ))}

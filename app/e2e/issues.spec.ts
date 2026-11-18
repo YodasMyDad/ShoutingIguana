@@ -2,7 +2,7 @@
 // docs/v2-ui-ia.md (pick a check, read it, open a group, its URLs, inspect one, Esc, Alt+Left), the list's keyboard,
 // and axe at zero violations in both themes and under forced colours.
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { siteRow } from './support';
 
 async function expectNoViolations(page: Page) {
@@ -198,6 +198,28 @@ test('a check that doesn’t group lists its URLs flat, sortable by its detail',
   await expect(page).toHaveURL(/sort=/);
   await expect(grid.getByRole('columnheader', { name: 'URL' })).toHaveAttribute('aria-sort', 'ascending');
   await expectNoViolations(page);
+});
+
+test('a check’s head keeps Recheck, Copy URLs and Hide on one row, Recheck’s line beneath them at its end', async ({
+  page,
+}) => {
+  await openIssues(page);
+  await page.getByRole('option', { name: /Duplicate title/ }).click();
+  const head = page.getByRole('article', { name: 'Duplicate title' }).locator('header');
+  const recheck = head.getByRole('button', { name: /^Recheck/ }).first();
+  // Once the plan is read, its line (what it fetches, or why it can't run now) describes it.
+  await expect(recheck).toHaveAttribute('aria-describedby', /.+/, { timeout: 20_000 });
+  const line = page.locator(`[id="${await recheck.getAttribute('aria-describedby')}"]`);
+  const box = async (locator: Locator) => (await locator.boundingBox())!;
+  const first = await box(recheck);
+  const copy = await box(head.getByRole('button', { name: 'Copy URLs' }));
+  const hide = await box(head.getByRole('button', { name: 'Hide this check' }));
+  const words = await box(line);
+  const middle = (of: typeof first) => of.y + of.height / 2;
+  expect(Math.abs(middle(copy) - middle(first))).toBeLessThan(1);
+  expect(Math.abs(middle(hide) - middle(first))).toBeLessThan(1);
+  expect(words.y).toBeGreaterThanOrEqual(Math.max(first.y + first.height, copy.y + copy.height, hide.y + hide.height));
+  expect(Math.abs(words.x + words.width - (hide.x + hide.width))).toBeLessThan(1);
 });
 
 for (const colorScheme of ['light', 'dark'] as const) {

@@ -454,7 +454,7 @@ export function LinkGroupsGrid({
       if (row.kind === 'group') return null;
       if (row.kind === 'more') {
         return (
-          <span className="text-text-link flex min-w-0 items-center gap-2">
+          <span className="flex min-w-0 items-center gap-2 text-accent-text">
             <Icon icon={List} size="sm" />
             <span className="truncate">{showAllLinksWords(row.group.links, images)}</span>
           </span>

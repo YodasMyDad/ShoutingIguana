@@ -368,6 +368,9 @@
   --inspector-width-min: 320px;
   --inspector-height: 320px; /* docked at the bottom; never more than the view above can spare (InspectorSlot) */
   --banner-measure-min: 14rem; /* a banner's words keep this much before its action goes under them */
+  /* Simple's words beside their actions (a screen's title and its line, the recheck card's): they keep this much, and the
+     actions go under them first (200% zoom), rather than squeeze the words into a narrow column. */
+  --simple-words-min: 320px;
   --checks-width: 372px;
   --issues-columns: var(--checks-width) minmax(0, 1fr); /* the checks list, then the selected check */
   --checks-height-stacked: max(50vh, 18rem); /* the checks list's rows above the selected check, when they stack */
@@ -449,12 +452,15 @@
   --ring-lg: 136px; /* the score ring: the Summary's score */
   --ring-md: 72px; /* the score ring in a dialog or the report's toolbar */
   --ring-sm: 36px; /* the score ring in a list (Home's rows) */
+  --ring-words-min: 256px; /* the words beside a score ring (No score yet): they keep this much before going under it */
   --button-height-lg: 40px;
   --grid-foot-height: 36px;
   --row-height-child: 34px; /* a group's rows, inside a grouped grid */
   --row-height-more: 38px;
   --row-height-issue: 30px;
   --tree-indent: 26px; /* chevron plus its gap */
+  /* A fold's body, under its title: the button's inset, the chevron and its gap. */
+  --fold-indent: calc(var(--space-4) + var(--icon-sm) + var(--space-3));
   /* Sitemaps and robots.txt (their slice). */
   --robots-file-min-height: 240px; /* the file keeps this much, and the blocked URLs at least it, however short the window */
   --robots-pane-height: 360px; /* the file where they stack, in a narrow panel; the blocked URLs at least it */
@@ -494,8 +500,17 @@
   */
   --site-row-columns: minmax(0, 1fr) minmax(0, 152px) minmax(0, 208px) minmax(0, 120px) auto;
   --site-row-columns-narrow: minmax(0, 1fr) auto; /* the same at 200% zoom: the score and the fixes under the site */
+  /* An earlier check under its site's row: its icon starts under the site's name (the row's inset, the site's icon and
+     its gap), so the row reads as the site's. */
+  --site-row-nested: calc(var(--space-5) + var(--favicon-lg) + var(--space-3));
   --library-site-min: 144px; /* Home's Site column never gives up more of its room than this */
+  /* An older crawl under its site's row in Home's library: its name starts under the site's (the cell's inset, the
+     site's icon and its gap). */
+  --library-nested: calc(var(--space-5) + var(--favicon-md) + var(--space-3));
   --settings-nav-width: 192px;
+  /* About what a Settings section has at 200% zoom on a 1280 px window (the sidebar as icons, Settings' list beside
+     it): the stories' narrow panels show a section this wide. */
+  --settings-section-narrow: 320px;
   --choice-card-min: 200px; /* a choice card's least width (the speed presets): narrower, they stack */
   --choice-columns: repeat(auto-fit, minmax(var(--choice-card-min), 1fr)); /* as many cards a row as fit */
   --form-max: 760px; /* the crawl settings form and a settings section: lines a reader can follow */
@@ -532,6 +547,9 @@
   --licence-list-height: 360px;
   --measure-text: 62ch; /* the longest line of explaining text */
   --measure-explain: 46ch;
+  /* A note under a row of actions (Recheck's plan in a check's head, or why it can't run): right-aligned beneath them,
+     it wraps at this rather than widen the head and push the actions apart. */
+  --measure-note: 46ch;
   --opacity-disabled: 0.5;
   --opacity-zero: 0.4; /* a severity mark beside a count of 0 */
   --opacity-track: 0.25; /* a spinner's track */

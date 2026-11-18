@@ -218,7 +218,7 @@ function CrawlRow({
     <tr id={id} className={clsx('hover:bg-surface-hover', nested && 'bg-surface-sunken')}>
       {/* No width of its own (max-w-0), so the site's names truncate instead of pushing the table wider; never less
           than its least (min-w), so a narrow window's other columns can't squeeze it out. */}
-      <td className={clsx('max-w-0 min-w-(--library-site-min)', CELL, nested && 'pl-14!')}>
+      <td className={clsx('max-w-0 min-w-(--library-site-min)', CELL, nested && 'pl-(--library-nested)!')}>
         <div className="flex min-w-0 items-center gap-3">
           {nested ? null : <CrawlFavicon item={item} size="md" />}
           <div className="flex min-w-0 flex-col">

@@ -97,7 +97,7 @@ export const EveryState: Story = {
 export const Narrow: Story = {
   render: () => (
     <StoryFrame>
-      <div className="w-80">
+      <div className="w-(--settings-section-narrow)">
         <Licences state={{ kind: 'ready', list: SAMPLE }} defaultOpen />
       </div>
     </StoryFrame>
