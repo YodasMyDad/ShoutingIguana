@@ -198,7 +198,11 @@ describe('how the score is worked out, since the last check', () => {
     expect(fixed).toHaveAttribute('aria-expanded', 'false');
     act(() => fixed.click());
     const list = dialog.getByRole('list', { name: 'Fixed since 17 Oct' });
-    expect(within(list).getAllByRole('listitem').map((entry) => entry.textContent)).toEqual([
+    expect(
+      within(list)
+        .getAllByRole('listitem')
+        .map((entry) => entry.textContent),
+    ).toEqual([
       expect.stringContaining('−6 then'),
       expect.stringContaining('−5 then'),
       expect.stringContaining('−3 then'),

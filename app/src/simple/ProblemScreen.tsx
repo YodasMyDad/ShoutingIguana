@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useRouter } from '@tanstack/react-router';
-import { ArrowLeft, ArrowUpRight, FileText, Gauge, RefreshCw, UserRound } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, FileText, Gauge, UserRound } from 'lucide-react';
 import { useMemo, useRef, type ReactNode } from 'react';
 import { analysisQuery, checksQuery, crawlQuery } from '../api/queries';
 import type { IssueGroup } from '../api/grids';
@@ -38,6 +38,8 @@ import { flatOneFixSentences, oneFixSentences } from './oneFixWords';
 import { plainImageInsight, plainRelated } from './plainEvidence';
 import { saysShownAt, useGroupShownAt } from '../screens/issues/useShownAt';
 import { WhereItIs } from './WhereItIs';
+import { RecheckCard } from './RecheckCard';
+import { useRecheckUnderway } from '../crawl/rechecks';
 import { useSharedSource } from './useSharedSource';
 import { pathOrigin } from './whereWords';
 import { useTemplateLink } from '../screens/issues/useWhereFound';
@@ -55,7 +57,9 @@ export function ProblemScreen({ crawlId, checkId }: { crawlId: string; checkId: 
   const liveStatus = useLive((state) => state.crawls[crawlId]?.status);
   const status = effectiveStatus(item, liveStatus === undefined ? undefined : { status: liveStatus });
   const crawling = status !== null && isCrawling(status);
-  const analysing = status === 'analyzing';
+  // A recheck's analyses (before and after it) are the recheck's: the page stays, its card following it.
+  const recheckUnderway = useRecheckUnderway(crawlId);
+  const analysing = status === 'analyzing' && !recheckUnderway;
   const readable = item !== undefined && status !== 'unreadable';
   const checks = useQuery(checksQuery());
   const analysis = useQuery({ ...analysisQuery(crawlId), enabled: readable && !crawling });
@@ -376,22 +380,8 @@ function FoundProblem({
         </Callout>
       ) : null}
       <WhereItIs crawlId={crawlId} item={item} check={check} total={count} onCopy={copyList} onSave={saveSheet} />
-      <Card className="mt-4 flex flex-wrap items-center gap-5 px-6 py-5">
-        <div className="basis-80 min-w-0 flex-1">
-          <h2 className="font-semibold">Fixed it?</h2>
-          <p className="mt-0.5 text-14 leading-body text-text-secondary">
-            Shouting Iguana can’t see a fix until it reads the site again. Check again, and this drops off the list if
-            it’s gone.
-          </p>
-        </div>
-        {item.startUrl ? (
-          <Button icon={RefreshCw} asChild>
-            <Link to="/new" search={{ url: item.startUrl, from: crawlId }}>
-              Check the site again
-            </Link>
-          </Button>
-        ) : null}
-      </Card>
+      {/* The fix loop: Fixed it? is a recheck of these pages (./RecheckCard). */}
+      <RecheckCard crawlId={crawlId} item={item} check={check} />
     </>
   );
 }
