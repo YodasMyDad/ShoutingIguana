@@ -6,6 +6,7 @@
 // answering) is in no class, live or done: the grid has it as not fetched, and the breakdown says it apart.
 import type { FacetsPage, GridFilter } from '../../api/grids';
 import type { CrawlStats, NoResponseCounts, SiteVersionCounts, StatusClassCounts } from '../../api/types';
+import { formatCount } from '../../lib/format';
 import {
   BLOCKED,
   NOT_BLOCKED,
@@ -87,6 +88,11 @@ export interface SplitSegment {
   parts: SplitPart[];
   /** Opens exactly these URLs. */
   link: UrlsLink;
+  /**
+   * How many of them are other sites' URLs (the links the crawl checked, not the site's own pages): null where that
+   * isn't known (live, from the progress event).
+   */
+  external: number | null;
 }
 
 export interface StatusSplit {
@@ -280,6 +286,7 @@ function splitOf(
     count: classes[key],
     parts: key === 'noResponse' ? noResponseParts(noResponse) : key === 'blocked' ? [] : codeParts(key, codes),
     link: urlsLink(splitFilters(key, ownOnly)),
+    external: null,
   }));
   const [okPercent = 0, restPercent = 0] = sharePercents([ok, rest], MIN_REST_PERCENT);
   const others = SPLIT_CLASSES.filter((key) => key !== '2xx' && classes[key] > 0);
@@ -346,6 +353,41 @@ export const PROBE_ROWS = {
 export interface StatusFacets extends FacetsPage {
   notChecked: number;
   probes?: ProbeCounts | null;
+  /**
+   * Of each class, the URLs on other sites (`isInternal` false), the blocked among them: null or left out where they
+   * weren't read.
+   */
+  external?: Partial<StatusClassCounts> | null;
+}
+
+/**
+ * The reads of the classes' URLs on other sites: what wasn't blocked by class, and the blocked (their count). A crawl
+ * checks the links to other sites, so a DNS failure or a bot challenge there is in the breakdown with the site's own.
+ */
+export const EXTERNAL = { column: 'isInternal', op: 'is', value: false } as const satisfies GridFilter;
+export const EXTERNAL_FACETS = { filters: [NOT_BLOCKED, EXTERNAL], facets: ['statusClass'] as const };
+export const EXTERNAL_BLOCKED_FACETS = { filters: [BLOCKED, EXTERNAL], facets: ['statusClass'] as const };
+
+/** The other sites' part of a finished crawl's classes, from `EXTERNAL_FACETS` and `EXTERNAL_BLOCKED_FACETS`. */
+export function externalCountsOf(
+  unblocked: FacetsPage,
+  blocked: Pick<FacetsPage, 'matching'>,
+): Partial<StatusClassCounts> {
+  const counts: Partial<StatusClassCounts> = { blocked: blocked.matching };
+  for (const bucket of unblocked.facets.statusClass ?? []) {
+    const key = SPLIT_CLASSES.find((candidate) => candidate === bucket.value);
+    if (key && key !== 'blocked') counts[key] = bucket.count;
+  }
+  return counts;
+}
+
+/**
+ * What a class's row says of its URLs on other sites: "2 on other sites", "All on other sites"; null with none, or
+ * where that isn't known.
+ */
+export function externalWords(segment: Pick<SplitSegment, 'count' | 'external'>): string | null {
+  if (segment.external === null || segment.external <= 0 || segment.count <= 0) return null;
+  return segment.external >= segment.count ? 'All on other sites' : `${formatCount(segment.external)} on other sites`;
 }
 
 /**
@@ -382,7 +424,31 @@ export function statusSplitFromFacets(
     : null;
   const allNotChecked = Math.max(0, facets.notChecked);
   const probes = facets.probes;
-  if (!probes || probes.fetched === 0) return splitOf(classes, codes, reasons, allNotChecked, notFetched, 0);
+  const split =
+    !probes || probes.fetched === 0
+      ? splitOf(classes, codes, reasons, allNotChecked, notFetched, 0)
+      : probesApart(probes, classes, codes, reasons, allNotChecked, notFetched);
+  const external = facets.external;
+  if (!external) return split;
+  // Each class's URLs on other sites, never more than the class has.
+  return {
+    ...split,
+    segments: split.segments.map((segment) => ({
+      ...segment,
+      external: Math.min(segment.count, Math.max(0, external[segment.key] ?? 0)),
+    })),
+  };
+}
+
+/** A finished crawl's breakdown with the probes of the site's other versions apart, as live. */
+function probesApart(
+  probes: ProbeCounts,
+  classes: StatusClassCounts,
+  codes: Readonly<Record<string, number>>,
+  reasons: Partial<Record<NoResponseReason, number>> | null,
+  allNotChecked: number,
+  notFetched: number,
+): StatusSplit {
   // The site's own, as live: each figure less the probes' part. The grid's classes have the URLs that weren't checked
   // in none, where the probes' part counts them under no response.
   const own = minus(classes, {
