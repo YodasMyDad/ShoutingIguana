@@ -108,6 +108,14 @@ internal sealed class CrawlSession
     private int _rateLimited;
     private string? _rateLimitedHost;
 
+    // Of those, the ones never asked (their turn in a limited section hadn't come), and of the rest, how many URLs were
+    // refused how many times: for the end's notice to say truly what happened to them.
+    private int _neverAsked;
+    private readonly ConcurrentDictionary<int, int> _refusedTimes = new();
+
+    // The 429s each of the site's URLs has had, while it waits for another try: dropped as it is recorded.
+    private readonly ConcurrentDictionary<int, int> _refusals = new();
+
     private CrawlSession(CrawlRequest request, RecheckPlan? recheck, ICrawlObserver observer, ILoggerFactory loggerFactory, TimeProvider timeProvider,
         Action<RecheckStage>? atStage = null)
     {
@@ -452,7 +460,8 @@ internal sealed class CrawlSession
 
     /// <summary>
     /// The site kept asking the crawler to slow down even at the end, so some of its URLs were stored as not checked: said
-    /// once, with what to do, only when there are some.
+    /// once, with what happened to them (how often those asked were refused, and why the others were never asked) and what
+    /// to do, only when there are some.
     /// </summary>
     private void SayWhatTheRateLimitLeftUnchecked()
     {
@@ -464,11 +473,67 @@ internal sealed class CrawlSession
 
         var host = Volatile.Read(ref _rateLimitedHost) ?? _scope.HostName(UrlNormalizer.GetHost(_startUri));
         var urls = count == 1 ? "1 URL wasn't" : $"{count:N0} URLs weren't";
-        _observer.OnNotice(new CrawlNotice(CrawlNoticeLevel.Warning, "rate-limited-unchecked",
-            $"{urls} checked because {host} kept asking the crawler to slow down ({HttpStatusNames.Describe(429)}), even when they were asked for again at the end, three times, each after the pause it asked for. Check the site again later, or at the Polite speed.")
+        List<string?> said =
+        [
+            $"{urls} checked because {host} kept asking the crawler to slow down ({HttpStatusNames.Describe(429)}).",
+            HowOftenTheRefusedWereAsked(),
+            WhyTheOthersWereNeverAsked(host),
+            "Check the site again later, or at the Polite speed."
+        ];
+        _observer.OnNotice(new CrawlNotice(CrawlNoticeLevel.Warning, "rate-limited-unchecked", string.Join(" ", said.OfType<string>()))
         {
             Data = new CrawlNoticeData(Host: host, Reason: HttpStatusNames.Describe(429), Count: count)
         });
+    }
+
+    /// <summary>The URLs asked and refused, and how many times: "2 were asked for and refused 4 times each."</summary>
+    private string? HowOftenTheRefusedWereAsked()
+    {
+        var byTimes = _refusedTimes.ToArray();
+        var urls = byTimes.Sum(entry => entry.Value);
+        if (urls == 0)
+        {
+            return null;
+        }
+
+        var fewest = byTimes.Min(entry => entry.Key);
+        var most = byTimes.Max(entry => entry.Key);
+        var times = fewest == most
+            ? (urls == 1 ? Times(fewest) : $"{Times(fewest)} each")
+            : $"between {fewest:N0} and {most:N0} times";
+        return $"{(urls == 1 ? "1 was" : $"{urls:N0} were")} asked for and refused {times}.";
+
+        static string Times(int times) => times switch
+        {
+            1 => "once",
+            2 => "twice",
+            _ => $"{times:N0} times"
+        };
+    }
+
+    /// <summary>
+    /// The URLs never asked, and why: the sections they waited in, read one page at a time, were given up on before their
+    /// turn came, as the time for them ran out or as they refused every page at their slowest pace.
+    /// </summary>
+    private string? WhyTheOthersWereNeverAsked(string host)
+    {
+        var urls = Volatile.Read(ref _neverAsked);
+        if (urls == 0)
+        {
+            return null;
+        }
+
+        var sections = _trickle.GivenUp;
+        var named = sections.Select(section => section.Host == host ? section.Section : section.Host + section.Section).Distinct(StringComparer.Ordinal).ToList();
+        var it = named.Count == 1 ? "it" : "them";
+        var their = urls == 1 ? "its" : "their";
+        var why = sections.Count > 0 && sections.All(section => section.TimeRanOut)
+            ? $"the {SectionTrickle.GIVE_UP_AFTER.TotalMinutes:0} minutes it gives such pages once the rest of the site is done ran out first"
+            : sections.Count > 0 && sections.All(section => !section.TimeRanOut)
+                ? $"it gave up on {it} after {SectionTrickle.GIVE_UP_FAILURES} refusals in a row at one page every {SectionPace.MAX_INTERVAL.TotalMinutes:0} minutes, before {their} turn came"
+                : $"it gave up on {it} before {their} turn came";
+        var where = named.Count == 0 ? "the pages it limits" : string.Join(" and ", named);
+        return $"{(urls == 1 ? "1 never had its" : $"{urls:N0} never had their")} turn to be asked: the crawl reads {where} one page at a time, as the site limits {it}, and {why}.";
     }
 
     /// <summary>
@@ -784,9 +849,8 @@ internal sealed class CrawlSession
     private bool HasRateLimitedTriesLeft(int id, ResponseRow response) =>
         IsRateLimited(response) && _rateLimitedTries.AddOrUpdate(id, 1, static (_, tries) => tries + 1) < MAX_RATE_LIMITED_TRIES;
 
-    /// <summary>Stored as not checked because the site answered 429 Too Many Requests.</summary>
-    private static bool IsRateLimited(ResponseRow response) =>
-        response.Error?.StartsWith(RetryingFetcher.RATE_LIMITED_ERROR, StringComparison.Ordinal) == true;
+    /// <summary>Stored as not checked because the site answered 429 Too Many Requests: refused, or never asked.</summary>
+    private static bool IsRateLimited(ResponseRow response) => RateLimitedErrors.IsRateLimited(response.Error);
 
     private Task[] StartWorkers(ChannelReader<FrontierItem> queue, int count) =>
         Enumerable.Range(0, count).Select(_ => Task.Run(() => WorkAsync(queue, _stop.Token))).ToArray();
@@ -812,6 +876,7 @@ internal sealed class CrawlSession
                 try
                 {
                     record = await _processor.ProcessAsync(item, cancellationToken, isRetry).ConfigureAwait(false);
+                    CountRefusal(record);
                     record = heldBack is null ? record : KeepTheRealError(record, heldBack);
                 }
                 catch (Exception exception) when (exception is not OperationCanceledException)
@@ -854,16 +919,41 @@ internal sealed class CrawlSession
         }
     }
 
-    /// <summary>Stores a URL's record, counting the site's own left unchecked by a 429 for the end's notice.</summary>
+    /// <summary>
+    /// Stores a URL's record, counting the site's own left unchecked by a 429 for the end's notice: never asked, or refused
+    /// as many times as it was.
+    /// </summary>
     private async Task RecordAsync(PageRecord record, CancellationToken cancellationToken)
     {
         var item = record.Item;
-        if (item.IsInternal && IsRateLimited(record.Response) && Interlocked.Increment(ref _rateLimited) == 1)
+        _refusals.TryRemove(item.Id, out var refusals);
+        if (item.IsInternal && IsRateLimited(record.Response))
         {
-            Volatile.Write(ref _rateLimitedHost, _scope.HostName(UrlNormalizer.GetHost(new Uri(item.Url))));
+            if (Interlocked.Increment(ref _rateLimited) == 1)
+            {
+                Volatile.Write(ref _rateLimitedHost, _scope.HostName(UrlNormalizer.GetHost(new Uri(item.Url))));
+            }
+
+            if (RateLimitedErrors.WasNeverAsked(record.Response.Error))
+            {
+                Interlocked.Increment(ref _neverAsked);
+            }
+            else
+            {
+                _refusedTimes.AddOrUpdate(Math.Max(1, refusals), 1, static (_, urls) => urls + 1);
+            }
         }
 
         await _writer.RecordAsync(record, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>One of the site's URLs was asked and answered 429: counted, for the end's notice to say how often.</summary>
+    private void CountRefusal(PageRecord asked)
+    {
+        if (asked.Item.IsInternal && IsRateLimited(asked.Response))
+        {
+            _refusals.AddOrUpdate(asked.Item.Id, 1, static (_, times) => times + 1);
+        }
     }
 
     /// <summary>The held-back sections' URLs, at their pace, until the crawl ends or stops.</summary>
@@ -871,7 +961,7 @@ internal sealed class CrawlSession
     {
         try
         {
-            await _trickle.RunAsync(RecordAsync, cancellationToken).ConfigureAwait(false);
+            await _trickle.RunAsync(RecordAsync, CountRefusal, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

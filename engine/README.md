@@ -152,8 +152,9 @@ curl -H "Authorization: Bearer <token>" http://127.0.0.1:53123/api/health
      the last tries), and shortens by a tenth each time a page gets through. The rest of the host keeps its pace. Only 429s
      from three sections within ten minutes are the host's own limit and slow the whole host, as below. Nothing is given
      up while pages get through: a section is given up on after three 429s in a row at its slowest (one page every 20
-     minutes), and every section 20 minutes after the rest of the crawl is over; what is left is not checked. Progress
-     says how many are left and when the next is tried.
+     minutes), and every section 20 minutes after the rest of the crawl is over, its last try coming then if the next was
+     due later; what is left is not checked. Progress says how many are left and when the next is tried, never later than
+     that.
    - A host that asks to slow down as a whole (429s from three sections, or 503 with Retry-After) is paused, all of it, for its Retry-After (or 10 s,
      doubling while it keeps asking, up to two minutes), then resumes one request at a time at half the pace that
      tripped it (never below one every five seconds), so nothing queued bursts out after the pause. 429s to requests sent before that slowdown don't slow
@@ -186,7 +187,10 @@ curl -H "Authorization: Bearer <token>" http://127.0.0.1:53123/api/health
      crawl is paused.
    - A 429 says nothing about the URL. One the site still answers with 429 at its last try (another site's, after its
      retries) is stored as not checked ("Not checked: the site asked the crawler to slow down"), like a URL whose host
-     stopped answering: no check judges it, and the analysis says how many there were. A firewall's block page (403, a
+     stopped answering: no check judges it, and the analysis says how many there were. One held in a limited section
+     whose turn hadn't come when the crawl gave up on the section is stored as never asked
+     (`RetryingFetcher.NEVER_ASKED_ERROR`, which starts the same, so it is read the same; `Fetching/RateLimitedErrors`
+     tells the two apart). A firewall's block page (403, a
      challenge) is still a block.
    - A public site's crawl never asks the user's own machine or network (`Fetching/PrivateNetworkGuard`): a link to
      localhost, 127.x, ::1 or a private range (10/8, 172.16/12, 192.168/16, 100.64/10, fc00::/7, link-local) is stored
@@ -241,7 +245,8 @@ crawl file, numbered across runs, with the facts it's about (which host, how man
 program that opens the crawl can show it (`CrawlNoticeReader`). `blocked` (a firewall's block page or challenge) and
 `rate-limited` (a 429: the pause asked for and the pace the crawler goes on at) are said once per host, and
 `robots-unreachable` once per origin, in each run. `rate-limited-unchecked` is said at the end of a run whose site
-still answered 429 at the last try, with how many of its URLs weren't checked and what to do. Read back, a `blocked` notice counts the host's blocked responses in
+kept asking the crawler to slow down, with how many of its URLs weren't checked, what happened to them (how many times
+those asked were refused; how many never had their turn in a limited section, and why) and what to do. Read back, a `blocked` notice counts the host's blocked responses in
 the whole crawl, every run's. Ids carry on from the file's highest, so the last ones heard before a crash can be given
 again: a notice is its id and its time. `CrawlHistoryReader` counts a crawl's fetching over time back from the stored
 fetch times, for a chart of a crawl continued later, and the site's own URLs found, each from when the page that first

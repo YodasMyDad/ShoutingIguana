@@ -614,7 +614,9 @@ on, mid-crawl as at the end.
   `statusClasses.noResponse`. `robotsDisallowed` is the same count as the top-level field (refused by a rule, or because
   robots.txt couldn't be read). `notChecked` is URLs never asked, their host having stopped answering, or asked and
   only ever answered 429 Too Many Requests, the site asking the crawler to slow down (their `error` starts "Not
-  checked: the site asked the crawler to slow down"), or on a private network address a public site's crawl doesn't
+  checked: the site asked the crawler to slow down"; one held in a section the site limits apart whose turn didn't come
+  before the crawl gave up on the section goes on "(429 Too Many Requests), and the crawl gave up on the pages it
+  limits before this URL had its turn"), or on a private network address a public site's crawl doesn't
   ask ("Not checked: private network address; not checked from a public site"): unknown, not broken, so the UI
   shouldn't call them errors. `networkError` doesn't include them.
 - **`crawlingMs`** (E3c) is the time spent crawling so far, over every run of the crawl: the earlier runs' time, and
@@ -732,7 +734,7 @@ An alert is a `CrawlNotice`, kept in the crawl file as the engine raises it (the
   | `mostly-forbidden` | warning | `host`, `count` (the 403s), `sampled` (of the site's first 20 URLs) | As for `blocked` |
   | `rate-limited` | info | `host`, `reason` (`429 Too Many Requests`), `durationMs`: the pause it asked for, when it did. Once per host in each run: the crawler waits as asked, goes on at a slower pace it learns, and asks again at the end for the URLs it was refused. Not a block | Nothing: it is handled |
   | `section-rate-limited` | info | `host`, `url`: the section ("/products/"), `reason` (`429 Too Many Requests`), `durationMs`: the first interval between its URLs. Once per section in each run: its URLs are held back and read one at a time, and the rest of the site isn't slowed | Nothing: it is handled; the `sectionLimited` wait says how it goes |
-  | `rate-limited-unchecked` | warning | `host` (of the first such URL), `reason` (`429 Too Many Requests`), `count`: the site's URLs stored as not checked (`outcome` `notChecked`) because it still answered 429 at their last try. Said at the end of a run, only when there are some | Crawl again later, or at the Polite speed |
+  | `rate-limited-unchecked` | warning | `host` (of the first such URL), `reason` (`429 Too Many Requests`), `count`: the site's URLs stored as not checked (`outcome` `notChecked`) because it kept asking the crawler to slow down: asked and still answered 429 at their last try, or held in a section it limits apart and never asked, the crawl having given up on the section before their turn came. The message says how many of each, how many times those asked were refused, and why the others weren't asked. Said at the end of a run, only when there are some | Crawl again later, or at the Polite speed |
   | `start-redirects-away` | warning | `url`: where the start URL leads | Crawl from there instead |
   | `robots-unreachable` | warning | `origin`, `reason` (`503 Service Unavailable`, or the error), `durationMs`: how long until it's asked again | Crawl again with robots.txt ignored |
   | `site-unreachable` | warning | `origin`, `reason` (the last error), `durationMs`: the pause between tries | Wait, or stop and continue later |

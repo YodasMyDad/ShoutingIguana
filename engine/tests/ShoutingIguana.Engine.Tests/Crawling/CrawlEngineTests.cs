@@ -138,9 +138,10 @@ public sealed class CrawlEngineTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// One that never lets the crawler through: its product pages are asked for once, then three more times at the end of
-    /// the crawl, and stored as not checked because the site asked the crawler to slow down. That is no fault of the site's pages, so
-    /// no check flags them, the analysis says why they weren't judged, and a notice says what to do.
+    /// One that never lets the crawler through: its product pages wait their turn in the section it limits, are asked
+    /// again and again, ever further apart, and are stored as not checked because the site asked the crawler to slow down
+    /// (refused, or never asked if their turn didn't come). That is no fault of the site's pages, so no check flags them,
+    /// the analysis says why they weren't judged, and a notice says what happened to them and what to do.
     /// </summary>
     [Fact]
     public async Task ASiteThatNeverStopsAskingToSlowDownLeavesItsUrlsNotCheckedAndSaysSo()
@@ -165,7 +166,12 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         const string PRODUCTS = "FROM responses r JOIN urls u ON u.id = r.url_id WHERE u.is_internal = 1 AND u.url LIKE '%/p/%'";
         var products = Count(path, $"SELECT COUNT(*) {PRODUCTS}");
         Assert.True(products >= 2, $"{products} product URLs");
-        Assert.Equal(products, Count(path, $"SELECT COUNT(*) {PRODUCTS} AND r.error = '{RetryingFetcher.RATE_LIMITED_ERROR} (429 Too Many Requests)'"));
+        // Each is stored as refused, or, if the section was limited before a worker asked it and its turn never came, as
+        // never asked: the first, which limited the section, was asked; whether the other was depends on the workers' timing.
+        var refused = Count(path, $"SELECT COUNT(*) {PRODUCTS} AND r.error = '{RetryingFetcher.RATE_LIMITED_ERROR} (429 Too Many Requests)'");
+        var neverAsked = Count(path, $"SELECT COUNT(*) {PRODUCTS} AND r.error = '{RetryingFetcher.NEVER_ASKED_ERROR}'");
+        Assert.Equal(products, refused + neverAsked);
+        Assert.True(refused >= 1, $"{refused} refused");
         Assert.True(server.RateLimited > 4 * products, $"{server.RateLimited} 429s");
         Assert.Equal(products, CrawlStatsReader.Read(path).NotCheckedCount);
 
@@ -177,6 +183,17 @@ public sealed class CrawlEngineTests : IAsyncLifetime
         var left = Assert.Single(observer.Notices, notice => notice.Code == "rate-limited-unchecked");
         Assert.Equal(products, left.Data!.Count);
         Assert.StartsWith($"{products} URLs weren't checked because ", left.Message, StringComparison.Ordinal);
+        Assert.Contains($"{(refused == 1 ? "1 was" : $"{refused} were")} asked for and refused ", left.Message, StringComparison.Ordinal);
+        if (neverAsked > 0)
+        {
+            Assert.Contains($"{(neverAsked == 1 ? "1 never had its" : $"{neverAsked} never had their")} turn to be asked: the crawl reads /p/ one page at a time", left.Message, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.DoesNotContain("never had", left.Message, StringComparison.Ordinal);
+        }
+
+        Assert.DoesNotContain("three times", left.Message, StringComparison.Ordinal);
         Assert.EndsWith("Check the site again later, or at the Polite speed.", left.Message, StringComparison.Ordinal);
         // The site's planted firewall block is still one; no 429 is.
         Assert.DoesNotContain(observer.Notices, notice => notice.Code == "blocked" && notice.Data?.Reason?.Contains("429", StringComparison.Ordinal) == true);

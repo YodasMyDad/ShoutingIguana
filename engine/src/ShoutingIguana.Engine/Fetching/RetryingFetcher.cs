@@ -36,6 +36,14 @@ internal sealed class RetryingFetcher(
     /// </summary>
     internal const string RATE_LIMITED_ERROR = NOT_CHECKED_ERROR + ": the site asked the crawler to slow down";
 
+    /// <summary>
+    /// The whole error of a URL held in a section its site limits apart (<see cref="SectionPace"/>) whose turn didn't come
+    /// before the crawl gave up on the section: not asked, where one stored as refused was asked and answered 429. It
+    /// starts with <see cref="RATE_LIMITED_ERROR"/>, so whatever reads a rate-limited URL reads this one the same; <see
+    /// cref="RateLimitedErrors"/> tells the two apart. No quotes in it: SQL quotes it as it is.
+    /// </summary>
+    internal const string NEVER_ASKED_ERROR = RATE_LIMITED_ERROR + " (429 Too Many Requests), and the crawl gave up on the pages it limits before this URL had its turn";
+
     private const int MAX_JITTER_MS = 250;
     private static readonly TimeSpan MAX_RETRY_WAIT = TimeSpan.FromSeconds(60);
 
