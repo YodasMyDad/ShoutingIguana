@@ -34,7 +34,10 @@ public static class ScoreCalculator
     /// <summary>
     /// The score of an analysis, or null when it read no page: there is nothing honest to say of a site nothing was read of.
     /// </summary>
-    /// <param name="checks">Every check that ran, with the URLs it flagged (0 for one that found nothing).</param>
+    /// <param name="checks">
+    /// Every check that ran, with the URLs it flagged (0 for one that found nothing). A check of what the site's platform set
+    /// (<see cref="IssueCount.Platform"/>) ran, but takes nothing off and has no line: the site's owner can't change it.
+    /// </param>
     /// <param name="checksSkipped">The checks the analysis couldn't run.</param>
     /// <param name="pages">The pages the analysis read.</param>
     /// <param name="urls">The URLs crawled, as they stood when the analysis ran.</param>

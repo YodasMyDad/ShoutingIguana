@@ -72,6 +72,9 @@ internal sealed partial class SyntheticShopifyStore(SyntheticShopify shopify, Ti
     /// <summary>
     /// The store's headers on every response of the site's port, and on its home page the theme object and two ways off
     /// the site over https, to the same server named <c>localhost</c>: a link, and <see cref="SyntheticShopify.AWAY_PATH"/>.
+    /// The home page sends what Shopify set on the Jitsunami store, which its owner can't change: no Referrer-Policy, HSTS
+    /// for 91 days, and Shopify's own <c>localization</c> cookie without Secure. A store's responses carry no cookie of its
+    /// owner's (Shopify strips them from what an app proxy answers), so the site's planted session cookie is left off.
     /// </summary>
     public SyntheticResponse Dress(SyntheticResponse response, string path, int sitePort)
     {
@@ -80,10 +83,14 @@ internal sealed partial class SyntheticShopifyStore(SyntheticShopify shopify, Ti
             ["powered-by"] = "Shopify",
             ["shopify-complexity-score"] = "1700"
         };
+        headers.Remove("Set-Cookie");
 
         var text = response.Text;
         if (path == "/" && text is not null && response.StatusCode == 200)
         {
+            headers.Remove("Referrer-Policy");
+            headers["Strict-Transport-Security"] = "max-age=7889238";
+            headers["Set-Cookie"] = "localization=GB; Path=/";
             var extra = """<script>var Shopify = Shopify || {}; Shopify.theme = {"name":"Synthetic","id":1};</script>""" +
                         $"""<a href="{SyntheticShopify.AWAY_PATH}">Gift cards</a><a href="https://localhost:{sitePort}/p/1">Our other shop</a>""";
             text = text.Replace("</body>", $"{extra}</body>", StringComparison.Ordinal);

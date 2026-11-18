@@ -450,7 +450,10 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
         // The not-in-sitemap check runs only when every sitemap was read: then the summary can say a URL isn't in one.
         var committed = writer.Commit(checks, info, JsonSerializer.Serialize(settings, EngineJsonContext.Default.AnalysisSettings), notes, skips, urls,
             sitemapsCovered: !skipped.ContainsKey(IssueCatalog.NOT_IN_SITEMAP), incomplete, progress);
-        var issues = checks.Select(issue => new IssueCount(issue, committed.Counts.GetValueOrDefault(issue.Id))).ToList();
+        var issues = checks.Select(issue => new IssueCount(issue, committed.Counts.GetValueOrDefault(issue.Id))
+        {
+            Platform = committed.PlatformOwned.GetValueOrDefault(issue.Id)
+        }).ToList();
 
         _logger.LogInformation("Analysed {Pages} pages in {Elapsed}: {Flagged} issues across {Types} checks, score {Score}",
             pages, stopwatch.Elapsed, issues.Sum(issue => issue.Count), issues.Count(issue => issue.Count > 0), committed.Score?.Value);

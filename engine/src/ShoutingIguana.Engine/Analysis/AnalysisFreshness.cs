@@ -52,9 +52,12 @@ public static class AnalysisFreshness
     /// with a space after its colon is one rule. 14 is the new sitemap checks' (batch 4): a sitemap entry on another scheme
     /// than every sitemap listing it, and not on the site's own, is reported as on another host (sitemap-url-other-host). 15
     /// writes one note for each reason checks weren't run, the checks totalled ("24 checks weren't run: this crawl was made
-    /// by an earlier version…"), where 14 wrote one for each collection of facts a page's parse lacked.
+    /// by an earlier version…"), where 14 wrote one for each collection of facts a page's parse lacked. 16 marks the checks
+    /// of what a Shopify store's platform set as Shopify's (<c>issue_types.platform</c>: its security headers and its own
+    /// cookies, on pages Shopify served), which are then no part of the score or Fix first, and its notes say Shopify's
+    /// reason and the fix for the pages a store refused, where 15 said to check again later or at the Polite speed.
     /// </summary>
-    public const int VERSION = 15;
+    public const int VERSION = 16;
 
     /// <summary>
     /// The catalog's check ids with their categories and severities, hashed. Titles, descriptions, fixes, why and

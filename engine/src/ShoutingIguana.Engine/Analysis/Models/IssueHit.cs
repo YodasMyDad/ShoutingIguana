@@ -24,6 +24,13 @@ internal readonly record struct IssueHit(IssueDefinition Issue, int UrlId, strin
     /// </summary>
     public IReadOnlyList<int>? Targets { get; init; }
 
+    /// <summary>
+    /// The platform that set what the issue is about, which the site's owner can't change (on a page Shopify served, its
+    /// security headers and the cookies Shopify sets), or null when it's the site's own. A check whose every issue has the
+    /// same one is that platform's (<see cref="IssueCount.Platform"/>). No part of the issue's identity.
+    /// </summary>
+    public PlatformOwner? Platform { get; init; }
+
     /// <summary>The URLs the issue is about, as <see cref="Targets"/> says: those, or the related URL, or none.</summary>
     public IReadOnlyList<int> AllTargets => Targets ?? (RelatedUrlId is { } related ? [related] : []);
 

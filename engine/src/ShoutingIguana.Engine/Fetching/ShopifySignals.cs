@@ -1,4 +1,6 @@
+using System.Collections.Frozen;
 using System.Globalization;
+using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Fetching.Models;
 
 namespace ShoutingIguana.Engine.Fetching;
@@ -12,6 +14,23 @@ namespace ShoutingIguana.Engine.Fetching;
 public static class ShopifySignals
 {
     public const string PLATFORM = "shopify";
+
+    /// <summary>
+    /// What a Shopify store's platform sets, which its owner can't change: the security headers of a page Shopify served,
+    /// and the cookies it sets (<see cref="STOREFRONT_COOKIES"/>). The checks that found only such things say so.
+    /// </summary>
+    public static readonly PlatformOwner OWNER = new("Shopify", "Set by Shopify. You can't change this on a Shopify store.");
+
+    /// <summary>
+    /// The cookies Shopify sets on its merchants' storefronts, by name, as its cookie policy lists them: the necessary
+    /// ones, the analytics one and the marketing one. Source: Shopify Cookie Policy, https://www.shopify.com/legal/cookies,
+    /// "Last updated: November 4, 2026" (cookies on merchant storefronts). Names are case-sensitive, as cookies' are.
+    /// </summary>
+    public static readonly FrozenSet<string> STOREFRONT_COOKIES = FrozenSet.ToFrozenSet(
+    [
+        "__Host-Http-shop_binding", "_shopify_cmp", "_shopify_essential", "_shopify_test", "cart", "cart_currency", "discount_code", "localization",
+        "_shopify_analytics", "_shopify_marketing"
+    ], StringComparer.Ordinal);
 
     /// <summary>
     /// Begins the Shopify part of the error of a URL a store refused with 429 when its request carried no signature:

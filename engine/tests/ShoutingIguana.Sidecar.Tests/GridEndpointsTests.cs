@@ -69,7 +69,7 @@ public sealed class GridEndpointsTests(GridSidecar grid) : IClassFixture<GridSid
     {
         var engine = IssueCauseReader.Read(grid.Path)!.Checks;
         var counts = (await Sidecar.GetJsonAsync($"api/crawls/{grid.Id}/analysis"))["counts"]!.AsArray().Select(count => count!).ToList();
-        Assert.All(counts, count => Assert.Equal(["checkId", "count", "likelyTemplate", "causes", "templateCauses", "clears"],
+        Assert.All(counts, count => Assert.Equal(["checkId", "count", "likelyTemplate", "causes", "templateCauses", "clears", "platform"],
             count.AsObject().Select(property => property.Key)));
         foreach (var count in counts)
         {

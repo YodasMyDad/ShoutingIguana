@@ -1,4 +1,5 @@
 using System.Text;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
@@ -7,6 +8,8 @@ using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Engine.Fetching;
+using ShoutingIguana.Engine.Fetching.Models;
+using ShoutingIguana.Engine.Serialization;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Engine.Storage.Models;
 using ShoutingIguana.Engine.Tests.Support;
@@ -50,10 +53,15 @@ public sealed class ShopifyCrawlTests : IDisposable
         Assert.True(afterTheRest <= SectionTrickle.SHOPIFY_RETRY_CAP + TimeSpan.FromMinutes(1),
             $"An unsigned crawl of the store went on {afterTheRest} after the rest of it, on the fake clock.");
         var products = TestCrawls.Count(path, $"SELECT COUNT(*) {PRODUCTS}");
-        var refused = TestCrawls.Count(path, $"SELECT COUNT(*) {PRODUCTS} AND r.error = '{REFUSED_UNSIGNED.Replace("'", "''", StringComparison.Ordinal)}'");
+        var asked = TestCrawls.Count(path, $"SELECT COUNT(*) {PRODUCTS} AND r.error = '{REFUSED_UNSIGNED.Replace("'", "''", StringComparison.Ordinal)}'");
+        // Refused when asked, or held back behind one that was and never asked before the crawl gave up (it doesn't wait
+        // for each in turn): either way not checked, for Shopify's reason.
+        var refused = TestCrawls.Count(path,
+            $"SELECT COUNT(*) {PRODUCTS} AND r.error LIKE '{RetryingFetcher.RATE_LIMITED_ERROR}%: {ShopifySignals.UNSIGNED_REFUSAL}'");
         var read = TestCrawls.Count(path, $"SELECT COUNT(*) {PRODUCTS} AND r.status_code = 200");
         Assert.True(products >= 4, $"{products} product URLs");
         Assert.True(read <= 2, $"{read} products read");
+        Assert.True(asked >= 1, $"{asked} products asked and refused");
         Assert.Equal(products, refused + read);
 
         // Kept as a fact of the crawl, from the first response that said so: the home page's headers.
@@ -151,6 +159,63 @@ public sealed class ShopifyCrawlTests : IDisposable
         Assert.NotEmpty(logs.Messages);
         Assert.DoesNotContain(logs.Messages, message => message.Contains(SyntheticShopify.KEY_ID, StringComparison.Ordinal) ||
                                                         message.Contains(SyntheticShopify.SIGNATURE, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// What Shopify sets on its store, which the store's owner can't change: the home page's security headers (no
+    /// Referrer-Policy, HSTS for 91 days) and Shopify's own cookies without Secure, as a real store sends them. The checks
+    /// are still reported, each marked as Shopify's with why, and are no part of the score or Fix first. On another site the
+    /// same checks are the site's own.
+    /// </summary>
+    [Fact]
+    public async Task WhatShopifySetsIsShopifysAndNoPartOfTheScoreOrFixFirst()
+    {
+        await using var server = await StartStoreAsync();
+        var path = _files.NewPath();
+        var time = new FakeTimeProvider();
+        await CrawlAsync(Signed(Options(server), server), path, time, new RecordingObserver(time));
+
+        var analysis = await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
+        var results = IssueReader.ReadResults(path)!;
+
+        string[] shopifys = [IssueCatalog.SECURITY_HEADERS_MISSING.Id, IssueCatalog.SECURITY_HEADERS_WEAK.Id, IssueCatalog.COOKIES_INSECURE.Id];
+        Assert.Equal(shopifys.Order(StringComparer.Ordinal), results.PlatformOwned.Keys.Order(StringComparer.Ordinal));
+        foreach (var check in shopifys)
+        {
+            Assert.Equal(1, results.Counts[check]);
+            Assert.Equal(ShopifySignals.OWNER, results.PlatformOwned[check]);
+            Assert.Equal(ShopifySignals.OWNER, Assert.Single(analysis.Issues, issue => issue.Issue.Id == check).Platform);
+            Assert.DoesNotContain(check, results.FixFirst);
+            Assert.DoesNotContain(results.Score!.Lines, line => line.CheckId == check);
+        }
+
+        Assert.Equal("Missing Referrer-Policy", Assert.Single(IssueReader.ReadIssues(path, IssueCatalog.SECURITY_HEADERS_MISSING.Id, 10)).Detail);
+        Assert.Equal("localization: no Secure", Assert.Single(IssueReader.ReadIssues(path, IssueCatalog.COOKIES_INSECURE.Id, 10)).Detail);
+        Assert.NotEmpty(results.FixFirst);
+        Assert.All(analysis.Issues.Where(issue => !shopifys.Contains(issue.Issue.Id)), issue => Assert.Null(issue.Platform));
+
+        // Still checks that ran.
+        Assert.Equal(analysis.Issues.Count, results.Score!.Covers.ChecksRun);
+
+        // The same checks on a site Shopify doesn't serve are its own.
+        await using var ordinary = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = 6, Https = true });
+        var ordinaryPath = _files.NewPath();
+        await CrawlAsync(Options(ordinary), ordinaryPath, time, new RecordingObserver(time));
+        await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(ordinaryPath);
+        var own = IssueReader.ReadResults(ordinaryPath)!;
+        Assert.Empty(own.PlatformOwned);
+        Assert.Contains(IssueCatalog.SECURITY_HEADERS_MISSING.Id, own.FixFirst);
+        Assert.Contains(IssueCatalog.COOKIES_INSECURE.Id, own.FixFirst);
+        Assert.Contains(own.Score!.Lines, line => line.CheckId == IssueCatalog.COOKIES_INSECURE.Id);
+
+        // A check is Shopify's only when every issue it found is: the home page as if Shopify served it, with Shopify's
+        // cookie, beside the site's own session cookie, leaves the cookie check the site's, and makes the headers Shopify's.
+        ServeAsShopify(ordinaryPath, ordinary.BaseUri.AbsoluteUri, new ResponseHeader("set-cookie", "localization=GB; Path=/"));
+        await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(ordinaryPath);
+        var mixed = IssueReader.ReadResults(ordinaryPath)!;
+        Assert.Equal(2, mixed.Counts[IssueCatalog.COOKIES_INSECURE.Id]);
+        Assert.Equal([IssueCatalog.SECURITY_HEADERS_MISSING.Id], mixed.PlatformOwned.Keys);
+        Assert.Contains(IssueCatalog.COOKIES_INSECURE.Id, mixed.FixFirst);
     }
 
     [Fact]
@@ -290,6 +355,30 @@ public sealed class ShopifyCrawlTests : IDisposable
     {
         await using var job = new CrawlEngine(logs ?? NullLoggerFactory.Instance, time).Start(new CrawlRequest(options, path), observer);
         return await FakeClock.PumpAsync(time, job.Completion, TimeSpan.FromSeconds(1), realLimit: TimeSpan.FromMinutes(2));
+    }
+
+    /// <summary>A page's stored response as if Shopify served it, with these headers too.</summary>
+    private static void ServeAsShopify(string path, string url, params ResponseHeader[] headers)
+    {
+        using var connection = new SqliteConnection($"Data Source={path};Pooling=False");
+        connection.Open();
+        int urlId;
+        ResponseDetails details;
+        using (var read = connection.CreateCommand())
+        {
+            read.CommandText = "SELECT d.url_id, d.data FROM response_details d JOIN urls u ON u.id = d.url_id WHERE u.url = $url";
+            read.Parameters.AddWithValue("$url", url);
+            using var reader = read.ExecuteReader();
+            Assert.True(reader.Read(), $"No stored response for {url}");
+            urlId = reader.GetInt32(0);
+            details = BlobCodec.DecodeDetails((byte[])reader.GetValue(1));
+        }
+
+        using var write = connection.CreateCommand();
+        write.CommandText = "UPDATE response_details SET data = $data WHERE url_id = $urlId";
+        write.Parameters.AddWithValue("$data", BlobCodec.EncodeDetails(details with { Headers = [.. details.Headers, new ResponseHeader("powered-by", "Shopify"), .. headers] }));
+        write.Parameters.AddWithValue("$urlId", urlId);
+        Assert.Equal(1, write.ExecuteNonQuery());
     }
 
     /// <summary>Neither value, nor the key id within one, anywhere in the file as SQLite wrote it: options, notices, errors.</summary>
