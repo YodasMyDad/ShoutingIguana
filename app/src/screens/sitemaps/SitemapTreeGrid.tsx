@@ -28,7 +28,7 @@ const ROUTE = '/crawls/$crawl/sitemaps/{-$sitemap}';
 const LIST_COUNTS: readonly SitemapCount[] = ['listed', 'crawled', 'blocked', 'notCrawled', 'nonIndexable'];
 
 // Five counts, how the sitemap was found and what became of it have to fit beside its address in a 1280 px window.
-const FOUND_WIDTH = 136;
+const FOUND_WIDTH = 112;
 /**
  * What became of a sitemap: at least this wide, and wider for the longest words in the list ("Couldn’t be read: 404 Not
  * Found" whole, gallery 6's re-shoot), up to `STATE_MAX_WIDTH`, past which its words are a hover away. It grows only
