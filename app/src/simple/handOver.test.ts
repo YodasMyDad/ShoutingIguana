@@ -51,7 +51,8 @@ describe('Copy the list', () => {
     const text = problemListText({ ...context, check: check('slow-response') }, [
       { id: 1, url: 'https://example.com/login/', detail: '5,476 ms' },
     ]);
-    expect(text.endsWith('Where it is:\nhttps://example.com/login/ (5,476 ms)')).toBe(true);
+    // As the page says it: the engine's detail in plain words (plainDetails.ts).
+    expect(text.endsWith('Where it is:\nhttps://example.com/login/ (It took 5.5 seconds to open)')).toBe(true);
   });
 
   it('says a long title’s pages as the page does, where Google will likely cut it, never in pixels', async () => {

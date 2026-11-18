@@ -9,6 +9,7 @@ import type { ShownAt } from '../crawl/evidence';
 import { reasonPhrase } from '../inspector/words';
 import { formatBytes, formatCount, formatMilliseconds } from '../lib/format';
 import { sourcePages } from '../screens/issues/whereFound';
+import { plainDetailWords } from './plainDetails';
 
 /** An address as Simple names it: its path on the site's own origin, else in full. */
 export function plainAddress(url: string, origin: string | null): string {
@@ -420,13 +421,18 @@ export function plainDetailColumn(check: Pick<Check, 'id'>): string | null {
 }
 
 /**
- * A page's line in place of the engine's detail, for a check Simple says plainly: "Google will likely cut this title
- * off after “…Garden Sofa”", "Only 5 characters long". Null for every other check, and where the row can't say it
- * (nothing cut, no count): the detail then says it.
+ * A page's line in place of the engine's detail, in plain words: for the four checks above, from their column ("Google
+ * will likely cut this title off after “…Garden Sofa”", "Only 5 characters long"); otherwise, and where the column
+ * can't say it (nothing cut, no count), the row's `detail` said plainly ("It goes from the main heading to a level-3
+ * heading, skipping level 2": plainDetails.ts). Null where neither can: no detail, or one in a form no check writes;
+ * the engine's detail then says it. A group's cause reads the same: `plainDetail(check, { detail: group.detail })`.
  */
 export function plainDetail(check: Pick<Check, 'id'>, row: Readonly<Record<string, unknown>>): string | null {
   const plain = PLAIN_DETAILS[check.id];
-  return plain ? plain.say(row[plain.column]) : null;
+  const fromColumn = plain ? plain.say(row[plain.column]) : null;
+  if (fromColumn) return fromColumn;
+  const detail = row.detail;
+  return typeof detail === 'string' && detail.trim() !== '' ? plainDetailWords(check.id, detail) : null;
 }
 
 // ------------------------------------------------------------------------------- An image bigger than it's shown

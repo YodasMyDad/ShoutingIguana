@@ -367,7 +367,8 @@ describe.skipIf(TABLE_STUBBED)('one problem', () => {
     await open(`${FIX}/slow-response`);
     await problem('Pages that are slow to answer');
     const where = within(main().getByRole('region', { name: 'Where it is' }));
-    expect(await where.findByText('5,476 ms (first byte after 5,475 ms)')).toBeVisible();
+    // The engine's detail, plainly: no ms (plainDetails.ts).
+    expect(await where.findByText('It took 5.5 seconds to open')).toBeVisible();
     expect(where.getByText('Login')).toBeVisible();
     expect(main().getByText(/off the score/)).toHaveTextContent('Takes 2 points off the score');
   });
