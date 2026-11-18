@@ -6,6 +6,7 @@ import {
   INDEXABILITY_FACETS,
   PAGE_FACETS,
   categoryFigures,
+  clearedWords,
   depthFigures,
   fixFirst,
   indexabilityFigures,
@@ -127,6 +128,58 @@ describe('fix first', () => {
 
   it('is empty when nothing found an issue', () => {
     expect(fixFirst(checkEntries(CHECKS, { ...ANALYSIS, counts: [] }))).toEqual({ checks: [], more: 0 });
+  });
+
+  it('lists a check whose fix clears another entirely as one job, the cleared one with it rather than apart', () => {
+    // Fixing the 4xx URLs clears every page of broken links to them (the analysis's `clears`): one job, not two.
+    const withClears = (
+      clears: Record<string, { checkId: string; pages: number; all: boolean }[]>,
+      hidden: string[] = [],
+    ) =>
+      checkEntries(
+        CHECKS,
+        { ...ANALYSIS, counts: ANALYSIS.counts.map((count) => ({ ...count, clears: clears[count.checkId] ?? [] })) },
+        new Set(hidden),
+      );
+    const all = { 'internal-client-error': [{ checkId: 'broken-internal-links', pages: 5, all: true }] };
+    const list = fixFirst(withClears(all));
+    expect(list.checks.map((item) => item.entry.check.id)).toEqual([
+      'internal-client-error',
+      'title-duplicate',
+      'empty-anchor-text',
+      'title-too-long',
+    ]);
+    expect(list.checks[0]?.cleared.map((cleared) => [cleared.entry.check.id, cleared.pages])).toEqual([
+      ['broken-internal-links', 5],
+    ]);
+    expect(list.checks[1]?.cleared).toEqual([]);
+    expect(clearedWords(list.checks[0]!.cleared)).toBe(
+      'Fixing it also clears Links to broken internal URLs on 5 pages.',
+    );
+    // The limit counts jobs: the cleared check is in its clearer's.
+    expect(fixFirst(withClears(all), 1).more).toBe(3);
+
+    // A fix that clears only some of another's pages leaves it a job of its own.
+    const some = fixFirst(
+      withClears({ 'internal-client-error': [{ checkId: 'broken-internal-links', pages: 2, all: false }] }),
+    );
+    expect(some.checks.map((item) => item.entry.check.id)).toContain('broken-internal-links');
+    expect(some.checks[0]?.cleared).toEqual([]);
+    // With the clearing check hidden, the one it clears is listed on its own; a hidden one is never named.
+    expect(fixFirst(withClears(all, ['internal-client-error'])).checks[0]?.entry.check.id).toBe(
+      'broken-internal-links',
+    );
+    expect(fixFirst(withClears(all, ['broken-internal-links'])).checks[0]?.cleared).toEqual([]);
+    // A cleared check the order puts first takes its clearer up to its place.
+    const first = fixFirst(withClears(all), undefined, [
+      'broken-internal-links',
+      'title-duplicate',
+      'internal-client-error',
+    ]);
+    expect(first.checks.map((item) => item.entry.check.id).slice(0, 2)).toEqual([
+      'internal-client-error',
+      'title-duplicate',
+    ]);
   });
 });
 
