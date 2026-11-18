@@ -516,9 +516,11 @@ It compares fingerprints taken when the page was parsed, never the text.
   file. The four lanes cost the parse 28 µs a page, less than the one lane did before, now that a shingle's weights are
   added eight bits at a time.
 - **Crawls without the whole fingerprint.** Engines before this one recorded lane 0 only. A crawl one of them made, or
-  pages one fetched while continuing a crawl, leave the check skipped (`earlier-version`), with a note: "This crawl was
-  made by an earlier version, which didn't record what this check needs. Crawl again to check it." It is skipped for
-  any such page, not run on the rest, as any page could be the near copy of one the check can't compare.
+  pages one fetched while continuing a crawl, leave the check skipped (`earlier-version`): "This crawl was made by an
+  earlier version, which didn't record what this check needs. Crawl again to check it." The analysis has one note for
+  every check skipped for the same reason, this one and those the crawl's other unrecorded facts leave out ("24 checks
+  weren't run: this crawl was made by an earlier version, …"). It is skipped for any such page, not run on the rest,
+  as any page could be the near copy of one the check can't compare.
 
 ## Crawl file (`.sicrawl`)
 

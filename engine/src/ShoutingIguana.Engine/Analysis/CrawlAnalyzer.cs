@@ -84,6 +84,7 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
         var stopwatch = Stopwatch.StartNew();
         List<string> notes = [];
         Dictionary<IssueDefinition, SkippedCheck> skipped = [];
+        List<(string Why, List<IssueDefinition> Checks)> earlierVersion = [];
         Dictionary<string, int> failures = new(StringComparer.Ordinal);
         List<IssueHit> hits = [];
         var finishFailed = false;
@@ -115,10 +116,7 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             incomplete = WhyIncomplete(status, limitSkips);
             if (options.DiscoverSitemaps && !reader.HasSitemapLastmods())
             {
-                Skip(notes, skipped,
-                    $"{IssueCatalog.SITEMAP_LASTMOD_INVALID.Title} wasn't checked: this crawl was made by an earlier version, which didn't record what the check needs. Crawl again to check it.",
-                    SkippedCheckReasons.EARLIER_VERSION, "This crawl was made by an earlier version, which didn't record what this check needs. Crawl again to check it.",
-                    IssueCatalog.SITEMAP_LASTMOD_INVALID);
+                SkipForEarlierVersion(notes, skipped, earlierVersion, "this crawl was made by an earlier version", IssueCatalog.SITEMAP_LASTMOD_INVALID);
             }
             if (!options.DiscoverSitemaps)
             {
@@ -358,12 +356,11 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
                 var why = duplicates.PagesWithFingerprint == 0
                     ? "this crawl was made by an earlier version"
                     : $"{RuleText.Count(unfingerprinted, "page", "pages")} in this crawl {(unfingerprinted == 1 ? "was" : "were")} fetched by an earlier version";
-                Skip(notes, skipped, $"Near-duplicate content wasn't checked: {why}, which didn't record what the check needs. Crawl again to check it.",
-                    SkippedCheckReasons.EARLIER_VERSION, $"{char.ToUpperInvariant(why[0])}{why[1..]}, which didn't record what this check needs. Crawl again to check it.",
-                    IssueCatalog.NEAR_DUPLICATE_CONTENT);
+                SkipForEarlierVersion(notes, skipped, earlierVersion, why, IssueCatalog.NEAR_DUPLICATE_CONTENT);
             }
 
-            SkipChecksNeedingNewerFacts(writer, notes, skipped, collections, parsedBefore, pages);
+            SkipChecksNeedingNewerFacts(writer, notes, skipped, earlierVersion, collections, parsedBefore, pages);
+            NoteEarlierVersions(notes, earlierVersion);
 
             progress.Start(AnalysisPhase.SiteRules, siteRules.Length);
             var rulesDone = 0;
@@ -447,21 +444,21 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
     }
 
     /// <summary>
-    /// Skips each check that needs a fact some pages were parsed without (<see cref="CollectedFacts"/>), as near duplicates
-    /// are skipped on pages without every lane of their fingerprint, and takes back what its rule found on the other pages:
-    /// a result for some pages only would read as the whole crawl's.
-    /// </summary>
-    /// <param name="collections">Each collection a check needs, in order.</param>
-    /// <param name="parsedBefore">For each, how many of the pages read were parsed before it.</param>
-    /// <summary>
     /// The latest a sitemap's lastmod may be, in Unix seconds: a day after the crawl last ran, so a time zone or a clock a
     /// little ahead isn't "the future".
     /// </summary>
     private static long LatestLastmod(AnalysisReader reader) =>
         (reader.ReadCrawlUpdatedAt() ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()) / 1000 + 86_400;
 
-    private void SkipChecksNeedingNewerFacts(IssueWriter writer, List<string> notes, Dictionary<IssueDefinition, SkippedCheck> skipped, int[] collections,
-        long[] parsedBefore, long pages)
+    /// <summary>
+    /// Skips each check that needs a fact some pages were parsed without (<see cref="CollectedFacts"/>), as near duplicates
+    /// are skipped on pages without every lane of their fingerprint, and takes back what its rule found on the other pages:
+    /// a result for some pages only would read as the whole crawl's.
+    /// </summary>
+    /// <param name="collections">Each collection a check needs, in order.</param>
+    /// <param name="parsedBefore">For each, how many of the pages read were parsed before it.</param>
+    private void SkipChecksNeedingNewerFacts(IssueWriter writer, List<string> notes, Dictionary<IssueDefinition, SkippedCheck> skipped,
+        List<(string Why, List<IssueDefinition> Checks)> earlierVersion, int[] collections, long[] parsedBefore, long pages)
     {
         for (var collection = 0; collection < collections.Length; collection++)
         {
@@ -481,12 +478,39 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             var why = older == pages
                 ? "this crawl was made by an earlier version"
                 : $"{RuleText.Count(older, "page", "pages")} in this crawl {(older == 1 ? "was" : "were")} fetched by an earlier version";
-            var note = checks.Length == 1
-                ? $"{checks[0].Title} wasn't checked: {why}, which didn't record what the check needs. Crawl again to check it."
-                : $"{checks.Length} checks weren't run: {why}, which didn't record what they need. Crawl again to run them.";
-            Skip(notes, skipped, note, SkippedCheckReasons.EARLIER_VERSION,
-                $"{char.ToUpperInvariant(why[0])}{why[1..]}, which didn't record what this check needs. Crawl again to check it.", checks);
+            SkipForEarlierVersion(notes, skipped, earlierVersion, why, checks);
             writer.Discard(checks);
+        }
+    }
+
+    /// <summary>
+    /// Leaves checks out because the crawl, or some of its pages, didn't record what they need, and keeps them by why for
+    /// <see cref="NoteEarlierVersions"/>: a crawl an earlier version made lacks many things, and one note says so for all.
+    /// </summary>
+    /// <param name="why">What an earlier version made: "this crawl was made by an earlier version", or how many of its pages.</param>
+    private void SkipForEarlierVersion(List<string> notes, Dictionary<IssueDefinition, SkippedCheck> skipped,
+        List<(string Why, List<IssueDefinition> Checks)> earlierVersion, string why, params IssueDefinition[] checks)
+    {
+        var group = earlierVersion.Find(entry => entry.Why == why);
+        if (group.Checks is null)
+        {
+            group = (why, []);
+            earlierVersion.Add(group);
+        }
+
+        group.Checks.AddRange(checks.Where(check => !skipped.ContainsKey(check)));
+        Skip(notes, skipped, note: null, SkippedCheckReasons.EARLIER_VERSION,
+            $"{char.ToUpperInvariant(why[0])}{why[1..]}, which didn't record what this check needs. Crawl again to check it.", checks);
+    }
+
+    /// <summary>One note for each reason <see cref="SkipForEarlierVersion"/> was given, counting every check it left out.</summary>
+    private static void NoteEarlierVersions(List<string> notes, List<(string Why, List<IssueDefinition> Checks)> earlierVersion)
+    {
+        foreach (var (why, checks) in earlierVersion.Where(entry => entry.Checks.Count > 0))
+        {
+            notes.Add(checks.Count == 1
+                ? $"{checks[0].Title} wasn't checked: {why}, which didn't record what the check needs. Crawl again to check it."
+                : $"{checks.Count} checks weren't run: {why}, which didn't record what they need. Crawl again to run them.");
         }
     }
 
