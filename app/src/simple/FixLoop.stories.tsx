@@ -4,11 +4,15 @@ import type { Analysis, CrawlListItem } from '../api/types';
 import { liveStore } from '../live/liveStore';
 import { TEST_CRAWL_ID, json, type FakeRoute } from '../test/fakeSidecar';
 import {
+  RECHECK_ROWS,
   changesRoute,
   comparedGardenItem,
+  fixedRoute,
   gardenComparison,
+  recheckPlan,
   recheckRecord,
   recheckResult,
+  recheckRoutes,
 } from '../test/fixLoopSidecar';
 import { ScreenApp, ownSidecar } from '../test/ScreenStory';
 import { GARDEN_ANALYSIS, gardenItem, problemRoutes, simpleRoutes } from '../test/simpleSidecar';
@@ -172,3 +176,125 @@ export const WhatToFixFirstCheckRechecked: Story = {
   ],
   render: () => <ScreenApp path={`${FIX}#fixed-since`} mode="simple" />,
 };
+
+// ---------------------------------------------------------------------------------------------------- One problem
+
+const BROKEN = `${CRAWL}/issues/broken-internal-links`;
+
+const problem = (
+  routes: Parameters<typeof recheckRoutes>[0] = {},
+  path = BROKEN,
+  live?: () => void,
+  item: CrawlListItem = comparedGardenItem(),
+): Story => ({
+  loaders: [
+    () => {
+      own(item, [changesRoute(), fixedRoute(), ...recheckRoutes(routes)]);
+      live?.();
+    },
+  ],
+  render: () => <ScreenApp path={path} mode="simple" />,
+});
+
+const send = (event: string, data: object) => liveStore.ingest({ event, id: '', data: JSON.stringify(data) });
+
+/** Fixed it?: what a recheck reads and how long, "was 9 on 17 Oct" in the head. */
+export const ProblemRecheckReady: Story = problem();
+
+/** Past the cap: the 1,000 most important, and checking the whole site instead suggested. */
+export const ProblemRecheckCapped: Story = problem({
+  plan: recheckPlan({
+    judged: 4_000,
+    capped: true,
+    notRechecked: 3_000,
+    estimateMs: 9 * 60_000,
+    suggestFullCheck: true,
+  }),
+});
+
+/** Refused: a check of the site runs; the button off, the reason its line. */
+export const ProblemRecheckSiteBusy: Story = problem({
+  plan: recheckPlan({
+    refused: { type: 'site-busy', title: 'A check of this site is running. Its results will show what’s fixed.' },
+  }),
+});
+
+/** An earlier check of the site: the same problem on its latest check. */
+export const ProblemRecheckEarlierCheck: Story = problem({
+  plan: recheckPlan({ refused: { type: 'recheck-not-latest', title: 'Recheck works on the site’s latest check.' } }),
+});
+
+/** A check a recheck can't settle: Check the site again in its place. */
+export const ProblemRecheckUnsupported: Story = problem({}, `${CRAWL}/issues/non-indexable-inlinks-only`);
+
+/** Running: its count, then working out the results, with Stop. */
+export const ProblemRechecking: Story = problem(
+  { rechecks: [recheckRecord({ status: 'running', result: null, endedAt: null, settledAt: null })] },
+  BROKEN,
+  () => {
+    send('hello', { live: [TEST_CRAWL_ID] });
+    send('crawl', { crawlId: TEST_CRAWL_ID, status: 'rechecking' });
+    send('recheck', {
+      crawlId: TEST_CRAWL_ID,
+      recheckId: 1,
+      status: 'running',
+      phase: 1,
+      done: 3,
+      total: 8,
+      result: null,
+    });
+  },
+);
+
+/** The analysis after it: "Working out the results…", the page as it was. */
+export const ProblemRecheckWorkingOut: Story = problem(
+  { rechecks: [recheckRecord({ status: 'running', result: null, endedAt: null, settledAt: null })] },
+  BROKEN,
+  () => {
+    send('hello', { live: [TEST_CRAWL_ID], analyzing: [TEST_CRAWL_ID] });
+    send('recheck', {
+      crawlId: TEST_CRAWL_ID,
+      recheckId: 1,
+      status: 'completed',
+      phase: 1,
+      done: 8,
+      total: 8,
+      result: null,
+    });
+    send('crawl', { crawlId: TEST_CRAWL_ID, status: 'analyzing' });
+  },
+);
+
+/** "4 of 5 fixed. 1 still has it:", the address, the score before and after, when, and Recheck again. */
+export const ProblemRecheckSomeFixed: Story = problem({ rechecks: [recheckRecord()] });
+
+/** All of them fixed. */
+export const ProblemRecheckAllFixed: Story = problem({
+  rechecks: [recheckRecord({ result: recheckResult({ fixed: 5, still: 0 }) })],
+  rows: [],
+});
+
+/** None fixed: maybe a saved copy (a cache). */
+export const ProblemRecheckNoneFixed: Story = problem({
+  rechecks: [recheckRecord({ result: recheckResult({ fixed: 0, still: 5, scoreAfter: 86 }) })],
+});
+
+/** Stopped part way: what it got through. */
+export const ProblemRecheckStopped: Story = problem({
+  rechecks: [recheckRecord({ status: 'stopped', result: recheckResult({ fixed: 2, still: 1, notRechecked: 2 }) })],
+});
+
+/** Cut short when the app closed: what it got through, never more. */
+export const ProblemRecheckInterrupted: Story = problem({
+  rechecks: [recheckRecord({ status: 'interrupted', result: recheckResult({ fixed: 1, still: 0, notRechecked: 4 }) })],
+  rows: [],
+});
+
+/** Some couldn't be rechecked, and one page has it now that didn't. */
+export const ProblemRecheckNotCheckedAndNew: Story = problem({
+  rechecks: [recheckRecord({ result: recheckResult({ fixed: 3, still: 0, notChecked: 2, new: 1 }) })],
+  rows: [{ ...RECHECK_ROWS[0]!, outcome: 'new', urlId: 77, url: 'https://www.gardenfurnituresets.co.uk/y/' }],
+});
+
+/** A problem fixed since the last check: the good news, what was fixed, and what wasn't checked this time. */
+export const ProblemFixedSince: Story = problem({}, `${CRAWL}/issues/internal-server-error`);

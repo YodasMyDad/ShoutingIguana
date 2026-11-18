@@ -36,13 +36,24 @@ import { pathOrigin } from './whereWords';
 /** How many of the addresses that still have it the result names. */
 const STILL_SHOWN = 5;
 
-export function RecheckCard({ crawlId, item, check }: { crawlId: string; item: CrawlListItem; check: Check }) {
+export function RecheckCard({
+  crawlId,
+  item,
+  check,
+  resultOnly = false,
+}: {
+  crawlId: string;
+  item: CrawlListItem;
+  check: Check;
+  /** A problem the check finds no more: the card only with a recheck's result (or one running), never to start one. */
+  resultOnly?: boolean | undefined;
+}) {
   const ask = { checkId: check.id };
   const supported = (check.recheck?.length ?? 0) > 0;
   const queryClient = useQueryClient();
   const run = useRecheckRun(crawlId);
   const rechecks = useQuery({ ...rechecksQuery(crawlId), enabled: supported });
-  const plan = useQuery({ ...recheckPlanQuery(crawlId, ask), enabled: supported });
+  const plan = useQuery({ ...recheckPlanQuery(crawlId, ask), enabled: supported && !resultOnly });
   const [starting, setStarting] = useState(false);
   // Settled: the crawl's rechecks and what another would do are read again, here, whoever else does.
   const settled = run?.stage === 'settled' ? run.recheckId : null;
@@ -65,6 +76,7 @@ export function RecheckCard({ crawlId, item, check }: { crawlId: string; item: C
     // Refused or not started: whether it can run has moved.
     if (!started) void plan.refetch();
   };
+  if (resultOnly && state.kind !== 'result' && state.kind !== 'running') return null;
 
   return (
     <Card as="section" aria-labelledby="recheck-title" className="mt-4 flex flex-col gap-3 px-6 py-5">
@@ -79,6 +91,7 @@ export function RecheckCard({ crawlId, item, check }: { crawlId: string; item: C
         starting={starting}
         onRecheck={() => void recheck()}
         onRetryPlan={() => void plan.refetch()}
+        again={!resultOnly}
       />
     </Card>
   );
@@ -92,6 +105,7 @@ function CardBody({
   starting,
   onRecheck,
   onRetryPlan,
+  again,
 }: {
   state: RecheckCardState;
   crawlId: string;
@@ -100,6 +114,8 @@ function CardBody({
   starting: boolean;
   onRecheck: () => void;
   onRetryPlan: () => void;
+  /** Recheck again under a result: not for a problem the check finds no more. */
+  again: boolean;
 }) {
   const whole = <WholeSiteAgain crawlId={crawlId} item={item} />;
   switch (state.kind) {
@@ -140,7 +156,14 @@ function CardBody({
       return <Running crawlId={crawlId} state={state} />;
     case 'result':
       return (
-        <Result crawlId={crawlId} item={item} check={check} state={state} starting={starting} onRecheck={onRecheck} />
+        <Result
+          crawlId={crawlId}
+          item={item}
+          check={check}
+          state={state}
+          starting={starting}
+          onRecheck={again ? onRecheck : null}
+        />
       );
     case 'refused':
     case 'ready': {
@@ -327,7 +350,8 @@ function Result({
   check: Check;
   state: Extract<RecheckCardState, { kind: 'result' }>;
   starting: boolean;
-  onRecheck: () => void;
+  /** Null: no Recheck again. */
+  onRecheck: (() => void) | null;
 }) {
   const { recheck, plan } = state;
   const { result } = recheck;
@@ -364,11 +388,13 @@ function Result({
       </div>
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
         {meta.length > 0 ? <p className="min-w-0 flex-1 text-13 text-text-muted">{meta.join('  ')}</p> : null}
-        <Button icon={RotateCcw} disabled={refused !== null || plan === null} loading={starting} onClick={onRecheck}>
-          Recheck again
-        </Button>
+        {onRecheck ? (
+          <Button icon={RotateCcw} disabled={refused !== null || plan === null} loading={starting} onClick={onRecheck}>
+            Recheck again
+          </Button>
+        ) : null}
       </div>
-      {refused ? <Refused crawlId={crawlId} checkId={check.id} item={item} refused={refused} /> : null}
+      {refused && onRecheck ? <Refused crawlId={crawlId} checkId={check.id} item={item} refused={refused} /> : null}
     </div>
   );
 }
