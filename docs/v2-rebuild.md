@@ -500,24 +500,60 @@ machine):
     - `hreflang-inconsistent-code` hiding the code;
     - Advanced cramped at 1440 px.
   - Page counts agree across every view.
-  - **Phase 2, under way, split by file:**
-    - `ui/3b-fixit-links`: the Advanced issue screens, inspector, Links and presets, and the found-on reader;
-    - `ui/3b-fixit-page`: Simple's words for every check, the on-page evidence and the hand-over;
-    - `ui/3b-fixit-index`: the URLs grid, Sitemaps, robots.txt, the report and the workbook, and site-wide checks
-      naming their file (`issue_files`, the `about` and `files` fields).
+  - **Phase 2, all merged:**
+    - index: cee3122e;
+    - Shopify phase B: dcf3c824;
+    - page: 6f76807a, plus the Shopify card's placement in 35af0751;
+    - links: 82eed758, plus a polish round in 7083415c.
+  - `AnalysisFreshness` is 20.
+  - What changed:
+    - every Simple check in plain words, held by a whole-catalog test;
+    - the fragment link and `data-srcset` false flags fixed;
+    - headings quoted;
+    - Copy the list hands over every image;
+    - site-wide checks name their file;
+    - sitemap counts agree with the checks;
+    - `blocked-by-robots` grouped by rule;
+    - below 1,600 px the check keeps the room, and the list folds behind "All checks";
+    - a check's only group opens;
+    - group rows are real columns;
+    - the Links presets agree with the checks;
+    - Fix first treats a 4xx and its broken links as one job;
+    - Shopify's own cookies and security headers read "Set by Shopify", out of the score;
+    - a repeated header (`nosniff, nosniff`) counts once;
+    - one canonical loop is one group.
+  - Left over, all small:
+    - the flat Links grid doesn't remeasure its columns after fonts load;
+    - the Sitemaps "Found via" column is still cut;
+    - no `si testsite` options for robots/sitemap-missing or the limits;
+    - `duplicate-site-version` is planted only on the HTTPS synthetic site.
+- **Jitsunami, crawl 6, signed (2026-11-18, 17:13, at the owner's word, with the signature the owner made):**
+  - Settings: `-c 1 --rate 1 --no-external`, built from 35af0751.
+  - Result: 253 URLs, 22 pages, 0 refused, 4:23. Unsigned at the same speed it was 46 URLs, 9 pages, 8 refused, 20:47.
+  - All 7 products and `/collections/belts` read, with status 200.
+  - The signature was in neither the log nor the crawl file.
+  - New real findings: `/collections/mens` returns 404, and a banner image is missing.
+- **The round's gates, at d1c98c8d (7083415c plus a smoke-script fix), on a quiet machine: all pass.**
+  - Engine 2,398, Sidecar 331, Cli 45.
+  - The 100k bench is exact, and memory stayed flat (209 → 198 MB).
+  - Readbench: all 23 gates met; the links search took 1,239 ms against its 2,500 ms gate.
+  - Typecheck, lint, format and the scripts pass.
+  - Vitest: 5,482. `main.test.tsx` timed out once at 5 s and passed alone, so it's flaky under load, as before.
+  - Stories: 665 × 2 themes, clean plain, in forced colours and in reduced motion.
+  - e2e: 291 passed (3 skipped); `e2e:filled`: 33 passed.
+  - `tauri build --no-bundle` passed, and so did `smoke:shell`, after two stale expectations in its script were fixed.
+  - The installer (unsigned) passed `smoke:tauri`.
+  - Linux Docker: clippy clean, cargo test 136 + 3.
 
 Next:
 
-- Merge the three fixit lanes and Shopify phase B, renumbering `AnalysisFreshness`.
-- Then the round's gates on a quiet machine:
-  - readbench first (if the links search misses again, it's investigated, not waved through);
-  - the full app verify and `e2e:filled`;
-  - the stories in forced colours and reduced motion;
-  - the release build, `smoke:shell`, the installer and `smoke:tauri`.
-- Then gallery 7 and the owner's look. Any further real crawl or recheck needs the owner's word again.
-- **Last, the owner's plan:** upgrade the owner's install (setup `/S`, only while the app is closed), open the app, and
-  tell the owner what to enter so they add the Jitsunami signature themselves. Then one real signed crawl, together.
-  The signature is never pasted in chat.
+- **The owner's plan:**
+  1. Upgrade the owner's install with setup `/S`, only while the app is closed.
+  2. Open the app, and the owner adds the Jitsunami signature in the Shopify form.
+  3. Run one signed crawl in the app, together.
+  4. Delete `%USERPROFILE%\.shouting-iguana\shopify\jitsunami.com.txt`; the owner deletes the signature in Shopify.
+- Then gallery 7, then tell the owner step 3b is finished. The release waits for the owner's word. Any further real
+  crawl or recheck needs the owner's word again.
 
 1. ~~The installer from `35d4888`, `smoke:tauri`, and the owner's install upgraded with setup `/S` while the app is
    closed.~~ Done.
