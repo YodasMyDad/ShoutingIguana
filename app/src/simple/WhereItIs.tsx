@@ -24,7 +24,7 @@ import { fileLabelOf } from '../ui/urlText';
 import { isBrokenImage } from '../ui/imageFacts';
 import { plainDetail, plainEvidence, plainImageInsight, plainRelated } from './plainEvidence';
 import { TargetWords } from './TargetWords';
-import { pathOrigin, shownWords } from './whereWords';
+import { causeName, causeWords, causesWords, pathOrigin, shownWords } from './whereWords';
 
 /** Causes (or pages, for a check that doesn't group) shown at a time. */
 export const WHERE_STEP = 25;
@@ -156,13 +156,12 @@ function PageLine({ row, origin }: { row: IssueRow; origin: string | null }) {
   );
 }
 
+/** The table's headings: what its causes hold and the pages they're on, or a check's pages and what each has. */
 function headings(check: Check): [string, string] {
   const pages = (check.subject ?? 'page') === 'page';
   if (check.grouping === 'none') return [pages ? 'Page' : 'Address', 'What was found'];
-  return [
-    check.grouping === 'relatedUrl' ? 'What it’s about' : 'What was found',
-    pages ? 'On these pages' : 'At these addresses',
-  ];
+  const words = causeWords(check);
+  return [words.heading, words.pagesHeading];
 }
 
 /**
@@ -220,10 +219,10 @@ export function WhereItIs({
   const causes = grouped ? (groups.data?.groupCount ?? null) : null;
   const listed = grouped ? (groups.data?.groups.length ?? 0) : (rows.data?.rows.length ?? 0);
   const all = grouped ? (causes ?? 0) : total;
-  const meta =
-    causes === null
-      ? `${formatCount(total)} ${noun(total)}`
-      : `${causes === 1 ? '1 cause' : `${formatCount(causes)} causes`}, on ${formatCount(total)} ${noun(total)}`;
+  // What it counts, by what its causes are, on the pages the headline counts: "129 images on 60 pages".
+  const meta = causes === null ? `${formatCount(total)} ${noun(total)}` : causesWords(check, causes, total);
+  const causeWord = causeWords(check);
+  const cause = (count: number) => (count === 1 ? causeWord.one : causeWord.many);
   const error = grouped ? groups.error : rows.error;
   // How many are shown, and the ways to more, only once the list is read: before then a grouped check's count of
   // causes isn't known, and "All 0 are shown" would be false.
@@ -294,6 +293,7 @@ export function WhereItIs({
               listed,
               all,
               noun,
+              cause,
               origin,
               shortened: origin !== null && (firstUrl ?? '').startsWith(origin),
             })}
@@ -407,7 +407,8 @@ function GroupRow({
             </span>
           </span>
         ) : (
-          <span>{group.detail ?? ''}</span>
+          // Its detail, said plainly; one the engine leaves empty is named by the check ("No main heading").
+          <span>{causeName(check, group.detail)}</span>
         )}
         {group.change ? (
           <ChangeLine words={groupChangeWords(group.change, group.urls ?? group.pages, since, 'simple')} />

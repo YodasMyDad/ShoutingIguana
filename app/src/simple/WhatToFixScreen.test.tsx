@@ -341,14 +341,14 @@ describe.skipIf(TABLE_STUBBED)('one problem', () => {
     expect(
       within(where).getAllByText('/outdoor-pe-rattan-dining-set-with-fire-pit-table/', { exact: false })[0],
     ).toBeVisible();
-    expect(within(where).queryByText(/0 causes/)).toBeNull();
+    expect(within(where).queryByText(/\b0 kinds of problem\b/)).toBeNull();
   });
 
   it('lists where it is: each cause, its first pages by title then address, and Show them for the rest', async () => {
     await open(`${FIX}/empty-anchor-text`);
     await problem('Links with nothing to read');
     const where = within(main().getByRole('region', { name: 'Where it is' }));
-    expect(await where.findByText('2 causes, on 265 pages')).toBeVisible();
+    expect(await where.findByText('2 addresses on 265 pages')).toBeVisible();
     expect(await where.findByText('Your home page')).toBeVisible();
     // A check that names what its pages link to lists its first pages one by one, each with its own line (where its
     // link is: ProblemScreen.evidence.test.tsx), then how many more.
@@ -359,7 +359,7 @@ describe.skipIf(TABLE_STUBBED)('one problem', () => {
     expect(await where.findByText('Page 199')).toBeVisible();
     expect(where.getByRole('button', { name: 'See all 264 in Advanced' })).toBeVisible();
     expect(
-      where.getByText('All 2 causes are shown. Addresses starting with “/” are on www.gardenfurnituresets.co.uk.'),
+      where.getByText('All 2 addresses are shown. Addresses starting with “/” are on www.gardenfurnituresets.co.uk.'),
     ).toBeVisible();
   });
 
