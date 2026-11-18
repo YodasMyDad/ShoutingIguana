@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { parseLinkEnds, validateGridSearch } from '../../routing/search';
+import { BROKEN_LINKS } from '../links/presets';
 import { linkEndsOf, linkEndsWords, linksViewWords } from './linkEnds';
 
-const BROKEN = [{ column: 'to.statusClass', op: 'in' as const, values: ['4xx', '5xx'] }];
+/** The Broken links preset's filters. */
+const BROKEN = [...BROKEN_LINKS];
 
 describe('the URL grid narrowed to a links view’s ends', () => {
   it('is read from the route, a links view’s filters and search kept as they are', () => {
@@ -37,7 +39,7 @@ describe('the URL grid narrowed to a links view’s ends', () => {
       'Only the pages that the broken links are on, each once.',
     );
     expect(linksViewWords({ filter: [...BROKEN, { column: 'kind', op: 'in', values: ['image'] }], q: 'x' })).toBe(
-      'the links of a view with 2 filters and the search “x”',
+      'the links of a view with 3 filters and the search “x”',
     );
   });
 });

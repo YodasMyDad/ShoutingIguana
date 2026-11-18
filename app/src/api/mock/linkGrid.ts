@@ -3,7 +3,9 @@
 // /links/facets`). It runs on the URL grid's own query code (gridQuery.ts) over rows keyed as the sidecar keys them
 // (`to.statusCode`), so a links query is checked, refused and paged by the same rules, with the links grid's own:
 // one sort key, `id` or a column of the target that the URL grid sorts by, and a search of the link's text and both
-// ends' URLs. `from.check` and `to.check` are the sidecar's alone: the mock has no issues by link end.
+// ends' URLs. `from.check` and `to.check` are the sidecar's alone: the mock has no issues by link end. A link's own
+// `check` filter (the links a check counts) is answered for the link checks, judged from the link's two ends
+// (`linkCheckOf`).
 import type { ProblemBody } from '../errors';
 import type {
   FacetBucket,
@@ -117,6 +119,30 @@ export interface LinkFacts {
   fragment: string | null;
 }
 
+/** Statuses many sites send crawlers but not people: a link to another site that answers one isn't broken. */
+const CRAWLER_ONLY_STATUSES: ReadonlySet<number> = new Set([401, 403, 405, 429, 503, 999]);
+
+/**
+ * The link check that counts a link, as the engine's would from its two ends alone (the mock has no redirect chains):
+ * a hyperlink on a page, to another URL, that fails or doesn't answer (`broken-internal-links`, or on another site
+ * `broken-external-links`, where a status only crawlers get doesn't count), or to one of the site's URLs that
+ * redirects for good (`links-to-redirects`). Null for any other link. The links grid's own `check` filter reads it.
+ */
+export function linkCheckOf(kind: LinkKind | null, from: UrlRow, to: UrlRow): string | null {
+  if (kind !== 'hyperlink' || from.id === to.id || from.outcome !== 'success') return null;
+  const code = to.statusCode ?? null;
+  const failed =
+    to.outcome === 'timeout' ||
+    to.outcome === 'networkError' ||
+    ((to.outcome === 'clientError' || to.outcome === 'serverError') &&
+      (to.isInternal === true || code === null || !CRAWLER_ONLY_STATUSES.has(code)));
+  if (failed) return to.isInternal === true ? 'broken-internal-links' : 'broken-external-links';
+  if (to.isInternal === true && to.outcome === 'redirect' && code !== 302 && code !== 303 && code !== 307) {
+    return 'links-to-redirects';
+  }
+  return null;
+}
+
 /**
  * Links as the grid's rows: each with its id (its place in `links`, from 1), its own columns, and every URL grid
  * column of both ends from the crawl's URLs. A link either of whose ends the URLs don't have is left out, as the
@@ -143,6 +169,8 @@ export function linkRows(links: readonly LinkFacts[], urls: readonly UrlRow[]): 
       followed: link.kind === 'hyperlink' ? !link.noFollow && from.nofollow !== true : null,
       fragment: link.fragment,
     };
+    // Not a column: what the `check` filter reads, as the sidecar reads the analysis's issue targets.
+    Object.assign(row, { check: linkCheckOf(link.kind, from, to) });
     for (const [end, url] of [
       ['from', from],
       ['to', to],

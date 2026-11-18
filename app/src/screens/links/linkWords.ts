@@ -157,7 +157,7 @@ export function linkFilterWords(
     value: (column, value) => {
       const end = endColumn(column);
       if (end?.column === 'id' && typeof value === 'number') return urlWords(value);
-      if (end?.column === 'check') return checkWords(value);
+      if (column === 'check' || end?.column === 'check') return checkWords(value);
       return linkFilterValue(column, value);
     },
     empty: (column, empty): FilterSentence | null => {
@@ -177,9 +177,12 @@ export function linkFilterWords(
   };
 }
 
-/** Whether a filter set names a check (by an end: `from.check`, `to.check`), so the catalog is read for its title. */
+/**
+ * Whether a filter set names a check (the links a check counts, `check`, or by an end: `from.check`, `to.check`), so
+ * the catalog is read for its title.
+ */
 export function namesCheck(filters: readonly GridFilter[]): boolean {
-  return filters.some((filter) => endColumn(filter.column)?.column === 'check');
+  return filters.some((filter) => filter.column === 'check' || endColumn(filter.column)?.column === 'check');
 }
 
 /** The ids of the URLs a filter set names by id, for their words to be read: `to.id`, `from.id`. */

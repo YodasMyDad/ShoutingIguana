@@ -77,15 +77,21 @@ const links = (filters: Filter[], more: Record<string, unknown> = {}) =>
 const PRESETS: { name: string; filters: Filter[]; chip: RegExp; planted: string | RegExp }[] = [
   {
     name: 'Broken links',
-    filters: [{ column: 'to.statusClass', op: 'in', values: ['4xx', '5xx'] }],
-    chip: /Target status class is 4xx or 5xx/,
+    filters: [
+      { column: 'kind', op: 'in', values: ['hyperlink'] },
+      { column: 'check', op: 'in', values: ['broken-internal-links', 'broken-external-links'] },
+    ],
+    chip: /Check is Links to broken internal URLs or Links to broken external URLs/,
     // A product page's link to a page that isn't there.
     planted: 'Broken link',
   },
   {
     name: 'Links to redirects',
-    filters: [{ column: 'to.statusClass', op: 'in', values: ['3xx'] }],
-    chip: /Target status class is 3xx/,
+    filters: [
+      { column: 'kind', op: 'in', values: ['hyperlink'] },
+      { column: 'check', op: 'in', values: ['links-to-redirects'] },
+    ],
+    chip: /Check is Links to internal redirects/,
     // The hub's link into a chain of three redirects.
     planted: 'Planted page chain-a',
   },
@@ -247,6 +253,23 @@ test('each preset lands on its planted count, with its filters as chips and its 
   await main(page).getByRole('button', { name: 'All links' }).click();
   await expectShown(page, total);
   await expect(page).toHaveURL(/\/links$/);
+});
+
+test('the link checks’ presets agree with the checks: their links are on exactly the pages the checks flagged', async () => {
+  for (const preset of PRESETS.slice(0, 2)) {
+    const checks = preset.filters.find((filter) => filter.column === 'check')?.values ?? [];
+    // The pages the checks flagged, as Issues lists them.
+    const flagged = await api<{ matching: number }>(`/api/crawls/${crawl}/urls`, {
+      filters: [{ column: 'check', op: 'in', values: checks }],
+      sort: [],
+      limit: 1,
+    });
+    const shown = await links(preset.filters, { columns: ['from.id', 'kind'], limit: 1_000 });
+    expect(shown.matching, preset.name).toBe(shown.rows.length);
+    expect(new Set(shown.rows.map((row) => row['from.id'])).size, preset.name).toBe(flagged.matching);
+    // Every one a hyperlink a page holds: never a redirect's hop.
+    expect(new Set(shown.rows.map((row) => row.kind)), preset.name).toEqual(new Set(['hyperlink']));
+  }
 });
 
 test('a facet counts the links in view by value, and a value narrows to exactly its count', async ({ page }) => {
