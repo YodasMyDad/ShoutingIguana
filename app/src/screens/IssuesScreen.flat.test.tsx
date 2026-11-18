@@ -54,6 +54,8 @@ describe('a flat check’s rows', () => {
       'Garden sofas and chairs for every season, delivered free across the UK | Example',
     );
     expect(title).toHaveClass('whitespace-normal', 'line-clamp-2');
+    // Clamped, not drawn whole over its row: nothing else sets how it displays.
+    expect(title).not.toHaveClass('block');
     expect(Number.parseFloat(row.style.height)).toBeGreaterThanOrEqual(48);
   });
 

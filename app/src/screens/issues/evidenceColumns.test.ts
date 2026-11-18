@@ -28,9 +28,9 @@ describe('the order a flat check’s rows come in', () => {
 });
 
 describe('the lines a flat check’s rows take', () => {
-  it('wraps the text an owner has to change: a title over two lines, a description over three', () => {
+  it('wraps the text an owner has to change: a title over two lines, a description over four', () => {
     expect(wrappedLines(['title', 'titleInResults', 'inlinks'])).toBe(2);
-    expect(wrappedLines(['description', 'descriptionInResults'])).toBe(3);
+    expect(wrappedLines(['description', 'descriptionInResults'])).toBe(4);
     expect(wrappedLines(['h1'])).toBe(2);
     expect(wrappedLines(['redirectChain', 'inlinks'])).toBe(1);
   });

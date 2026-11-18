@@ -46,8 +46,8 @@ const WRAPPED: Readonly<Record<string, number>> = {
   titleInResults: 2,
   h1: 2,
   h2: 2,
-  description: 3,
-  descriptionInResults: 3,
+  description: 4,
+  descriptionInResults: 4,
 };
 
 /** How many lines a flat check's rows take: one, or as many as its longest wrapped text needs. */

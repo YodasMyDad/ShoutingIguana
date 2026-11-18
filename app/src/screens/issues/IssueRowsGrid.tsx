@@ -64,6 +64,10 @@ const HEADER_SLACK = 40;
 const LINE_HEIGHT = 18;
 const LINE_HEIGHT_COMFORTABLE = 20;
 const ROW_PADDING = 12;
+/** The lines a wrapped text takes at most, as classes that compile (styles/classes.test.ts). */
+const CLAMP: Readonly<Record<number, string>> = { 2: 'line-clamp-2', 3: 'line-clamp-3', 4: 'line-clamp-4' };
+/** In a wide panel the detail keeps its usual room beside the evidence; only a narrower one takes it in. */
+const ROOMY = 900;
 
 export interface IssueRowsGridProps {
   crawlId: string;
@@ -171,7 +175,7 @@ export function IssueRowsGrid({
           cell: (row: IssueRow) => {
             const text = column.text(row);
             return text ? (
-              <span className={`block whitespace-normal ${lines > 2 ? 'line-clamp-3' : 'line-clamp-2'}`} title={text}>
+              <span className={`whitespace-normal ${CLAMP[lines] ?? 'line-clamp-2'}`} title={text}>
                 {text}
               </span>
             ) : (
@@ -189,7 +193,7 @@ export function IssueRowsGrid({
   const available =
     (width ?? 720) - fixed - whereWidth - (compare ? CHANGE_WIDTH : 0) - (files ? OPEN_FILE_WIDTH : 0) - FRAME_SLACK;
   // Where the usual widths don't fit, the words take less: a figure is never scrolled out of view for them.
-  const usual = extra.length > 1 ? DETAIL_WITH_EVIDENCE_WIDTH : DETAIL_WIDTH;
+  const usual = extra.length > 1 && available < ROOMY ? DETAIL_WITH_EVIDENCE_WIDTH : DETAIL_WIDTH;
   const tight = words > 0 && available < usual + MIN_SHARED_URL_WIDTH + MIN_WORDS_WIDTH * words;
   const baseDetailWidth = noDetail ? 0 : tight ? TIGHT_DETAIL_WIDTH : usual;
   const room = available - baseDetailWidth;
@@ -198,7 +202,7 @@ export function IssueRowsGrid({
   const growing = (noDetail ? 0 : 1) + (whereWidth > 0 ? 1 : 0);
   const urlWidth =
     words > 0
-      ? Math.max(tight ? TIGHT_URL_WIDTH : MIN_SHARED_URL_WIDTH, Math.round(room * 0.4))
+      ? Math.max(tight ? TIGHT_URL_WIDTH : MIN_SHARED_URL_WIDTH, Math.round(room * (lines > 1 ? 0.25 : 0.4)))
       : growing > 0
         ? Math.max(MIN_URL_WIDTH, Math.round(room * 0.4))
         : Math.max(MIN_URL_WIDTH, room);
