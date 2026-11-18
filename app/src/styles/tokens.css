@@ -459,6 +459,8 @@
   --row-height-more: 38px;
   --row-height-issue: 30px;
   --tree-indent: 26px; /* chevron plus its gap */
+  /* A fold's body, under its title: the button's inset, the chevron and its gap. */
+  --fold-indent: calc(var(--space-4) + var(--icon-sm) + var(--space-3));
   /* Sitemaps and robots.txt (their slice). */
   --robots-file-min-height: 240px; /* the file keeps this much, and the blocked URLs at least it, however short the window */
   --robots-pane-height: 360px; /* the file where they stack, in a narrow panel; the blocked URLs at least it */
@@ -498,7 +500,13 @@
   */
   --site-row-columns: minmax(0, 1fr) minmax(0, 152px) minmax(0, 208px) minmax(0, 120px) auto;
   --site-row-columns-narrow: minmax(0, 1fr) auto; /* the same at 200% zoom: the score and the fixes under the site */
+  /* An earlier check under its site's row: its icon starts under the site's name (the row's inset, the site's icon and
+     its gap), so the row reads as the site's. */
+  --site-row-nested: calc(var(--space-5) + var(--favicon-lg) + var(--space-3));
   --library-site-min: 144px; /* Home's Site column never gives up more of its room than this */
+  /* An older crawl under its site's row in Home's library: its name starts under the site's (the cell's inset, the
+     site's icon and its gap). */
+  --library-nested: calc(var(--space-5) + var(--favicon-md) + var(--space-3));
   --settings-nav-width: 192px;
   --choice-card-min: 200px; /* a choice card's least width (the speed presets): narrower, they stack */
   --choice-columns: repeat(auto-fit, minmax(var(--choice-card-min), 1fr)); /* as many cards a row as fit */

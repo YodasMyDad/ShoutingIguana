@@ -279,7 +279,7 @@ function FixedSince({
   return (
     <div className="rounded-md border border-border-subtle">
       <Fold title={`${title} (${formatCount(lines.length)})`} open={open} onOpenChange={setOpen} level={3}>
-        <ul aria-label={title} className="flex flex-col gap-1.5 px-4 pb-3 text-14">
+        <ul aria-label={title} className="flex flex-col gap-1.5 pb-3 text-14">
           {lines.map((line) => (
             <li key={line.checkId} className="flex items-center gap-2">
               <Icon icon={Tick} size="sm" className="text-text-secondary" />

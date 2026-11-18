@@ -110,7 +110,7 @@ function LicenceRow({ pkg, text }: { pkg: LicensedPackage; text: string | null }
             <span className="break-all">{pkg.name}</span>
           </button>
         ) : (
-          <span className="pl-5.5 min-w-0 font-medium break-all">{pkg.name}</span>
+          <span className="min-w-0 pl-5 font-medium break-all">{pkg.name}</span>
         )}
         {pkg.version ? <span className="font-mono text-12 text-text-secondary">{pkg.version}</span> : null}
         <span className="text-text-secondary">{pkg.licence}</span>
