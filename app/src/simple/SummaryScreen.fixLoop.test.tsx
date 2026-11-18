@@ -178,3 +178,37 @@ describe('the Summary since the last check', () => {
     expect(sidecar.requests.filter((request) => request.path === `/api/crawls/${EARLIER_ID}/analyze`)).toHaveLength(1);
   });
 });
+
+describe('how the score is worked out, since the last check', () => {
+  async function breakdown(item: CrawlListItem, extra: FakeRoute[]) {
+    replaceSettings({ mode: 'simple', hiddenChecks: [], hiddenChecksByCrawl: {} });
+    setTransport(fakeSidecar([...extra, ...simpleRoutes(item, GARDEN_ANALYSIS)]));
+    const queryClient = createQueryClientWithoutBackoff();
+    const router = createAppRouter(queryClient, createMemoryHistory({ initialEntries: [`${CRAWL}/overview?score=1`] }));
+    render(<App router={router} queryClient={queryClient} />);
+    await act(() => router.load());
+    return within(await screen.findByRole('dialog', { name: 'How the score is worked out' }));
+  }
+
+  it('gives each line its points then, and folds the lines that took points then and none now', async () => {
+    const dialog = await breakdown(comparedGardenItem(), [changesRoute()]);
+    const broken = (await dialog.findByRole('link', { name: /Links that lead to broken pages/ })).closest('tr');
+    expect(broken).toHaveTextContent('−4 · was −7');
+    const fixed = dialog.getByRole('button', { name: 'Fixed since 17 Oct (3)' });
+    expect(fixed).toHaveAttribute('aria-expanded', 'false');
+    act(() => fixed.click());
+    const list = dialog.getByRole('list', { name: 'Fixed since 17 Oct' });
+    expect(within(list).getAllByRole('listitem').map((entry) => entry.textContent)).toEqual([
+      expect.stringContaining('−6 then'),
+      expect.stringContaining('−5 then'),
+      expect.stringContaining('−3 then'),
+    ]);
+  });
+
+  it('says nothing of then for a first check, nor for one scored another way', async () => {
+    const first = await breakdown(gardenItem({ previous: null, changes: null }), []);
+    const broken = (await first.findByRole('link', { name: /Links that lead to broken pages/ })).closest('tr');
+    expect(broken).not.toHaveTextContent('was');
+    expect(first.queryByRole('button', { name: /Fixed since/ })).toBeNull();
+  });
+});

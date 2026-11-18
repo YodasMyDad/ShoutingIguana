@@ -117,3 +117,11 @@ export const SummaryWhileRechecking: Story = summary(
     });
   },
 );
+
+// ---------------------------------------------------------------------------------------------------- The breakdown
+
+/** How the score is worked out, since the last check: each line's points then, and the lines fixed since, folded. */
+export const BreakdownSinceLastCheck: Story = {
+  loaders: [() => own(comparedGardenItem(), [changesRoute()])],
+  render: () => <ScreenApp path={`${SUMMARY}?score=1`} mode="simple" />,
+};
