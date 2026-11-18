@@ -256,6 +256,7 @@ test('every check’s count is called what the check flags, as a share of the AP
           /^Reach\s*Whole site\s*A fault of the whole site, whatever its count$/,
         );
         await expect(detail.getByText(/^Share of (pages|URLs)$/)).toHaveCount(0);
+        await showChecks(page);
         await expect(option).toHaveAccessibleName(new RegExp(`, the whole site$`));
         return;
       }
@@ -265,6 +266,7 @@ test('every check’s count is called what the check flags, as a share of the AP
           /^Reach\s*Whole site\s*Checked once for the whole site, not URL by URL$/,
         );
         await expect(detail.getByText(/^Share of (pages|URLs)$/)).toHaveCount(0);
+        await showChecks(page);
         await expect(option).toHaveAccessibleName(new RegExp(`, checked once for the whole site$`));
         return;
       }
@@ -287,9 +289,10 @@ test('every check’s count is called what the check flags, as a share of the AP
       if (check.grouping === 'none') {
         await expect(detail.getByRole('grid')).toHaveAccessibleName(`${check.title}: affected ${words.many}`);
         await expect(listed.locator('xpath=..')).toHaveText(
-          // Then the order the engine gives them in (evidence): the most linked first, or the most used.
+          // Then the order the engine gives them in (evidence): the most linked first, the most used, or the fewest
+          // links first (pages missing from the sitemaps).
           new RegExp(
-            `^Affected ${words.many}\\s*${literal(counted(flaggedCount, words))}(, most (linked|used) first)?$`,
+            `^Affected ${words.many}\\s*${literal(counted(flaggedCount, words))}(, (most (linked|used)|fewest links) first)?$`,
           ),
         );
       } else {
@@ -300,6 +303,7 @@ test('every check’s count is called what the check flags, as a share of the AP
         await expect(groups.getByRole('columnheader', { name: words.Many, exact: true })).toBeVisible();
       }
       // Its row in the list says the same.
+      await showChecks(page);
       await expect(option).toHaveAccessibleName(
         // Then its share of the site, "% of total" (round 5): of the pages analysed, the URLs crawled, or the whole site.
         new RegExp(
