@@ -38,6 +38,7 @@ import {
 } from '../../crawl/evidence';
 import { formatBytes, formatCount } from '../../lib/format';
 import { revealInScrollParent } from '../../lib/scroll';
+import { useFontsLoaded } from '../../lib/useFontsLoaded';
 import { Badge } from '../../ui/Badge';
 import { Callout } from '../../ui/Callout';
 import { FilterChip } from '../../ui/FilterChip';
@@ -50,6 +51,7 @@ import { Url } from '../../ui/Url';
 import { urlDisplay } from '../../ui/urlText';
 import { followWords } from '../../inspector/links';
 import { StatusCode } from '../../ui/StatusCode';
+import { linkTextMeasure } from '../links/linkColumns';
 import { linksOfUrl } from '../links/linkPlaces';
 import { imagesOfPage } from '../links/presets';
 import {
@@ -101,6 +103,9 @@ type TreeRow =
 /** Wrappers kept per row object, so a row the grid has drawn keeps its identity (and its memoised cells). */
 const groupRows = new WeakMap<IssueGroup, TreeRow>();
 const pageRows = new WeakMap<IssueRow, TreeRow>();
+
+/** What a page's address keeps beside it in its group's row: its open button and the gap before it. */
+const URL_OPEN_ROOM = 26;
 const whereTreeRows = new WeakMap<WhereRow, TreeRow>();
 const moreRows = new WeakMap<IssueGroup, TreeRow>();
 
@@ -933,49 +938,81 @@ export function IssueGroups({
   // A page's issue names what's wrong with each URL in its line ("shown at 400×300 · +1 other URL"): its detail ("2
   // images over 200 KB") says nothing more, so the line gets its room.
   const linesSayDetail = grouping === 'relatedUrl' && references === 'targets' && (check.targetFacts ?? []).length > 0;
+  // The open group's pages as columns (the 3b polish: each page's type and "Found on" flowed after its URL, so they
+  // started at a different x on every row): the URL as wide as the widest of them takes (a third of the row at least,
+  // three fifths at most), then the facts as wide as the widest, then where it's found, which takes the rest. Measured
+  // again as the fonts arrive.
+  const fontsLoaded = useFontsLoaded();
+  const pageColumns = useMemo(() => {
+    const measure = linkTextMeasure();
+    let url = 0;
+    let facts = 0;
+    for (const row of loadedRows ?? []) {
+      // With the open button the address keeps beside it, and its gap.
+      url = Math.max(url, measure(urlDisplay(row.url ?? '', siteOrigin).shown, 'url') + URL_OPEN_ROOM);
+      const evidence = evidenceLine(row, check, siteOrigin);
+      if (evidence) facts = Math.max(facts, measure(evidence, 'text'));
+    }
+    const px = (width: number) => `${Math.ceil(width) + 1}px`;
+    return [
+      references === 'none' ? null : 'calc(var(--chevron-box) - var(--space-2))',
+      `minmax(min(${px(url)}, 33%), min(${px(url)}, 60%))`,
+      facts > 0 ? `minmax(min(${px(facts)}, 10%), min(${px(facts)}, 30%))` : '0px',
+      'minmax(0, 1fr)',
+      'fit-content(25%)',
+      'auto',
+    ]
+      .filter((track) => track !== null)
+      .join(' ');
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the fonts arriving change what's measured
+  }, [loadedRows, check, siteOrigin, references, fontsLoaded]);
   const spanRow = useCallback(
     (row: TreeRow): ReactNode => {
       if (row.kind === 'group') return null;
       if (row.kind === 'page') {
         const evidence = evidenceLine(row.row, check, siteOrigin);
         const opens = references !== 'none' && (ownTarget === null || namesOthers.has(row.row.id));
+        // Every row has every column, an empty one where it has nothing to say, so each starts at the same x.
         return (
-          <span className="flex min-w-0 items-center gap-3">
-            {!opens ? null : (
+          <span className="grid min-w-0 items-center gap-3" style={{ gridTemplateColumns: pageColumns }}>
+            {references === 'none' ? null : opens ? (
               <span data-tree-toggle aria-hidden="true" className="si-tree-toggle -me-2">
                 <Icon icon={ChevronRight} size="sm" />
               </span>
+            ) : (
+              <span aria-hidden="true" />
             )}
             <Url
               url={row.row.url ?? ''}
               siteOrigin={siteOrigin}
               copyable={false}
               tabbable={false}
-              className="min-w-1/3 flex-1"
+              className="min-w-0"
             />
-            {evidence ? (
-              <span className="si-row-evidence max-w-2/5 min-w-0 shrink truncate text-text-secondary" title={evidence}>
-                {evidence}
-              </span>
-            ) : null}
-            {references === 'none' ? null : (
+            <span className="si-row-evidence min-w-0 truncate text-text-secondary" title={evidence || undefined}>
+              {evidence}
+            </span>
+            {references === 'none' ? (
+              <span aria-hidden="true" />
+            ) : (
               <WhereFoundLine
                 crawlId={crawlId}
                 check={check}
                 urlId={row.row.id}
                 siteOrigin={siteOrigin}
                 first={row.group.relatedUrlId}
-                className="max-w-1/2 shrink"
               />
             )}
             {row.row.detail &&
             row.row.detail !== row.group.detail &&
             (!linesSayDetail || detailSaysMore(row.row.detail)) ? (
               // The detail gives way first: the where line beside it says what the page names.
-              <span className="max-w-1/4 min-w-0 shrink-3 truncate text-text-muted" title={row.row.detail}>
+              <span className="min-w-0 truncate text-text-muted" title={row.row.detail}>
                 {row.row.detail}
               </span>
-            ) : null}
+            ) : (
+              <span aria-hidden="true" />
+            )}
             {/* Inspects the page, as Enter and a double-click on its row do. */}
             <button
               type="button"
@@ -1027,7 +1064,7 @@ export function IssueGroups({
         </span>
       );
     },
-    [crawlId, check, grouping, siteOrigin, references, linesSayDetail, ownTarget, namesOthers, onInspect],
+    [crawlId, check, grouping, siteOrigin, references, linesSayDetail, ownTarget, namesOthers, onInspect, pageColumns],
   );
 
   // The insight: the open group when it's probably the template's, else the largest group that is.

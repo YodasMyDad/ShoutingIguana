@@ -14,6 +14,7 @@ import { usePagedRows } from '../../grid/usePagedRows';
 import { useElementWidth } from '../../grid/useElementWidth';
 import { OUTCOME_WORDS, POSITION_WORDS } from '../../inspector/words';
 import { formatBytes, formatCount } from '../../lib/format';
+import { useFontsLoaded } from '../../lib/useFontsLoaded';
 import { openInBrowser } from '../../shell/os';
 import { Badge } from '../../ui/Badge';
 import { Icon } from '../../ui/Icon';
@@ -295,20 +296,7 @@ export function LinkGroupsGrid({
   const groupsInView = first?.rows;
   // The fonts the widths are measured in may still be on their way (an address measured in a fallback monospace is
   // narrower than it draws): measured again as each arrives.
-  const [fontsLoaded, setFontsLoaded] = useState(0);
-  useEffect(() => {
-    if (typeof document.fonts === 'undefined') return undefined;
-    let current = true;
-    const loaded = () => {
-      if (current) setFontsLoaded((count) => count + 1);
-    };
-    void document.fonts.ready.then(loaded);
-    document.fonts.addEventListener('loadingdone', loaded);
-    return () => {
-      current = false;
-      document.fonts.removeEventListener('loadingdone', loaded);
-    };
-  }, []);
+  const fontsLoaded = useFontsLoaded();
   const needs = useMemo(
     () => groupColumnNeeds(groupsInView ?? [], images, siteOrigin, linkTextMeasure()),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the fonts arriving change what's measured
