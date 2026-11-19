@@ -161,7 +161,8 @@ export function ProblemScreen({ crawlId, checkId }: { crawlId: string; checkId: 
         <p className="mb-4">
           <Link
             to={FIX}
-            params={{ crawl: crawlId }}
+            // The list: left out, the route's optional check is the one this page is on, and the link leads nowhere.
+            params={{ crawl: crawlId, check: undefined }}
             className="inline-flex items-center gap-1.5 text-14 font-medium text-text-secondary hover:text-text"
           >
             <Icon icon={ArrowLeft} size="sm" />
