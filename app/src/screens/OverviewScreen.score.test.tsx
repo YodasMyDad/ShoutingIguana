@@ -1,5 +1,5 @@
 import { createMemoryHistory } from '@tanstack/react-router';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { setTransport } from '../api/transport';
 import type { Analysis, Score } from '../api/types';
@@ -73,6 +73,20 @@ describe('the score on Advanced’s Overview', () => {
     await waitFor(() => expect(score).toHaveFocus());
     // Closed by going back to the entry it opened on: Back from here leaves Overview, as it would have before.
     expect(router.history.canGoBack()).toBe(false);
+  });
+
+  it('names each check in its sheet as Overview does, counts URLs, and its notices open Issues’ notices (H-14, H-07)', async () => {
+    await open({ ...ISSUES_ANALYSIS, score: GARDEN_SCORE, noScoreReason: null }, `${OVERVIEW}?score=1`);
+    const dialog = await screen.findByRole('dialog', { name: 'How the score is worked out' });
+    // Advanced's own title for the check, not Simple's plain one, and URLs, not addresses.
+    const check = await within(dialog).findByRole('link', { name: /Internal URL returns 4xx/ });
+    expect(check).toHaveAttribute('href', `/crawls/${TEST_CRAWL_ID}/issues/internal-client-error`);
+    expect(dialog).toHaveTextContent('9 of 4,521 URLs: a few');
+    expect(dialog).not.toHaveTextContent(/addresses|serious problem|worth a look/);
+    expect(dialog).toHaveTextContent('notices take nothing off');
+    const notices = within(dialog).getByRole('link', { name: /1 notice/ });
+    expect(new URL(notices.getAttribute('href') ?? '', 'http://x').pathname).toBe(`/crawls/${TEST_CRAWL_ID}/issues`);
+    expect(decodeURIComponent(notices.getAttribute('href') ?? '')).toContain('severity=["notice"]');
   });
 
   it('says "so far" for a crawl that didn’t read all of the site', async () => {

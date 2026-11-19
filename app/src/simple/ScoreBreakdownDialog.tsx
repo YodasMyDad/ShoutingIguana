@@ -14,7 +14,9 @@ import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
 import { SeverityMark } from '../ui/SeverityMark';
 import { SeverityWord } from '../ui/SeverityWord';
-import { plainSeverityCount } from '../ui/severity';
+import { useMode, type Mode } from '../mode/mode';
+import { outcomeWord, plainSeverityCount, severityCount } from '../ui/severity';
+import { FIX_SECTIONS } from './fixSections';
 import { coverageSentences, lineShareWords, plainTitle } from './plainWords';
 import { ScoreRing } from '../ui/ScoreRing';
 import { Check as Tick } from 'lucide-react';
@@ -130,8 +132,20 @@ function noScoreWords(analysis: Analysis): string {
     : 'its results were worked out by an earlier version of Shouting Iguana. Update the results to give it one.';
 }
 
-/** The two sentences, as the design gives them: what takes points off, and what doesn't. */
-function TwoSentences() {
+/**
+ * The two sentences, as the design gives them: what takes points off, and what doesn't. In Advanced, by the severities'
+ * own names, as the screen it's opened over has them (the shell audit of 2026-11-19, H-14).
+ */
+function TwoSentences({ mode }: { mode: Mode }) {
+  if (mode === 'advanced') {
+    return (
+      <p className="text-14 leading-body text-text-secondary">
+        The score starts at 100, and each check that found issues takes points off: up to 10 for an error (60 if it is a
+        fault of the whole site) and up to 4 for a warning, by how much of the site it affects. While any error stands
+        the score can’t be above 89, and <strong className="font-semibold text-text">notices take nothing off</strong>.
+      </p>
+    );
+  }
   return (
     <p className="text-14 leading-body text-text-secondary">
       The score starts at 100, and each check that found a problem takes points off: up to 10 for a serious problem (60
@@ -162,15 +176,18 @@ function Breakdown({
     .sort((a, b) => b.then - a.then);
   const notices = score.lines.filter((line) => line.severity === 'notice');
   const free = score.lines.filter((line) => line.severity !== 'notice' && line.points === 0);
-  const titleOf = (line: ScoreLine) => {
-    const check = checks.checks.find((candidate) => candidate.id === line.checkId);
-    return check ? plainTitle(check) : line.checkId;
+  // Each check by the name the screen behind has for it: Advanced's own title over Overview, the plain one over the
+  // Summary. One check, one name on screen (H-14).
+  const mode = useMode();
+  const titleOf = (checkId: string) => {
+    const check = checks.checks.find((candidate) => candidate.id === checkId);
+    return check ? (mode === 'advanced' ? check.title : plainTitle(check)) : checkId;
   };
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center gap-5">
         <ScoreRing value={score.value} band={score.band} partial={score.partial} size="md" />
-        <TwoSentences />
+        <TwoSentences mode={mode} />
       </div>
 
       <table className="si-score-table">
@@ -194,10 +211,10 @@ function Breakdown({
                   className="si-score-table__check"
                 >
                   <SeverityWord severity={line.severity} variant="mark" size="sm" />
-                  {titleOf(line)}
+                  {titleOf(line.checkId)}
                 </Link>
               </th>
-              <td>{lineShareWords(line)}</td>
+              <td>{shareWords(line, mode)}</td>
               <td className="si-score-table__num">
                 −{formatCount(line.points)}
                 {since ? <PointsThen then={pointsThen.get(line.checkId) ?? 0} now={line.points} /> : null}
@@ -211,8 +228,8 @@ function Breakdown({
               <td className="si-score-table__num">0</td>
             </tr>
           ) : null}
-          <ZeroLine severity="notice" count={notices.length} />
-          {free.length > 0 ? <ZeroLine severity="warning" count={free.length} /> : null}
+          <ZeroLine crawlId={crawlId} mode={mode} severity="notice" count={notices.length} />
+          {free.length > 0 ? <ZeroLine crawlId={crawlId} mode={mode} severity="warning" count={free.length} /> : null}
         </tbody>
         <tfoot>
           <tr>
@@ -223,19 +240,12 @@ function Breakdown({
         </tfoot>
       </table>
       {since && fixedSince.length > 0 ? (
-        <FixedSince
-          crawlId={crawlId}
-          startedAt={since.startedAt}
-          lines={fixedSince}
-          titleOf={(checkId) => {
-            const check = checks.checks.find((candidate) => candidate.id === checkId);
-            return check ? plainTitle(check) : checkId;
-          }}
-        />
+        <FixedSince crawlId={crawlId} startedAt={since.startedAt} lines={fixedSince} titleOf={titleOf} />
       ) : null}
       {score.heldBySerious ? (
         <p className="text-14 text-text-secondary">
-          Held at {score.value} while a serious problem stands ({score.beforeCeiling} otherwise).
+          Held at {score.value} while {mode === 'advanced' ? 'an error' : 'a serious problem'} stands (
+          {score.beforeCeiling} otherwise).
         </p>
       ) : null}
 
@@ -251,7 +261,7 @@ function Breakdown({
         </p>
       </section>
 
-      {score.version === 1 ? <PointsTable /> : null}
+      {score.version === 1 ? <PointsTable mode={mode} /> : null}
     </div>
   );
 }
@@ -299,17 +309,50 @@ function FixedSince({
   );
 }
 
-function ZeroLine({ severity, count }: { severity: Severity; count: number }) {
+/** How much of the site a line is, in the mode's words: Advanced counts URLs where Simple says addresses. */
+function shareWords(line: ScoreLine, mode: Mode): string {
+  const words = lineShareWords(line);
+  return mode === 'advanced' ? words.replace(/address(es)?/, (_, plural?: string) => (plural ? 'URLs' : 'URL')) : words;
+}
+
+function ZeroLine({
+  crawlId,
+  mode,
+  severity,
+  count,
+}: {
+  crawlId: string;
+  mode: Mode;
+  severity: Severity;
+  count: number;
+}) {
   if (count === 0) return null;
   const words: ReactNode =
-    severity === 'notice' ? plainSeverityCount('notice', count) : `${formatCount(count)} more that took nothing off`;
+    severity === 'notice'
+      ? mode === 'advanced'
+        ? severityCount('notice', count)
+        : plainSeverityCount('notice', count)
+      : `${formatCount(count)} more that took nothing off`;
   return (
     <tr>
       <th scope="row">
-        <span className="si-score-table__check">
-          <SeverityMark severity={severity} size="sm" decorative />
-          {words}
-        </span>
+        {severity === 'notice' ? (
+          // The count names a list, so it opens it (fix-common's rule 5): Issues' notices, or What to fix's part.
+          <Link
+            to="/crawls/$crawl/issues/{-$check}"
+            params={{ crawl: crawlId, check: undefined }}
+            {...(mode === 'advanced' ? { search: { severity: ['notice'] } } : { hash: FIX_SECTIONS.notice })}
+            className="si-score-table__check"
+          >
+            <SeverityMark severity={severity} size="sm" decorative />
+            {words}
+          </Link>
+        ) : (
+          <span className="si-score-table__check">
+            <SeverityMark severity={severity} size="sm" decorative />
+            {words}
+          </span>
+        )}
       </th>
       <td>They don’t change the score</td>
       <td className="si-score-table__num">0</td>
@@ -318,7 +361,8 @@ function ZeroLine({ severity, count }: { severity: Severity; count: number }) {
 }
 
 /** Version 1's points for each problem, its ceiling and its four words, as the design gives them. */
-function PointsTable() {
+function PointsTable({ mode }: { mode: Mode }) {
+  const advanced = mode === 'advanced';
   const columns = [
     ['A few pages', 'under 1 in 100'],
     ['Some pages', '1 in 100 or more'],
@@ -334,11 +378,13 @@ function PointsTable() {
   return (
     <section aria-labelledby="score-points" className="flex flex-col gap-2">
       <h3 id="score-points" className="text-14 font-semibold">
-        Points for each problem
+        {advanced ? 'Points for each check' : 'Points for each problem'}
       </h3>
       <div className="overflow-x-auto">
         <table className="si-score-table si-score-table--bands">
-          <caption className="sr-only">Points for each problem, by how much of the site it affects</caption>
+          <caption className="sr-only">
+            {advanced ? 'Points for each check' : 'Points for each problem'}, by how much of the site it affects
+          </caption>
           <thead>
             <tr>
               <th scope="col">Affects</th>
@@ -354,7 +400,14 @@ function PointsTable() {
             {rows.map(([severity, points]) => (
               <tr key={severity}>
                 <th scope="row">
-                  <SeverityWord severity={severity} variant="inline" />
+                  {advanced ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <SeverityMark severity={severity} size="sm" decorative />
+                      {outcomeWord(severity)}
+                    </span>
+                  ) : (
+                    <SeverityWord severity={severity} variant="inline" />
+                  )}
                 </th>
                 {points.map((value, index) => (
                   <td key={columns[index]?.[0]} className="si-score-table__num">
@@ -367,8 +420,8 @@ function PointsTable() {
         </table>
       </div>
       <p className="text-14 leading-body text-text-secondary">
-        While any serious problem stands, the score can’t be above 89. 90 and over is Very good, 70 and over Good, 50
-        and over Needs work, and under 50 Poor.
+        While any {advanced ? 'error' : 'serious problem'} stands, the score can’t be above 89. 90 and over is Very
+        good, 70 and over Good, 50 and over Needs work, and under 50 Poor.
       </p>
     </section>
   );
