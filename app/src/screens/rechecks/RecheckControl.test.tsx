@@ -61,7 +61,11 @@ describe('Recheck in a check’s head (Advanced)', () => {
   it('rechecks the check’s URLs, saying what it fetches and about how long', async () => {
     const sidecar = show();
     const button = await screen.findByRole('button', { name: 'Recheck 5 URLs' });
-    expect(screen.getByText('Fetches 8 URLs again (about 20 seconds). Other URLs stay as crawled.')).toBeVisible();
+    expect(
+      screen.getByText(
+        'Fetches 5 URLs again, and the 3 URLs they refer to (about 20 seconds). Other URLs stay as crawled.',
+      ),
+    ).toBeVisible();
     await userEvent.click(button);
     await waitFor(() => expect(started(sidecar)).toHaveLength(1));
     expect(started(sidecar)[0]?.body).toEqual({ checkId: 'broken-internal-links' });
@@ -110,7 +114,7 @@ describe('Recheck in a check’s head (Advanced)', () => {
     expect(await screen.findByRole('button', { name: 'Recheck 1,000 of 4,000 URLs' })).toBeVisible();
     expect(
       screen.getByText(
-        'Fetches 1,000 URLs again (about 9 minutes). Other URLs stay as crawled. 3,000 past the cap stay as crawled.',
+        'Fetches 1,000 URLs again (about 9 minutes). The other 3,000 of the 4,000 are past the cap of 1,000 fetches. Other URLs stay as crawled.',
       ),
     ).toBeVisible();
   });
@@ -133,7 +137,9 @@ describe('Recheck in a check’s head (Advanced)', () => {
   it('keeps the head’s other actions on its row, its line beneath them describing Recheck', async () => {
     show({ actions: OTHERS });
     const recheck = await screen.findByRole('button', { name: 'Recheck 5 URLs' });
-    const line = screen.getByText('Fetches 8 URLs again (about 20 seconds). Other URLs stay as crawled.');
+    const line = screen.getByText(
+      'Fetches 5 URLs again, and the 3 URLs they refer to (about 20 seconds). Other URLs stay as crawled.',
+    );
     expect(recheck).toHaveAccessibleDescription(line.textContent);
     oneRow(recheck, line);
   });
