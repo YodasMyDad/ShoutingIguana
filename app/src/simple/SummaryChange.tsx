@@ -14,6 +14,8 @@ import { ANALYSED_AGAIN_WORDS, cautionLine, summaryChangeParts } from '../change
 import { analysedAgainHere, useLikeForLike } from '../changes/likeForLike';
 import { Tooltip } from '../ui/Tooltip';
 
+import { gotWorseWords } from './changeLine';
+
 const FIX = '/crawls/$crawl/issues/{-$check}';
 
 export function SummaryChange({
@@ -62,6 +64,7 @@ export function SummaryChange({
     counts,
     partial: Boolean(score && (score.then.partial || score.now.partial)),
   });
+  const worse = gotWorseWords(counts.more);
   const caution = cautionLine(shown);
   const again = analysedAgainHere(shown.with.id);
   const inline = 'si-link si-link--inline';
@@ -77,7 +80,13 @@ export function SummaryChange({
         {parts.added}
       </Link>
     ) : null,
-    parts.none,
+    // What got worse, as plainly as what was fixed (S-12): it lands on the first problem that's on more pages now.
+    worse ? (
+      <Link key="worse" to={FIX} params={{ crawl: crawlId }} hash="worse-since" className={inline}>
+        {worse}
+      </Link>
+    ) : null,
+    worse ? null : parts.none,
   ].filter((piece) => piece !== null);
 
   return (

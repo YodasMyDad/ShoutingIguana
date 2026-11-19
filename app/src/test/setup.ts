@@ -14,6 +14,9 @@ beforeEach(async () => {
   // Every test starts as a new run of the app: no proxy password or header value kept from the one before.
   const { resetSessionSecretsForTests } = await import('../crawl/secrets');
   resetSessionSecretsForTests();
+  // Nor any list's scroll place, or what was opened on it (simple/scrollPlace keeps them for the session).
+  const { forgetPlaces } = await import('../simple/scrollPlace');
+  forgetPlaces();
 });
 
 if (hasDom) {

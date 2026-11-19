@@ -168,10 +168,11 @@ describe.skipIf(TABLE_STUBBED)('What to fix', () => {
     ]) {
       expect(main().getByRole('heading', { level: 2, name: `${name} ${count}` })).toBeVisible();
     }
+    // The UX audit of 2026-11-19 (S-04): this pinned two links, the second to broken-internal-links; that check is now
+    // merged into the first row, and the heading above still counts both problems.
     const serious = within(main().getByRole('region', { name: 'Serious 2' }));
     expect(serious.getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([
       `${FIX}/internal-client-error`,
-      `${FIX}/broken-internal-links`,
     ]);
   });
 
@@ -265,7 +266,12 @@ describe.skipIf(TABLE_STUBBED)('What to fix', () => {
     expect(first).toHaveFocus();
     expect(first).toHaveAttribute('aria-current', 'true');
     fireEvent.keyDown(first, { key: 'j' });
-    expect(main().getByRole('link', { name: /Links that lead to broken pages/ })).toHaveFocus();
+    // The UX audit of 2026-11-19 (S-04): this pinned focus on the nested row of "Links that lead to broken pages";
+    // that check is merged into the first row, so J goes straight to the next problem.
+    const second = main().getByRole('link', { name: /Large images that slow pages down/ });
+    expect(second).toHaveAttribute('href', `${FIX}/image-too-large`);
+    expect(second).toHaveFocus();
+    expect(first).not.toHaveAttribute('aria-current');
     fireEvent.keyDown(document.activeElement ?? document.body, { key: 'k' });
     expect(first).toHaveFocus();
   });
@@ -287,11 +293,16 @@ describe.skipIf(TABLE_STUBBED)('What to fix', () => {
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0]).toContain('Serious (2)');
     // A row's count without what it's a share of, so the rows compare, and the points fixing it gives back: with the
-    // broken links its fix clears, folded under it.
+    // broken links its fix clears, merged into it.
+    // The UX audit of 2026-11-19 (S-04, S-19): this pinned "…: 9 addresses, 6 points back. Some addresses…"; the lead
+    // line now counts the merged check's pages too, and says the points as they add to the score.
     expect(writes[0]).toContain(
-      "- Pages or files that can't be found: 9 addresses, 6 points back. Some addresses on your site answer with an error",
+      "\n- Pages or files that can't be found: 9 addresses on 5 pages, +6 to your score. Some addresses on your site answer with an error",
     );
-    expect(writes[0]).toContain('  - Fixed along with it: Links that lead to broken pages, 5 pages.\n');
+    // The UX audit of 2026-11-19 (S-04): this pinned "  - Fixed along with it: Links that lead to broken pages, 5
+    // pages."; a merged check is now named alone under the line that counts it.
+    expect(writes[0]).toContain('\n  - The same links, fixed in one go: Links that lead to broken pages.\n');
+    expect(writes[0]).not.toContain('Fixed along with it');
     // A reason many checks share, once, with the checks under it.
     expect(writes[0]).toMatch(
       /\n- 24 checks couldn’t run: This site check was made with an older version[^\n]*\n {2}- /,
@@ -376,21 +387,29 @@ describe.skipIf(TABLE_STUBBED)('What to fix, related and ordered', () => {
     await whatToFix();
     const serious = within(main().getByRole('region', { name: /^Serious/ }));
     const rows = serious.getAllByRole('link');
-    expect(rows.map((row) => row.getAttribute('href'))).toEqual([
-      `${FIX}/internal-client-error`,
-      `${FIX}/broken-internal-links`,
-    ]);
-    expect(rows[0]).toHaveAccessibleName(/Pages or files that can't be found .* 9 addresses 6 points back$/);
-    expect(rows[1]).toHaveAccessibleName(
-      /^Serious Links that lead to broken pages Fixed along with the problem above\. 5 pages$/,
+    // The UX audit of 2026-11-19 (S-04): this pinned two links, the second to broken-internal-links as a nested row;
+    // dead addresses and the pages that link to them are now one row.
+    expect(rows.map((row) => row.getAttribute('href'))).toEqual([`${FIX}/internal-client-error`]);
+    // The UX audit of 2026-11-19 (S-04, S-19): this pinned "… 9 addresses 6 points back", and a second row named
+    // "Serious Links that lead to broken pages Fixed along with the problem above. 5 pages" in a nested item.
+    expect(rows[0]).toHaveAccessibleName(
+      /Pages or files that can't be found .* Also covers “Links that lead to broken pages”: one list of links fixes both\. 9 addresses on 5 pages \+6 to your score$/,
     );
-    expect(rows[1]!.closest('li')).toHaveClass('si-plain-list__nested');
+    expect(
+      main()
+        .getByRole('region', { name: /^Serious/ })
+        .querySelector('.si-plain-list__nested'),
+    ).toBeNull();
     // Still two problems: the heading counts them.
     expect(main().getByRole('heading', { level: 2, name: /^Serious\s*2$/ })).toBeVisible();
-    // J and K go through the folded one after the one it's under.
+    // The UX audit of 2026-11-19 (S-04): J and K went through the folded row after the one it was under; with it
+    // merged, the second J lands on the next part's first problem.
     fireEvent.keyDown(document.body, { key: 'j' });
+    expect(rows[0]).toHaveFocus();
     fireEvent.keyDown(document.activeElement ?? document.body, { key: 'j' });
-    expect(rows[1]).toHaveFocus();
+    const next = within(main().getByRole('region', { name: /^Worth fixing/ })).getAllByRole('link')[0];
+    expect(next).toHaveAttribute('href', `${FIX}/image-too-large`);
+    expect(next).toHaveFocus();
   });
 
   it('orders each part by the most points back or the most found, remembered for Simple', async () => {
@@ -430,8 +449,11 @@ describe.skipIf(TABLE_STUBBED)('one problem', () => {
     const { router } = await open(`${FIX}/internal-client-error`);
     await problem("Pages or files that can't be found");
     const also = main().getByRole('list', { name: 'Fixed along with it' });
-    expect(also).toHaveTextContent(
-      'Fixing this also fixes Links that lead to broken pages: all 5 pages, 4 more points back.',
+    // The UX audit of 2026-11-19 (S-19): this pinned "…: all 5 pages, 4 more points back."; the points of both are now
+    // one figure among the page's facts (it read "Takes 2 points off the score"), made up as said.
+    expect(also).toHaveTextContent(/^Fixing this also fixes Links that lead to broken pages: all 5 pages\.$/);
+    expect(main().getByText(/^Fixing this adds/)).toHaveTextContent(
+      /^Fixing this adds 6 to your score \(2 for these, 4 for what it also fixes\)$/,
     );
     fireEvent.click(within(also).getByRole('link', { name: 'Links that lead to broken pages' }));
     await problem('Links that lead to broken pages');
@@ -503,7 +525,8 @@ describe.skipIf(TABLE_STUBBED)('one problem', () => {
     // The engine's detail, plainly: no ms (plainDetails.ts).
     expect(await where.findByText('It took 5.5 seconds to open')).toBeVisible();
     expect(where.getByText('Login')).toBeVisible();
-    expect(main().getByText(/off the score/)).toHaveTextContent('Takes 2 points off the score');
+    // The UX audit of 2026-11-19 (S-19): this pinned "Takes 2 points off the score".
+    expect(main().getByText(/^Fixing this adds/)).toHaveTextContent(/^Fixing this adds 2 to your score$/);
   });
 
   it('copies the list on Ctrl+Shift+C: titles, how to fix it, then each cause with full addresses', async () => {

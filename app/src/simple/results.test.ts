@@ -120,7 +120,9 @@ describe('Simple’s results on the garden crawl', () => {
   });
 
   it('says each count with what it is a share of: pages, addresses, or the whole site', () => {
-    expect(shareWords(check('internal-client-error'), 9, results.wholes).text).toBe('9 of 4,521 addresses');
+    // The UX audit of 2026-11-19 (S-19): this pinned "9 of 4,521 addresses"; addresses are now counted alone, and only
+    // pages keep their share.
+    expect(shareWords(check('internal-client-error'), 9, results.wholes).text).toBe('9 addresses');
     expect(shareWords(check('broken-internal-links'), 5, results.wholes).text).toBe('5 of 265 pages');
     expect(shareWords(check('no-https'), 1, results.wholes).text).toBe('The whole site');
     expect(shareWords(check('sitemap-missing'), 1, results.wholes).text).toBe('Once, for the whole site');

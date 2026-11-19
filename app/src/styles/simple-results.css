@@ -149,6 +149,12 @@
     color: var(--color-text-muted);
   }
 
+  /* What got worse since the last check is said as plainly as what was fixed (S-12). */
+  .si-plain-row__change--worse {
+    color: var(--color-warning-text);
+    font-weight: var(--font-weight-medium);
+  }
+
   /* A check a fix of the row above clears entirely, folded under it: indented past the row's mark, on the same card. */
   .si-plain-row--nested {
     padding-inline-start: calc(var(--space-6) + var(--icon-lg) + var(--space-4));

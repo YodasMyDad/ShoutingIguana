@@ -79,11 +79,14 @@ describe.skipIf(TABLE_STUBBED)('the Summary since the last check', () => {
   it('says the score then and now, the problems fixed and new, each a link to What to fix', async () => {
     await open(comparedGardenItem(), [changesRoute()]);
     const line = await within(card()).findByText(/^Since your last check on 17 Oct:/);
+    // The UX audit of 2026-11-19 (S-12): this pinned "…3 problems fixed, 1 new. See what changed"; what got worse is
+    // now counted after the fixed and the new, as a link that lands on it.
     expect(line).toHaveTextContent(
-      'Since your last check on 17 Oct: score 72 → 87, 3 problems fixed, 1 new. See what changed',
+      'Since your last check on 17 Oct: score 72 → 87, 3 problems fixed, 1 new, 1 got worse. See what changed',
     );
     expect(within(line).getByRole('link', { name: '3 problems fixed' })).toHaveAttribute('href', `${FIX}#fixed-since`);
     expect(within(line).getByRole('link', { name: '1 new' })).toHaveAttribute('href', `${FIX}#new-since`);
+    expect(within(line).getByRole('link', { name: '1 got worse' })).toHaveAttribute('href', `${FIX}#worse-since`);
     expect(within(line).getByRole('link', { name: 'See what changed' })).toHaveAttribute('href', FIX);
   });
 
@@ -222,10 +225,15 @@ describe.skipIf(TABLE_STUBBED)('Fix these first, since the last check', () => {
   it('gives each row its change under its count', async () => {
     await open(comparedGardenItem(), [changesRoute()]);
     const first = screen.getByRole('region', { name: /Fix these first/ });
+    // The UX audit of 2026-11-19 (S-12, S-20): this pinned "12 on 17 Oct", the count then; a row now says which way it
+    // moved and by how much (12 addresses then, 9 now; 58 pages then, 61 now).
     await waitFor(() =>
       expect(within(first).getByRole('link', { name: /Pages or files that can't be found/ })).toHaveTextContent(
-        '12 on 17 Oct',
+        /▼ 3 fewer than on 17 Oct$/,
       ),
+    );
+    expect(within(first).getByRole('link', { name: /Large images that slow pages down/ })).toHaveTextContent(
+      /▲ 3 more than on 17 Oct$/,
     );
     expect(within(first).getByRole('link', { name: /Pages that are slow to answer/ })).toHaveTextContent(
       'Not looked for last time',

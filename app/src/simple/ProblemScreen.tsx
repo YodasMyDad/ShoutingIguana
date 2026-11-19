@@ -26,6 +26,7 @@ import { Icon } from '../ui/Icon';
 import { SeverityWord } from '../ui/SeverityWord';
 import { copyProblemList, saveCheckSheet } from './handOver';
 import {
+  fixAddsWords,
   fixerWords,
   looksForWords,
   passedWords,
@@ -266,7 +267,7 @@ function AlsoFixes({
           {other.all
             ? `: ${other.pages === 1 ? 'its 1 page' : `all ${pages(other.pages)}`}`
             : ` on ${formatCount(other.pages)} of its ${pages(other.entry.count ?? other.pages)}`}
-          {other.points ? `, ${formatCount(other.points)} more ${other.points === 1 ? 'point' : 'points'} back` : ''}.
+          .
         </li>
       ))}
       {related.clearedBy.map((other) => (
@@ -328,6 +329,11 @@ function FoundProblem({
   const share = shareWords(check, count, wholes);
   const line = analysis.score?.lines.find((candidate) => candidate.checkId === check.id);
   const points = analysis.score ? pointsWords(line, check.severity) : null;
+  // One figure for the job, as its row has it: its own points with those of the problems its fix clears entirely.
+  const adds = fixAddsWords(
+    points?.points ?? 0,
+    (related?.clears ?? []).reduce((sum, other) => sum + (other.all ? (other.points ?? 0) : 0), 0),
+  );
   const fixer = fixerWords(check.fixer);
   const first = useQuery({ ...firstGroupQuery(crawlId, check.id), enabled: check.grouping !== 'none' });
   const template = first.data?.groups[0]?.likelyTemplate ? first.data.groups[0] : null;
@@ -401,8 +407,8 @@ function FoundProblem({
                   points.text
                 ) : (
                   <>
-                    Takes <b className="font-semibold text-text">{points.points}</b>{' '}
-                    {points.points === 1 ? 'point' : 'points'} off the score
+                    Fixing this adds <b className="font-semibold text-text">{adds.points}</b> to your score
+                    {adds.split ? ` (${adds.split})` : null}
                   </>
                 )}
               </Fact>

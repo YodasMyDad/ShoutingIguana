@@ -1,7 +1,7 @@
 // Where a Simple screen is scrolled to (the closing audit's G3: a problem opened from a scrolled What to fix opened part
 // way down, its back link out of sight). The app scrolls in its main region (layout/AppShell), not the window, and the
 // router keeps no scroll places of its own (app/router: scrollRestoration is off), so each screen says its own.
-import { useEffect, useLayoutEffect, type RefObject } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useState, type RefObject } from 'react';
 
 /** The region a screen scrolls in: the app's main, or the screen's own element outside the app (a story). */
 function scrollerOf(element: HTMLElement | null): HTMLElement | null {
@@ -38,7 +38,28 @@ export function useKeepsPlace(ref: RefObject<HTMLElement | null>, key: string, r
   }, [ref, key, ready]);
 }
 
-/** For tests: forgets every place. */
+/** What a list had opened, by its key, for this session (the UX audit of 2026-11-19, S-10). */
+const opened = new Map<string, boolean>();
+
+/**
+ * A fold that stays as it was left when the list is come back to (Back from a problem): "Show all 22 things worth a
+ * look", open and scrolled to its end, was folded to three again. `initial` opens it whatever it was (a count that
+ * lands on it).
+ */
+export function useKeptOpen(key: string, initial: boolean): [boolean, (open: boolean) => void] {
+  const [open, setOpen] = useState(() => initial || opened.get(key) === true);
+  const set = useCallback(
+    (next: boolean) => {
+      opened.set(key, next);
+      setOpen(next);
+    },
+    [key],
+  );
+  return [open, set];
+}
+
+/** For tests: forgets every place, and every fold. */
 export function forgetPlaces(): void {
   places.clear();
+  opened.clear();
 }

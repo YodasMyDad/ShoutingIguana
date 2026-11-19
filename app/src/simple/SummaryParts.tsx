@@ -11,7 +11,8 @@ import { SeverityMark } from '../ui/SeverityMark';
 import { SeverityWord } from '../ui/SeverityWord';
 import { plainSeverityCount, type CheckOutcome } from '../ui/severity';
 import { FIX_SECTIONS } from './fixSections';
-import { fixRows, type FixRow } from './fixRows';
+import { fixRows, mergedWords, type FixRow } from './fixRows';
+import { saysWorse } from './changeLine';
 import {
   bandWord,
   categoriesWords,
@@ -160,6 +161,7 @@ export function ProblemRow({
   oneFix,
   points,
   nested = false,
+  merged,
   change,
   platform = null,
   oneFixCovers = null,
@@ -176,6 +178,8 @@ export function ProblemRow({
   points?: number | null | undefined;
   /** Folded under the row above: a fix of that one clears it. */
   nested?: boolean | undefined;
+  /** The checks that are this one from its other end (fixRows): the row says both, and names them in its line. */
+  merged?: readonly CheckEntry[] | undefined;
   /** The fix loop: its change since the site's last check, under its count ("9 on 3 Nov"); left out or null, none. */
   change?: string | null | undefined;
   /**
@@ -192,6 +196,7 @@ export function ProblemRow({
 } & Omit<React.HTMLAttributes<HTMLAnchorElement>, 'title' | 'results'>) {
   const share = rowCountWords(entry.check, entry.count ?? 0);
   const back = platform ? null : rowPointsWords(points);
+  const also = merged && merged.length > 0 ? mergedWords(merged) : null;
   return (
     <PlainCheckRow
       asChild
@@ -216,7 +221,15 @@ export function ProblemRow({
           plainTitle(entry.check)
         )
       }
-      summary={platform ? platform.reason : nested ? 'Fixed along with the problem above.' : plainSummary(entry.check)}
+      summary={
+        platform
+          ? platform.reason
+          : nested
+            ? 'Fixing the problem above clears this too.'
+            : merged && merged.length > 0
+              ? `${plainSummary(entry.check)} Also covers “${merged.map((other) => plainTitle(other.check)).join('”, “')}”: one list of links fixes both.`
+              : plainSummary(entry.check)
+      }
       count={
         <>
           {share.count === null ? (
@@ -227,6 +240,7 @@ export function ProblemRow({
               {share.rest}
             </>
           )}
+          {also ? ` ${also}` : null}
           {back ? (
             <>
               {' '}
@@ -236,7 +250,13 @@ export function ProblemRow({
           {change ? (
             <>
               {' '}
-              <span className="si-plain-row__change">{change}</span>
+              <span
+                className={
+                  saysWorse(change) ? 'si-plain-row__change si-plain-row__change--worse' : 'si-plain-row__change'
+                }
+              >
+                {change}
+              </span>
             </>
           ) : null}
         </>
@@ -290,6 +310,7 @@ export function FixFirstCard({
                 oneFix={oneFix.has(job.entry.check.id)}
                 oneFixCovers={covers.get(job.entry.check.id)}
                 points={job.points}
+                merged={job.merged}
                 change={changeOf(job.entry.check.id)}
               />
             </li>,

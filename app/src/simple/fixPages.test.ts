@@ -315,9 +315,7 @@ describe('the words of a link to change', () => {
 
   it('says how a dead address answered from its status, else from its detail in plain words', () => {
     const row = { id: 1, url: `${SITE}/a/`, detail: '404 Not Found' };
-    expect(deadEndWrong(check('internal-client-error'), { ...row, statusCode: 410 }, SITE)).toBe(
-      'missing (410 Gone)',
-    );
+    expect(deadEndWrong(check('internal-client-error'), { ...row, statusCode: 410 }, SITE)).toBe('missing (410 Gone)');
     expect(deadEndWrong(check('internal-client-error'), row, SITE)).toBe('missing (404 Not Found)');
   });
 });

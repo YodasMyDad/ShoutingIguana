@@ -78,7 +78,13 @@ export function shareWords(check: Check, count: number, wholes: Wholes): ShareWo
   const pages = (check.subject ?? 'page') === 'page';
   const whole = pages ? wholes.pages : wholes.urls;
   const noun = pages ? (whole === 1 || (whole === null && count === 1) ? 'page' : 'pages') : 'addresses';
-  const single = !pages && (whole === 1 || (whole === null && count === 1)) ? 'address' : noun;
+  // Addresses are counted alone (S-19: "8 of 4,362 addresses" put a figure on screen that means nothing to an owner):
+  // every image, script and link is one, so the whole says nothing of the site. Pages keep their share.
+  if (!pages) {
+    const rest = count === 1 ? ' address' : ' addresses';
+    return { count: formatCount(count), rest, text: `${formatCount(count)}${rest}` };
+  }
+  const single = noun;
   const rest = whole === null ? ` ${single}` : ` of ${formatCount(whole)} ${single}`;
   return { count: formatCount(count), rest, text: `${formatCount(count)}${rest}` };
 }
@@ -96,10 +102,25 @@ export function rowCountWords(check: Check, count: number): ShareWords {
   return { count: formatCount(count), rest, text: `${formatCount(count)}${rest}` };
 }
 
-/** The points fixing a problem gives back, on its row: "4 points back", or nothing when it gives none. */
+/**
+ * The points fixing a problem gives back, on its row: "+4 to your score", or nothing when it gives none. It read "4
+ * points back" (the UX audit of 2026-11-19, section 5: back to where?).
+ */
 export function rowPointsWords(points: number | null | undefined): string | null {
   if (!points) return null;
-  return `${formatCount(points)} ${points === 1 ? 'point' : 'points'} back`;
+  return `+${formatCount(points)} to your score`;
+}
+
+/**
+ * What fixing a problem does to the score, on its page, in one figure (S-19: the list said 6, the page 2 and, a line
+ * down, 4 more): "Fixing this adds 6 to your score", and how it's made up where a fix clears another problem too, "(2
+ * for these, 4 for the links to them)".
+ */
+export function fixAddsWords(own: number, alsoClears: number): { points: number; split: string | null } {
+  return {
+    points: own + alsoClears,
+    split: alsoClears > 0 ? `${formatCount(own)} for these, ${formatCount(alsoClears)} for what it also fixes` : null,
+  };
 }
 
 // ---------------------------------------------------------------------------------------------------- The score

@@ -2,11 +2,18 @@
 // another clears entirely folded under that one (related checks), each row with the points fixing it gives back.
 // Pure, so every rule is tested.
 import { sortChecks, type CheckEntry, type PlainCheckSort } from '../screens/issues/checkList';
+import { fixShape } from './fixPages';
 
 export interface FixRow {
   entry: CheckEntry;
   /** The checks a fix of this one clears entirely, folded under it: one job, not two. */
   nested: CheckEntry[];
+  /**
+   * The checks that are this one seen from its other end (the UX audit of 2026-11-19, S-04): dead addresses and the
+   * pages that link to them are one list of links to change, so they are one row, not a row and its mirror folded
+   * under it. The row says both ("8 addresses on 4 pages") and carries the points of both.
+   */
+  merged: CheckEntry[];
   /** The points fixing it gives back, its folded checks' with its own; null when it gives none (a notice). */
   points: number | null;
 }
@@ -47,7 +54,16 @@ export function fixRows(entries: readonly CheckEntry[], order: FixRowOrder): Fix
       .map((entry) => {
         const under = nested.get(entry.check.id) ?? [];
         const points = [entry, ...under].reduce((sum, each) => sum + pointsOf(each), 0);
-        return [entry.check.id, { entry, nested: under, points: points > 0 ? points : null }] as const;
+        const merged = under.filter((other) => mirrors(entry, other));
+        return [
+          entry.check.id,
+          {
+            entry,
+            nested: under.filter((other) => !merged.includes(other)),
+            merged,
+            points: points > 0 ? points : null,
+          },
+        ] as const;
       }),
   );
   const combined = new Map([...rows].map(([id, row]) => [id, row.points ?? 0]));
@@ -55,6 +71,20 @@ export function fixRows(entries: readonly CheckEntry[], order: FixRowOrder): Fix
     [...rows.values()].map((row) => row.entry),
     { sort: order.sort, fixFirst: order.fixFirst, points: combined },
   ).flatMap((entry) => rows.get(entry.check.id) ?? []);
+}
+
+/**
+ * Whether a folded check is the row's own seen from the other end: the row's is a check of dead addresses, listed by
+ * the pages that link to them, and the folded one a check of those pages (fixPages' shapes).
+ */
+function mirrors(lead: CheckEntry, other: CheckEntry): boolean {
+  return fixShape(lead.check) === 'addresses' && fixShape(other.check) === 'pages';
+}
+
+/** "on 4 pages": the pages a row's merged checks count, after its own count ("8 addresses on 4 pages"). */
+export function mergedWords(merged: readonly CheckEntry[]): string | null {
+  const pages = merged.reduce((most, entry) => Math.max(most, entry.count ?? 0), 0);
+  return pages > 0 ? `on ${pages === 1 ? '1 page' : `${pages.toLocaleString('en-GB')} pages`}` : null;
 }
 
 /** The orders What to fix offers, in its words. */
