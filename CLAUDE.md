@@ -10,6 +10,8 @@ Guidance for agents working in this repo. Read this before making changes.
 - `app/` — React and TypeScript UI in a Tauri 2 shell. The shell starts the engine as a sidecar.
 - `docs/` — the rebuild plan and the UI notes. **Where step 4 stands** in [`docs/v2-rebuild.md`](docs/v2-rebuild.md) is the only status. Update that section before you stop, and commit it.
 
+All work is on `master`. Steps 1 to 4 of the rebuild are shipped; step 5 (integrations) starts only at the owner's word.
+
 The WPF app is not in this branch. It is the tag `legacy-v1`. Do not move or delete that tag. v2 has no plugin system. The `ShoutingIguana.PluginSdk` NuGet package is unused here and stays published.
 
 ## Do not push

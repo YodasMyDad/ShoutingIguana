@@ -80,7 +80,7 @@ Each file has a SHA256 checksum (`SHA256SUMS-*.txt` on the release).
 
 ## Opening an unsigned build
 
-This beta is not code-signed. Windows and macOS warn the first time you open it.
+This release is not code-signed. Windows and macOS warn the first time you open it.
 
 ### Windows (SmartScreen)
 

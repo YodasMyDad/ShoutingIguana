@@ -3,7 +3,7 @@
 The single place to pick up the rebuild. Technical detail lives in [engine/README.md](../engine/README.md) and the
 rules for working in the code in [CLAUDE.md](../CLAUDE.md). Update the status and open items here at the end of every
 step. For step 3, **Where step 3 stands** below is the history. For what to build next, **Where step 4 stands** is the
-only status. `v2`'s copy of this doc only points here. Update this section before you stop, then commit it. **Never
+only status. Work is on `master`; the old `v2` and `ui/step-3` branches are retired. Update this section before you stop, then commit it. **Never
 push** until the owner says it is time to deploy (2026-11-15: pushes ran CI and used up their GitHub minutes); every
 check runs locally, and the app and engine workflows are manual-only. The release workflow publishes only from a tag
 `app-v*` plus the version in `app/src-tauri/tauri.conf.json`. `app-v2.0.0-beta.1` shipped. `app-v2.0.0-beta.2` is the
@@ -32,12 +32,24 @@ v2 is a fresh solution that ports the useful logic.
 | --- | --- | --- |
 | 1 | Headless engine, storage and CLI (`si`), proven on a generated 100k-page site, with the benchmark in CI | Done: `3e556be` |
 | 2 | SEO rules and issue catalog (84 checks), `si analyze` / `si issues`, exact-match proof on the synthetic site | Done: `1489adb`, then a real-site crawl and two full reviews ([Status](#status)) |
-| 3 | Desktop UI: React + TypeScript in a Tauri 2 shell, with the engine as a sidecar behind a token-protected localhost API. Enterprise-grade UX: the bar is in [the UI brief](v2-ui-brief.md). Since 2026-11-10 it opens in Simple, with Advanced one switch away, and ends in a report: [Simple first](#simple-first-advanced-on-a-switch-2026-11-10) | Shipped. `app-v2.0.0-beta.1`, then `app-v2.0.0-beta.2`. History: [Where step 3 stands](#where-step-3-stands-2026-11-15) |
-| 3b | The check audit: every check proven against real sites and worded for a non-expert, then the old app's checks worth keeping and those a comparison with Screaming Frog shows are missing | Planned on 2026-11-10: [Simple first](#simple-first-advanced-on-a-switch-2026-11-10) |
-| 4 | Missing basics: JavaScript rendering, a browser fallback for blocked sites, include/exclude rules, auth and cookies, list mode, custom extraction | Shipped as `app-v2.0.0`. JavaScript rendering, include/exclude, custom extraction, list mode, the browser fallback, and auth and cookies. Step 5 is what's left. [Where step 4 stands](#where-step-4-stands-2026-11-20) |
-| 5 | Integrations: Search Console, then GA4, Bing Webmaster, Google Ads and Microsoft Advertising | Later |
+| 3 | Desktop UI: React + TypeScript in a Tauri 2 shell, with the engine as a sidecar behind a token-protected localhost API. Enterprise-grade UX: the bar is in [the UI brief](v2-ui-brief.md). Since 2026-11-10 it opens in Simple, with Advanced one switch away, and ends in a report: [Simple first](#simple-first-advanced-on-a-switch-2026-11-10) | Done. First shipped as `app-v2.0.0-beta.1` (2026-11-20). History: [Where step 3 stands](#where-step-3-stands-2026-11-15) |
+| 3b | The check audit: every check proven against real sites and worded for a non-expert, then the old app's checks worth keeping and those a comparison with Screaming Frog shows are missing | Done 2026-11-19, and in every release since `app-v2.0.0-beta.1`. Plan: [Simple first](#simple-first-advanced-on-a-switch-2026-11-10). History: [Where step 3 stands](#where-step-3-stands-2026-11-15) |
+| 4 | Missing basics: JavaScript rendering, a browser fallback for blocked sites, include/exclude rules, auth and cookies, list mode, custom extraction | Done. Shipped as `app-v2.0.0` (2026-11-22): JavaScript rendering, include/exclude, custom extraction, list mode, the browser fallback, and auth and cookies. [Where step 4 stands](#where-step-4-stands-2026-11-20) |
+| 5 | Integrations: Search Console, then GA4, Bing Webmaster, Google Ads and Microsoft Advertising | Not started. It waits for the owner's word |
 
 ## Where step 4 stands (2026-11-20)
+
+**2026-11-24, the whole state.** Steps 1 to 4 are done and released. The latest release is `app-v2.0.3`, a full
+release for Windows, macOS (arm64 and x64) and Linux. `master` is the only line of work and matches GitHub apart from
+docs commits made since the tag. Nothing is in flight: no branch holds unmerged work. The only thing left in the plan
+is step 5 (integrations), which is not started and waits for the owner's word. Builds are still unsigned; how to sign
+is an open talk with the owner.
+
+Housekeeping done that day: the repo's main folder (`C:\Projects\ShoutingIguana`) is now checked out on `master`. It
+had been left on `v2`, whose `CLAUDE.md` still described the WPF app and sent agents to `ui/step-3`, so a session
+opened there reported step 3 as unfinished. The local `v2`, `ui/*` and `step4/*` branches and their worktrees were
+removed; all were merged, or held only notes that are obsolete or copied here. The galleries and the old session
+handoffs outside the repo (`.claude/worktrees/_gallery`, `_handoff`) were kept.
 
 **2026-11-23.** Work is on `master`. `ui/step-3` is the old step-3 line and is not where changes go. Home's library status was one word a line when a crawl's analysis was out of date: the site column takes the spare width, and the note could break on every word. Each phrase stays whole ("Analysis out of date." then "Analyse again"), and a file error wraps inside the status width. Shipped as `2.0.2`. `2.0.3` keeps Simple Home from ending a saved-settings line with an empty sentence, and keeps the speed card and the check-again note from leaving the last words of a phrase alone.
 
