@@ -957,6 +957,14 @@ exact (33,156 rows compared in 24.8 s), memory flat.
   and the start URL's: never another site's. `siteVersions` asks
   every probe again (the plan adds them as named). A check read only by these kinds has its judged URLs settled as
   rechecked when the recheck completed.
+- **Turned away is not an answer** (2026-11-19, `RecheckTurnedAwayTests`). What the crawl read is replaced only by what
+  the site says of it now. A sitemap that gets no answer, answers 429 at every try or is answered by a firewall's
+  challenge keeps its row and its entries (put aside while it's read, by negating `sitemap_id`, and put back). A
+  robots.txt that gets no answer, a 429 or a server error keeps the crawl's, unless the check is whether robots.txt can
+  be read; while it can't be read the sitemaps aren't read again either, as the ones it declares can't be known. A page
+  the crawler may not fetch only because robots.txt couldn't be read is "no answer", and stays as the crawl read it,
+  with its links. Each is settled not checked, never fixed. A recheck stopped while a sitemap is being read puts that
+  sitemap's entries back. A recheck that fails is rolled back whole (B2).
 - **Labels.** The URL grid gains a `skipReason` column ("Why not read"): every skip reason, with "Found by a recheck,
   not followed" and "No longer linked (a recheck let it go)". The stats leave a URL let go out of the URLs found; the
   report names the URLs a recheck found and didn't follow.

@@ -152,6 +152,7 @@ internal sealed class SitemapDiscoverer(
         var urlCount = 0;
         var isIndex = false;
         var bodyRead = false;
+        var turnedAway = false;
         int? statusCode = null;
         string? error = null;
 
@@ -171,6 +172,9 @@ internal sealed class SitemapDiscoverer(
             {
                 // The status by its name, as an issue's detail names it: "404 Not Found" ("HTTP 520" for one with none).
                 error = HttpStatusNames.Describe(statusCode.Value);
+
+                // Asked to slow down at every try, or a firewall answered in the file's place: not the file's own answer.
+                turnedAway = BlockDetector.Detect(statusCode.Value, HttpFetcher.CollectHeaders(response), null) is not null;
             }
             else
             {
@@ -229,7 +233,8 @@ internal sealed class SitemapDiscoverer(
         // Every sitemap the file lists is counted, whether or not the crawl goes on to read it: past its limit of sitemaps,
         // or of nesting, an index still says how many it names.
         await writer.CompleteSitemapAsync(
-                new SitemapRecord(sitemapId, statusCode, isIndex, urlCount, error, isProbe, bodyRead ? children.Count : null, bodyRead ? counted?.BytesRead : null),
+                new SitemapRecord(sitemapId, statusCode, isIndex, urlCount, error, isProbe, bodyRead ? children.Count : null, bodyRead ? counted?.BytesRead : null,
+                    turnedAway),
                 cancellationToken)
             .ConfigureAwait(false);
         return (children, urlCount);

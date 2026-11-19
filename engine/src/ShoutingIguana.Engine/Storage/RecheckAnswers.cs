@@ -22,6 +22,9 @@ internal static class RecheckAnswers
             FetchOutcome.NetworkError or FetchOutcome.Timeout when error.StartsWith(RetryingFetcher.NOT_CHECKED_ERROR, StringComparison.Ordinal) => RecheckAnswer.NotAsked,
             FetchOutcome.NetworkError or FetchOutcome.Timeout => RecheckAnswer.NoAnswer,
             FetchOutcome.Blocked => RecheckAnswer.Blocked,
+
+            // Not fetched because robots.txt couldn't be read, not because a rule of it refuses the URL: no answer.
+            FetchOutcome.RobotsDisallowed when error.StartsWith(Robots.RobotsTxt.UNREACHABLE_ERROR, StringComparison.Ordinal) => RecheckAnswer.NoAnswer,
             FetchOutcome.RobotsDisallowed => RecheckAnswer.RobotsTxt,
             _ => RecheckAnswer.Read
         };

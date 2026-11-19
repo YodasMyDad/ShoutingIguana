@@ -640,11 +640,21 @@ internal sealed class CrawlSession
         }
     }
 
-    /// <summary>A recheck of the sitemaps reads them all again, as the crawl found them: robots.txt's, the extra ones, or the conventional one.</summary>
+    /// <summary>
+    /// A recheck of the sitemaps reads them all again, as the crawl found them: robots.txt's, the extra ones, or the
+    /// conventional one. While robots.txt can't be read, the sitemaps it declares can't be known: none is read, and they
+    /// stay as the crawl read them (the writer has counted robots.txt's read as one that got no answer).
+    /// </summary>
     private async Task ReadSitemapsAgainAsync(CancellationToken cancellationToken)
     {
         try
         {
+            if ((await _robots.GetAsync(_startUri).WaitAsync(cancellationToken).ConfigureAwait(false)).UnreachableReason is { } reason)
+            {
+                _logger.LogWarning("robots.txt can't be read ({Reason}), so the sitemaps aren't read again", reason);
+                return;
+            }
+
             await _sitemaps.RunAsync(_startUri, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception exception) when (exception is not (OperationCanceledException or ChannelClosedException))

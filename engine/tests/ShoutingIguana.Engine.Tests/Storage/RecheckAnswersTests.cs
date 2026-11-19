@@ -19,6 +19,7 @@ public sealed class RecheckAnswersTests
     [InlineData(FetchOutcome.ServerError, null, RecheckAnswer.Read)]
     [InlineData(FetchOutcome.Blocked, null, RecheckAnswer.Blocked)]
     [InlineData(FetchOutcome.RobotsDisallowed, null, RecheckAnswer.RobotsTxt)]
+    [InlineData(FetchOutcome.RobotsDisallowed, "robots.txt unreachable: 503 Service Unavailable", RecheckAnswer.NoAnswer)]
     [InlineData(FetchOutcome.Timeout, "The request timed out", RecheckAnswer.NoAnswer)]
     [InlineData(FetchOutcome.NetworkError, "Connection refused", RecheckAnswer.NoAnswer)]
     [InlineData(FetchOutcome.NetworkError, RetryingFetcher.RATE_LIMITED_ERROR + " (429 Too Many Requests)", RecheckAnswer.RateLimited)]
