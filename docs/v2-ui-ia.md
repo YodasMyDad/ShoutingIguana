@@ -45,16 +45,26 @@ the switch in the shell, the Report route and screen, a Simple line in the flows
     (the open one ticked; each opens on the section you're on) and a way Home to them all. Each crawl is named as Home
     names its site, with a port of its own ("127.0.0.1:62801"), and says its state when it isn't simply finished
     ("Paused", "Running", "Stopped"; in Simple's words "Checking", "Stopped early"), so two crawls of a site are told
-    apart (gallery 6). Then its sections, with live counts; the current one a neutral fill, never the accent (the owner: the accent rule "looks AI made").
+    apart (gallery 6). Another crawl of the same site opens on the same screen with the filters that mean the same
+    in any crawl (severity, text, status, sort, columns), less whatever names a row of this crawl's file; another
+    site's opens on the same section, unfiltered (the UX round of 2026-11-19).
+    Then its sections, with live counts; the current one a neutral fill, never the accent (the owner: the accent rule "looks AI made").
+    The crawl's own settings are the item "This crawl's settings", so it's never mistaken for the app's Settings.
+  - The app's Settings, opened from a crawl, keeps that crawl's switcher and sections on the sidebar, and Ctrl+1 to
+    Ctrl+8 still go to them, so the way back is one click. Opened from Home, no crawl is listed.
   - At the bottom: crawls running in the background, each a link with its progress, and app Settings. When the
     window is too short for them all (several crawls and exports, 200% zoom), what's between the name and Settings
     scrolls inside the sidebar; Settings stays whole below it.
 - **Top bar.**
-  - Back and forward.
-  - Where you are: the site with its favicon, the crawl, the section.
-  - The status pill.
+  - Back and forward, dimmed where there's nowhere to go.
+  - Where you are: the site with its favicon, the crawl, the section. Each part leads somewhere: Home, the site to its
+    crawl's Overview, the crawl's date to the switcher (the site's other crawls).
+  - The status pill, which leads to Overview's "The crawl".
   - The crawl's controls, which change with its state: Pause, Resume, Stop, Continue, Analyse again.
-  - Search and the command palette.
+  - Search and the command palette. Beyond commands, checks, URLs and recent crawls, the palette finds a setting by
+    its words (each Settings section, and each setting New crawl can open on), a check by a status code its title
+    names as a class ("404" finds the 4xx check), "Crawl again…", "Compare with…" and Issues by severity. Outside a
+    crawl, finding nothing says that checks and URLs are searched in the open crawl.
 
   It's the same on every screen, so a running crawl is always visible and controllable.
 - **The switch (Simple).** The top bar ends in a two-part control, **Simple | Advanced**: to the right of search in
@@ -145,20 +155,32 @@ found, 265 pages; the 100k crawl 110,251 and 112,577, and 101,106 pages, everywh
 - Validation is inline, field by field: a field's message shows once it's been left, and all of them once Start is
   pressed. A refused Start opens the section of the first and puts focus on it.
 - Start (Ctrl+Enter, from any field), and "Save as my defaults". Header values and a proxy's password are used for
-  the crawl and never saved.
+  the crawl and never saved. In Advanced the row with Start stays at the foot of the pane as the form scrolls, and in
+  a wide window (1700 px and over) the six sections are two columns.
+- A line beside Start says pages are read as the server sends them: their JavaScript isn't run (rendering is step 4).
+- Opened by "Crawl again…", the page is titled "Crawl <site> again" and says which crawl's settings it holds.
 - In Simple, "Check a website": the address, how fast, how much, and two switches, "Use these choices every time", and
   a line naming any Advanced setting that differs from its default. What is typed goes across the switch.
 
 **The crawl's settings.**
 
-- What the crawl used, by section, in words. "Crawl again with these" opens New crawl with them.
+- Titled "This crawl's settings": a record of how the crawl was made, read from its file.
+- What the crawl used, by section, in words. A value that isn't the engine's default is bold with the default beside
+  it, and the card counts them. "Crawl again with these" opens New crawl with them.
 - Continue, for a stopped crawl: the speed, the timeout, the headers and the proxy may change; the headers' values
   and the proxy's password, which a crawl file doesn't keep, are asked for again, with "Continue without" for headers.
+  A crawl that ended has no Continue card.
+- Analysis: when its issues were worked out, whether that's out of date, Analyse again, and a link to the limits in
+  Settings.
 
 **Settings.**
 
 - General (Mode, Theme, Density), Crawl defaults (New crawl's form, saved as it changes), Analysis (once the engine
   can save limits), Data folder, Shortcuts, Diagnostics (Copy diagnostics, the logs' folder), Updates, About.
+- The list of sections and the section are centred in the pane together, each section a form's measure wide.
+- Analysis lists its limits in groups (titles and descriptions, content, images, pages and speed, links), two
+  columns in a wide window. A size is typed in KB (or with MB or GB after the number) and the near-duplicate limit as
+  "% the same"; the engine keeps bytes and bits. It says how many crawls in the library are out of date.
 - The same in both modes, every section and every word (the owner, 2026-11-15: "the Simple and Advanced modes are just
   for the UI for the user of using the app, not for settings. I still need the settings whatever version they're
   using"). See [Simple mode, Settings in each mode](v2-ui-simple.md#settings-in-each-mode).
