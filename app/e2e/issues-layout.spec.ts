@@ -54,6 +54,22 @@ test('at 1440 px the open check takes the width, the list is behind All checks, 
   await expect(checksOf(page)).toBeHidden();
 });
 
+// 3b final: with the list out from behind "All checks", inspecting a row stacked the check under the list, off-screen.
+// The inspector folds the list away: the check is what was being worked on.
+test('at 1440 px, inspecting a row with All checks open folds the list away and keeps the check beside the inspector', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openCheck(page, 'title-too-long');
+  await allChecks(page).click();
+  await expect(checksOf(page)).toBeVisible();
+
+  await inspectFirst(page);
+  await expect(checksOf(page)).toBeHidden();
+  await expect(allChecks(page)).toHaveAttribute('aria-expanded', 'false');
+  await expectCheckInView(page, 640);
+});
+
 test('at 1920 px the list stays beside the check, until the inspector needs the room', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 });
   await openCheck(page, 'title-too-long');
