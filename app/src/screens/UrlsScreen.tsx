@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { Copy, Globe, Link2, RefreshCw } from 'lucide-react';
+import { Copy, Globe, Link2, ListChecks, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { isProblem } from '../api/errors';
@@ -11,7 +11,7 @@ import { analyseCrawl } from '../crawl/actions';
 import { crawlControls, effectiveStatus } from '../crawl/status';
 import { announce } from '../feedback/announce';
 import { ErrorState } from '../feedback/ErrorState';
-import { notifyResult } from '../feedback/notify';
+import { notifyError, notifyResult } from '../feedback/notify';
 import { useAnnounceResults } from '../feedback/useAnnounceResults';
 import { useFocusRescue } from '../feedback/useFocusRescue';
 import { ColumnChooser } from '../grid/ColumnChooser';
@@ -26,7 +26,7 @@ import { useSearchApplyHint } from '../grid/SearchApplyHint';
 import { ToolsToggle } from '../grid/ToolsToggle';
 import { useShortScreen } from '../grid/useShortScreen';
 import { queryRefusalWords } from '../grid/queryRefusal';
-import { storeColumnLayout, useColumnLayout, useStoredColumnLayout } from '../grid/useColumnLayout';
+import { storeColumnLayout, useColumnLayout } from '../grid/useColumnLayout';
 import { GRID_SCREEN_MIN_ROWS, GridScreen, GridScreenBody } from '../grid/GridScreen';
 import { useGridMetrics } from '../grid/metrics';
 import { NeedsAnalysis } from '../grid/NeedsAnalysis';
@@ -39,7 +39,6 @@ import type { SavedView } from '../grid/savedViews';
 import { nextMultiSort, sortFullWords, useHeaderHandoff } from '../grid/sort';
 import { UNAVAILABLE_BECAUSE, UNAVAILABLE_WHILE_ANALYSING, analyseWords, listOfNames } from '../grid/summaryWords';
 import { MAX_COPY_ROWS, toTsv } from '../grid/tsv';
-import { useElementWidth } from '../grid/useElementWidth';
 import { usePagedRows } from '../grid/usePagedRows';
 import { ExportButton } from '../export/ExportButton';
 import { useExportCommand } from '../export/useExportCommand';
@@ -78,11 +77,12 @@ import {
   URL_PRESETS,
   activeUrlPreset,
   colsParam,
+  presetFilters,
   presetOrderOf,
   shownUrlColumns,
   urlChooserGroups,
   urlColumnName,
-  urlColumnWidth,
+  urlCountPlace,
   urlFilterColumns,
   urlGridColumns,
   urlQueryColumns,
@@ -92,9 +92,6 @@ import { RecheckMenuItem } from './rechecks/RecheckMenuItem';
 import { onlyFullCheck } from './rechecks/rechecks';
 
 const ROUTE = '/crawls/$crawl/urls';
-
-/** The room the grid's frame takes beside its columns: its border and the scrollbar over its right edge. */
-const FRAME_SLACK = 24;
 
 /** What the last read of a view said of it, kept while the same view is read again for other columns. */
 interface Counted {
@@ -295,12 +292,50 @@ export function UrlsScreen() {
   }, [hiddenSort, navigate, shown]);
 
   const handoff = useHeaderHandoff(sort);
-  const [measure, width] = useElementWidth();
-  const layoutWidths = useStoredColumnLayout('urls').widths;
-  const urlWidth = urlColumnWidth(shown, catalogue.data, width === null ? null : width - FRAME_SLACK, layoutWidths);
+  // What a click in a cell opens (rules 1 and 5 of the UX round of 2026-11-19): the row's URL in the inspector, another
+  // URL the row names (looked up, as the crawl may not have it), and the list a count stands for.
+  const inspectRow = useCallback((row: UrlRow) => inspector.open(row.id), [inspector]);
+  const inspectUrl = useCallback(
+    (url: string) => {
+      api.lookupUrl(crawlId, url).then(
+        (found) => inspector.open(found.id),
+        (error: unknown) => {
+          if (isProblem(error, 'not-found')) {
+            notifyResult('That URL isn’t in this crawl', {
+              id: 'urls.notInCrawl',
+              description: `The crawl found no URL ${url}: it can be opened in your browser from the icon after it.`,
+            });
+          } else notifyError(error, { title: 'The URL couldn’t be looked up.' });
+        },
+      );
+    },
+    [crawlId, inspector],
+  );
+  const openCount = useCallback(
+    (row: UrlRow, column: string) => {
+      const place = urlCountPlace(column);
+      if (place === 'usedOn') {
+        void navigate({
+          to: '/crawls/$crawl/links',
+          params: { crawl: crawlId },
+          search: { filter: linksOfUrl('inlinks', row.id, 'all') },
+        });
+      } else if (place) inspector.open(row.id, undefined, { section: place });
+    },
+    [crawlId, inspector, navigate],
+  );
   const columns = useMemo(
-    () => urlGridColumns(shown, catalogue.data, { siteOrigin, fullUrls, sort, urlWidth, crawling }),
-    [shown, catalogue.data, siteOrigin, fullUrls, sort, urlWidth, crawling],
+    () =>
+      urlGridColumns(shown, catalogue.data, {
+        siteOrigin,
+        fullUrls,
+        sort,
+        crawling,
+        onInspect: inspectRow,
+        onGoUrl: inspectUrl,
+        onCount: openCount,
+      }),
+    [shown, catalogue.data, siteOrigin, fullUrls, sort, crawling, inspectRow, inspectUrl, openCount],
   );
   // The columns as the user laid them out: their widths and pins kept with the preferences, their order the route's.
   const columnOrder = useMemo(() => ({ ids: shown, onChange: setColumns }), [shown, setColumns]);
@@ -459,6 +494,27 @@ export function UrlsScreen() {
   const hasRows = rowCount !== null && rowCount > 0;
   const noUrls = noUrlsWords(crawling);
   const preset = activeUrlPreset(shown);
+  /**
+   * A tab chosen: its columns, and the filters it brings in place of those the tab it leaves brought (the site's pages
+   * for Indexability and Content, the redirects for Redirects). The user's own filters, search and sort stay.
+   */
+  const choosePreset = useCallback(
+    (entering: { columns: readonly string[]; filters?: readonly GridFilter[] | undefined }) => {
+      void navigate({
+        search: (previous) => {
+          const next = presetFilters(previous.filter ?? [], activeUrlPreset(shown), entering);
+          return {
+            ...previous,
+            cols: colsParam(entering.columns),
+            sort: sortShown(previous.sort, entering.columns),
+            filter: next.length > 0 ? next : undefined,
+          };
+        },
+        replace: true,
+      });
+    },
+    [navigate, shown],
+  );
   // "All columns": every column the engine has, known once its list is read.
   const allColumns = useMemo(() => (catalogue.data ? allUrlColumns(catalogue.data) : null), [catalogue.data]);
   const showsAll =
@@ -524,7 +580,7 @@ export function UrlsScreen() {
         title: `Show the ${candidate.title.toLowerCase()} columns`,
         group: 'URLs',
         keywords: ['columns', 'preset', candidate.hint],
-        run: () => setColumns(candidate.columns),
+        run: () => choosePreset(candidate),
       })),
       {
         id: `urls.preset.${ALL_COLUMNS_PRESET.id}`,
@@ -533,7 +589,7 @@ export function UrlsScreen() {
         keywords: ['columns', 'preset', 'everything', 'full export', ALL_COLUMNS_PRESET.hint],
         enabled: () => allColumns !== null,
         run: () => {
-          if (allColumns) setColumns(allColumns);
+          if (allColumns) choosePreset({ columns: allColumns });
         },
       },
       {
@@ -604,7 +660,7 @@ export function UrlsScreen() {
       copyUrlsTitle,
       copyColumnTitle,
       clearView,
-      setColumns,
+      choosePreset,
       saved.views,
       saved.current,
       saved.problem,
@@ -733,7 +789,7 @@ export function UrlsScreen() {
                     variant="ghost"
                     size="sm"
                     pressed={preset?.id === candidate.id}
-                    onClick={() => setColumns(candidate.columns)}
+                    onClick={() => choosePreset(candidate)}
                   >
                     {candidate.title}
                   </Button>
@@ -746,7 +802,7 @@ export function UrlsScreen() {
                   pressed={showsAll}
                   disabled={allColumns === null}
                   onClick={() => {
-                    if (allColumns) setColumns(allColumns);
+                    if (allColumns) choosePreset({ columns: allColumns });
                   }}
                 >
                   {ALL_COLUMNS_PRESET.title}
@@ -916,7 +972,7 @@ export function UrlsScreen() {
           <ErrorState error={rows.error} onRetry={rows.refetch} />
         )
       ) : (
-        <GridScreenBody ref={measure} className="mx-6 pb-4">
+        <GridScreenBody className="mx-6 pb-4">
           <GridCore<UrlRow>
             key={view}
             label="URLs"
@@ -969,7 +1025,8 @@ export function UrlsScreen() {
                 />
               )
             }
-            className="flex-1 rounded-lg border border-border-card"
+            // A big grid: a URL's open-in-browser button shows on the row pointed at and on the cursor's.
+            className="si-open-on-row flex-1 rounded-lg border border-border-card"
           />
         </GridScreenBody>
       )}
@@ -1013,6 +1070,29 @@ export function UrlsScreen() {
           }}
         >
           Show its inlinks in Links
+        </MenuItem>
+        <MenuItem
+          icon={Link2}
+          disabled={!menuRow}
+          onSelect={() => {
+            if (!menuRow) return;
+            void navigate({
+              to: '/crawls/$crawl/links',
+              params: { crawl: crawlId },
+              search: { filter: linksOfUrl('outlinks', menuRow.id, 'all') },
+            });
+          }}
+        >
+          Show its outlinks in Links
+        </MenuItem>
+        <MenuItem
+          icon={ListChecks}
+          disabled={!menuRow}
+          onSelect={() => {
+            if (menuRow) inspector.open(menuRow.id, undefined, { section: 'issues' });
+          }}
+        >
+          Show its issues
         </MenuItem>
         {/* The fix loop: the row, or the selection, fetched again into the crawl (at most 1,000). */}
         <RecheckMenuItem<UrlRow>

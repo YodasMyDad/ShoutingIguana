@@ -2,33 +2,48 @@
 // asks for to draw them, how each cell reads, the chooser's groups and what a filter can be on. A column a newer
 // engine adds appears in the chooser and the filter bar with no work here: its type says how it's drawn, and its name
 // is worded from its id until this file has words for it.
-import type { GridSort, UrlColumn, UrlColumnType, UrlRow } from '../../api/grids';
+import type { GridFilter, GridSort, UrlColumn, UrlColumnType, UrlRow } from '../../api/grids';
 import type { ChooserGroup } from '../../grid/ColumnChooser';
 import type { FilterColumn, FilterGroup } from '../../grid/filterEditing';
 import type { GridColumn } from '../../grid/types';
 import { midPhrase, urlColumnWords } from '../../grid/urlFilterWords';
 import { objectCellWords, redirectKindWords } from '../../crawl/evidence';
 import { OUTCOME_WORDS } from '../../inspector/words';
-import { formatBytes, formatCount, formatMilliseconds } from '../../lib/format';
+import { formatBytes, formatCount, formatCountOf, formatMilliseconds } from '../../lib/format';
 import { StatusCode } from '../../ui/StatusCode';
 import { Url } from '../../ui/Url';
-import { RESOURCE_URL_TYPES } from '../../ui/urlText';
+import { RESOURCE_URL_TYPES, fileLabelOf, urlDisplay } from '../../ui/urlText';
+import { sameFilters } from '../links/presets';
 import { outcomeWords } from '../sitemaps/urlOutcome';
 
 /** A column preset (docs/v2-ui-ia.md, URLs): the columns an audit of one kind reads, in its order. */
 export interface UrlPreset {
-  id: 'overview' | 'indexability' | 'content' | 'performance' | 'links';
+  id: 'overview' | 'indexability' | 'content' | 'redirects' | 'performance' | 'links';
   title: string;
   /** What it's for, for its tooltip. */
   hint: string;
   columns: readonly string[];
+  /**
+   * The filters it brings, where its columns are about one kind of URL: an indexability or a title is a page's, so
+   * those tabs list the site's pages, not its 4,000 images; Redirects lists the redirects. They're chips like any
+   * other, so removing one shows the rest again, and leaving the tab takes them with it.
+   */
+  filters?: readonly GridFilter[] | undefined;
 }
 
+/** The site's own pages: what an indexability, a title or a description is said of. */
+export const PAGES_ONLY: readonly GridFilter[] = [
+  { column: 'type', op: 'in', values: ['page'] },
+  { column: 'isInternal', op: 'is', value: true },
+];
+
+/** The URLs that redirect. */
+export const REDIRECTS_ONLY: readonly GridFilter[] = [{ column: 'statusClass', op: 'in', values: ['3xx'] }];
+
 /**
- * The presets. Each leads with the URL and what an expert reads first for that kind of audit, and fits the grid of a
- * 1,440-pixel window (`URL_GRID_AT_1440`) with nothing off its right edge (the fix-it pass: the Indexability preset's
- * redirect targets were); a narrower one scrolls the grid sideways (never the page), and the Columns menu adds the rest.
- * Overview is the default view.
+ * The presets. Each leads with the URL and what an expert reads first for that kind of audit. Their columns take
+ * their widths from what they hold and share the grid's (grid/columnFit.ts); where they can't all fit, the grid
+ * scrolls sideways (never the page). The Columns menu adds the rest. Overview is the default view.
  */
 export const URL_PRESETS: readonly UrlPreset[] = [
   {
@@ -51,14 +66,32 @@ export const URL_PRESETS: readonly UrlPreset[] = [
   {
     id: 'indexability',
     title: 'Indexability',
-    hint: 'Why each URL can or can’t be indexed: its canonical, robots meta tag, sitemaps and redirect',
+    hint: 'Why each of the site’s pages can or can’t be indexed: its canonical, robots meta tag, sitemaps and redirect',
     columns: ['url', 'indexability', 'canonicalUrl', 'metaRobots', 'inSitemap', 'redirectTarget'],
+    filters: PAGES_ONLY,
   },
   {
     id: 'content',
     title: 'Content',
-    hint: 'Titles and descriptions with their widths in results, and how many main headings',
-    columns: ['url', 'title', 'titleWidth', 'description', 'descriptionWidth', 'h1Count'],
+    hint: 'The site’s pages’ titles and descriptions with their widths in results, and their main headings',
+    columns: ['url', 'title', 'titleWidth', 'description', 'descriptionWidth', 'h1', 'h1Count'],
+    filters: PAGES_ONLY,
+  },
+  {
+    id: 'redirects',
+    title: 'Redirects',
+    hint: 'Every URL that redirects: where it goes, what the redirect changes, where the chain ends, and who links to it',
+    columns: [
+      'url',
+      'statusCode',
+      'redirectTarget',
+      'redirectKind',
+      'finalUrl',
+      'finalStatusCode',
+      'redirectChain',
+      'inlinks',
+    ],
+    filters: REDIRECTS_ONLY,
   },
   {
     id: 'performance',
@@ -117,6 +150,20 @@ export function presetOrderOf(shown: readonly string[]): readonly string[] | nul
   );
 }
 
+/**
+ * The view's filters after a tab is chosen: without the filters the tab it leaves brought (where they're still as it
+ * brought them), and with the new tab's own, each once. The user's own filters stay.
+ */
+export function presetFilters(
+  filters: readonly GridFilter[],
+  leaving: Pick<UrlPreset, 'filters'> | null,
+  entering: Pick<UrlPreset, 'filters'> | null,
+): GridFilter[] {
+  const has = (list: readonly GridFilter[], filter: GridFilter) => list.some((other) => sameFilters([other], [filter]));
+  const kept = filters.filter((filter) => !has(leaving?.filters ?? [], filter));
+  return [...kept, ...(entering?.filters ?? []).filter((filter) => !has(kept, filter))];
+}
+
 /** The route's `cols` for a set of columns: none for the default set, so the address stays short. */
 export function colsParam(shown: readonly string[]): string[] | undefined {
   return sameColumns(shown, DEFAULT_URL_COLUMNS) ? undefined : [...shown];
@@ -149,10 +196,10 @@ export function shownUrlColumns(
  * status, how the request went, so a URL with no status says what happened instead ("Blocked by robots.txt").
  */
 export function urlQueryColumns(shown: readonly string[]): string[] {
-  const asked = new Set<string>(['url', ...shown]);
+  // The type always: a file (a stylesheet, an image) is named by its file whatever the columns, and isn't a page to
+  // judge for search, which its indexability cell says by its type.
+  const asked = new Set<string>(['url', 'type', ...shown]);
   if (shown.includes('statusCode')) ['statusClass', 'outcome', 'fetched'].forEach((id) => asked.add(id));
-  // A file (a stylesheet, an image) isn't a page to judge for search: its indexability cell says so by its type.
-  if (shown.includes('indexability')) asked.add('type');
   return [...asked];
 }
 
@@ -464,7 +511,7 @@ const WIDTHS: Record<string, number> = {
   redirectChain: 360,
   robotsRule: 240,
 };
-/** The URL column's width before the grid's is known, and the least it's given where it is. */
+/** The URL column's width before its rows are read, and the least the user can make it. */
 const URL_WIDTH = 360;
 export const URL_MIN_WIDTH = 240;
 
@@ -472,52 +519,42 @@ function widthOf(id: string, type: UrlColumnType): number {
   return WIDTHS[id] ?? TYPE_WIDTHS[type];
 }
 
+/** The room a URL's cell keeps beside its text: the open-in-browser button and the gap before it. */
+const OPEN_BUTTON_ROOM = 28;
+/** The room a status keeps before its code: its mark and the gap after it. */
+const STATUS_MARK_ROOM = 16;
+
 /**
- * The URL column's width: the room the other columns leave, so a preset fills the window with nothing to scroll
- * sideways for where it fits, and a wider window gives the URLs the room. Never under URL_MIN_WIDTH: with more columns
- * than fit, the grid scrolls sideways. Undefined while the grid's width isn't known.
+ * Where a count leads, for the counts that stand for a list (rule 5): a URL's links and issues in the inspector, on
+ * the tab that lists them, and the pages a file is used on in Links.
  */
-export function urlColumnWidth(
-  shown: readonly string[],
-  catalogue: readonly UrlColumn[] | undefined,
-  available: number | null,
-  /** The widths the user gave columns (the grid's column layout): the room they take is theirs. */
-  widths: Readonly<Record<string, number>> = {},
-): number | undefined {
-  if (available === null || !shown.includes('url')) return undefined;
-  const byId = new Map((catalogue ?? []).map((column) => [column.id, column]));
-  const others = shown
-    .filter((id) => id !== 'url')
-    .reduce((sum, id) => sum + (widths[id] ?? widthOf(id, byId.get(id)?.type ?? 'text')), 0);
-  return Math.max(URL_MIN_WIDTH, Math.floor(available - others));
+export type UrlCountPlace = 'inlinks' | 'outlinks' | 'issues' | 'usedOn';
+const COUNT_PLACES: Record<string, UrlCountPlace> = {
+  inlinks: 'inlinks',
+  followedInlinks: 'inlinks',
+  nofollowInlinks: 'inlinks',
+  linkingPages: 'inlinks',
+  outlinks: 'outlinks',
+  issues: 'issues',
+  errors: 'issues',
+  warnings: 'issues',
+  notices: 'issues',
+  usedOn: 'usedOn',
+};
+
+/** Where a column's count leads, or nothing for a number that is only a number. */
+export function urlCountPlace(column: string): UrlCountPlace | undefined {
+  return COUNT_PLACES[column];
 }
 
-/** The URL grid's width in a 1,440-pixel window, the sidebar open: what every preset fits (its frame and scrollbar left out). */
-export const URL_GRID_AT_1440 = 1_120;
-
-/** Whether these columns fit a grid this wide with the URL at its least width or more: nothing off the right edge. */
-export function urlPresetFits(
-  shown: readonly string[],
-  catalogue: readonly UrlColumn[] | undefined,
-  available: number,
-): boolean {
-  const byId = new Map((catalogue ?? []).map((column) => [column.id, column]));
-  const others = shown
-    .filter((id) => id !== 'url')
-    .reduce((sum, id) => sum + widthOf(id, byId.get(id)?.type ?? 'text'), 0);
-  return others + URL_MIN_WIDTH <= available;
-}
-
-/** How many columns are wholly in view from the left, at a grid's width: what a preset shows without scrolling. */
-export function columnsInView(widths: readonly number[], available: number): number {
-  let used = 0;
-  let count = 0;
-  for (const width of widths) {
-    used += width;
-    if (used > available) break;
-    count++;
-  }
-  return count;
+/** What a count's link does, for its tooltip and its name: "Show its 12 inlinks". */
+export function urlCountHint(column: string, count: number): string {
+  const place = COUNT_PLACES[column];
+  if (place === 'usedOn') return `Show the ${formatCountOf(count, 'page')} that use it, in Links`;
+  if (place === 'issues') return `Show its ${formatCountOf(count, 'issue')}`;
+  if (place === 'outlinks') return `Show its ${formatCountOf(count, 'outlink')}`;
+  // The inlinks' own count names them; a count of some of them (followed, nofollow, pages) opens them all.
+  return column === 'inlinks' ? `Show its ${formatCountOf(count, 'inlink')}` : 'Show its inlinks';
 }
 
 // ------------------------------------------------------------------------------------------------------ Columns
@@ -528,10 +565,17 @@ export interface UrlColumnContext {
   /** "Show full URLs": every URL whole, the host included. */
   fullUrls: boolean;
   sort: readonly GridSort[];
-  /** The URL column's width, when the grid has room to give it. */
-  urlWidth?: number | undefined;
   /** The crawl is running: a URL not fetched yet may still be. */
   crawling: boolean;
+  /** A click on a row's URL: the inspector opens on it. Left out, the URL is text. */
+  onInspect?: ((row: UrlRow) => void) | undefined;
+  /**
+   * A click on another URL a row names (its canonical, where it redirects to, where its chain ends): the inspector
+   * opens on that URL, where the crawl has it.
+   */
+  onGoUrl?: ((url: string) => void) | undefined;
+  /** A click on a count that stands for a list (`urlCountPlace`): the list opens. */
+  onCount?: ((row: UrlRow, column: string) => void) | undefined;
 }
 
 /** Why a column can't be sorted by: its header's tooltip, and what Enter on it says. */
@@ -585,11 +629,22 @@ function urlGridColumn(id: string, column: UrlColumn | undefined, context: UrlCo
 
   if (id === 'url') {
     const origin = context.fullUrls ? null : context.siteOrigin;
+    const isFile = (row: UrlRow) => Boolean(row.type && RESOURCE_URL_TYPES.has(row.type));
+    const onInspect = context.onInspect;
     return {
       ...base,
-      ...(context.urlWidth ? { width: context.urlWidth } : { width: URL_WIDTH }),
+      width: URL_WIDTH,
       minWidth: URL_MIN_WIDTH,
       mono: true,
+      // As wide as the longest URL among the rows read first, never wider: the next column starts where they end.
+      fit: 'url',
+      fitText: (row) => {
+        if (!row.url) return '';
+        if (!isFile(row)) return urlDisplay(row.url, origin).shown;
+        const file = fileLabelOf(row.url, origin);
+        return file.rest ? `${file.name}  ${file.rest}` : file.name;
+      },
+      fitExtra: OPEN_BUTTON_ROOM,
       // The host is named once, here, where the rows show its URLs as paths.
       ...(origin ? { headerDetail: `on ${new URL(origin).host}` } : {}),
       cell: (row) =>
@@ -600,7 +655,9 @@ function urlGridColumn(id: string, column: UrlColumn | undefined, context: UrlCo
             copyable={false}
             tabbable={false}
             // A file a page loads (an image, a stylesheet) is named by its file, not cut in the middle of its name.
-            label={row.type && RESOURCE_URL_TYPES.has(row.type) ? 'file' : 'address'}
+            label={isFile(row) ? 'file' : 'address'}
+            // The URL's text is a link: one click inspects it (rule 1 of the UX round of 2026-11-19).
+            {...(onInspect ? { onGo: () => onInspect(row) } : {})}
           />
         ) : (
           muted('–')
@@ -611,6 +668,9 @@ function urlGridColumn(id: string, column: UrlColumn | undefined, context: UrlCo
   if (id === 'statusCode') {
     return {
       ...base,
+      // Never cut: "Blocked by robots.txt" takes the room it needs.
+      fit: 'value',
+      fitExtra: STATUS_MARK_ROOM,
       cell: (row) => {
         if (typeof row.statusCode === 'number') return <StatusCode code={row.statusCode} />;
         // What happened instead of a status can be longer than the column: whole in its tooltip.
@@ -630,17 +690,44 @@ function urlGridColumn(id: string, column: UrlColumn | undefined, context: UrlCo
         const number = valueOf(row, id);
         return typeof number === 'number' ? numberWords(id, number) : '';
       };
+      const onCount = urlCountPlace(id) ? context.onCount : undefined;
       return {
         ...base,
         numeric: true,
-        cell: (row) => words(row) || muted('–'),
+        // Its own width, and where room is short just its header's and its values', before a URL is cut.
+        fit: 'value',
+        fitText: words,
+        cell: (row) => {
+          const number = valueOf(row, id);
+          if (typeof number !== 'number') return muted('–');
+          // A count that stands for a list is a link to exactly that list; none is only a number.
+          if (!onCount || number <= 0) return words(row);
+          const hint = urlCountHint(id, number);
+          return (
+            <button
+              type="button"
+              className="si-link si-count-link"
+              // The grid is the one Tab stop, and keeps the focus a press would take.
+              tabIndex={-1}
+              title={hint}
+              aria-label={`${words(row)}: ${hint}`}
+              onMouseDown={(event) => event.preventDefault()}
+              onDoubleClick={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                if (event.detail <= 1) onCount(row, id);
+              }}
+            >
+              {words(row)}
+            </button>
+          );
+        },
         // Copied as the number itself, so a spreadsheet can add it up.
         text: (row) => (typeof valueOf(row, id) === 'number' ? String(valueOf(row, id)) : ''),
       };
     }
     case 'boolean': {
       const words = (row: UrlRow) => (valueOf(row, id) === true ? 'Yes' : valueOf(row, id) === false ? 'No' : '');
-      return { ...base, cell: (row) => words(row) || muted('–'), text: words };
+      return { ...base, fit: 'value', cell: (row) => words(row) || muted('–'), text: words };
     }
     case 'enum': {
       const words = (row: UrlRow) => {
@@ -651,6 +738,8 @@ function urlGridColumn(id: string, column: UrlColumn | undefined, context: UrlCo
       };
       return {
         ...base,
+        // Never cut: "Blocked by robots.txt" takes the room it needs.
+        fit: 'value',
         cell: (row) => (words(row) ? <span title={words(row)}>{words(row)}</span> : muted('–')),
         text: words,
       };
@@ -662,6 +751,8 @@ function urlGridColumn(id: string, column: UrlColumn | undefined, context: UrlCo
       const words = (row: UrlRow) => objectCellWords(id, raw(row), origin);
       return {
         ...base,
+        fit: 'text',
+        fitText: words,
         cell: (row) => (words(row) ? <span title={words(row)}>{words(row)}</span> : muted('–')),
         text: (row) => objectCellWords(id, raw(row), null),
       };
@@ -674,9 +765,14 @@ function urlGridColumn(id: string, column: UrlColumn | undefined, context: UrlCo
       };
       if (URL_TEXT.has(id)) {
         const origin = context.fullUrls ? null : context.siteOrigin;
+        const onGoUrl = context.onGoUrl;
+        const isSelf = (row: UrlRow) => (id === 'canonicalUrl' || id === 'finalUrl') && words(row) === row.url;
         return {
           ...base,
           mono: true,
+          fit: 'url',
+          fitText: (row) => (isSelf(row) ? 'Self' : words(row) ? urlDisplay(words(row), origin).shown : ''),
+          fitExtra: OPEN_BUTTON_ROOM,
           cell: (row) => {
             const url = words(row);
             if (!url) return muted('–');
@@ -696,13 +792,26 @@ function urlGridColumn(id: string, column: UrlColumn | undefined, context: UrlCo
                 </span>
               );
             }
-            return <Url url={url} siteOrigin={origin} copyable={false} tabbable={false} />;
+            return (
+              <Url
+                url={url}
+                siteOrigin={origin}
+                copyable={false}
+                tabbable={false}
+                // A link to that URL in the inspector: from a redirect's row, one click to where it goes.
+                {...(onGoUrl ? { onGo: () => onGoUrl(url) } : {})}
+              />
+            );
           },
           text: words,
         };
       }
       return {
         ...base,
+        // The words people read: given room before a URL grows past what its longest value needs. A few words that
+        // name a kind ("HTTP to HTTPS, adds www") are never cut.
+        fit: id === 'redirectKind' ? 'value' : 'text',
+        ...(id === 'redirectKind' ? { fitText: words } : {}),
         // The whole text is the cell's tooltip: a title or a description can be longer than the column.
         cell: (row) => (words(row) ? <span title={words(row)}>{words(row)}</span> : muted('–')),
         text: words,

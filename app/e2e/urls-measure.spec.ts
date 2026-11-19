@@ -178,7 +178,7 @@ test('the URL grid against its budgets on this crawl', async ({ page }) => {
     await page.goto(`/crawls/${crawl}/urls`);
     await expect(page.getByRole('grid', { name: 'URLs' }).getByRole('row').nth(1)).toBeVisible({ timeout: 60_000 });
   }
-  await page.getByRole('button', { name: 'Filter by status', exact: true }).click();
+  await page.getByRole('button', { name: 'Filter by status class', exact: true }).click();
   await expect(page.getByRole('menu').getByRole('menuitem').first().locator('.si-menu-item__detail')).toBeVisible({
     timeout: 60_000,
   });

@@ -9,18 +9,18 @@ import { testUrlRows } from '../../test/urlsSidecar';
 import { withFacetValue } from '../links/facets';
 import {
   DEFAULT_URL_COLUMNS,
-  URL_MIN_WIDTH,
-  URL_GRID_AT_1440,
+  PAGES_ONLY,
+  REDIRECTS_ONLY,
   URL_PRESETS,
   activeUrlPreset,
   colsParam,
-  columnsInView,
+  presetFilters,
   shownUrlColumns,
   urlChooserGroups,
-  urlColumnWidth,
+  urlCountHint,
+  urlCountPlace,
   urlFilterColumns,
   urlGridColumns,
-  urlPresetFits,
   urlQueryColumns,
   urlStatusWords,
 } from './urlColumns';
@@ -47,22 +47,64 @@ describe('the URL grid’s presets', () => {
       'Overview',
       'Indexability',
       'Content',
+      'Redirects',
       'Performance',
       'Links',
     ]);
   });
 
-  it('fit the URL grid of a 1,440-pixel window, the URL at its least width or more (the fix-it pass)', () => {
-    // The Indexability preset's Redirects to was off the right edge at 1,440 pixels, where the grid is 1,120 wide.
+  it('give every preset’s columns a width from what they hold, so none is fixed while another is cut (rule 8)', () => {
+    const context = { siteOrigin: 'https://example.com', fullUrls: false, sort: [], crawling: false };
     for (const preset of URL_PRESETS) {
-      expect({ preset: preset.id, fits: urlPresetFits(preset.columns, URL_COLUMNS, URL_GRID_AT_1440) }).toEqual({
-        preset: preset.id,
-        fits: true,
-      });
+      const columns = urlGridColumns(preset.columns, URL_COLUMNS, context);
+      expect(columns.filter((column) => column.fit === undefined).map((column) => column.id)).toEqual([]);
     }
+    const kinds = Object.fromEntries(
+      urlGridColumns(
+        ['url', 'statusCode', 'title', 'redirectTarget', 'depth', 'indexability'],
+        URL_COLUMNS,
+        context,
+      ).map((column) => [column.id, column.fit]),
+    );
+    expect(kinds).toEqual({
+      url: 'url',
+      statusCode: 'value',
+      title: 'text',
+      redirectTarget: 'url',
+      depth: 'value',
+      indexability: 'value',
+    });
     // A redirect's target and a page's canonical lead the Indexability preset's reasons.
     const indexability = URL_PRESETS.find((preset) => preset.id === 'indexability')!.columns;
     expect(indexability).toEqual(expect.arrayContaining(['canonicalUrl', 'metaRobots', 'inSitemap', 'redirectTarget']));
+  });
+
+  it('list the site’s pages on Indexability and Content, and the redirects with where each goes on Redirects', () => {
+    const preset = (id: string) => URL_PRESETS.find((candidate) => candidate.id === id)!;
+    expect(preset('indexability').filters).toBe(PAGES_ONLY);
+    expect(preset('content').filters).toBe(PAGES_ONLY);
+    expect(preset('overview').filters).toBeUndefined();
+    expect(preset('redirects').filters).toBe(REDIRECTS_ONLY);
+    expect(preset('redirects').columns).toEqual(
+      expect.arrayContaining(['redirectTarget', 'redirectKind', 'finalUrl', 'finalStatusCode', 'redirectChain']),
+    );
+  });
+
+  it('bring a tab’s filters in place of those of the tab left, and keep the user’s own', () => {
+    const own = { column: 'depth', op: 'eq', value: 2 } as const;
+    const onContent = presetFilters([own], null, { filters: PAGES_ONLY });
+    expect(onContent).toEqual([own, ...PAGES_ONLY]);
+    // To another tab of pages: nothing twice.
+    expect(presetFilters(onContent, { filters: PAGES_ONLY }, { filters: PAGES_ONLY })).toEqual([own, ...PAGES_ONLY]);
+    // To Redirects: the pages' filters go, the redirects' come.
+    expect(presetFilters(onContent, { filters: PAGES_ONLY }, { filters: REDIRECTS_ONLY })).toEqual([
+      own,
+      ...REDIRECTS_ONLY,
+    ]);
+    // To a tab of every URL: only what the user set is left. A filter the user already removed isn't missed.
+    expect(presetFilters([own, PAGES_ONLY[0]!], { filters: PAGES_ONLY }, {})).toEqual([own]);
+    // A filter the user set that a tab also brings stays when the tab left didn't bring it.
+    expect(presetFilters([...REDIRECTS_ONLY], null, {})).toEqual([...REDIRECTS_ONLY]);
   });
 
   it('reads as chosen exactly while the columns are its own, in its order', () => {
@@ -91,25 +133,33 @@ describe('the columns shown', () => {
     expect(shownUrlColumns(['noSuchColumn'], URL_COLUMNS)).toBe(DEFAULT_URL_COLUMNS);
   });
 
-  it('ask for the URL always, and with the status how the request went', () => {
-    expect(urlQueryColumns(['title'])).toEqual(['url', 'title']);
-    // With indexability, the type: a file isn't a page to judge.
-    expect(urlQueryColumns(['url', 'indexability'])).toEqual(['url', 'indexability', 'type']);
-    expect(urlQueryColumns(['url', 'statusCode'])).toEqual(['url', 'statusCode', 'statusClass', 'outcome', 'fetched']);
+  it('ask for the URL and its type always, and with the status how the request went', () => {
+    // The type whatever the columns: a file is named by its file on every tab, and isn't a page to judge.
+    expect(urlQueryColumns(['title'])).toEqual(['url', 'type', 'title']);
+    expect(urlQueryColumns(['url', 'indexability'])).toEqual(['url', 'type', 'indexability']);
+    expect(urlQueryColumns(['url', 'statusCode'])).toEqual([
+      'url',
+      'type',
+      'statusCode',
+      'statusClass',
+      'outcome',
+      'fetched',
+    ]);
   });
 
-  it('give the URL the room the others leave, never less than its least, so a narrow grid scrolls sideways', () => {
-    const shown = ['url', 'statusCode', 'title'];
-    expect(urlColumnWidth(shown, URL_COLUMNS, null)).toBeUndefined();
-    expect(urlColumnWidth(shown, URL_COLUMNS, 1000)).toBe(1000 - 88 - 208);
-    expect(urlColumnWidth(shown, URL_COLUMNS, 400)).toBe(URL_MIN_WIDTH);
-    expect(urlColumnWidth(['title'], URL_COLUMNS, 1000)).toBeUndefined();
-  });
-
-  it('count the columns wholly in view from the left', () => {
-    expect(columnsInView([300, 100, 100], 450)).toBe(2);
-    expect(columnsInView([300, 100, 100], 500)).toBe(3);
-    expect(columnsInView([300], 100)).toBe(0);
+  it('say where a count leads, for the counts that stand for a list', () => {
+    expect(urlCountPlace('inlinks')).toBe('inlinks');
+    expect(urlCountPlace('linkingPages')).toBe('inlinks');
+    expect(urlCountPlace('outlinks')).toBe('outlinks');
+    expect(urlCountPlace('issues')).toBe('issues');
+    expect(urlCountPlace('warnings')).toBe('issues');
+    expect(urlCountPlace('usedOn')).toBe('usedOn');
+    // A number that is only a number.
+    expect(urlCountPlace('depth')).toBeUndefined();
+    expect(urlCountPlace('wordCount')).toBeUndefined();
+    expect(urlCountHint('outlinks', 69)).toBe('Show its 69 outlinks');
+    expect(urlCountHint('issues', 1)).toBe('Show its 1 issue');
+    expect(urlCountHint('usedOn', 259)).toBe('Show the 259 pages that use it, in Links');
   });
 });
 

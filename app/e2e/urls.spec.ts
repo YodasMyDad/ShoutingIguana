@@ -90,7 +90,7 @@ test('sorts by two keys from the headers, in the order the sidecar gives them', 
 
 test('narrows to a facet’s value, landing on its count, which the sidecar counts too', async ({ page }) => {
   await openUrls(page);
-  await main(page).getByRole('button', { name: 'Filter by status', exact: true }).click();
+  await main(page).getByRole('button', { name: 'Filter by status class', exact: true }).click();
   const item = page.getByRole('menu').getByRole('menuitem').first();
   await expect(item.locator('.si-menu-item__detail')).toBeVisible({ timeout: 30_000 });
   const said = number(await item.locator('.si-menu-item__detail [aria-hidden="true"]').innerText());

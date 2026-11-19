@@ -2539,6 +2539,16 @@
     text-underline-offset: var(--underline-offset);
   }
 
+  /* A count in a grid's cell that opens the list it stands for (a URL's inlinks, its issues): the link's colour on the
+     cell's own figures, so the column still adds up by eye. */
+  .si-count-link {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-variant-numeric: inherit;
+  }
+
   /* A link in running text: underlined, so it isn't told apart by colour alone (WCAG 1.4.1). */
   .si-link--inline {
     text-decoration: underline;

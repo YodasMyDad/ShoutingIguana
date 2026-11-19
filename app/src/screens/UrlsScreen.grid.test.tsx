@@ -207,7 +207,7 @@ describe('the URL grid’s facets', () => {
     const { transport } = sidecar();
     const { router, user } = await open(URLS);
     expect(facetReads(transport)).toHaveLength(0);
-    await user.click(screen.getByRole('button', { name: 'Filter by status' }));
+    await user.click(screen.getByRole('button', { name: 'Filter by status class' }));
     const menu = await screen.findByRole('menu');
     const value = await within(menu).findByRole('menuitem', { name: /^2xx/ });
     expect(facetReads(transport)).toHaveLength(1);
@@ -253,6 +253,8 @@ describe('the URL grid’s row menu', () => {
       'Filter by this valueURL is https://example.com/a',
       'Exclude this valueURL is not https://example.com/a',
       'Show its inlinks in Links',
+      'Show its outlinks in Links',
+      'Show its issues',
       // The fix loop: the row, or the selection, fetched again into the crawl.
       'Recheck this URL',
     ]);
@@ -440,7 +442,7 @@ describe('round 5: the facets’ buttons', () => {
   it('open on the first click whatever was open before (the audit’s Minor, never reproduced)', async () => {
     sidecar();
     const { user } = await open(URLS);
-    await user.click(screen.getByRole('button', { name: 'Filter by status' }));
+    await user.click(screen.getByRole('button', { name: 'Filter by status class' }));
     await screen.findByRole('menu');
     await user.click(screen.getByRole('button', { name: 'Filter by type' }));
     expect(await screen.findByRole('menu')).toHaveTextContent(/^Type/);

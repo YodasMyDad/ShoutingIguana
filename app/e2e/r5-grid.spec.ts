@@ -262,7 +262,7 @@ test('fits the search’s placeholder in its field, and says Enter applies it (g
 
 test('opens the Type facet on the first click after another facet’s menu (the audit’s Minor)', async ({ page }) => {
   await openUrls(page);
-  await main(page).getByRole('button', { name: 'Filter by status', exact: true }).click();
+  await main(page).getByRole('button', { name: 'Filter by status class', exact: true }).click();
   await expect(page.getByRole('menu')).toBeVisible();
   await main(page).getByRole('button', { name: 'Filter by type', exact: true }).click();
   await expect(page.getByRole('menu')).toContainText(/^Type/);
