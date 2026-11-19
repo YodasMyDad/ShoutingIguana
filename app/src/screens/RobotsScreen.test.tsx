@@ -12,6 +12,7 @@ import type { SourceViewerProps } from '../inspector/SourceViewer';
 import { commands, installKeyboard } from '../keyboard/registry';
 import { TEST_CRAWL_ID, fakeSidecar, json, problem } from '../test/fakeSidecar';
 import { resetPlaces } from './listPlace';
+import { fileBoxHeight } from './robots/robotsFile';
 import { UNKNOWN_ACTION } from './robots/robotsWords';
 import { createQueryClientWithoutBackoff } from '../test/queryClient';
 import { wholeText } from '../test/text';
@@ -20,6 +21,8 @@ import {
   TEST_BLOCKED,
   TEST_FILE,
   TEST_ORIGINS,
+  TEST_SITEMAPS,
+  TEST_SITEMAP_LIST,
   blockedPage,
   sitemapsRobotsRoutes,
   testOrigin,
@@ -28,32 +31,38 @@ import {
 
 // CodeMirror needs a browser's layout: the viewer itself is covered end to end. Here it's a stand-in that shows what
 // it was given: the text, each marked line's link as a button, and the line it was told is chosen.
+/** Every line the viewer was told is chosen, in order: a line shown again is taken off and put back. */
+const seen = vi.hoisted(() => ({ chosen: [] as (number | null)[] }));
+
 vi.mock('../inspector/SourceViewer', () => ({
-  default: (props: SourceViewerProps) => (
-    <div
-      data-testid="source-viewer"
-      data-language={props.language}
-      data-chosen={props.chosenLine ?? ''}
-      data-query={props.query}
-      aria-label={props.label}
-    >
-      {(props.lineMarks ?? []).map((mark) =>
-        mark.action ? (
-          <button
-            key={mark.line}
-            type="button"
-            title={mark.actionTitle}
-            onClick={() => props.onLineAction?.(mark.line)}
-          >
-            {`line ${mark.line}: ${mark.action}`}
-          </button>
-        ) : mark.note ? (
-          <span key={mark.line}>{`line ${mark.line}: ${mark.note}`}</span>
-        ) : null,
-      )}
-      <pre>{props.html}</pre>
-    </div>
-  ),
+  default: (props: SourceViewerProps) => {
+    if (seen.chosen.at(-1) !== (props.chosenLine ?? null)) seen.chosen.push(props.chosenLine ?? null);
+    return (
+      <div
+        data-testid="source-viewer"
+        data-language={props.language}
+        data-chosen={props.chosenLine ?? ''}
+        data-query={props.query}
+        aria-label={props.label}
+      >
+        {(props.lineMarks ?? []).map((mark) =>
+          mark.action ? (
+            <button
+              key={mark.line}
+              type="button"
+              title={mark.actionTitle}
+              onClick={() => props.onLineAction?.(mark.line)}
+            >
+              {`line ${mark.line}: ${mark.action}`}
+            </button>
+          ) : mark.note ? (
+            <span key={mark.line}>{`line ${mark.line}: ${mark.note}`}</span>
+          ) : null,
+        )}
+        <pre>{props.html}</pre>
+      </div>
+    );
+  },
 }));
 
 const ROBOTS = `/crawls/${TEST_CRAWL_ID}/robots`;
@@ -85,6 +94,7 @@ const viewer = () => screen.getByTestId('source-viewer');
 afterEach(() => {
   setTransport(fakeSidecar([]));
   resetPlaces();
+  seen.chosen = [];
 });
 
 describe('robots.txt: the origins', () => {
@@ -554,6 +564,97 @@ describe('robots.txt: one origin’s file', () => {
     fireEvent.keyDown(grid, { key: 'Enter' });
     await waitFor(() => expect(searchOf(router).inspect).toBe(22));
     expect(pathOf(router)).toBe(FILE);
+  });
+
+  it('puts open in the browser straight after the origin in the heading, and Copy the file in the file’s own pane', async () => {
+    sidecar();
+    const opened = vi.spyOn(window, 'open').mockReturnValue(null);
+    await open(FILE);
+    await within(await screen.findByTestId('source-viewer')).findByRole('button', { name: 'line 6: Blocked 3 URLs' });
+    const heading = screen.getByRole('heading', { level: 1 });
+    const open_ = screen.getByRole('button', { name: /^Open this robots.txt in the browser/ });
+    // After the heading, in its line: not at the header's far edge.
+    expect(open_.closest('.si-grid-header__actions')).toBeNull();
+    expect(open_.closest('.si-grid-header')).not.toBeNull();
+    expect(heading.compareDocumentPosition(open_) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(open_);
+    expect(opened).toHaveBeenCalledWith(`${SITE}/robots.txt`, '_blank', 'noopener,noreferrer');
+    // Copy acts on the file: it's with the file's own controls.
+    const file = screen.getByRole('region', { name: 'The file' });
+    expect(within(file).getByRole('button', { name: /^Copy the file/ })).toBeVisible();
+    opened.mockRestore();
+  });
+
+  it('makes each blocked URL a link that opens the inspector on it in one click', async () => {
+    sidecar();
+    const { router } = await open(FILE);
+    const grid = await screen.findByRole('grid', { name: 'Blocked URLs' });
+    await screen.findByText(`${SITE}/admin/users`);
+    const link = within(grid).getByRole('button', { name: `${SITE}/admin/users` });
+    expect(link).toHaveClass('si-url__go');
+    expect(link).toHaveAttribute('tabindex', '-1');
+    fireEvent.click(link);
+    await waitFor(() => expect(searchOf(router).inspect).toBe(22));
+    expect(pathOf(router)).toBe(FILE);
+    // A big grid: its open-in-browser buttons show on the row pointed at, and the cursor's.
+    expect(grid.closest('.si-open-on-row')).not.toBeNull();
+  });
+
+  it('makes the rule that blocked a URL a link that marks its line in the file, and shows it again when asked twice', async () => {
+    sidecar();
+    const { router } = await open(FILE);
+    await screen.findByText(`${SITE}/admin/users`);
+    expect(viewer()).toHaveAttribute('data-chosen', '');
+    const rule = within(rowOf(`${SITE}/admin/users`)).getByRole('button', { name: 'Disallow: /admin/' });
+    expect(rule).toHaveAttribute('title', 'Line 6 refused it: Disallow: /admin/');
+    expect(rule).toHaveAttribute('tabindex', '-1');
+    fireEvent.click(rule);
+    await waitFor(() => expect(viewer()).toHaveAttribute('data-chosen', '6'));
+    // The list isn't narrowed: the reader is shown the line, and keeps the URLs they were reading.
+    expect(searchOf(router).line).toBeUndefined();
+    // Asked again (the file was scrolled away): the line is taken off and put back, which brings it into view.
+    seen.chosen = [6];
+    fireEvent.click(rule);
+    await waitFor(() => expect(seen.chosen).toEqual([6, null, 6]));
+    // A URL no line refused has words there, and nothing to press.
+    expect(within(rowOf(`${SITE}/old-private`)).queryByRole('button', { name: 'No matching rule' })).toBeNull();
+  });
+
+  it('makes the file’s Sitemap line a link to that sitemap’s page', async () => {
+    sidecar();
+    const { router } = await open(FILE);
+    await screen.findByText(`${SITE}/admin/users`);
+    const link = await within(viewer()).findByRole('button', { name: 'line 12: Open this sitemap' });
+    expect(link).toHaveAttribute('title', `Open ${SITE}/sitemap.xml in Sitemaps`);
+    fireEvent.click(link);
+    await waitFor(() => expect(pathOf(router)).toBe(`/crawls/${TEST_CRAWL_ID}/sitemaps/1`));
+    expect(searchOf(router).line).toBeUndefined();
+  });
+
+  it('leaves a Sitemap line plain when the crawl has no such sitemap', async () => {
+    sidecar({ sitemaps: { ...TEST_SITEMAP_LIST, sitemaps: TEST_SITEMAPS.filter((sitemap) => sitemap.id !== 1) } });
+    await open(FILE);
+    await screen.findByText(`${SITE}/admin/users`);
+    await within(viewer()).findByRole('button', { name: 'line 6: Blocked 3 URLs' });
+    expect(within(viewer()).queryByRole('button', { name: /^line 12/ })).toBeNull();
+  });
+
+  it('sizes the file’s box to its lines where the panes stack', async () => {
+    sidecar();
+    await open(FILE);
+    const file = await screen.findByRole('region', { name: 'The file' });
+    await within(await screen.findByTestId('source-viewer')).findByRole('button', { name: 'line 6: Blocked 3 URLs' });
+    expect(file.style.getPropertyValue('--robots-file-fit')).toBe(`${fileBoxHeight(TEST_FILE.lines.length)}px`);
+  });
+
+  it('takes no second click of the double-click that opened it', async () => {
+    sidecar();
+    const { router } = await open(FILE);
+    await screen.findByText(`${SITE}/admin/users`);
+    const link = () => screen.getByRole('button', { name: `${SITE}/admin/users` });
+    fireEvent.dblClick(link(), { detail: 2 });
+    fireEvent.click(link(), { detail: 2 });
+    expect(searchOf(router).inspect).toBeUndefined();
   });
 
   it('says a line that blocked nothing did, with the way back to every blocked URL', async () => {

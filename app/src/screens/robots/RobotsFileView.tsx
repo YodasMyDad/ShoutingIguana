@@ -1,11 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { ArrowLeft, Copy, ExternalLink, FileX, ListFilter } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState, type FocusEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FocusEvent } from 'react';
 import { api } from '../../api/client';
 import { isProblem, missingPlaceWords } from '../../api/errors';
-import type { RobotsBlockedUrl, RobotsFile } from '../../api/grids';
-import { blockedAsGridPage, robotsFileQuery, robotsKeys } from '../../api/queries';
+import type { RobotsBlockedUrl, RobotsFile, Sitemap } from '../../api/grids';
+import { blockedAsGridPage, robotsFileQuery, robotsKeys, sitemapsQuery } from '../../api/queries';
 import type { CrawlState } from '../../crawl/useCrawlState';
 import { announce } from '../../feedback/announce';
 import { ErrorState } from '../../feedback/ErrorState';
@@ -52,16 +52,21 @@ import { Url } from '../../ui/Url';
 import { urlDisplay } from '../../ui/urlText';
 import { copyUrls } from '../issues/copyUrls';
 import { linksOfUrl } from '../links/linkPlaces';
+import { useStrayClickGuard } from '../listPlace';
 import { blockedUrlsReader } from './copyBlocked';
 import {
   blockedQueryOf,
   emptyLineWords,
+  fileBoxHeight,
   fileMarks,
   fileText,
+  lineAt,
+  lineOf,
   markedLine,
   narrowingOf,
   narrowingWords,
   obeyedWords,
+  sitemapOfLine,
   type Narrowing,
 } from './robotsFile';
 import {
@@ -84,7 +89,7 @@ const ROUTE = '/crawls/$crawl/robots/{-$origin}';
 
 // Every column fits beside the URL in the pane, at 1440 px and at the window's least (stacked there): a few words in
 // each, the whole of it behind them on hover and for a screen reader.
-const WHY_WIDTH = 144;
+const WHY_WIDTH = 168;
 const LINKED_WIDTH = 128;
 const SITEMAP_WIDTH = 112;
 const CONFLICT_WIDTH = 128;
@@ -109,8 +114,9 @@ export interface RobotsFileViewProps {
 /**
  * One origin's robots.txt beside the URLs it blocked. The file is the text as the crawl kept it, in the source viewer:
  * the group the crawl obeyed is marked and the others are quiet, and each rule says how many URLs it blocked, as a
- * link. Choosing a line lists its URLs; moving through the URLs shows each one's line. The origin is in the path and
- * the line chosen in the search, so a link or a reload lands back here.
+ * link. Choosing a line lists its URLs; moving through the URLs shows each one's line, and the rule in a URL's
+ * "Blocked by" is a link that shows its line in the file. A Sitemap line is a link to that sitemap's page when the
+ * crawl has it. The origin is in the path and the line chosen in the search, so a link or a reload lands back here.
  */
 export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) {
   const search = useSearch({ from: ROUTE });
@@ -119,6 +125,8 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
   const title = useRef<HTMLHeadingElement>(null);
   // The chip that narrows the list goes when it's removed: focus goes to the view's title.
   useFocusRescue(container, () => title.current);
+  // The list's rows open on one click: the second click of a double-click isn't meant for what's under it here.
+  useStrayClickGuard(container);
 
   const crawling = crawl.crawling;
   const file = useQuery({
@@ -149,6 +157,23 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
   const narrowing = useMemo(() => narrowingOf({ line, reason, conflict }), [line, reason, conflict]);
   /** The blocked URL the list's cursor is on: the file shows the line that decided it. */
   const [cursor, setCursor] = useState<RobotsBlockedUrl | undefined>(undefined);
+  // The crawl's sitemaps, to link the file's Sitemap lines to their pages: without them the lines are plain.
+  const sitemaps = useQuery(sitemapsQuery(crawlId)).data?.sitemaps;
+  /**
+   * A line is being shown again: the file is told no line is chosen for a frame, then the line again, which brings it
+   * back into view (the viewer reveals a line when it becomes the chosen one, and the reader may have scrolled since).
+   */
+  const [showingAgain, setShowingAgain] = useState(false);
+  useEffect(() => {
+    if (!showingAgain) return undefined;
+    const frame = requestAnimationFrame(() => setShowingAgain(false));
+    return () => cancelAnimationFrame(frame);
+  }, [showingAgain]);
+  /** A blocked URL's rule was pressed: the file marks the line that refused it, and brings it into view. */
+  const showLineOf = useCallback((row: RobotsBlockedUrl) => {
+    setCursor(row);
+    setShowingAgain(true);
+  }, []);
 
   const narrow = useCallback(
     (next: Narrowing) =>
@@ -170,6 +195,18 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
 
   const data = file.data;
   const text = useMemo(() => (data ? fileText(data.lines) : ''), [data]);
+  /** A line's link was pressed: a Sitemap line opens that sitemap's page; a rule lists the URLs it blocked. */
+  const chooseLine = (number: number) => {
+    const line = data ? lineAt(data, number) : undefined;
+    const sitemap: Pick<Sitemap, 'id'> | undefined = line && sitemaps ? sitemapOfLine(line, sitemaps) : undefined;
+    if (sitemap) {
+      void navigate({
+        to: '/crawls/$crawl/sitemaps/{-$sitemap}',
+        params: { crawl: crawlId, sitemap: String(sitemap.id) },
+        search: {},
+      });
+    } else narrow({ by: 'line', line: number });
+  };
   const copyFile = async () => {
     if (!data || data.lines.length === 0) return;
     announce((await copyText(text)) ? 'Copied the file.' : 'The file couldn’t be copied.');
@@ -323,27 +360,18 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
               </span>
             </>
           }
+          // Straight after the origin it opens, not at the header's far edge. (Copy the file is with the file.)
+          count={
+            <IconButton
+              label="Open this robots.txt in the browser"
+              icon={ExternalLink}
+              size="sm"
+              command="robots.open"
+              onClick={() => void openInBrowser(fileUrl)}
+            />
+          }
           badge={crawl.crawling ? <LiveBadge /> : null}
           className="px-6 pb-1"
-          actions={
-            <>
-              <IconButton
-                label="Copy the file"
-                icon={Copy}
-                size="sm"
-                command="robots.copyFile"
-                disabled={!data || data.lines.length === 0}
-                onClick={() => void copyFile()}
-              />
-              <IconButton
-                label="Open this robots.txt in the browser"
-                icon={ExternalLink}
-                size="sm"
-                command="robots.open"
-                onClick={() => void openInBrowser(fileUrl)}
-              />
-            </>
-          }
         />
         {/* What the answer meant to the crawl, in a sentence; the line's room is kept while it's read. */}
         <p
@@ -364,13 +392,19 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
             {IGNORED}
           </Banner>
         ) : null}
-        <GridScreenBody className="grid grid-cols-(--robots-columns) gap-4 px-6 pb-4 @max-robots-split:flex-none @max-robots-split:grid-cols-1">
+        {/* Side by side, the panes are one row as tall as the room there is, and each scrolls what it holds: a long
+            file never sets the row's height (400 lines made both panes 7,000 px tall, and the screen scroll). The
+            row's least is the blocked URLs' own: their header, note and five rows. */}
+        <GridScreenBody className="grid grid-cols-(--robots-columns) gap-4 px-6 pb-4 @max-robots-split:flex-none @max-robots-split:grid-cols-1 @robots-split:min-h-[calc(var(--robots-pane-height)+2*var(--robots-note-height))] @robots-split:grid-rows-[minmax(0,1fr)]">
           <Card
             as="section"
             flush
             aria-label="The file"
             aria-busy={file.isFetching && !crawl.crawling}
-            className="flex min-h-(--robots-file-min-height) flex-col @max-robots-split:h-(--robots-pane-height)"
+            // Where the panes stack, the box is as tall as the file's lines, up to the pane's own height: a file of
+            // four lines doesn't hold a tall empty box over the blocked URLs.
+            style={{ '--robots-file-fit': `${fileBoxHeight(data?.lines.length ?? 0)}px` } as CSSProperties}
+            className="flex min-h-(--robots-file-min-height) flex-col @max-robots-split:h-[min(var(--robots-pane-height),var(--robots-file-fit))] @max-robots-split:min-h-0"
           >
             <FilePane
               file={file.data}
@@ -380,8 +414,10 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
               obeyed={obeyed ?? null}
               onRetry={() => void file.refetch()}
               text={text}
-              chosenLine={markedLine(narrowing, cursor)}
-              onLine={(line) => narrow({ by: 'line', line })}
+              sitemaps={sitemaps}
+              chosenLine={showingAgain ? null : markedLine(narrowing, cursor)}
+              onLine={chooseLine}
+              onCopy={() => void copyFile()}
               focusSearch={searchRequested}
               onSearchFocused={searchFocused}
             />
@@ -404,6 +440,7 @@ export function RobotsFileView({ crawlId, origin, crawl }: RobotsFileViewProps) 
               inspecting={search.inspect !== undefined}
               onNarrow={narrow}
               onCursor={setCursor}
+              onShowLine={showLineOf}
               onCopy={() => void copyBlocked()}
               copying={copying}
             />
@@ -431,8 +468,10 @@ function FilePane({
   obeyed,
   onRetry,
   text,
+  sitemaps,
   chosenLine,
   onLine,
+  onCopy,
   focusSearch,
   onSearchFocused,
 }: {
@@ -442,8 +481,12 @@ function FilePane({
   obeyed: Obeyed;
   onRetry: () => void;
   text: string;
+  /** The crawl's sitemaps, once read: a Sitemap line that names one is a link to its page. */
+  sitemaps: readonly Sitemap[] | undefined;
   chosenLine: number | null;
   onLine: (line: number) => void;
+  /** Copies the file's text: its button is with the file's own controls. */
+  onCopy: () => void;
   /** The search field is asked to take focus (Ctrl+F from elsewhere on the page, the palette). */
   focusSearch: boolean;
   onSearchFocused: () => void;
@@ -453,7 +496,7 @@ function FilePane({
   const waiting = loading || (viewer.Viewer === null && viewer.error === null);
   const skeleton = useDelayedLoading(waiting);
   const lines = file?.lines;
-  const marks = useMemo(() => fileMarks(lines ?? []), [lines]);
+  const marks = useMemo(() => fileMarks(lines ?? [], sitemaps), [lines, sitemaps]);
 
   if (skeleton) return <SourceSkeleton label="Loading the file" />;
   // A moment's wait shows nothing, as everywhere: a skeleton only for a load worth one.
@@ -492,6 +535,7 @@ function FilePane({
       onLineAction={onLine}
       focusSearch={focusSearch}
       onSearchFocused={onSearchFocused}
+      actions={<IconButton label="Copy the file" icon={Copy} size="sm" command="robots.copyFile" onClick={onCopy} />}
       meta={
         <>
           <span className="figures">{formatCountOf(file.lines.length, 'line')}</span>
@@ -513,6 +557,7 @@ function BlockedUrls({
   inspecting,
   onNarrow,
   onCursor,
+  onShowLine,
   onCopy,
   copying,
 }: {
@@ -527,6 +572,8 @@ function BlockedUrls({
   inspecting: boolean;
   onNarrow: (narrowing: Narrowing) => void;
   onCursor: (row: RobotsBlockedUrl | undefined) => void;
+  /** The rule in a URL's "Blocked by" was pressed: the file shows the line that refused it. */
+  onShowLine: (row: RobotsBlockedUrl) => void;
   onCopy: () => void;
   copying: boolean;
 }) {
@@ -575,8 +622,17 @@ function BlockedUrls({
         id: 'url',
         header: 'Blocked URL',
         width: urlWidth,
-        // Every one is on this origin, which the page names once: its path is what tells them apart.
-        cell: (row) => <Url url={row.url} siteOrigin={origin} copyable={false} tabbable={false} />,
+        // Every one is on this origin, which the page names once: its path is what tells them apart. A link: one
+        // click opens the inspector on it, as in every grid.
+        cell: (row) => (
+          <Url
+            url={row.url}
+            siteOrigin={origin}
+            onGo={() => inspector.open(row.id)}
+            copyable={false}
+            tabbable={false}
+          />
+        ),
         text: (row) => row.url,
       },
       {
@@ -667,6 +723,24 @@ function BlockedUrls({
         width: WHY_WIDTH,
         cell: (row) => {
           const why = blockedWhy(row);
+          // The rule is a link to its line in the file beside (or over) the list: pressed, the file marks the line
+          // and brings it into view. A URL no line refused has words, and nothing to press.
+          if (lineOf(row) !== null) {
+            return (
+              <button
+                type="button"
+                className="si-link block max-w-full truncate text-start font-mono text-(length:--mono-scale)"
+                title={withRecorded(why.sentence, why.recorded)}
+                // The grid is the one Tab stop, and a press leaves focus on it.
+                tabIndex={-1}
+                onMouseDown={(event) => event.preventDefault()}
+                onDoubleClick={(event) => event.stopPropagation()}
+                onClick={() => onShowLine(row)}
+              >
+                {why.cell}
+              </button>
+            );
+          }
           return (
             <span title={withRecorded(why.sentence, why.recorded)} className="block truncate">
               {why.cell}
@@ -676,7 +750,7 @@ function BlockedUrls({
         text: (row) => blockedWhy(row).short,
       },
     ],
-    [origin, urlWidth, crawlId, unknown],
+    [origin, urlWidth, crawlId, unknown, inspector, onShowLine],
   );
   // The columns as the user laid them out (resized, moved, pinned), kept for this grid with the preferences.
   const laid = useColumnLayout('robots.blocked', columns);
@@ -874,7 +948,8 @@ function BlockedUrls({
               />
             )
           }
-          className="mx-2 mb-2 flex-1 rounded-md border border-border"
+          // A big grid: a URL's open-in-browser button shows on the row pointed at and the cursor's.
+          className="si-open-on-row mx-2 mb-2 flex-1 rounded-md border border-border"
         />
       )}
       <RowMenu

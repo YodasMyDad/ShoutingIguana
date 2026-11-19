@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { TEST_BLOCKED, TEST_FILE, TEST_FILE_LINES, blockedPage } from '../../test/sitemapsRobotsSidecar';
+import { SITE, TEST_BLOCKED, TEST_FILE, TEST_FILE_LINES, blockedPage } from '../../test/sitemapsRobotsSidecar';
 import { blockedUrlsReader } from './copyBlocked';
 import {
+  FILE_LINE_PX,
   blockedQueryOf,
+  fileBoxHeight,
   fileMarks,
   fileText,
   lineAt,
@@ -14,6 +16,8 @@ import {
   obeyedLines,
   obeyedWords,
   originFromParam,
+  sitemapLineUrl,
+  sitemapOfLine,
 } from './robotsFile';
 
 describe('the file as the viewer shows it', () => {
@@ -85,6 +89,43 @@ describe('the file as the viewer shows it', () => {
         .filter((mark) => mark.action !== undefined)
         .map((mark) => mark.line),
     ).toEqual([6]);
+  });
+
+  it('reads the address a Sitemap line names: after its colon, a comment after it left out', () => {
+    expect(sitemapLineUrl('Sitemap: https://example.com/sitemap.xml')).toBe('https://example.com/sitemap.xml');
+    expect(sitemapLineUrl('sitemap:https://example.com/a.xml   # the news')).toBe('https://example.com/a.xml');
+    expect(sitemapLineUrl('Sitemap:')).toBeNull();
+    expect(sitemapLineUrl('just some words')).toBeNull();
+  });
+
+  it('finds the sitemap a Sitemap line names among the crawl’s, however its address is spelled', () => {
+    const sitemaps = [
+      { id: 1, url: `${SITE}/sitemap.xml` },
+      { id: 5, url: `${SITE}/news-sitemap.xml` },
+    ];
+    const at = (text: string) => sitemapOfLine({ kind: 'sitemap', text }, sitemaps)?.id;
+    expect(at(`Sitemap: ${SITE}/sitemap.xml`)).toBe(1);
+    expect(at(`Sitemap: ${SITE.replace('https://', 'HTTPS://')}/news-sitemap.xml`)).toBe(5);
+    // One the crawl doesn't have, and a line that isn't a Sitemap line.
+    expect(at(`Sitemap: ${SITE}/other.xml`)).toBeUndefined();
+    expect(sitemapOfLine({ kind: 'disallow', text: `Disallow: ${SITE}/sitemap.xml` }, sitemaps)).toBeUndefined();
+  });
+
+  it('makes a Sitemap line a link to that sitemap’s page when the crawl has it, and leaves it plain when not', () => {
+    const marks = fileMarks(TEST_FILE_LINES, [{ id: 1, url: `${SITE}/sitemap.xml` }]);
+    expect(marks.find((mark) => mark.line === 12)).toMatchObject({
+      action: 'Open this sitemap',
+      actionTitle: `Open ${SITE}/sitemap.xml in Sitemaps`,
+    });
+    expect(fileMarks(TEST_FILE_LINES, []).find((mark) => mark.line === 12)?.action).toBeUndefined();
+    expect(fileMarks(TEST_FILE_LINES).find((mark) => mark.line === 12)?.action).toBeUndefined();
+  });
+
+  it('sizes a short file’s box to its lines where the panes stack, and never past the pane’s own height', () => {
+    expect(fileBoxHeight(4)).toBeLessThan(fileBoxHeight(8));
+    expect(fileBoxHeight(8) - fileBoxHeight(4)).toBe(4 * FILE_LINE_PX);
+    // A file with no text has an empty state to show, not no room at all.
+    expect(fileBoxHeight(0)).toBe(fileBoxHeight(3));
   });
 });
 
