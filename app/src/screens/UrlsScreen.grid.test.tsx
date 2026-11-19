@@ -27,6 +27,7 @@ import {
   standardRoutes,
   testCrawlItem,
 } from '../test/fakeSidecar';
+import { resetPlaces } from './listPlace';
 import { URL_PRESETS } from './urls/urlColumns';
 
 const URLS = `/crawls/${TEST_CRAWL_ID}/urls`;
@@ -93,6 +94,7 @@ let uninstall: () => void = () => undefined;
 beforeEach(() => {
   uninstall = installKeyboard();
   updateSettings({ savedViews: [], showFullUrls: false, gridColumns: {} });
+  resetPlaces();
 });
 afterEach(() => {
   uninstall();

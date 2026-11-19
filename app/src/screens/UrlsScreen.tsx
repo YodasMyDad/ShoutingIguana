@@ -43,6 +43,7 @@ import { usePagedRows } from '../grid/usePagedRows';
 import { ExportButton } from '../export/ExportButton';
 import { useExportCommand } from '../export/useExportCommand';
 import { urlExportColumns, urlGridOffer } from '../export/offers';
+import { rememberPlace, rememberedKey, rememberedPlace } from './listPlace';
 import { linkEndsOf, linkEndsWords } from './urls/linkEnds';
 import { useCommands, type Command } from '../keyboard/registry';
 import { formatCount, formatShownOf } from '../lib/format';
@@ -92,6 +93,9 @@ import { RecheckMenuItem } from './rechecks/RecheckMenuItem';
 import { onlyFullCheck } from './rechecks/rechecks';
 
 const ROUTE = '/crawls/$crawl/urls';
+
+/** A row's identity: its URL's id. */
+const rowKeyOf = (row: UrlRow) => row.id;
 
 /** What the last read of a view said of it, kept while the same view is read again for other columns. */
 interface Counted {
@@ -262,8 +266,11 @@ export function UrlsScreen() {
   };
   /** The narrowing to the links' ends gone; the view's own filters, search and sort stay. */
   const showEveryUrl = () => void navigate({ search: (previous) => ({ ...previous, links: undefined }) });
-  /** Every URL again, in crawl order, with the columns as they are. */
-  const clearView = useCallback(() => void navigate({ search: (previous) => ({ cols: previous.cols }) }), [navigate]);
+  /** Every URL again, in crawl order, with the columns as they are (and the URL inspected, if one is). */
+  const clearView = useCallback(
+    () => void navigate({ search: (previous) => ({ cols: previous.cols, inspect: previous.inspect }) }),
+    [navigate],
+  );
   /** The filters and the search gone: the sort and the columns stay, as "Clear the filters" says. */
   const clearFilters = useCallback(
     () => void navigate({ search: (previous) => ({ cols: previous.cols, sort: previous.sort }) }),
@@ -292,6 +299,14 @@ export function UrlsScreen() {
   }, [hiddenSort, navigate, shown]);
 
   const handoff = useHeaderHandoff(sort);
+  // Where this view was left, for the grid it comes back to (the grid is made again for each view).
+  const placeKey = `urls|${view}`;
+  const [place, setPlace] = useState({ key: placeKey, row: rememberedPlace(placeKey), id: rememberedKey(placeKey) });
+  if (place.key !== placeKey) {
+    setPlace({ key: placeKey, row: rememberedPlace(placeKey), id: rememberedKey(placeKey) });
+  }
+  const startRow = place.key === placeKey ? place.row : undefined;
+  const startKey = place.key === placeKey && place.id !== undefined ? Number(place.id) : undefined;
   // What a click in a cell opens (rules 1 and 5 of the UX round of 2026-11-19): the row's URL in the inspector, another
   // URL the row names (looked up, as the crawl may not have it), and the list a count stands for.
   const inspectRow = useCallback((row: UrlRow) => inspector.open(row.id), [inspector]);
@@ -472,6 +487,32 @@ export function UrlsScreen() {
     });
     setCopying(false);
   };
+  // The view's rows as the grid shows them, for a spreadsheet: what Ctrl+A then Ctrl+C copies, without selecting.
+  const copyRowsTitle = copyPart
+    ? `Copy the first ${formatCount(MAX_COPY_ROWS)} rows of this view`
+    : 'Copy the rows of this view';
+  const copyViewRows = async () => {
+    if (copying) return;
+    setCopying(true);
+    const shownColumns = laid.columns;
+    await copyAll<UrlRow>({
+      read: reader(urlQueryColumns(shown)),
+      text: (read) => ({
+        text: toTsv(
+          shownColumns.map((column) => column.header),
+          read.map((row) => shownColumns.map((column) => column.text(row))),
+        ),
+        count: read.length,
+      }),
+      noun: ['row', 'rows'],
+      failed: 'The rows couldn’t be copied.',
+      truncated: (read, matching) => ({
+        title: `Copied the first ${formatCount(read)} rows of this view`,
+        description: `The view has ${formatCount(matching)} URLs: a copy takes no more than ${formatCount(read)}.`,
+      }),
+    });
+    setCopying(false);
+  };
   const copyOneColumn = async () => {
     const column = columns.find((candidate) => candidate.id === copyColumn);
     if (copying || !column) return;
@@ -602,6 +643,14 @@ export function UrlsScreen() {
         run: () => void copyUrls(),
       },
       {
+        id: 'urls.copyRows',
+        title: copyRowsTitle,
+        group: 'URLs',
+        keywords: ['copy', 'rows', 'spreadsheet', 'excel', 'clipboard'],
+        enabled: () => hasRows && !copying,
+        run: () => void copyViewRows(),
+      },
+      {
         id: 'urls.copyColumn',
         title: copyColumnTitle,
         group: 'URLs',
@@ -658,6 +707,7 @@ export function UrlsScreen() {
       hasRows,
       copying,
       copyUrlsTitle,
+      copyRowsTitle,
       copyColumnTitle,
       clearView,
       choosePreset,
@@ -849,6 +899,7 @@ export function UrlsScreen() {
                   </Button>
                 }
               >
+                <MenuItem command="urls.copyRows">{copyRowsTitle}</MenuItem>
                 <MenuItem command="urls.copyUrls">{copyUrlsTitle}</MenuItem>
                 <MenuItem command="urls.copyColumn">{copyColumnTitle}</MenuItem>
               </DropdownMenu>
@@ -869,7 +920,11 @@ export function UrlsScreen() {
             onEditingChange={setEditingFilter}
             refused={refused}
             maxFilters={MAX_FILTERS}
-            onClear={() => setFilters([])}
+            // "Clear all": the filters, the search and the sort go; the columns stay (rule 9's other half is Back).
+            onClear={clearView}
+            clearsAll
+            sorted={sort.length > 0}
+            search={q ? { field: 'URL or title', text: q, onRemove: () => applySearch('') } : undefined}
             className="flex flex-wrap items-center gap-2 px-6 pb-3"
           >
             {URL_FACET_IDS.map((id) => (
@@ -992,7 +1047,12 @@ export function UrlsScreen() {
             fetchRows={rows.fetchRows}
             onCopy={onCopy}
             // The cursor is on a URL, not at a row number: a running crawl's refresh that moves rows keeps it on its URL.
-            rowKey={(row) => row.id}
+            rowKey={rowKeyOf}
+            // Back to this view (from Links, from another screen) starts on the URL it was left on (rule 9).
+            startRow={startRow}
+            startKey={startKey}
+            // The highlight follows the inspector's walk: the URL it shows is the row marked, or none is.
+            followKey={search.inspect}
             onSort={onSort}
             focusHeader={handoff.focusHeader}
             onActivate={(_index, row) => {
@@ -1000,7 +1060,9 @@ export function UrlsScreen() {
             }}
             // While it's open, the inspector follows the cursor, in place.
             onActiveRowChange={(index) => {
-              const row = inspecting && index !== null ? rows.getRow(index) : undefined;
+              const at = index === null ? undefined : rows.getRow(index);
+              if (index !== null && at) rememberPlace(placeKey, index, String(at.id));
+              const row = inspecting ? at : undefined;
               if (row) inspector.open(row.id);
             }}
             onActiveColumnChange={setCursorColumn}
@@ -1026,7 +1088,7 @@ export function UrlsScreen() {
               )
             }
             // A big grid: a URL's open-in-browser button shows on the row pointed at and on the cursor's.
-            className="si-open-on-row flex-1 rounded-lg border border-border-card"
+            className="si-open-on-row si-mark-cursor flex-1 rounded-lg border border-border-card"
           />
         </GridScreenBody>
       )}
