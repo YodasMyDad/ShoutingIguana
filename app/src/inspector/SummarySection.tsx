@@ -389,7 +389,7 @@ function TestRow({ row }: { row: IndexabilityRow }) {
             </Badge>
           ) : null}
         </p>
-        {row.plain ? null : <p className="text-12 text-text-muted">{row.detail}</p>}
+        {row.plain || row.robots ? null : <p className="text-12 text-text-muted">{row.detail}</p>}
         {row.robots ? (
           // The rule that refused it, as the file writes it: a link to the file, where every URL it blocks is listed.
           <p className="text-12 text-text-muted">
@@ -741,7 +741,7 @@ function InlinksFact({ detail, onShowSection }: SummarySectionProps) {
             : detail.type === 'image'
               ? totals.inlinks === 1
                 ? ', an image'
-                : ', as an image'
+                : ', each an image'
               : ', none of them hyperlinks'}
         </span>
       )}

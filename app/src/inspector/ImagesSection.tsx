@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { ImageOff } from 'lucide-react';
 import clsx from 'clsx';
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import type { PageImage } from '../api/inspector';
 import { urlDetailQuery, urlImagesQuery } from '../api/queries';
 import { GridCore } from '../grid/GridCore';
@@ -37,6 +37,14 @@ const URL_SHARE = 0.5;
 /** Room the thumbnail and the open-in-browser button take beside an image's name. */
 const THUMB_AND_BUTTON_WIDTH = 60;
 const FRAME_SLACK = 24;
+/** One column a fact needs this much: narrower (the inspector docked at the side), each image is stacked. */
+const WIDE_LAYOUT_WIDTH = MIN_URL_WIDTH + SIZE_WIDTH + PIXELS_WIDTH + ALT_WIDTH + SHOWN_WIDTH + FRAME_SLACK;
+/** Stacked: the file's size over its pixels, beside the image. */
+const FILE_WIDTH = 112;
+/** The least a stacked image's column is given: with less, the grid scrolls. */
+const MIN_STACKED_WIDTH = 160;
+/** A stacked row's second line, beside the grid's row height. */
+const STACKED_EXTRA_HEIGHT = 16;
 
 /**
  * The images the page shows (step 3b): each file once, the largest first, with its picture, its size and pixels after
@@ -50,8 +58,14 @@ export function ImagesSection() {
   const navigate = useNavigate();
   const images = useQuery(urlImagesQuery(crawlId, urlId, IMAGES_LISTED));
   const limit = useQuery(urlDetailQuery(crawlId, urlId)).data?.limits.largeImageBytes;
-  const { rowHeight, headerHeight } = useGridMetrics();
+  const { rowHeight: gridRowHeight, headerHeight } = useGridMetrics();
   const [measure, width] = useElementWidth();
+  // Docked at the side, one column a fact scrolls sideways past the size and the alt text: each image is then its file
+  // over its alt text and where it's shown, beside its size over its pixels, on a row of two lines. A width of 0 is
+  // no layout at all (a hidden panel, a test's page): the wide grid stands.
+  const stacked = width !== null && width > 0 && width < WIDE_LAYOUT_WIDTH;
+  const rowHeight = stacked ? gridRowHeight + STACKED_EXTRA_HEIGHT : gridRowHeight;
+  const stackedWidth = Math.max(MIN_STACKED_WIDTH, (width ?? 0) - FILE_WIDTH - FRAME_SLACK);
   // A crawl made before images' pixel sizes were read has none: no column of dashes, one line that says so.
   const unmeasured = images.data?.pixelSizes === false;
   // The image and its alt text share what the short columns leave: neither is cut beside the other's blank space.
@@ -64,6 +78,84 @@ export function ImagesSection() {
     return [...rows.filter((row) => row.id === marked), ...rows.filter((row) => row.id !== marked)];
   }, [images.data, marked]);
   const cameFirst = marked !== undefined && listed[0]?.id === marked;
+  const sizeCell = useCallback(
+    (row: PageImage) => {
+      if (typeof row.target.sizeBytes !== 'number') return <span className="text-text-muted">–</span>;
+      // The limit it's over, when it's a large image.
+      const over = limit !== undefined && isLargeImage(row, limit) ? limit : null;
+      return (
+        <span
+          className="flex items-center justify-end gap-1.5"
+          title={over === null ? undefined : `Over the ${formatBytes(over)} the analysis allows`}
+        >
+          {over === null ? null : <SeverityMark severity="warning" label="Large image" />}
+          {formatBytes(row.target.sizeBytes)}
+        </span>
+      );
+    },
+    [limit],
+  );
+  const sizeText = useCallback(
+    (row: PageImage) =>
+      typeof row.target.sizeBytes === 'number'
+        ? `${formatBytes(row.target.sizeBytes)}${limit !== undefined && isLargeImage(row, limit) ? ', large' : ''}`
+        : '',
+    [limit],
+  );
+  const stackedColumns = useMemo<GridColumn<PageImage>[]>(
+    () => [
+      {
+        id: 'image',
+        header: 'Image',
+        width: stackedWidth,
+        cell: (row) => {
+          const shown = shownWords(row);
+          return (
+            <span className={clsx('flex min-w-0 items-center gap-2', row.id === marked && 'si-came-for')}>
+              {row.id === marked ? <span className="sr-only">The image you came from: </span> : null}
+              <ImageThumb url={row.url} broken={isBrokenImage(row.target)} />
+              <span className="flex min-w-0 flex-1 flex-col">
+                <Url
+                  url={row.url}
+                  siteOrigin={siteOrigin}
+                  tabbable={false}
+                  copyable={false}
+                  onGo={() => walk(row.id)}
+                  label="file"
+                />
+                <span
+                  className="truncate text-12 text-text-secondary"
+                  title={[row.text ?? 'No alt text', shown].filter(Boolean).join(' · ')}
+                >
+                  {row.text ? <span className="text-text">{row.text}</span> : 'No alt text'}
+                  {shown ? ` · ${shown}` : ''}
+                </span>
+              </span>
+            </span>
+          );
+        },
+        text: (row) => [row.url, row.text ?? 'No alt text', shownWords(row)].filter(Boolean).join(' · '),
+      },
+      {
+        id: 'file',
+        header: 'Size',
+        width: FILE_WIDTH,
+        numeric: true,
+        headerHint: 'The file’s size as transferred, after any redirects, over its own width and height',
+        cell: (row) => (
+          <span className="flex flex-col items-end">
+            {sizeCell(row)}
+            <span className="text-12 text-text-secondary">
+              {pixelsWords(row.target.pixelWidth, row.target.pixelHeight) ?? ''}
+            </span>
+          </span>
+        ),
+        text: (row) =>
+          [sizeText(row), pixelsWords(row.target.pixelWidth, row.target.pixelHeight)].filter(Boolean).join(' · '),
+      },
+    ],
+    [stackedWidth, siteOrigin, walk, marked, sizeCell, sizeText],
+  );
   const columns = useMemo<GridColumn<PageImage>[]>(
     () => [
       {
@@ -96,24 +188,8 @@ export function ImagesSection() {
         width: SIZE_WIDTH,
         numeric: true,
         headerHint: 'The file’s size as transferred, after any redirects',
-        cell: (row) => {
-          if (typeof row.target.sizeBytes !== 'number') return <span className="text-text-muted">–</span>;
-          // The limit it's over, when it's a large image.
-          const over = limit !== undefined && isLargeImage(row, limit) ? limit : null;
-          return (
-            <span
-              className="flex items-center justify-end gap-1.5"
-              title={over === null ? undefined : `Over the ${formatBytes(over)} the analysis allows`}
-            >
-              {over === null ? null : <SeverityMark severity="warning" label="Large image" />}
-              {formatBytes(row.target.sizeBytes)}
-            </span>
-          );
-        },
-        text: (row) =>
-          typeof row.target.sizeBytes === 'number'
-            ? `${formatBytes(row.target.sizeBytes)}${limit !== undefined && isLargeImage(row, limit) ? ', large' : ''}`
-            : '',
+        cell: sizeCell,
+        text: sizeText,
       },
       {
         id: 'pixels',
@@ -142,13 +218,14 @@ export function ImagesSection() {
         text: shownWords,
       },
     ],
-    [urlWidth, altWidth, siteOrigin, walk, limit, marked],
+    [urlWidth, altWidth, siteOrigin, walk, marked, sizeCell, sizeText],
   );
   const visible = useMemo(
-    () => (unmeasured ? columns.filter((column) => column.id !== 'pixels') : columns),
-    [columns, unmeasured],
+    () => (stacked ? stackedColumns : unmeasured ? columns.filter((column) => column.id !== 'pixels') : columns),
+    [columns, stackedColumns, stacked, unmeasured],
   );
-  const laid = useColumnLayout('inspector.images', visible);
+  // The columns as the user laid them out, the stacked grid's apart, as its columns are others.
+  const laid = useColumnLayout(stacked ? 'inspector.images.stacked' : 'inspector.images', visible);
 
   if (images.isError && !images.data) {
     return <SectionError error={images.error} onRetry={() => void images.refetch()} what="The images" />;

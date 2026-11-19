@@ -3,7 +3,7 @@
 import { createMemoryHistory } from '@tanstack/react-router';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GridFilter } from '../api/grids';
 import { setTransport, type TransportRequest } from '../api/transport';
 import { App } from '../app/App';
@@ -48,7 +48,10 @@ beforeEach(() => {
   setTransport(transport);
 });
 
-afterEach(() => setTransport(fakeSidecar([])));
+afterEach(() => {
+  setTransport(fakeSidecar([]));
+  vi.restoreAllMocks();
+});
 
 describe('the inspector’s Images', () => {
   it('is a tab after the link lists, counting the page’s image files', async () => {
@@ -124,6 +127,25 @@ describe('the inspector’s Images', () => {
     expect(second).toHaveTextContent('2.1 MB');
     expect(second!.querySelector('.si-came-for')).toBeNull();
     expect(within(inspector).getByText('The image you came from is first')).toBeVisible();
+  });
+
+  it('stacks each image’s facts in a narrow inspector, with nothing to scroll sideways for', async () => {
+    // Docked on the right in a 1,280 px window: about 350 px for the grid.
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(348);
+    const { inspector, user } = await open(`${URLS}?inspect=2`);
+    await user.click(await within(inspector).findByRole('tab', { name: /^Images/ }));
+    const panel = await screen.findByRole('tabpanel', { name: /^Images/ });
+    const grid = await within(panel).findByRole('grid', { name: 'Images' });
+    await within(grid).findByText('2.1 MB');
+    const rows = within(grid).getAllByRole('row');
+    expect(Number.parseFloat(rows[0]!.style.width)).toBeLessThanOrEqual(348);
+    const [image, file] = within(rows[1]!).getAllByRole('gridcell');
+    // The image by its file, over its alt text and where the page shows it; its size over its pixels.
+    expect(image).toHaveTextContent(/harpswell-hero\.jpg.*Harpswell metal patio set on a lawn.*Content/);
+    expect(file).toHaveTextContent(/2\.1 MB.*4000×3000 px/);
+    expect(within(file!).getByRole('img', { name: 'Large image' })).toBeVisible();
+    const [icon] = within(rows[2]!).getAllByRole('gridcell');
+    expect(icon).toHaveTextContent(/basket\.svg.*No alt text.*2 times · Header, Footer/);
   });
 
   it('says a page that shows no image has none', async () => {
