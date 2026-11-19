@@ -9,6 +9,21 @@ export interface GridColumn<Row> {
   width: number;
   /** The least the user can make it, px, where a column needs more than the grid's least (`MIN_COLUMN_WIDTH`). */
   minWidth?: number;
+  /**
+   * The column takes its width from what it holds, and shares the grid's width by need (grid/columnFit.ts), instead
+   * of having `width` whatever the window: `url` for a URL (as wide as the longest among the rows read first, never
+   * wider, so the next column starts where the URLs end), `text` for words people read (a title, an anchor, a
+   * description: the same, and the first to be given room). `width` is then what it has before any row is read.
+   * Where room is short every column gives way, these down to a usable width, before the grid scrolls sideways. A
+   * column the user has sized keeps that size.
+   */
+  fit?: 'url' | 'text' | undefined;
+  /** What a `fit` column measures, where it isn't `text` (a URL shown as its path). */
+  fitText?: ((row: Row) => string) | undefined;
+  /** Room a `fit` column's cell needs beside its text, px: the open-in-browser button, a status dot. */
+  fitExtra?: number | undefined;
+  /** The widest a `fit` column grows to, px, where it isn't the grid's own limit for its kind. */
+  maxWidth?: number | undefined;
   /** Pinned to the grid's left edge: it stays in view while the grid scrolls sideways. Pinned columns come first. */
   pinned?: boolean;
   /** Numbers right-align with tabular figures. */
