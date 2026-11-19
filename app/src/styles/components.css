@@ -2277,6 +2277,12 @@
     opacity: 1;
   }
 
+  /* A list of places to go (the sitemaps, the origins' robots.txt): a click anywhere on a row opens it, so the whole
+     row has the pointer, not only its name. */
+  .si-rows-open .si-grid-row:not(.si-grid-head) {
+    cursor: pointer;
+  }
+
   /* The same button after a URL shown as plain text in a cell. */
   .si-url__open--inline {
     flex-shrink: 0;

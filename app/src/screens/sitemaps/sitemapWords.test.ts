@@ -12,6 +12,7 @@ import {
   coverageOf,
   coverageSkippedWords,
   coverageWords,
+  foundInWords,
   foundViaWords,
   indexBadgeWords,
   indexHoldsWords,
@@ -31,6 +32,17 @@ describe('how a sitemap was found', () => {
     expect(foundViaWords('options').short).toBe('Crawl settings');
     expect(foundViaWords('defaultLocation').sentence).toContain('/sitemap.xml');
     expect(foundViaWords('index').short).toBe('Sitemap index');
+  });
+
+  it('names the index that lists a sitemap: its path on the crawl’s own site, its whole address elsewhere', () => {
+    expect(foundInWords('https://www.example.com/sitemap.xml', 'https://www.example.com')).toEqual({
+      name: '/sitemap.xml',
+      short: 'In /sitemap.xml',
+      sentence: 'The sitemap index https://www.example.com/sitemap.xml lists it.',
+    });
+    expect(foundInWords('https://cdn.example.net/maps/index.xml', 'https://www.example.com').short).toBe(
+      'In https://cdn.example.net/maps/index.xml',
+    );
   });
 
   it('says plainly when the crawl can’t say how it found it', () => {

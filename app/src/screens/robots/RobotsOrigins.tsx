@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { Bot } from 'lucide-react';
+import { ArrowRight, ClipboardList, Copy, ExternalLink, Bot } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client';
 import type { RobotsOrigin } from '../../api/grids';
@@ -11,6 +11,8 @@ import { GridCore } from '../../grid/GridCore';
 import { useColumnLayout } from '../../grid/useColumnLayout';
 import { GRID_SCREEN_MIN_ROWS, GridScreen } from '../../grid/GridScreen';
 import { useGridMetrics } from '../../grid/metrics';
+import { RowMenu } from '../../grid/RowMenu';
+import { copyRowUrls, rowMenuLabel, rowsWords, useRowMenu } from '../../grid/rowMenuState';
 import type { GridColumn } from '../../grid/types';
 import { useElementWidth } from '../../grid/useElementWidth';
 import { usePagedRows } from '../../grid/usePagedRows';
@@ -21,14 +23,16 @@ import { OpenUrlButton } from '../../ui/OpenUrlButton';
 import { Banner } from '../../ui/Banner';
 import { EmptyState } from '../../ui/EmptyState';
 import { LiveBadge } from '../../ui/LiveBadge';
+import { MenuItem } from '../../ui/Menu';
 import { PageHeader } from '../../ui/PageHeader';
 import { RelativeTime } from '../../ui/RelativeTime';
 import { TextLink } from '../../ui/TextLink';
 import { CountSentence } from '../SentenceWithCounts';
-import { pressedRow, rememberPlace, rememberedKey, rememberedPlace } from '../listPlace';
+import { opensItsRow, pressedRow, rememberPlace, rememberedKey, rememberedPlace } from '../listPlace';
 import { IGNORED, answerParts, stateWords } from './robotsWords';
 import { robotsOriginsOffer } from '../../export/offers';
 import { useExportCommand } from '../../export/useExportCommand';
+import { openInBrowser } from '../../shell/os';
 
 const ROUTE = '/crawls/$crawl/robots/{-$origin}';
 
@@ -43,6 +47,9 @@ const FRAME_SLACK = 18;
 /** An origin's row is its origin, wherever a running crawl moves it in the list. */
 const originOf = (row: RobotsOrigin) => row.origin;
 
+/** Where an origin's robots.txt is on the live site: what its row opens in the browser. */
+const liveFileOf = (origin: string) => `${origin}/robots.txt`;
+
 export interface RobotsOriginsProps {
   crawlId: string;
   crawl: CrawlState;
@@ -51,7 +58,10 @@ export interface RobotsOriginsProps {
 /**
  * robots.txt, the origins: every origin the crawl asked for a robots.txt, the site's own first, then the rest by the
  * URLs they blocked. Each says what its answer meant to the crawl, in plain words, and how many URLs it blocked. A
- * real crawl asks thousands of origins, so the list pages. One Tab stop: Enter opens an origin's file.
+ * real crawl asks thousands of origins, so the list pages. A list of places to go: the origin is a link that opens its
+ * file, a click anywhere else on its row opens it too (every row, one that blocked nothing as well), and the button
+ * straight after the origin opens the live robots.txt in the browser. One Tab stop: Enter opens an origin's file. A
+ * row's menu (right-click, Shift+F10) has the same, and copies the origin.
  */
 export function RobotsOrigins({ crawlId, crawl }: RobotsOriginsProps) {
   const navigate = useNavigate({ from: ROUTE });
@@ -65,6 +75,9 @@ export function RobotsOrigins({ crawlId, crawl }: RobotsOriginsProps) {
     [crawlId],
   );
   const rows = usePagedRows<RobotsOrigin>({ queryKey, fetchPage, rowHeight });
+  const rowMenu = useRowMenu<RobotsOrigin>();
+  // The row as it was when the menu opened: rows can move under a running crawl while it is open.
+  const menuRow = rowMenu.state?.menu.row;
 
   // Export (Ctrl+E): the origins, as the list shows them. An origin's blocked URLs are exported from its file.
   const listed = rows.rowCount;
@@ -112,10 +125,19 @@ export function RobotsOrigins({ crawlId, crawl }: RobotsOriginsProps) {
       mono: true,
       cell: (row) => (
         <span className="flex min-w-0 items-center gap-2">
-          <span className="min-w-0 truncate" title={row.origin}>
+          {/* The origin is the link that opens its file; the live robots.txt opens from the button straight after. */}
+          <TextLink
+            to={ROUTE}
+            params={{ crawl: crawlId, origin: row.origin }}
+            search={{}}
+            // The grid is the one Tab stop: Enter on the row does what a click on the link does.
+            tabIndex={-1}
+            title={row.origin}
+            className="min-w-0 truncate"
+          >
             {row.origin}
-          </span>
-          <OpenUrlButton url={row.origin} inGrid />
+          </TextLink>
+          <OpenUrlButton url={liveFileOf(row.origin)} inGrid />
           {row.isInternal ? (
             <Badge variant="outline" className="shrink-0 font-sans">
               This site
@@ -196,14 +218,23 @@ export function RobotsOrigins({ crawlId, crawl }: RobotsOriginsProps) {
     // grid's own least, `minRows`), and the screen scrolls for the rest of what's on it.
     const short = rows.rowCount !== null && rows.rowCount <= GRID_SCREEN_MIN_ROWS;
     body = (
+      // The click that opens a row is the pointer's way to what Enter does in the grid, which holds the keys.
+      // eslint-disable-next-line jsx-a11y-x/click-events-have-key-events, jsx-a11y-x/no-static-element-interactions
       <div
         ref={measure}
-        className={short ? 'flex shrink-0 flex-col' : 'flex shrink flex-col'}
+        className={short ? 'si-rows-open flex shrink-0 flex-col' : 'si-rows-open flex shrink flex-col'}
         style={{ height }}
-        // A count's link is followed by the router, not the grid: the row it was in is where the list was left.
+        // A link (the origin, its count) is followed by the router, not the grid: the row it was in is where the list
+        // was left.
         onClickCapture={(event) => {
           const row = event.target instanceof Element && event.target.closest('a') ? pressedRow(event.target) : null;
           if (row !== null) rememberPlace(place, row, rows.getRow(row)?.origin);
+        }}
+        // A list of places to go: a click on a row, anywhere its own links and buttons aren't, opens its file.
+        onClick={(event) => {
+          const row = opensItsRow(event) ? pressedRow(event.target) : null;
+          const pressed = row === null ? undefined : rows.getRow(row);
+          if (row !== null && pressed) open(pressed.origin, row);
         }}
       >
         <GridCore<RobotsOrigin>
@@ -225,6 +256,9 @@ export function RobotsOrigins({ crawlId, crawl }: RobotsOriginsProps) {
           onActivate={(index, row) => {
             if (row) open(row.origin, index);
           }}
+          // Shift+Enter opens the origin's live robots.txt in the browser, as the button after the origin does.
+          openUrlOf={(row) => liveFileOf(row.origin)}
+          onContextMenu={rowMenu.onContextMenu}
           // Live refreshes update in place: the progress line is for a refresh the user asked for.
           busy={rows.isRefreshing && !crawl.crawling}
           className="flex-1 rounded-lg border border-border-card"
@@ -259,6 +293,43 @@ export function RobotsOrigins({ crawlId, crawl }: RobotsOriginsProps) {
         </Banner>
       ) : null}
       {body}
+      <RowMenu
+        state={rowMenu.state}
+        onOpenChange={rowMenu.onOpenChange}
+        label={rowMenuLabel(rowMenu.state?.menu.indices.length ?? 1, menuRow?.origin, ['origin', 'origins'])}
+      >
+        <MenuItem
+          icon={ArrowRight}
+          shortcut="enter"
+          disabled={!menuRow}
+          onSelect={() => {
+            if (menuRow && rowMenu.state) open(menuRow.origin, rowMenu.state.index);
+          }}
+        >
+          Open its robots.txt
+        </MenuItem>
+        <MenuItem
+          icon={ExternalLink}
+          shortcut="shift+enter"
+          disabled={!menuRow}
+          onSelect={() => {
+            if (menuRow) void openInBrowser(liveFileOf(menuRow.origin));
+          }}
+        >
+          Open robots.txt in the browser
+        </MenuItem>
+        <MenuItem
+          icon={Copy}
+          onSelect={() => {
+            if (rowMenu.state) void copyRowUrls(rowMenu.state.menu, (row) => row.origin);
+          }}
+        >
+          {`Copy ${rowsWords(rowMenu.state?.menu.indices.length ?? 1, ['origin', 'origins'])}`}
+        </MenuItem>
+        <MenuItem icon={ClipboardList} shortcut="mod+c" onSelect={() => void rowMenu.state?.menu.copy()}>
+          {`Copy ${rowsWords(rowMenu.state?.menu.indices.length ?? 1, ['row', 'rows'])}`}
+        </MenuItem>
+      </RowMenu>
     </GridScreen>
   );
 }

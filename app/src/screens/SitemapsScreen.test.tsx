@@ -73,7 +73,14 @@ describe('Sitemaps: the list', () => {
     expect(rows.slice(1, 4).map((row) => row.getAttribute('aria-level'))).toEqual(['2', '2', '2']);
     expect(within(rows[0]!).getByText('Index')).toBeVisible();
     expect(within(rows[0]!).getByText('robots.txt')).toBeVisible();
-    expect(within(rowOf(`${SITE}/sitemaps/pages.xml`)).getByText('Sitemap index')).toBeVisible();
+    // A sitemap an index lists says which: the index's name, a link to it (never "Sitemap index", which read as its type).
+    expect(rowOf(`${SITE}/sitemaps/pages.xml`).querySelector('[aria-colindex="2"]')).toHaveTextContent(
+      'In /sitemap.xml',
+    );
+    expect(within(rowOf(`${SITE}/sitemaps/pages.xml`)).getByRole('link', { name: '/sitemap.xml' })).toHaveAttribute(
+      'href',
+      `${SITEMAPS}/1`,
+    );
     expect(within(rowOf(`${SITE}/news-sitemap.xml`)).getByText('Crawl settings')).toBeVisible();
     expect(within(rowOf(`${SITE}/sitemaps/missing.xml`)).getByText('Couldn’t be read: 404 Not Found')).toBeVisible();
   });
@@ -90,14 +97,20 @@ describe('Sitemaps: the list', () => {
     await open(SITEMAPS);
     const failed = await waitFor(() => rowOf(`${SITE}/sitemaps/missing.xml`));
     expect(within(failed).getAllByText('–')).toHaveLength(5);
-    expect(within(failed).queryByRole('link')).toBeNull();
+    // No count to open: the row's only link is the index that lists it.
+    expect(
+      within(failed)
+        .getAllByRole('link')
+        .map((link) => link.textContent),
+    ).toEqual(['/sitemap.xml']);
   });
 
   it('makes every count a link to that sitemap’s URLs under the count’s own filter, and a 0 plain', async () => {
     sidecar();
     await open(SITEMAPS);
     const products = await waitFor(() => rowOf(`${SITE}/sitemaps/products.xml`));
-    const links = within(products).getAllByRole('link');
+    // Its first link is the index that lists it; the counts follow.
+    const links = within(products).getAllByRole('link').slice(1);
     expect(links.map((link) => link.textContent)).toEqual(['3', '2', '1', '1']);
     expect(links.map((link) => link.getAttribute('aria-label'))).toEqual([
       '3 URLs listed',
@@ -378,6 +391,85 @@ describe('Sitemaps: the list', () => {
     await waitFor(() => expect(pathOf(router)).toBe(`${SITEMAPS}/4`));
     expect(searchOf(router).filter).toBeUndefined();
     expect(tree).not.toBeInTheDocument();
+  });
+
+  it('opens a sitemap on one click on its name, one that couldn’t be read too', async () => {
+    sidecar();
+    const { router } = await open(SITEMAPS);
+    await screen.findByText(`${SITE}/sitemaps/missing.xml`);
+    // The name is a link, in the grid's one Tab stop.
+    const name = screen.getByRole('button', { name: `${SITE}/sitemaps/missing.xml` });
+    expect(name).toHaveClass('si-url__go');
+    expect(name).toHaveAttribute('tabindex', '-1');
+    fireEvent.click(name);
+    await waitFor(() => expect(pathOf(router)).toBe(`${SITEMAPS}/4`));
+    expect(searchOf(router).filter).toBeUndefined();
+  });
+
+  it('opens a sitemap on a click anywhere on its row, and leaves Shift and Ctrl clicks to select', async () => {
+    sidecar();
+    const { router } = await open(SITEMAPS);
+    await screen.findByText(`${SITE}/news-sitemap.xml`);
+    const status = () => within(rowOf(`${SITE}/news-sitemap.xml`)).getByText('Read');
+    fireEvent.click(status(), { shiftKey: true });
+    fireEvent.click(status(), { ctrlKey: true });
+    expect(pathOf(router)).toBe(SITEMAPS);
+    fireEvent.click(status());
+    await waitFor(() => expect(pathOf(router)).toBe(`${SITEMAPS}/5`));
+    expect(searchOf(router).filter).toBeUndefined();
+  });
+
+  it('doesn’t open the sitemap from its row’s own controls: the chevron, the button that opens it in the browser', async () => {
+    sidecar();
+    const opened = vi.spyOn(window, 'open').mockReturnValue(null);
+    const { router } = await open(SITEMAPS);
+    await screen.findByText(`${SITE}/sitemaps/pages.xml`);
+    const index = rowOf(`${SITE}/sitemap.xml`);
+    fireEvent.click(index.querySelector('[data-tree-toggle]')!);
+    fireEvent.click(within(index).getByRole('button', { name: `Open ${SITE}/sitemap.xml in your browser` }));
+    expect(opened).toHaveBeenCalledWith(`${SITE}/sitemap.xml`, '_blank', 'noopener,noreferrer');
+    expect(pathOf(router)).toBe(SITEMAPS);
+    opened.mockRestore();
+  });
+
+  it('has a menu on each row: open the sitemap, open it in the browser, copy its URL', async () => {
+    sidecar();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    const { router } = await open(SITEMAPS);
+    await screen.findByText(`${SITE}/sitemaps/missing.xml`);
+    const cell = () => rowOf(`${SITE}/sitemaps/missing.xml`).querySelector<HTMLElement>('[data-col="0"]')!;
+    fireEvent.contextMenu(cell());
+    const menu = await screen.findByRole('menu', { name: 'Menu for /sitemaps/missing.xml' });
+    expect(
+      within(menu)
+        .getAllByRole('menuitem')
+        .map((item) => item.textContent),
+    ).toEqual([
+      expect.stringContaining('Open this sitemap'),
+      expect.stringContaining('Open in the browser'),
+      expect.stringContaining('Copy the URL'),
+      expect.stringContaining('Copy the row'),
+    ]);
+    fireEvent.click(within(menu).getByRole('menuitem', { name: /Copy the URL/ }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(`${SITE}/sitemaps/missing.xml`));
+    fireEvent.contextMenu(cell());
+    fireEvent.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: /Open this sitemap/ }));
+    await waitFor(() => expect(pathOf(router)).toBe(`${SITEMAPS}/4`));
+  });
+
+  it('starts, coming back from a sitemap opened by its name, on that sitemap’s row', async () => {
+    sidecar();
+    const { router } = await open(SITEMAPS);
+    await screen.findByText(`${SITE}/news-sitemap.xml`);
+    fireEvent.click(screen.getByRole('button', { name: `${SITE}/news-sitemap.xml` }));
+    await waitFor(() => expect(pathOf(router)).toBe(`${SITEMAPS}/5`));
+    act(() => router.history.back());
+    const tree = await screen.findByRole('treegrid', { name: 'Sitemaps' });
+    await screen.findByText(`${SITE}/news-sitemap.xml`);
+    act(() => tree.focus());
+    const cursor = document.getElementById(tree.getAttribute('aria-activedescendant') ?? '');
+    expect(cursor?.closest('[role="row"]')).toHaveTextContent('/news-sitemap.xml');
   });
 
   it('says how many of the site’s indexable pages no sitemap lists, as the check counts them, as a link to exactly those pages', async () => {

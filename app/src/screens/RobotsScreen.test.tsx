@@ -122,8 +122,94 @@ describe('robots.txt: the origins', () => {
     await open(ROBOTS);
     const own = await waitFor(() => rowOf(SITE));
     expect(within(own).getByRole('link', { name: '4 URLs blocked' })).toHaveAttribute('href', FILE);
-    expect(within(rowOf('https://partner.example.org')).queryByRole('link')).toBeNull();
+    // An origin that blocked nothing has no count to open: its only link is the origin itself.
+    expect(
+      within(rowOf('https://partner.example.org'))
+        .getAllByRole('link')
+        .map((link) => link.textContent),
+    ).toEqual(['https://partner.example.org']);
     expect(rowOf('https://partner.example.org').querySelector('[aria-colindex="3"]')).toHaveTextContent('0');
+  });
+
+  it('opens an origin’s file on one click on the origin, one that blocked nothing too', async () => {
+    sidecar();
+    const { router } = await open(ROBOTS);
+    await screen.findByText('https://partner.example.org');
+    const origin = screen.getByRole('link', { name: 'https://partner.example.org' });
+    expect(origin).toHaveAttribute('href', `${ROBOTS}/${encodeURIComponent('https://partner.example.org')}`);
+    expect(origin).toHaveAttribute('tabindex', '-1');
+    fireEvent.click(origin);
+    await waitFor(() => expect(pathOf(router)).toBe(`${ROBOTS}/${encodeURIComponent('https://partner.example.org')}`));
+  });
+
+  it('opens an origin’s file on a click anywhere on its row, and leaves Shift and Ctrl clicks to select', async () => {
+    sidecar();
+    const { router } = await open(ROBOTS);
+    await screen.findByText('https://slow.example.io');
+    const state = () => within(rowOf('https://slow.example.io')).getByText('No answer: crawled anyway');
+    fireEvent.click(state(), { shiftKey: true });
+    fireEvent.click(state(), { ctrlKey: true });
+    expect(pathOf(router)).toBe(ROBOTS);
+    fireEvent.click(state());
+    await waitFor(() => expect(pathOf(router)).toBe(`${ROBOTS}/${encodeURIComponent('https://slow.example.io')}`));
+  });
+
+  it('opens the live robots.txt in the browser from the button straight after the origin, without opening its row', async () => {
+    sidecar();
+    const opened = vi.spyOn(window, 'open').mockReturnValue(null);
+    const { router } = await open(ROBOTS);
+    const own = await waitFor(() => rowOf(SITE));
+    fireEvent.click(within(own).getByRole('button', { name: `Open ${SITE}/robots.txt in your browser` }));
+    expect(opened).toHaveBeenCalledWith(`${SITE}/robots.txt`, '_blank', 'noopener,noreferrer');
+    expect(pathOf(router)).toBe(ROBOTS);
+    opened.mockRestore();
+  });
+
+  it('has a menu on each row: open its robots.txt here, open it in the browser, copy the origin', async () => {
+    sidecar();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    const opened = vi.spyOn(window, 'open').mockReturnValue(null);
+    const { router } = await open(ROBOTS);
+    await screen.findByText('https://partner.example.org');
+    const cell = () => rowOf('https://partner.example.org').querySelector<HTMLElement>('[data-col="0"]')!;
+    fireEvent.contextMenu(cell());
+    const menu = await screen.findByRole('menu', { name: 'Menu for https://partner.example.org' });
+    expect(
+      within(menu)
+        .getAllByRole('menuitem')
+        .map((item) => item.textContent),
+    ).toEqual([
+      expect.stringContaining('Open its robots.txt'),
+      expect.stringContaining('Open robots.txt in the browser'),
+      expect.stringContaining('Copy the origin'),
+      expect.stringContaining('Copy the row'),
+    ]);
+    fireEvent.click(within(menu).getByRole('menuitem', { name: /Copy the origin/ }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('https://partner.example.org'));
+    fireEvent.contextMenu(cell());
+    fireEvent.click(
+      within(await screen.findByRole('menu')).getByRole('menuitem', { name: /Open robots.txt in the browser/ }),
+    );
+    expect(opened).toHaveBeenCalledWith('https://partner.example.org/robots.txt', '_blank', 'noopener,noreferrer');
+    fireEvent.contextMenu(cell());
+    fireEvent.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: /Open its robots.txt/ }));
+    await waitFor(() => expect(pathOf(router)).toBe(`${ROBOTS}/${encodeURIComponent('https://partner.example.org')}`));
+    opened.mockRestore();
+  });
+
+  it('starts, coming back from an origin opened by a click, on that origin’s row', async () => {
+    sidecar();
+    const { router } = await open(ROBOTS);
+    await screen.findByText('https://partner.example.org');
+    fireEvent.click(screen.getByRole('link', { name: 'https://partner.example.org' }));
+    await waitFor(() => expect(pathOf(router)).toBe(`${ROBOTS}/${encodeURIComponent('https://partner.example.org')}`));
+    act(() => router.history.back());
+    const again = await screen.findByRole('grid', { name: 'Origins' });
+    await screen.findByText('https://partner.example.org');
+    act(() => again.focus());
+    const cursor = document.getElementById(again.getAttribute('aria-activedescendant') ?? '');
+    expect(cursor?.closest('[role="row"]')).toHaveTextContent('https://partner.example.org');
   });
 
   it('is one Tab stop, and Enter opens the origin’s file', async () => {
