@@ -351,13 +351,8 @@ describe('a length check’s page in plain words, in place of the detail', () =>
       'Google will likely cut this title off after “…every season, delivered free”',
     );
     expect(plainDetail({ id: 'description-too-short' }, row)).toBe('Only 6 characters long');
-    // A short title's length against the room there is (the UX audit of 2026-11-19, S-13: it pinned the length alone).
-    expect(plainDetail({ id: 'title-too-short' }, { titleLength: 1 })).toBe(
-      'Only 1 character long: search results have room for about 60',
-    );
-    expect(plainDetail({ id: 'title-too-short' }, { titleLength: 1_234 })).toBe(
-      'Only 1,234 characters long: search results have room for about 60',
-    );
+    expect(plainDetail({ id: 'title-too-short' }, { titleLength: 1 })).toBe('Only 1 character long');
+    expect(plainDetail({ id: 'title-too-short' }, { titleLength: 1_234 })).toBe('Only 1,234 characters long');
     expect(
       plainDetail(
         { id: 'description-too-long' },

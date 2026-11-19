@@ -66,11 +66,12 @@ export function FoundOnWords({
             url={urlAtText(page.url, page.words)}
             hint={page.words ? 'Open the page at this link' : 'Open the page in your browser'}
             className="font-mono"
+            short={page.path.length < 4}
           >
             <span aria-hidden="true">{page.path}</span>
             <span className="sr-only">{page.url}</span>
           </OpenLink>
-          <OpenUrlButton url={urlAtText(page.url, page.words)} className="ml-0.5" />
+          <OpenUrlButton url={page.url} className="ml-0.5" />
           {page.place ? ` (${page.place})` : null}
         </Fragment>
       ))}

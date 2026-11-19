@@ -309,6 +309,11 @@ export function WhereToFix({
                           {plainAddress(sitemap.url, origin)}
                         </OpenLink>
                       ))}
+                      {(unlinked.forwards ?? []).map((url) => (
+                        <OpenLink key={url} url={url} className="mr-2 font-mono text-13">
+                          {plainAddress(url, origin)}
+                        </OpenLink>
+                      ))}
                     </p>
                   </li>
                 ))}
@@ -376,7 +381,12 @@ function PageName({
 function Leads({ target, origin }: { target: FixTarget; origin: string | null }) {
   return (
     <span className="si-fix-leads">
-      <OpenLink url={target.url} hint="Open this address in your browser" className="si-fix-leads__url">
+      <OpenLink
+        url={target.url}
+        hint="Open this address in your browser"
+        className="si-fix-leads__url"
+        short={plainAddress(target.url, origin).length < 4}
+      >
         <span aria-hidden="true">{plainAddress(target.url, origin)}</span>
         <span className="sr-only">{target.url}</span>
       </OpenLink>

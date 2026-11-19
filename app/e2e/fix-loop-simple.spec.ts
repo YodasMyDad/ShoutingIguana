@@ -4,6 +4,7 @@
 // settled it, and the page's count follows; a second check then says what changed since the first, on the Summary,
 // What to fix's Fixed group and the problem page's causes, each against `/changes`.
 import { expect, test, type Page } from '@playwright/test';
+import { fixShape } from './fixList';
 import { startRevisionSite, type RevisionSite } from './revisionSite';
 import { expectNoViolations, read, removeCrawl, type SeededCrawl } from './support';
 
@@ -16,6 +17,7 @@ interface Check {
   plainTitle: string | null;
   title: string;
   grouping: string;
+  references?: string;
   recheck?: string[];
 }
 interface CheckChange {
@@ -183,9 +185,21 @@ test('a second check says what changed since the first, on the Summary, What to 
     await expect(main(page).getByText(new RegExp(`^was ${moved.then!.toLocaleString('en-GB')} on `))).toBeVisible({
       timeout: 15_000,
     });
-    if (check && check.grouping !== 'none') {
+    if (check && check.grouping !== 'none' && fixShape(check) === null) {
+      // It pinned a line under a cause, "Still there since 19 Nov" or "New since 19 Nov". Changed in the UX audit of
+      // 2026-11-19 (S-12/S-20, with S-17): only a cause that is new since the last check says so, and none says
+      // "Still there": as many "New since …" lines as the sidecar's comparison has new causes, each cause listed.
+      const { groups } = await read<{ groups: { change?: { state: string } | null }[] }>(
+        `/api/crawls/${second.id}/issues/${moved.checkId}/groups`,
+        { offset: 0, limit: 25, compareWith: 'previous' },
+      );
+      expect(groups.length).toBeGreaterThan(0);
       const where = main(page).getByRole('region', { name: 'Where it is' });
-      await expect(where.getByText(/^(Still there|New) since /).first()).toBeVisible({ timeout: 15_000 });
+      await expect(where.locator('tbody > tr')).toHaveCount(groups.length, { timeout: 15_000 });
+      await expect(where.getByText(/^New since (\d{1,2} [A-Z][a-z]{2}|your last check)$/)).toHaveCount(
+        groups.filter((group) => group.change?.state === 'new').length,
+      );
+      await expect(where).not.toContainText('Still there');
     }
     await expectNoViolations(page);
   }

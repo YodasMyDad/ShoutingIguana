@@ -12,12 +12,15 @@ export function OpenLink({
   url,
   hint = 'Open in your browser',
   className,
+  short = false,
   children,
 }: {
   url: string;
   /** Its tooltip: what opening it shows ("Open the page at this link"). */
   hint?: string | undefined;
   className?: string | undefined;
+  /** Its words are a letter or two (the home page's "/"): it's given the least size a pointer or finger needs. */
+  short?: boolean | undefined;
   children: ReactNode;
 }) {
   if (!/^https?:\/\//i.test(url)) return <span className={className}>{children}</span>;
@@ -27,7 +30,8 @@ export function OpenLink({
       target="_blank"
       rel="noreferrer"
       title={hint}
-      className={clsx('si-open-link', className)}
+      // A short one (the home page's "/") is still a target a finger can hit.
+      className={clsx('si-open-link', short && 'si-open-link--short', className)}
       onClick={(event) => {
         event.preventDefault();
         void openInBrowser(url);

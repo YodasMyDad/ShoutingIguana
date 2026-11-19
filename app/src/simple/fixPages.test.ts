@@ -138,6 +138,24 @@ describe('dead addresses, by the page to edit', () => {
     expect(unlinkedWords({ where: 'nowhere', sitemaps: [] })).toBe('No page that was checked links to it now.');
   });
 
+  it('keeps an address only another address forwards to off the pages to edit: its fix is where that forwards', () => {
+    const forwarded = addressesModel([dead(1)], new Map([[1, found(1, 1, [])]]), [
+      { ...link(20, '/old-name/', null, 1, null), kind: 'redirect' },
+    ]);
+    expect(forwarded.pages).toEqual([]);
+    expect(forwarded.unlinked).toEqual([
+      {
+        target: expect.objectContaining({ id: 1 }) as unknown,
+        where: 'forwarded',
+        sitemaps: [],
+        forwards: [`${SITE}/old-name/`],
+      },
+    ]);
+    expect(unlinkedWords(forwarded.unlinked[0]!)).toBe(
+      'No page links to it: another address forwards here. Change where it forwards to, in your site’s redirect settings.',
+    );
+  });
+
   it('counts what it lists', () => {
     expect(fixSummary(model)).toBe(
       '3 links to change on 2 pages · 1 link many pages share · 2 addresses no page links to',

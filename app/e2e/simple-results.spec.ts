@@ -6,6 +6,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
+import { deadEndFixList, FIX_LISTED, FIX_SUMMARY, fixShape } from './fixList';
 import { countOf, expectNoViolations, read, seededCrawl } from './support';
 
 test.use({ storageState: { cookies: [], origins: [] } });
@@ -34,6 +35,7 @@ interface Check {
   siteWide?: boolean;
   reportedOnce?: boolean;
   grouping: string;
+  references?: string;
 }
 
 const BANDS: Record<string, string> = { veryGood: 'Very good', good: 'Good', needsWork: 'Needs work', poor: 'Poor' };
@@ -55,24 +57,32 @@ async function facts() {
 
 /**
  * "9 addresses", as a row in Simple's lists writes a check's count (without what it's a share of, so rows compare),
- * then the points fixing it gives back, when it gives some: "9 addresses 2 points back".
+ * then the pages of a problem merged into its row ("9 addresses on 5 pages"), then what fixing it adds to the score,
+ * when it adds some: "9 addresses +2 to your score".
  */
-function rowWords(check: Check, count: number, points: number): string {
-  const words = check.siteWide
+function rowWords(check: Check, count: number, points: number, alsoPages = 0): string {
+  const counted = check.siteWide
     ? 'The whole site'
     : check.reportedOnce
       ? 'Once, for the whole site'
       : `${number(count)} ${(check.subject ?? 'page') === 'page' ? (count === 1 ? 'page' : 'pages') : count === 1 ? 'address' : 'addresses'}`;
-  return points > 0 ? `${words} ${number(points)} ${points === 1 ? 'point' : 'points'} back` : words;
+  const words = alsoPages > 0 ? `${counted} on ${alsoPages === 1 ? '1 page' : `${number(alsoPages)} pages`}` : counted;
+  // It pinned "9 addresses 2 points back". Changed in the UX audit of 2026-11-19 (S-19): the points read "+2 to your
+  // score".
+  return points > 0 ? `${words} +${number(points)} to your score` : words;
 }
 
-/** "9 of 4,521 addresses", as Simple writes a check's count and what it is a share of. */
+/**
+ * "9 of 265 pages", as Simple writes a check of pages' count and what it is a share of; a check of addresses its count
+ * alone, "9 addresses". It pinned "9 of 4,521 addresses" for those. Changed in the UX audit of 2026-11-19 (S-19):
+ * every image, script and link is an address, so the whole says nothing of the site.
+ */
 function shareOf(check: Check, count: number, analysis: Analysis): string {
   if (check.siteWide) return 'The whole site';
   if (check.reportedOnce) return 'Once, for the whole site';
-  const pages = (check.subject ?? 'page') === 'page';
-  const whole = pages ? (analysis.score?.covers.pages ?? analysis.pagesAnalyzed) : (analysis.score?.covers.urls ?? 0);
-  return `${number(count)} of ${number(whole)} ${pages ? (whole === 1 ? 'page' : 'pages') : whole === 1 ? 'address' : 'addresses'}`;
+  if ((check.subject ?? 'page') !== 'page') return `${number(count)} ${count === 1 ? 'address' : 'addresses'}`;
+  const whole = analysis.score?.covers.pages ?? analysis.pagesAnalyzed;
+  return `${number(count)} of ${number(whole)} ${whole === 1 ? 'page' : 'pages'}`;
 }
 
 async function openSummary(page: Page, id: string) {
@@ -108,7 +118,7 @@ test('the Summary says the engine’s score, word and counts, and passes axe in 
     expect([found('error'), found('warning'), found('notice')]).toEqual([2, 3, 23]);
     // The sentence counts the jobs: a problem another's fix clears is folded under it.
     const five = analysis.fixFirst.filter((id) => byId.get(id)?.severity !== 'notice').slice(0, 5);
-    const numbered = fixFirstJobs(five, analysis, byId).filter((job) => !job.nested).length;
+    const numbered = fixJobs(five, analysis, byId).rows.filter((job) => !job.nested).length;
     const these = ['this one', 'these two', 'these three', 'these four', 'these five'][numbered - 1] ?? '';
     await expect(main(page).getByText(`Fixing ${these} takes the score from 87 to 100.`)).toBeVisible();
   }
@@ -146,22 +156,28 @@ test('the score’s breakdown: the engine’s lines add up to its score, and Esc
   await expect(main(page).getByRole('link', { name: 'How the score is worked out' })).toBeVisible();
 });
 
-/** The rows a list shows, with each one's link and count. */
 /**
- * The five to fix first as the Summary lists them, as What to fix has them (simple/fixRows.ts): a check a fix of another
- * of the five of its severity clears entirely (the analysis's `clears[].all`) under that one, which carries the points
- * of both. The rows in order, each with the points it says.
+ * A list of problems as jobs, as the Summary lists its five and What to fix its parts (simple/fixRows.ts): a check a
+ * fix of another of its severity in the list clears entirely (the analysis's `clears[].all`) under that one, which
+ * carries the points of both. The rows in order, each with the points it says.
+ *
+ * It pinned every such check as a row folded under the other. Changed in the UX audit of 2026-11-19 (S-04): the pages
+ * that link to dead addresses, cleared by the dead addresses' own check, are that check from its other end, so the two
+ * are one row ("9 addresses on 5 pages") and the pages' check has no row: it is in `merged`, and its pages in the
+ * row's `alsoPages`.
  */
-function fixFirstJobs(
-  five: readonly string[],
+function fixJobs(
+  ids: readonly string[],
   analysis: Analysis,
   byId: ReadonlyMap<string, Check>,
-): { id: string; points: number; nested: boolean }[] {
+  severities: readonly Check['severity'][] = ['error', 'warning'],
+): { rows: { id: string; points: number; nested: boolean; alsoPages: number }[]; merged: string[] } {
   const pointsOf = (id: string) => analysis.score?.lines.find((line) => line.checkId === id)?.points ?? 0;
+  const found = (id: string) => analysis.counts.find((count) => count.checkId === id)?.count ?? 0;
   const under = new Map<string, string[]>();
   const folded = new Set<string>();
-  for (const severity of ['error', 'warning'] as const) {
-    const part = five.filter((id) => byId.get(id)?.severity === severity);
+  for (const severity of severities) {
+    const part = ids.filter((id) => byId.get(id)?.severity === severity);
     for (const id of part) {
       if (folded.has(id)) continue;
       for (const cleared of analysis.counts.find((count) => count.checkId === id)?.clears ?? []) {
@@ -172,17 +188,29 @@ function fixFirstJobs(
       }
     }
   }
-  return five
+  const mirrors = (id: string, other: string) =>
+    fixShape(byId.get(id)!) === 'addresses' && fixShape(byId.get(other)!) === 'pages';
+  const rows = ids
     .filter((id) => !folded.has(id))
     .flatMap((id) => {
-      const nested = under.get(id) ?? [];
+      const all = under.get(id) ?? [];
+      const merged = all.filter((other) => mirrors(id, other));
       return [
-        { id, points: [id, ...nested].reduce((sum, each) => sum + pointsOf(each), 0), nested: false },
-        ...nested.map((each) => ({ id: each, points: 0, nested: true })),
+        {
+          id,
+          points: [id, ...all].reduce((sum, each) => sum + pointsOf(each), 0),
+          nested: false,
+          alsoPages: merged.reduce((most, each) => Math.max(most, found(each)), 0),
+        },
+        ...all
+          .filter((each) => !merged.includes(each))
+          .map((each) => ({ id: each, points: 0, nested: true, alsoPages: 0 })),
       ];
     });
+  return { rows, merged: [...under].flatMap(([id, all]) => all.filter((other) => mirrors(id, other))) };
 }
 
+/** The rows a list shows, with each one's link and count. */
 async function rowsOf(list: Locator) {
   return list.getByRole('link').evaluateAll((links) =>
     links.map((link) => ({
@@ -203,16 +231,23 @@ test('the sweep: every figure of the Summary, What to fix and one problem lands 
   await page.setViewportSize({ width: 1280, height: 720 });
   await openSummary(page, crawl.id);
   let followed = 0;
+  // What to fix as jobs: a problem merged into another's row has no row of its own (S-04).
+  const listed = fixJobs(analysis.fixFirst, analysis, byId, ['error', 'warning', 'notice']);
+  const mergedOf = (severity: Check['severity']) =>
+    listed.merged.filter((id) => byId.get(id)?.severity === severity).length;
 
   // The five counts beside the score: each lands on its part of What to fix, holding exactly that many.
-  const parts: [string, string, number][] = [
-    ['Serious problem', 'Serious', found('error')],
-    ['worth fixing', 'Worth fixing', found('warning')],
-    ['worth a look', 'Worth a look', found('notice')],
-    ['found nothing wrong', 'Nothing wrong', passed],
-    ['couldn’t run', 'Couldn’t check', skipped],
+  // It pinned as many links in a part as its heading counts. Changed in the UX audit of 2026-11-19 (S-04): the heading
+  // still counts every problem, and a problem merged into another's row is in that row, so the part has one link fewer
+  // for each.
+  const parts: [string, string, number, number][] = [
+    ['Serious problem', 'Serious', found('error'), mergedOf('error')],
+    ['worth fixing', 'Worth fixing', found('warning'), mergedOf('warning')],
+    ['worth a look', 'Worth a look', found('notice'), mergedOf('notice')],
+    ['found nothing wrong', 'Nothing wrong', passed, 0],
+    ['couldn’t run', 'Couldn’t check', skipped, 0],
   ];
-  for (const [words, heading, count] of parts) {
+  for (const [words, heading, count, merged] of parts) {
     await openSummary(page, crawl.id);
     const row = main(page)
       .getByRole('list', { name: 'What the checks found' })
@@ -226,7 +261,7 @@ test('the sweep: every figure of the Summary, What to fix and one problem lands 
     await row.getByRole('link').click();
     const section = main(page).getByRole('region', { name: `${heading} ${number(count)}` });
     await expect(section).toBeVisible();
-    await expect(section.getByRole('link')).toHaveCount(count);
+    await expect(section.getByRole('link')).toHaveCount(count - merged);
     followed++;
   }
 
@@ -234,13 +269,15 @@ test('the sweep: every figure of the Summary, What to fix and one problem lands 
   // another's fix clears entirely is folded under it, as What to fix folds it, the points of both on the row above.
   await openSummary(page, crawl.id);
   const fixFirst = analysis.fixFirst.filter((id) => byId.get(id)?.severity !== 'notice').slice(0, 5);
-  const jobs = fixFirstJobs(fixFirst, analysis, byId);
+  const jobs = fixJobs(fixFirst, analysis, byId).rows;
   const firstRows = await rowsOf(main(page).getByRole('region', { name: 'Fix these first' }).getByRole('list'));
   expect(firstRows.map((row) => row.href.split('/').pop())).toEqual(jobs.map((job) => job.id));
   for (const [index, row] of firstRows.entries()) {
     const id = row.href.split('/').pop() ?? '';
     const check = byId.get(id)!;
-    expect(row.count).toBe(rowWords(check, counts.get(id) ?? 0, jobs[index]?.points ?? 0));
+    // It pinned "The whole site 60 points back". Changed in the UX audit of 2026-11-19 (S-19, and S-04 for a row
+    // that holds two problems): "The whole site +60 to your score", "9 addresses on 5 pages +6 to your score".
+    expect(row.count).toBe(rowWords(check, counts.get(id) ?? 0, jobs[index]?.points ?? 0, jobs[index]?.alsoPages ?? 0));
   }
 
   // What to fix: every problem's count is the engine's, and its page says the same and lists exactly that many.
@@ -251,17 +288,49 @@ test('the sweep: every figure of the Summary, What to fix and one problem lands 
     ...(await rowsOf(main(page).getByRole('region', { name: /^Worth fixing / }))),
     ...(await rowsOf(main(page).getByRole('region', { name: /^Worth a look / }))),
   ];
-  expect(problems).toHaveLength(found('error') + found('warning') + found('notice'));
+  // It pinned a row for every problem found. Changed in the UX audit of 2026-11-19 (S-04): all but those merged into
+  // another's row.
+  expect(problems).toHaveLength(found('error') + found('warning') + found('notice') - listed.merged.length);
+  expect(problems.filter((row) => listed.merged.includes(row.href.split('/').pop() ?? ''))).toEqual([]);
   for (const row of problems) {
     const id = row.href.split('/').pop() ?? '';
     const check = byId.get(id)!;
     const count = counts.get(id) ?? 0;
     const share = shareOf(check, count, analysis);
-    // A row folded under another says no points (they're on that row); any other its own, or with what's folded under it.
-    expect(row.count.startsWith(rowWords(check, count, 0)), `${id}: ${row.count}`).toBe(true);
+    // A row folded under another says no points (they're on that row); any other its own, or with what's folded under
+    // it; a row that holds a merged problem says its pages after its own count.
+    const alsoPages = listed.rows.find((job) => job.id === id)?.alsoPages ?? 0;
+    expect(row.count.startsWith(rowWords(check, count, 0, alsoPages)), `${id}: ${row.count}`).toBe(true);
     await page.goto(row.href);
     await expect(main(page).getByRole('heading', { level: 1 })).toBeVisible();
-    await expect(main(page).getByRole('list').first()).toContainText(share);
+    // It pinned the share somewhere in the head's facts ("9 of 4,521 addresses"). Changed in the UX audit of
+    // 2026-11-19 (S-19): the first fact is the count, alone for a check of addresses (shareOf).
+    await expect(main(page).getByRole('list').first().getByRole('listitem').first()).toHaveText(share);
+    const shape = fixShape(check);
+    if (shape) {
+      // It pinned a region "Where it is" with the check's count and a table. Changed in the UX audit of 2026-11-19
+      // (S-02 to S-05, S-07): a problem that is a link has "Where to fix it", counted in links to change on pages to
+      // edit, links many pages share and addresses no page links to; no region "Where it is".
+      const fix = main(page).getByRole('region', { name: 'Where to fix it' });
+      const summary = fix.locator('h2 + span');
+      await expect(summary).toHaveText(FIX_SUMMARY, { timeout: 15_000 });
+      await expect(main(page).getByRole('region', { name: 'Where it is' })).toHaveCount(0);
+      const said = (await summary.textContent()) ?? '';
+      const edited = fix.getByRole('list', { name: 'Pages to edit' }).getByRole('listitem');
+      if (shape === 'addresses' && count <= FIX_LISTED) {
+        // Dead addresses: the three parts hold exactly the check's count of them, as the sidecar says where each is.
+        const list = await deadEndFixList(crawl.id, id);
+        expect(said).toBe(list.summary);
+        expect(list.linked.length + list.shared.length + list.unlinked.length, id).toBe(count);
+        await expect(edited).toHaveCount(list.pages.length);
+      } else if (shape === 'pages' && count <= FIX_LISTED && !said.includes('share')) {
+        // Pages that hold the links, none of them shared by many: each page the check counts is a page to edit.
+        await expect(edited).toHaveCount(count);
+        expect(said.endsWith(count === 1 ? ' on 1 page' : ` on ${number(count)} pages`), `${id}: ${said}`).toBe(true);
+      }
+      followed++;
+      continue;
+    }
     // Where it is: the causes and pages it lists add up to the check's count.
     const where = main(page).getByRole('region', { name: 'Where it is' });
     if (!check.siteWide && !check.reportedOnce) {
@@ -276,7 +345,7 @@ test('the sweep: every figure of the Summary, What to fix and one problem lands 
 });
 
 test('J and K move through the problems on What to fix, and Enter opens one', async ({ page }) => {
-  const { crawl, found } = await facts();
+  const { crawl, found, byId } = await facts();
   test.skip(found('error') + found('warning') + found('notice') < 2, 'Fewer than two problems');
   await page.goto(`/crawls/${crawl.id}/issues`);
   await expect(main(page).getByRole('heading', { level: 1, name: 'What to fix' })).toBeVisible();
@@ -291,7 +360,12 @@ test('J and K move through the problems on What to fix, and Enter opens one', as
   const href = await first.getAttribute('href');
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(new RegExp(`${href}$`));
-  await expect(main(page).getByRole('region', { name: 'Where it is' })).toBeVisible();
+  // It pinned a region "Where it is" on whichever problem is first. Changed in the UX audit of 2026-11-19 (S-02 to
+  // S-05, S-07): a problem that is a link has "Where to fix it" in its place.
+  const opened = byId.get((href ?? '').split('/').pop() ?? '');
+  await expect(
+    main(page).getByRole('region', { name: opened && fixShape(opened) ? 'Where to fix it' : 'Where it is' }),
+  ).toBeVisible();
   await expectNoViolations(page);
   await page.setViewportSize({ width: 1280, height: 720 });
   await shoot(page, 'problem-light');
@@ -360,14 +434,18 @@ test('a title or description too long says where Google will likely cut it, one 
   page,
 }) => {
   const { crawl, counts } = await facts();
-  const lines: [string, RegExp][] = [
-    ['title-too-long', /Google will likely cut this title off after “[^”]+”/],
-    ['description-too-long', /Google will likely cut this description off after “[^”]+”/],
-    ['title-too-short', /Only [\d,]+ characters? long/],
-    ['description-too-short', /Only [\d,]+ characters? long/],
+  // It pinned, for one too long, "Google will likely cut this title off after “…”" on every page listed. Changed in
+  // the UX audit of 2026-11-19 (S-13): the whole text in quotes, the part Google cuts in grey (a span the column's
+  // heading explains), then its length and how far over it is. One too short says "Only 16 characters long", as it did.
+  const lines: [string, RegExp, 'title' | 'description' | null][] = [
+    ['title-too-long', /^“.+”[\d,]+ characters: about [\d,]+ more than Google shows\.$/, 'title'],
+    ['description-too-long', /^“.+”[\d,]+ characters: about [\d,]+ more than Google shows\.$/, 'description'],
+    ['title-too-short', /^Only [\d,]+ characters? long$/, null],
+    // A short description is quoted under its length: it is short enough to show whole.
+    ['description-too-short', /^Only [\d,]+ characters? long\s*Search description: “.+”$/, null],
   ];
   let shown = 0;
-  for (const [id, line] of lines) {
+  for (const [id, line, cut] of lines) {
     const count = counts.get(id) ?? 0;
     if (count === 0) continue;
     await page.goto(`/crawls/${crawl.id}/issues/${id}`);
@@ -375,6 +453,30 @@ test('a title or description too long says where Google will likely cut it, one 
     await expect(where.getByRole('table')).toBeVisible();
     // Every page listed says it plainly, in place of the engine's "612 px, over 580 (64 characters)".
     await expect(where.getByRole('cell').filter({ hasText: line })).toHaveCount(Math.min(count, 25));
+    if (cut) {
+      await expect(
+        where.getByRole('columnheader', {
+          name: `Its ${cut}: the words in grey are the ones Google will likely cut off`,
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect(where).not.toContainText('Google will likely cut this');
+      // The grey part is what the line counts: "about 20 more" is the 20 characters in grey.
+      const cuts = await where.locator('tbody tr').evaluateAll((rows) =>
+        rows.map((row) => {
+          const parts = row.querySelectorAll('.si-cut-text');
+          const grey = (parts[0]?.textContent ?? '').trim();
+          const said = /about ([\d,]+) more than Google shows\./.exec(row.textContent)?.[1] ?? '';
+          return {
+            parts: parts.length,
+            grey: Array.from(new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(grey)).length,
+            said: Number(said.replace(/,/g, '')),
+          };
+        }),
+      );
+      expect(cuts).toHaveLength(Math.min(count, 25));
+      expect(cuts.filter((each) => each.parts !== 1 || each.grey === 0 || each.grey !== each.said)).toEqual([]);
+    }
     await expect(main(page)).not.toContainText(/\bpx\b/);
     shown++;
   }

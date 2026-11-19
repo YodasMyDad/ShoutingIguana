@@ -3,6 +3,7 @@
 // of it also clears; the answer and Overview's cards as things to change; and Simple's What to fix ordered and
 // folded, a problem saying what fixing it also fixes. Every expectation is worked out from the sidecar's own answer.
 import { expect, test, type Page } from '@playwright/test';
+import { deadEndFixList, FIX_LISTED, fixShape } from './fixList';
 import { expectNoViolations, read, seededCrawl, showChecks } from './support';
 
 interface Cleared {
@@ -27,6 +28,8 @@ interface Check {
   title: string;
   plainTitle: string | null;
   severity: 'error' | 'warning' | 'notice';
+  grouping: string;
+  references?: string;
   clears?: string[];
 }
 
@@ -178,9 +181,25 @@ test.describe('Never a count over an empty list, in Simple (round 4)', () => {
     const count = found.find((entry) => entry.checkId === 'internal-client-error')?.count ?? 0;
     test.skip(count === 0, 'The seeded crawl has no 404s');
     await page.goto(`/crawls/${crawl.id}/issues/internal-client-error`);
-    const where = page.getByRole('region', { name: 'Where it is' });
-    await expect(where).toContainText(`on ${number(count)} ${count === 1 ? 'address' : 'addresses'}`);
-    await expect(where.getByText(/Linked from/).first()).toBeVisible();
+    // It pinned "on 6 addresses" in a region "Where it is". Changed in the UX audit of 2026-11-19 (S-02 to S-05, S-07
+    // and S-19): the head says the count ("6 addresses", not a share of every address), and the region is "Where to fix
+    // it", counted in links to change on pages to edit, in links many pages share and in addresses no page links to.
+    const list = await deadEndFixList(crawl.id, 'internal-client-error');
+    await expect(page.getByRole('main').getByRole('listitem').first()).toHaveText(
+      `${number(count)} ${count === 1 ? 'address' : 'addresses'}`,
+    );
+    const where = page.getByRole('region', { name: 'Where to fix it' });
+    await expect(where.getByText(list.summary, { exact: true })).toBeVisible({ timeout: 15_000 });
+    // Never a count over an empty list: every address the check flagged is in one of the three.
+    expect(list.linked.length + list.shared.length + list.unlinked.length).toBe(Math.min(count, FIX_LISTED));
+    // It pinned "Linked from" under an address. Changed in the UX audit of 2026-11-19 (S-02, S-03): each address a
+    // page links to is where a link of a page to edit leads, itself a link.
+    expect(list.linked.length).toBeGreaterThan(0);
+    const pages = where.getByRole('list', { name: 'Pages to edit' });
+    await expect(pages.getByRole('listitem')).toHaveCount(list.pages.length);
+    for (const url of list.linked) {
+      await expect(pages.getByRole('link', { name: url, exact: true }).first()).toBeVisible();
+    }
   });
 });
 
@@ -190,17 +209,38 @@ test.describe('Simple', () => {
   test('What to fix folds a problem a fix clears entirely under it, and orders by points, remembered', async ({
     page,
   }) => {
-    const { crawl, related, byId } = await facts();
+    const { crawl, related, byId, found } = await facts();
     await page.goto(`/crawls/${crawl.id}/issues`);
     await expect(page.getByRole('heading', { level: 1, name: 'What to fix' })).toBeVisible();
+    const rowOf = (checkId: string) => page.getByRole('main').locator(`a.si-plain-row[href$="/issues/${checkId}"]`);
     // Each fold the analysis says, within a part: the folded problem's row is among the rows folded right after the
     // one it's under.
     for (const { fixer, cleared } of related.filter(
       ({ fixer, cleared }) => cleared.all && byId.get(fixer.checkId)?.severity === byId.get(cleared.checkId)?.severity,
     )) {
       const under = page.getByRole('main').locator(`a[href$="/issues/${fixer.checkId}"]`);
+      const lead = byId.get(fixer.checkId)!;
+      const other = byId.get(cleared.checkId)!;
+      if (fixShape(lead) === 'addresses' && fixShape(other) === 'pages') {
+        // It pinned the pages that link to dead addresses as a row folded under the dead addresses' own. Changed in
+        // the UX audit of 2026-11-19 (S-04): the two are one list of links to change, so they are one row, which
+        // names the other problem in its title and counts both ("9 addresses on 5 pages"); the other has no row.
+        const pages = found.find((count) => count.checkId === cleared.checkId)!.count;
+        await expect(rowOf(cleared.checkId)).toHaveCount(0);
+        await expect(rowOf(fixer.checkId)).toContainText(
+          `${lead.plainTitle ?? lead.title} with “${other.plainTitle ?? other.title}”: one list fixes both`,
+        );
+        await expect(rowOf(fixer.checkId).locator('.si-plain-row__count')).toHaveText(
+          new RegExp(
+            `^${number(fixer.count)} ${fixer.count === 1 ? 'address' : 'addresses'} on ${pages === 1 ? '1 page' : `${number(pages)} pages`}( \\+[\\d,]+ to your score)?( (▲|▼|New |Not looked for ).+)?$`,
+          ),
+        );
+        continue;
+      }
       const folded = page.getByRole('main').locator(`li.si-plain-list__nested a[href$="/issues/${cleared.checkId}"]`);
-      await expect(folded).toContainText('Fixed along with the problem above.');
+      // It pinned "Fixed along with the problem above." Changed in the UX audit of 2026-11-19 (S-04): a folded row
+      // says "Fixing the problem above clears this too."
+      await expect(folded).toContainText('Fixing the problem above clears this too.');
       const foldedUnder = await under.evaluate((row) => {
         const hrefs: string[] = [];
         let next = row.closest('li')?.nextElementSibling;

@@ -85,8 +85,10 @@ export interface SharedLink {
 /** An address no page links to: where the check found it instead. */
 export interface UnlinkedAddress {
   target: FixTarget;
-  where: 'sitemap' | 'start' | 'nowhere' | 'unread';
+  where: 'sitemap' | 'start' | 'nowhere' | 'unread' | 'forwarded';
   sitemaps: readonly SitemapRef[];
+  /** The addresses that forward to it, where that is all that leads there: the fix is where they forward to. */
+  forwards?: readonly string[] | undefined;
 }
 
 export interface FixModel {
@@ -227,8 +229,16 @@ export function addressesModel(
       });
       continue;
     }
+    const forwards: string[] = [];
+    let onAPage = 0;
     for (const link of links) {
       if (link['to.id'] !== row.id || typeof link['from.id'] !== 'number' || !link['from.url']) continue;
+      // An address that forwards here isn't a page with a link to change: its fix is where it forwards to.
+      if (link.kind === 'redirect') {
+        forwards.push(link['from.url']);
+        continue;
+      }
+      onAPage += 1;
       const title = link['from.title'];
       onPages.push({
         page: { id: link['from.id'], url: link['from.url'], title: typeof title === 'string' && title ? title : null },
@@ -238,6 +248,9 @@ export function addressesModel(
         position: link.position ?? null,
         count: 1,
       });
+    }
+    if (onAPage === 0 && forwards.length > 0) {
+      model.unlinked.push({ target, where: 'forwarded', sitemaps: [], forwards: [...new Set(forwards)] });
     }
   }
   model.pages = fixPagesOf(onPages);
@@ -383,8 +396,12 @@ export function fixedOnce(shared: Pick<SharedLink, 'position'>): boolean {
 }
 
 /** Where an address no page links to was found: "No page links to it. It’s listed in your sitemap." */
-export function unlinkedWords(unlinked: Pick<UnlinkedAddress, 'where' | 'sitemaps'>): string {
+export function unlinkedWords(unlinked: Pick<UnlinkedAddress, 'where' | 'sitemaps' | 'forwards'>): string {
   switch (unlinked.where) {
+    case 'forwarded': {
+      const count = unlinked.forwards?.length ?? 0;
+      return `No page links to it: ${count === 1 ? 'another address forwards' : `${formatCount(count)} other addresses forward`} here. Change where ${count === 1 ? 'it forwards' : 'they forward'} to, in your site’s redirect settings.`;
+    }
     case 'sitemap':
       return `No page links to it. It’s listed in your ${unlinked.sitemaps.length > 1 ? 'sitemaps' : 'sitemap'}: take it out of there.`;
     case 'start':
@@ -455,6 +472,7 @@ export function fixListText(model: FixModel): string[] {
       lines.push(`  ${leads(unlinked.target)}`);
       lines.push(`    ${unlinkedWords(unlinked)}`);
       for (const sitemap of unlinked.sitemaps) lines.push(`    Sitemap: ${sitemap.url}`);
+      for (const url of unlinked.forwards ?? []) lines.push(`    Forwards here: ${url}`);
     }
   }
   return lines;

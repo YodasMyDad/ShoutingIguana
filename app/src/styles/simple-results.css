@@ -394,6 +394,12 @@
     cursor: pointer;
   }
 
+  .si-open-link--short {
+    display: inline-block;
+    min-width: var(--space-6);
+    min-height: var(--space-6);
+  }
+
   .si-open-link:hover {
     color: var(--color-accent-text);
     text-decoration-color: currentColor;

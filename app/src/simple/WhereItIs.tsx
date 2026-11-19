@@ -158,7 +158,11 @@ function Address({
   return (
     <span className={small ? 'block font-mono text-12 text-text-muted' : 'font-mono text-13'}>
       {/* The address is the link (the UX fix round's rules 1 and 2); its open button sits straight after it. */}
-      <OpenLink url={at ?? url} hint={hint ?? `Open ${file ? 'it' : 'this address'} in your browser`}>
+      <OpenLink
+        url={at ?? url}
+        hint={hint ?? `Open ${file ? 'it' : 'this address'} in your browser`}
+        short={!label && shown.length < 4}
+      >
         {label ? (
           <span aria-hidden="true">
             <span className="si-file-name">{label.name}</span>

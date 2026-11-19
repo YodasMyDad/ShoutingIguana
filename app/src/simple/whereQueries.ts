@@ -6,12 +6,17 @@ import { queryKeys } from '../api/queries';
 import type { Check } from '../api/types';
 import { evidenceOf } from '../screens/issues/evidenceColumns';
 import { LINK_COLUMNS } from './fixPages';
+import { plainDetailColumn } from './plainEvidence';
 
 const ROW_COLUMNS = ['url', 'title', 'detail', 'relatedUrl', 'relatedStatusCode'];
 
 /** What a check's rows carry here: the page's name and address, the detail, the other URL, and the check's evidence. */
-function rowColumns(check: Pick<Check, 'evidence'>): string[] {
-  return [...ROW_COLUMNS, ...evidenceOf(check).filter((id) => !ROW_COLUMNS.includes(id))];
+function rowColumns(check: Pick<Check, 'id' | 'evidence'>): string[] {
+  // With the column its plain line is said from ("Only 16 characters long" is its `titleLength`): without it the line
+  // fell back to the engine's detail.
+  const plain = plainDetailColumn(check);
+  const wanted = [...evidenceOf(check), ...(plain ? [plain] : [])];
+  return [...ROW_COLUMNS, ...wanted.filter((id, index) => !ROW_COLUMNS.includes(id) && wanted.indexOf(id) === index)];
 }
 
 /** The fix loop: compared with the site's last check (each cause and page then gains its `change`), or not. */
