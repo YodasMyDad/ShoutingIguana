@@ -342,20 +342,20 @@ and isn't run in CI: it needs a Windows desktop session (a disconnected one will
   removes a param.
 - The inspector reads the current view's checked `inspect`, so it opens only on a view that has one. Its place in
   history is one model every screen uses (`routing/inspector.ts`, `useInspector`), so the inspector's slice inherits
-  it: opened from a grid (Enter, a double-click) and following the grid's cursor while open, it's in place (a
-  replace); walking a link inside it, or the palette's "Go to URL…" while it's open, is a push, each entry counting
-  the steps walked from where it opened (`inspectSteps` in its history state), so back and forward retrace the walk; Esc or Close goes
-  back over those steps to the entry it opened on, then drops `inspect` there in place. So Esc then Alt+Left leaves
-  the screen, and from a walk A, B, C, Alt+Left shows B while Esc from C closes to the screen as it was before A. A
-  browser keeps only so many entries (Chromium 50) and `history.go` past the oldest does nothing, silently: a close
-  goes back no further than history holds, waits a second at most for it, and then closes on the entry it's on, so
-  the inspector always closes (after a walk of 60, on the oldest entry left). One close runs at a time: Esc pressed
-  again before history has gone back joins it, never goes back over the walk a second time. A
+  it: opening it (a click on a URL, Enter, a double-click) is one new place (a push), so the entry behind it is the
+  view exactly as it was and Back closes the inspector; everything after that is in place (a replace): the grid's
+  cursor moving it to another row, a link walked inside it, the palette's "Go to URL…" while it's open. The hops are
+  kept beside the entry (`inspectTrail` in its history state, the last 50, each with the section it was left on) for
+  the inspector's own back (`back`, the "Back to /page/" strip), and what to show on arriving (`inspectShow`: a
+  section, and the link to mark in its list) goes with the navigation. Esc or Close steps back to the entry it
+  opened from where that is still the same view (`inspectOpenedFrom`), and otherwise (a link straight to the
+  inspector, filters changed while it was open, history that can't step back) drops `inspect` in place: it waits a
+  second at most for history, so the inspector always closes. One close runs at a time: Esc pressed again before
+  history has gone back joins it, never goes back twice. A
   screen's own replaces while it's open (Issues' filters and group) keep the history state (`state: true`). The
-  palette's "Go to URL…" is `goToUrl`: on a view that has the inspector (`viewInspects`), a step of the walk when
-  it's open and, when it's closed, opened in place as a grid opens it (a push would leave two entries for the same
-  view once it's closed, and a back between them that shows nothing); from any other view (Overview, the crawl's
-  settings) the crawl's URLs with the inspector open, a place of its own that back leaves.
+  palette's "Go to URL…" is `goToUrl`: on a view that has the inspector (`viewInspects`), a hop when it's open and,
+  when it's closed, opened as a grid opens it; from any other view (Overview, the crawl's settings) the crawl's URLs
+  with the inspector open, a place of its own that back leaves.
 - `/crawls/:crawl` opens the crawl's last view, in the current mode. The app reopens where it was left.
 - A route with a Simple screen renders it in Simple through the one table, `app/simpleScreens.ts`
   ([The routes' table](#the-routes-table-adding-a-simple-screen)).
@@ -940,11 +940,27 @@ is what it shows. What it settled:
   cluster is named after its first page (the page itself, when other pages' issues name it), and is left out for an
   analysis another version made, which may have grouped the older way. `issueLinks.sweep.test.ts` checks every link
   it builds against the real groups of three analyses (`scripts/issue-links-fixture.mjs` makes its fixture).
-- **Walking.** A URL of the crawl inside the inspector is `WalkUrl` (`Url` with `onGo`): a push through
-  `useInspector().walk`. In the link grids Enter, a double-click or a click on the URL walks; the grid stays one Tab
-  stop. A double-click is one step wherever it lands: the second click of one is no go of its own (`Url`), and a
-  double-click counts for a link grid only when both its presses were on that grid, off the URL (the first click on
-  a URL has walked, and the second may land on the next URL's grid).
+- **Walking.** A URL of the crawl inside the inspector is `WalkUrl` (`Url` with `onGo`): a hop in place through
+  `useInspector().walk`, which the inspector's own back retraces (`WalkBack` in `Inspector.tsx`). In the link grids
+  Enter, a double-click or a click on the URL walks; the grid stays one Tab stop. A double-click is one step wherever
+  it lands: the second click of one is no go of its own (`Url`), and a double-click counts for a link grid only when
+  both its presses were on that grid, off the URL (the first click on a URL has walked, and the second may land on
+  the next URL's grid).
+- **The page that holds a link is where the hop lands.** An inlink's page, and the summary's "Found on", are walked
+  to with `show: { section: 'outlinks', link: <the URL left> }`: the page's Outlinks, with its link to the URL left
+  first, marked (`.si-came-for`: the neutral fill and bold text of what's current, no stripe; "The link you came
+  from" for a screen reader, and "is first" over the list). An image's "Used on" page is walked to on its Images the
+  same way. The mark is `marked` in the inspector's context (`inspectorContext.ts`), from `useInspectShow()`.
+- **A link list one read holds is ordered and narrowed in the app.** The lists page 1,000 links at a time, the
+  most `/urls/inlinks` gives (`LINKS_READ_AT_ONCE`), so a list no longer than that comes whole with its first page:
+  `arrangeLinks` (`links.ts`) puts the link come for first, then the broken ones (4xx, 5xx or no answer), then the
+  rest as found, and the Status menu ("Broken", "Redirects") narrows it. A longer list is paged in crawl order with
+  no Status menu: the read takes `kinds` only, so ordering or narrowing it by status needs the sidecar.
+- **The summary's counts are the lists' own.** The Inlinks and Outlinks lines lead with `linkTotals` (every kind of
+  link: the figure on the tab) as a button that shows the section, then the analysis's hyperlinks; "In a sitemap"
+  names `listedIn`'s sitemaps, each linking to `/sitemaps/<id>?inspect=<url id>`. An image's head reads where it's
+  used from `/urls/found-on` and its pixels from the URL grid's row (`pixelWidth`, `pixelHeight`), which
+  `/urls/inspect` doesn't carry.
 - **Focus stays in the inspector when what had it goes**: a link walked from, another URL's content (a walk, back
   or forward), a button that replaces what it sits in ("Open Issues", "Try again", "Show more"). Focus that was in a
   section and is taken away with its element moves to the shown section's panel (`Inspector.tsx` watches for it: a
@@ -953,7 +969,9 @@ is what it shows. What it settled:
   URL inspected. Focus the user puts down themselves stays down. A link grid has a better place for it: the grid
   that comes takes the keyboard (another URL's, or every kind's after "Show every kind"), and starts on the row its
   cursor was left on (`GridCore`'s `startRow`; `links.ts` remembers each grid's row for the session), so back along
-  a walk is where the walk left from. "Go to URL…" asks for a URL by name, so the inspector's panel takes the
+  a walk is where the walk left from. A hop made with the keyboard in a link grid, and the inspector's back to a
+  list of links, promise the keyboard to the grid of the URL arrived on (`promiseKeyboardToLinksOf`), which may be
+  another section's and is shown a render before its URL. "Go to URL…" asks for a URL by name, so the inspector's panel takes the
   keyboard when it shows it (`useGoneToByName`), instead of leaving it on the view or, from Overview, on nothing.
 - **The source** (`SourceViewer.tsx`) is CodeMirror 6, read-only but focusable, with a caret, so the keyboard moves
   through it and selects. It's a chunk of its own (239 kB), loaded while the app is idle once an inspector is open

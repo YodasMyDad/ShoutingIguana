@@ -63,7 +63,11 @@ the switch in the shell, the Report route and screen, a Simple line in the flows
   Summary, What to fix and Report. In Advanced, Report joins as the eighth section, below the crawl's Settings.
   What switching does, and the order in which the rest of the bar gives way, are in
   [Simple mode](v2-ui-simple.md#the-switch).
-- **Inspector.** Opens for the selected URL on any grid, and holds its place while you move between rows.
+- **Inspector.** Opens for the selected URL on any grid, and holds its place while you move between rows. Until you
+  drag its edge (which shows a grip, and is remembered) it takes about a third of a wide window, enough for its ten
+  tabs and a link with its anchor text (920 px at 2,560), 400 px in a 1,440 px window and 368 px at 1,360 and under,
+  so the grid beside it keeps its room; docked at the bottom, two fifths of the window's height. Tabs that don't fit
+  go to an "N more" menu at the end of the strip, never cut and never scrolled.
 - **Overview has two states.** While a crawl runs, it's the live crawl screen. Once the analysis is done, it's the
   answer. That gives one place to look, whatever the crawl's state.
 
@@ -342,9 +346,23 @@ found, 265 pages; the 100k crawl 110,251 and 112,577, and 101,106 pages, everywh
 
 **URL inspector tabs.**
 
-- Summary: status, indexability and why, title, description, H1, canonical, word count, timings.
+- Summary: status, indexability and why, title, description, H1, canonical, word count, timings. Every count and
+  name in it that stands for a list is a link to that list: "Inlinks 257 links" and "Outlinks 27 links" (the tabs'
+  own totals, then the hyperlinks among them) open those sections, the count of issues opens Issues, a check's name
+  its page on Issues, the robots.txt rule that blocks the URL ("Blocked by `Disallow: /private/`, line 2 of its
+  robots.txt") that origin's file, "Found on" the page that linked to it (on its Outlinks, at the link). "In a
+  sitemap" names the sitemaps ("Yes: extra.xml", then "and 2 more"), each a link to its own page with the URL still
+  open; a page no sitemap lists that the analysis says should be leads to the pages missing from the sitemaps.
+  An image is shown as an image: its picture, what the file is (size, type, pixels) and "Used on 3 pages: /page/"
+  (a hop to that page's Images, the image first; the rest in Inlinks), with no indexability checklist; issues filed
+  on the pages that show it are listed as that ("1 issue, filed on the page that shows it"), never "No issues".
 - Issues.
-- Inlinks and outlinks.
+- Inlinks and outlinks. A list of up to 1,000 links comes whole, ordered: the link you came for (first, marked, and
+  said over the list), then the broken ones, then the rest as the crawl found them; a Status menu beside Kind narrows
+  it to the broken links or the redirects. A longer list is paged as found, narrowed by kind alone. A click on an
+  inlink's page hops to that page's Outlinks, with its link to the URL you left first; its open-in-browser opens the
+  page at the link's anchor text. In a narrow sheet each link is two lines (the URL over its anchor and position).
+- Images: the page's image files, the largest first (the one you came from first, where you came from an image).
 - Redirects, drawn hop by hop.
 - Headers.
 - Structured data.
@@ -419,13 +437,19 @@ always on a selected row; it's no Tab stop (Shift+Enter is its key) and a press 
      Continue asks for them.
 3. **Triage.**
    - From "Fix first", or Issues, pick a check. Read what, why and how to fix it, then look at its groups.
-   - Open a group's URLs, and press Enter on one for the inspector.
-   - Esc closes it, and Alt+Left goes back to where you were.
-4. **Inspect a URL.** From any row (Enter or double-click), or the palette ("Go to URL…"). Its inlinks and outlinks
-   are links themselves, so you can walk the site, and back and forward retrace your steps. Moving the grid's cursor
-   moves the inspector with it, in place. Esc closes it to the view as it was before it opened, however far you walked.
+   - Open a group's URLs, and click one's URL (or press Enter on it) for the inspector.
+   - Esc closes it, as Back (Alt+Left) does: the check as it was, its group, row and scroll kept. Opening the
+     inspector is one place in history, whatever is done inside it.
+4. **Inspect a URL.** From any row (a click on its URL, Enter or a double-click), or the palette ("Go to URL…").
+   Opening it is one new place in history. Its inlinks and outlinks are links themselves, so you can walk the site:
+   each hop is in place, and a strip at the top of the inspector ("← Back to /page/") retraces the hops one at a
+   time, each on the section it was left on, with the keyboard back in the list it was made from. An inlink hops to
+   the page that holds the link, on its Outlinks, with that link first and marked: from a 404 to the link to fix is
+   two clicks (the 404's Inlinks, the page). Moving the grid's cursor moves the inspector with it, in place. Back
+   and Esc both close it to the view as it was before it opened, however far you walked; forward opens it again.
    "Go to URL…" takes a URL or a path on the site; from a view without an inspector (Overview, the crawl's settings)
-   it opens the crawl's URLs with the inspector on it. The sections are tabs, and the one you're on stays as you walk.
+   it opens the crawl's URLs with the inspector on it. The sections are tabs, and the one you're on stays as you walk
+   an outlink.
 5. **Hand over.**
    - On any grid, Export (Ctrl+E) offers CSV or Excel of what you see: these filters, these columns.
    - On Issues, it offers this check, or every check with a summary sheet.
@@ -504,8 +528,10 @@ read the Summary, open a problem and send its list on, or open the report. They 
 | Keys | Action |
 | --- | --- |
 | Left and Right on the tabs | The section before or after |
-| Enter on a link's row | Walk to that URL |
-| Alt+Left, Alt+Right | Back and forward along the walk |
+| Enter on a link's row | Walk to that URL, in place (an inlink's page: on its Outlinks, at the link) |
+| The "Back to" strip at its top | Back along the walk, a hop a press |
+| Shift+Enter on an inlink's row | Open its page in the browser at the link's anchor text |
+| Alt+Left | Close it: history goes back to the view as it was before it opened (Alt+Right opens it again) |
 | Esc | Close it, to the view as it was before it opened |
 | Ctrl+F in Source | Search the HTML |
 | Enter, Shift+Enter in the search | The next match, the one before |
@@ -518,7 +544,7 @@ With focus in the HTML itself (Source's viewer, which has a caret and can't be t
 | Arrows, Home, End, Page Up, Page Down, Ctrl+Home, Ctrl+End; with Shift | The viewer's | Move the caret; select |
 | Ctrl+A, Ctrl+C | The viewer's | Select all of the HTML; copy the selection |
 | Ctrl+F | The section's | Its search field |
-| Alt+Left, Alt+Right | The app's | Back and forward (on macOS too, where a text field keeps Option+arrows) |
+| Alt+Left, Alt+Right | The app's | Back (which closes the inspector) and forward (on macOS too, where a text field keeps Option+arrows) |
 | Esc | The app's | Close the inspector, whatever is selected |
 | Ctrl+K, `?`, F7, F8, Ctrl+1 to Ctrl+7, Ctrl+N, Ctrl+O, Ctrl+, | The app's | As everywhere |
 | Letters and other typing keys | Nobody's | Nothing: a screen's single-letter keys (Issues' J and K) wait for focus outside the HTML |
