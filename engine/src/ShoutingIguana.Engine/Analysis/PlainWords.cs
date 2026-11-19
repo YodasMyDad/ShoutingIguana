@@ -87,6 +87,10 @@ public static class PlainWords
             """This site check was made with an older version of Shouting Iguana, which didn't save what this check compares.""",
             """Check the site again to include it."""),
 
+        [SkippedCheckReasons.SITEMAP_LIST_LOST] = new(
+            """An earlier version of Shouting Iguana lost the list of pages your sitemap names, so it can't be compared with your pages.""",
+            """Check the site again to get the list back."""),
+
         [SkippedCheckReasons.NEWER_THAN_ANALYSIS] = new(
             """This check was added to Shouting Iguana after these results were worked out.""",
             """Update the results to include it.""")
