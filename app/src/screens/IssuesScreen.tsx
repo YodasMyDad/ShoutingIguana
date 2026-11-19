@@ -120,6 +120,14 @@ export function IssuesScreen() {
   const checksBarRef = useRef<HTMLDivElement>(null);
   const checksListId = useId();
   const checksBehindButton = () => (checksBarRef.current?.getClientRects().length ?? 0) > 0;
+  // The inspector opening (a row inspected, "Go to URL…") folds the list back behind its button: the check is what
+  // was being worked on, and it stays beside the inspector, never stacked under the list off-screen (3b final).
+  const inspecting = search.inspect !== undefined;
+  const [wasInspecting, setWasInspecting] = useState(inspecting);
+  if (inspecting !== wasInspecting) {
+    setWasInspecting(inspecting);
+    if (inspecting) setChecksOpen(false);
+  }
 
   // The filter answers each key at once; the route follows, replaced, so back doesn't step through every letter. The
   // route's value is taken up only when it's not one this field sent (back, forward, a link, clearing the filters).
@@ -342,7 +350,7 @@ export function IssuesScreen() {
     });
   // From a grid, in place, and following its cursor while it's open (routing/inspector.ts).
   const inspector = useInspector();
-  const onFollow = search.inspect !== undefined ? inspector.open : undefined;
+  const onFollow = inspecting ? inspector.open : undefined;
 
   // A check is hidden in this crawl only or in every crawl (docs/v2-ui-discovery.md, decision 2).
   const hiddenScope = useSettings((settings) => (checkId ? hiddenScopeOf(settings, crawlId, checkId) : null));
