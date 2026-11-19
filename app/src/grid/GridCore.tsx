@@ -523,27 +523,31 @@ function GridCoreInner<Row>({
 
   // The highlight follows what's shown beside the grid (`followKey`): on its change only, so a cursor the user just
   // moved is never pulled back while the panel catches up with it.
-  const follow = useEffectEvent(() => {
-    if (followKey === undefined || !rowKey || count === 0) return;
-    const at = nav.active ? Math.min(nav.active.row, count - 1) : view.first;
-    const here = getRow(at);
-    if (nav.active && here !== undefined && rowKey(here) === followKey) return;
-    for (let step = nav.active ? 1 : 0; step <= REANCHOR_REACH; step++) {
-      for (const row of step === 0 ? [at] : [at + step, at - step]) {
-        const candidate = row >= 0 && row < count ? getRow(row) : undefined;
-        if (candidate === undefined || rowKey(candidate) !== followKey) continue;
-        anchor.current = { key: followKey, row, start: false };
-        setNav((current) => ({
-          active: { row, col: current.active?.col ?? 0 },
-          selection: selectOnly(row),
-          follow: true,
-        }));
-        model.scrollToIndex(row);
-        return;
+  const [followed, setFollowed] = useState(followKey);
+  const [followedTo, setFollowedTo] = useState<{ key: string | number; row: number } | null>(null);
+  if (followed !== followKey) {
+    setFollowed(followKey);
+    const at = nav.active ? Math.min(nav.active.row, count - 1) : Math.max(0, view.first);
+    const here = count > 0 ? getRow(at) : undefined;
+    const onIt = nav.active !== null && here !== undefined && rowKey?.(here) === followKey;
+    if (followKey !== undefined && rowKey && count > 0 && !onIt) {
+      search: for (let step = nav.active ? 1 : 0; step <= REANCHOR_REACH; step++) {
+        for (const row of step === 0 ? [at] : [at + step, at - step]) {
+          const candidate = row >= 0 && row < count ? getRow(row) : undefined;
+          if (candidate === undefined || rowKey(candidate) !== followKey) continue;
+          setNav({ active: { row, col: nav.active?.col ?? 0 }, selection: selectOnly(row), follow: true });
+          setFollowedTo({ key: followKey, row });
+          break search;
+        }
       }
     }
-  });
-  useLayoutEffect(() => follow(), [followKey]);
+  }
+  // The row the highlight went to comes into view, and is the row the cursor is held on from here.
+  useLayoutEffect(() => {
+    if (!followedTo) return;
+    anchor.current = { ...followedTo, start: false };
+    model.scrollToIndex(followedTo.row);
+  }, [followedTo, model]);
 
   const template = columns.map((column) => `${column.width}px`).join(' ');
   const width = columns.reduce((sum, column) => sum + column.width, 0);
@@ -1099,13 +1103,21 @@ function GridCoreInner<Row>({
    * Ctrl+C would then copy in place of the rows. The press is prevented, what was selected is cleared, and the grid
    * takes the focus the press would have given it.
    */
-  const onMouseDown = (event: MouseEvent<HTMLDivElement>) => {
-    if (event.button !== 0 || !(event.shiftKey || (isMac ? event.metaKey : event.ctrlKey))) return;
-    if (!positionOf(event.target)) return;
-    event.preventDefault();
-    window.getSelection()?.removeAllRanges();
-    scrollRef.current?.focus({ preventScroll: true });
-  };
+  const bodyRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (!body) return undefined;
+    // The browser's own press, which is what starts a text selection: React's pointer handler can't stop it.
+    const onMouseDown = (event: globalThis.MouseEvent) => {
+      if (event.button !== 0 || !(event.shiftKey || (isMac ? event.metaKey : event.ctrlKey))) return;
+      if (!(event.target instanceof Element) || !event.target.closest('[data-row][data-col]')) return;
+      event.preventDefault();
+      window.getSelection()?.removeAllRanges();
+      scrollRef.current?.focus({ preventScroll: true });
+    };
+    body.addEventListener('mousedown', onMouseDown);
+    return () => body.removeEventListener('mousedown', onMouseDown);
+  }, []);
 
   const onDoubleClick = (event: MouseEvent<HTMLDivElement>) => {
     const position = positionOf(event.target);
@@ -1321,8 +1333,8 @@ function GridCoreInner<Row>({
           role="rowgroup"
           className="relative"
           style={{ height: skeleton ? SKELETON_ROWS * rowHeight : loading ? 0 : bodyHeight, width }}
+          ref={bodyRef}
           onPointerDown={onPointerDown}
-          onMouseDown={onMouseDown}
           onDoubleClick={onDoubleClick}
           onContextMenu={onContextMenuEvent}
         >
