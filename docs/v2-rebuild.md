@@ -142,6 +142,13 @@ Nothing was pushed. Nothing below is merged into `ui/step-3` except the two seve
 outstanding"**. The whole record is in
 [`docs/handoff/2026-11-19/`](handoff/2026-11-19/): read [`checkpoint.md`](handoff/2026-11-19/checkpoint.md) first.
 
+**RESUMED 2026-11-19 (session `848ba86b`).** Step 1 of the resume list held: every lane worktree clean and at the
+head in the table. Step 2 is under way: five agents, one per lane (simple, data, shell, issues, engine), each in its
+own worktree. The issues agent merges `ui/step-3` into `ui/ux-issues` itself and does items 1 to 3 of the fix as code
+there, so that conflict is not left for the integration merge. Each agent writes its lane's state to
+`.claude/worktrees/_handoff/2026-11-19/lanes/<lane>-fix/state-after.md` (untracked). If this session dies: check each
+lane worktree's `git status` and `git log`, read those files, and carry on from step 2 or 3. Nothing merged yet.
+
 *What the owner asked (2026-11-19, on the installed app and their own garden crawl):* "The UI looks nice in most cases
 but the UX really falls short." In Issues > "Internal URL returns 4xx" the page that holds each broken link was plain
 text; reaching it took an expand, a "Show the link in Links" and another screen. They asked for a high-level UX audit
