@@ -184,15 +184,24 @@ describe('where an issue’s URL is found, in its group', () => {
     expect(within(grid).getByRole('columnheader', { name: 'Linked URL' })).toBeVisible();
     const group = await within(grid).findByRole('row', { expanded: true });
     expect(await urlLink(group, 'https://example.com/')).toBeVisible();
-    // Each of its five pages says its own link to it: no words, in the header. Not the URL again.
-    await waitFor(() => expect(within(grid).getAllByText('No text')).toHaveLength(5));
+    // The group every page shares is one thing to fix: the callout counts it, says where on the pages it is and how
+    // many repeat it, with its URL a link like any other.
+    const thing = await waitFor(() => {
+      const callout = document.querySelector<HTMLElement>('[data-template-thing]');
+      expect(callout).toHaveTextContent(/^1 link, to.*in the header, repeated on 5 of 6 pages: one fix clears them\.$/);
+      return callout!;
+    });
+    expect(await urlLink(thing, 'https://example.com/')).toBeVisible();
+    // So its five pages don't each read as a fault of their own ("No text · Header" five times): each is the same
+    // link again. Not the URL again either.
+    await waitFor(() => expect(grid.querySelectorAll('[data-same-link]')).toHaveLength(5));
     const pages = [...grid.querySelectorAll<HTMLElement>('[role="row"][aria-level="2"]')].slice(0, 5);
     for (const page of pages) {
-      expect(within(page).getByText('Header')).toBeVisible();
+      expect(within(page).getByText('The same link')).toBeVisible();
+      expect(within(page).queryByText('No text')).toBeNull();
+      expect(within(page).queryByText('Header')).toBeNull();
       expect(within(page).queryByRole('button', { name: 'https://example.com/' })).toBeNull();
     }
-    // The group every page shares: the callout says where on the pages its link is.
-    expect(await screen.findByText(/It’s a link in the header\./)).toBeVisible();
   });
 
   it('has a menu item for a URL’s links in Links', async () => {

@@ -383,6 +383,42 @@ export function templateLinkWords(link: Pick<IssueTarget, 'kind' | 'position'> |
 }
 
 /**
+ * A template group's callout, the count of things first (the owner read "260 pages" as 260 links): the words either
+ * side of the group's URL, "1 link, to" … "in the header, repeated on 260 pages: one fix clears them." `link` is the
+ * link its pages share, once read: until then, and for a URL no stored link names, it's "1 URL".
+ */
+export function templateThingWords(
+  link: Pick<IssueTarget, 'kind' | 'position'> | null,
+  pages: string,
+): { lead: string; tail: string } {
+  const end = `${pages}: one fix clears them.`;
+  if (!link?.kind) return { lead: '1 URL,', tail: `named on ${end}` };
+  if (link.kind === 'canonical') return { lead: '1 canonical URL,', tail: `in the head of ${end}` };
+  if (link.kind === 'hreflang') return { lead: '1 hreflang URL,', tail: `in the annotations of ${end}` };
+  const where = link.position ? `in the ${POSITION_WORDS[link.position].toLowerCase()}, ` : '';
+  if (link.kind === 'image') return { lead: '1 image,', tail: `${where}shown on ${end}` };
+  if (link.kind === 'hyperlink') return { lead: '1 link, to', tail: `${where}repeated on ${end}` };
+  return { lead: `1 ${KIND_WORDS[link.kind].toLowerCase()},`, tail: `${where}repeated on ${end}` };
+}
+
+/**
+ * Whether a page's link to its group's URL is the one the template's callout describes: a link in the same place with
+ * the same words. Never an image or another kind, whose row says how the page shows it.
+ */
+export function sameLink(
+  own: Pick<IssueTarget, 'kind' | 'position' | 'text'>,
+  shared: Pick<IssueTarget, 'kind' | 'position' | 'text'> | null,
+): boolean {
+  return (
+    shared !== null &&
+    own.kind === 'hyperlink' &&
+    own.kind === shared.kind &&
+    own.position === shared.position &&
+    (own.text ?? '').trim() === (shared.text ?? '').trim()
+  );
+}
+
+/**
  * Whether a page's detail says more than its line under a group of the URL it names: a count of what the line names
  * ("Links to 2 URLs", "2 images over 200 KB, the largest 1.8 MB") says nothing more; a sentence of its own ("Names /fr/
  * as “fr-CA”; /fr/ calls itself “fr”", "The canonical URL redirects back to this page") does.

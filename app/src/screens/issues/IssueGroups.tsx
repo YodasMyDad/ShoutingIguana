@@ -13,7 +13,7 @@ import {
   type GroupPlace,
 } from '../../api/queries';
 import type { Check } from '../../api/types';
-import { affectedWords, partOfAffected, showInUrlsWords } from '../../crawl/checkSubject';
+import { affectedCount, affectedWords, partOfAffected, showInUrlsWords } from '../../crawl/checkSubject';
 import { ErrorState } from '../../feedback/ErrorState';
 import { notifyResult } from '../../feedback/notify';
 import { NO_DETAIL } from '../../grid/filterSentence';
@@ -88,7 +88,8 @@ import {
   referencesOf,
   targetLead,
   targetRows,
-  templateLinkWords,
+  sameLink,
+  templateThingWords,
   whereRowText,
   type WhereRow,
 } from './whereFound';
@@ -1002,6 +1003,7 @@ export function IssueGroups({
                 view={view}
                 row={row.row}
                 first={row.group.relatedUrlId}
+                template={row.group.likelyTemplate ? row.group : null}
                 opens={opens}
                 open={row.row.id === expandedId}
               />
@@ -1074,7 +1076,16 @@ export function IssueGroups({
   return (
     <div className="flex min-h-0 flex-col gap-3">
       {insight ? (
-        <TemplateCallout crawlId={crawlId} group={insight} total={total} check={check} siteOrigin={siteOrigin} />
+        <div data-template-callout>
+          <TemplateCallout
+            crawlId={crawlId}
+            group={insight}
+            total={total}
+            check={check}
+            siteOrigin={siteOrigin}
+            onInspect={onInspect}
+          />
+        </div>
       ) : null}
       {rowsFailed ? (
         <ErrorState error={firstRows.error} title={words.unread} onRetry={() => void firstRows.refetch()} compact />
@@ -1229,6 +1240,7 @@ function PageWhere({
   view,
   row,
   first,
+  template,
   opens,
   open,
 }: {
@@ -1236,12 +1248,18 @@ function PageWhere({
   row: IssueRow;
   /** Under a group of one URL the page names: that URL. */
   first: number | null;
+  /** The row's group when it's likely the site's template (one thing on many pages), else null. */
+  template: IssueGroup | null;
   /** The row opens to show more. */
   opens: boolean;
   open: boolean;
 }) {
   const { crawlId, check, siteOrigin } = view;
   const where = useWhereFoundOf(crawlId, check, row.id);
+  // Under a group that's likely the template's: the link its pages share, as its callout reads it (the same read).
+  const shared = useTemplateLink(crawlId, check, template);
+  const ownLink = first === null ? undefined : where.targets?.targets.find((target) => target.id === first);
+  const same = ownLink !== undefined && sameLink(ownLink, shared);
   if (where.error) return <span className="min-w-0 truncate text-text-muted">Where it’s found couldn’t be read</span>;
   if (where.foundOn) {
     const [lead] = foundOnRows(where.foundOn);
@@ -1262,6 +1280,14 @@ function PageWhere({
   if (where.targets) {
     // Under a group of the URL it names, the group's row says the URL: the page's row says its link to it.
     const own = first === null ? undefined : where.targets.targets.find((target) => target.id === first);
+    if (own && same && own.id !== row.id && !opens) {
+      // The template's one link again: its callout and its group say what and where, once. Not a fault of its own.
+      return (
+        <span className="min-w-0 truncate text-text-muted" data-where-found="read" data-same-link>
+          The same link
+        </span>
+      );
+    }
     if (own) {
       return (
         <span className="flex min-w-0 items-center gap-3" data-where-found="read">
@@ -1317,9 +1343,10 @@ function WhereCell({ row, view }: { row: Extract<TreeRow, { kind: 'where' }>; vi
 }
 
 /**
- * "The same related URL on 264 of 265 pages, so it's likely in the site's template: one fix clears the group." Built
- * from what the engine says (`likelyTemplate`, the group's count and the check's total), never more, and in pages only
- * for a check that flags nothing else.
+ * "1 link, to /, in the header, repeated on 260 pages: one fix clears them." The count of things first, so a group of
+ * 260 pages never reads as 260 faults (the owner took it for one). Built from what the engine says (`likelyTemplate`,
+ * the group's count and the check's total) and the link the group's pages share, never more, and in pages only for a
+ * check that flags nothing else.
  */
 function TemplateCallout({
   crawlId,
@@ -1327,43 +1354,49 @@ function TemplateCallout({
   total,
   check,
   siteOrigin,
+  onInspect,
 }: {
   crawlId: string;
   group: IssueGroup;
   total: number;
   check: Check;
   siteOrigin: string | null;
+  onInspect: (urlId: number) => void;
 }) {
   const grouping = check.grouping;
-  const share = partOfAffected(check, group.pages, total);
-  // Where on the pages the shared link is, for a check whose pages hold it: "It’s a link in the footer."
-  const place = templateLinkWords(useTemplateLink(crawlId, check, group));
+  // "260 pages" for all of them, "5 of 6 pages" for a part.
+  const pages = group.pages < total ? partOfAffected(check, group.pages, total) : affectedCount(check, group.pages);
+  // What the shared thing is and where on the pages it is, for a check whose pages hold it: "1 link, to … in the header".
+  const thing = templateThingWords(useTemplateLink(crawlId, check, group), pages);
   const facts = relatedFactsWords(group, check, siteOrigin);
   // An oversized image: the size its pages show it at, against the file's.
   const shownAt = useGroupShownAt(crawlId, check, group);
+  const relatedId = group.relatedUrlId;
   return (
     <Callout tone="insight" title="Likely in the site’s template">
       {group.sharedText ? (
         <>
-          The same text, {quoted(group.sharedText, 120)}, on {share}, so it’s likely in the site’s template: one fix
-          clears the group.
+          1 text, {quoted(group.sharedText, 120)}, repeated on {pages}: one fix clears them.
         </>
       ) : grouping === 'relatedUrl' && group.relatedUrl ? (
-        <>
-          The same URL, <span className="font-mono text-12">{urlDisplay(group.relatedUrl, siteOrigin).shown}</span>
-          {facts ? ` (${facts})` : null}, on {share}, so it’s likely in the site’s template: one fix clears the group.
-          {place ? ` ${place}${shownAt ? `, ${shownAtInsight(shownAt, group.related, group.pages)}` : ''}.` : null}
-          {!place && shownAt ? ` It’s ${shownAtInsight(shownAt, group.related, group.pages)}.` : null}
-        </>
+        <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5" data-template-thing>
+          <span className="font-semibold text-text">{thing.lead}</span>
+          {relatedId !== null ? (
+            <IssueUrl url={group.relatedUrl} siteOrigin={siteOrigin} onInspect={() => onInspect(relatedId)} />
+          ) : (
+            <span className="font-mono text-12">{urlDisplay(group.relatedUrl, siteOrigin).shown}</span>
+          )}
+          <span>
+            {facts ? `(${facts}) ` : null}
+            {thing.tail}
+            {shownAt ? ` It’s ${shownAtInsight(shownAt, group.related, group.pages)}.` : null}
+          </span>
+        </span>
       ) : grouping === 'relatedUrl' ? (
-        <>
-          The same issue on {share}, naming no other URL, so it’s likely in the site’s template: one fix clears the
-          group.
-        </>
+        <>1 cause, with no URL named, repeated on {pages}: one fix clears them.</>
       ) : (
         <>
-          The same detail, “{group.detail ?? NO_DETAIL}”, on {share}, so it’s likely in the site’s template: one fix
-          clears the group.
+          1 cause, “{group.detail ?? NO_DETAIL}”, repeated on {pages}: one fix clears them.
         </>
       )}
     </Callout>

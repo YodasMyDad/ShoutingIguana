@@ -89,7 +89,9 @@ describe('a flat check’s evidence', () => {
     await open(`${ISSUES}/viewport-missing`);
     expect(await screen.findByText('Likely in the site’s template')).toBeVisible();
     expect(
-      screen.getByText(/The same issue on 13 of the 14 pages analysed, so it’s likely in the site’s template/),
+      screen.getByText(
+        /On 13 of the 14 pages analysed, so it’s likely 1 cause in the site’s template: one fix clears them all\./,
+      ),
     ).toBeVisible();
   });
 
@@ -129,8 +131,12 @@ describe('a group’s evidence', () => {
     // An image check opens grouped by image, with no asking: its pages, in its groups, the largest file first.
     expect(screen.getByText('14 pages in 2 groups, largest file first')).toBeVisible();
     expect(screen.getByRole('radio', { name: 'Grouped by image' })).toHaveAttribute('aria-checked', 'true');
-    // The callout names the file with what it is.
-    expect(screen.getByText(/The same URL, .*\(1\.8 MB · JPEG · 4000×3000 px\), on 12 of 14 pages/)).toBeVisible();
+    // The callout counts the thing, not its pages: one image, named with what it is, and where its pages show it.
+    await waitFor(() =>
+      expect(document.querySelector('[data-template-thing]')).toHaveTextContent(
+        /^1 image,.*hero\.jpg.*\(1\.8 MB · JPEG · 4000×3000 px\) in the content, shown on 12 of 14 pages: one fix clears them\./,
+      ),
+    );
     // The insight: the size its pages show it at, against the file's.
     expect(
       await screen.findByText(/shown at 400×300 on the first 10 pages read; the file is 4000×3000 \(10× wider\)\./),

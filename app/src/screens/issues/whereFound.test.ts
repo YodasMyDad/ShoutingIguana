@@ -11,7 +11,9 @@ import {
   targetLineWords,
   targetRows,
   targetsSummary,
+  sameLink,
   templateLinkWords,
+  templateThingWords,
   whereRowText,
 } from './whereFound';
 
@@ -188,6 +190,38 @@ describe('where a URL is found, in words', () => {
     );
     expect(templateLinkWords({ kind: 'hyperlink', position: null })).toBeNull();
     expect(templateLinkWords(null)).toBeNull();
+  });
+
+  it('counts a template’s shared thing first, then where it is and how many pages repeat it', () => {
+    // Read around the group's URL: "1 link, to / in the header, repeated on 260 pages: one fix clears them."
+    expect(templateThingWords({ kind: 'hyperlink', position: 'header' }, '260 pages')).toEqual({
+      lead: '1 link, to',
+      tail: 'in the header, repeated on 260 pages: one fix clears them.',
+    });
+    expect(templateThingWords({ kind: 'image', position: 'content' }, '12 of 14 pages')).toEqual({
+      lead: '1 image,',
+      tail: 'in the content, shown on 12 of 14 pages: one fix clears them.',
+    });
+    expect(templateThingWords({ kind: 'hyperlink', position: null }, '5 pages')).toEqual({
+      lead: '1 link, to',
+      tail: 'repeated on 5 pages: one fix clears them.',
+    });
+    expect(templateThingWords({ kind: 'canonical', position: 'head' }, '9 pages').lead).toBe('1 canonical URL,');
+    // Before its link is read, and for a URL no stored link names: one URL, still one fix.
+    expect(templateThingWords(null, '260 pages')).toEqual({
+      lead: '1 URL,',
+      tail: 'named on 260 pages: one fix clears them.',
+    });
+  });
+
+  it('knows a page’s link for the template’s own: a link in the same place with the same words, never an image', () => {
+    const logo = { kind: 'hyperlink', position: 'header', text: null } as const;
+    expect(sameLink({ kind: 'hyperlink', position: 'header', text: '' }, logo)).toBe(true);
+    expect(sameLink({ kind: 'hyperlink', position: 'content', text: null }, logo)).toBe(false);
+    expect(sameLink({ kind: 'hyperlink', position: 'header', text: 'Home' }, logo)).toBe(false);
+    expect(sameLink(logo, null)).toBe(false);
+    const image = { kind: 'image', position: 'content', text: 'Hero' } as const;
+    expect(sameLink(image, image)).toBe(false);
   });
 
   it('reads a sidecar from before the field as referring to nothing', () => {
