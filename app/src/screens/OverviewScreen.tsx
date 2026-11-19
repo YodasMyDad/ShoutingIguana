@@ -396,7 +396,24 @@ export function OverviewScreen() {
             siteOrigin={siteOriginOf(item.startUrl)}
           />
         )}
-        {empty ? null : <RechecksCard crawlId={crawlId} titleOf={titleOf} />}
+        {empty ? null : (
+          <RechecksCard
+            crawlId={crawlId}
+            titleOf={titleOf}
+            siteOrigin={siteOriginOf(item.startUrl)}
+            checkLink={comparisonLinks.check}
+            // A recheck's URL, inspected where it was judged: its check in Issues, or the URL grid for a list of URLs.
+            onInspect={(checkId, urlId) =>
+              void (checkId
+                ? navigate({
+                    to: '/crawls/$crawl/issues/{-$check}',
+                    params: { crawl: crawlId, check: checkId },
+                    search: { inspect: urlId },
+                  })
+                : navigate({ to: '/crawls/$crawl/urls', params: { crawl: crawlId }, search: { inspect: urlId } }))
+            }
+          />
+        )}
 
         <section aria-labelledby="overview-crawl-title" className="flex flex-col gap-4 pt-2">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">

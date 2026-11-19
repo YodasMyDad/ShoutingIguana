@@ -8,6 +8,7 @@ import { Button } from '../../ui/Button';
 import { Checkbox } from '../../ui/Checkbox';
 import { Dialog } from '../../ui/Dialog';
 import { SegmentedControl, type SegmentOption } from '../../ui/SegmentedControl';
+import { Url } from '../../ui/Url';
 import { recheckOutcomeWords, recheckResultLine, recheckWhatWords } from './rechecks';
 
 const PAGE = 100;
@@ -22,21 +23,13 @@ const ROLES: Record<RecheckRole, string> = {
   letGo: 'No longer linked',
 };
 
-/** A URL as the list shows it: its path on the crawl's site, else in full. */
-function shownUrl(url: string): string {
-  try {
-    const parsed = new URL(url);
-    return `${parsed.pathname}${parsed.search}`;
-  } catch {
-    return url;
-  }
-}
-
 /**
  * One recheck's URLs (docs/v2-fix-loop.md, Overview's Rechecks card: "Each opens its rows"): the URLs it judged, each
  * with its outcome (Fixed, Still, Not checked, Not rechecked, New) and what the check said of it before and after,
  * narrowed by outcome; and, asked for, every URL it fetched (what they named, the pages linking to them, what it found
- * one step on, what it let go). A hundred at a time.
+ * one step on, what it let go). A hundred at a time. Each URL is a link like any other (it inspects the URL, in the
+ * recheck's check) with its open-in-browser after it, in a dialog wide enough for them (the audit of 2026-11-19,
+ * H-23: 640 px, the paths cut with "…", and not links).
  */
 export function RecheckRowsDialog({
   crawlId,
@@ -45,6 +38,8 @@ export function RecheckRowsDialog({
   onOpenChange,
   titleOf,
   outcome: initialOutcome = 'all',
+  siteOrigin,
+  onInspect,
 }: {
   crawlId: string;
   recheck: Recheck;
@@ -52,6 +47,10 @@ export function RecheckRowsDialog({
   onOpenChange: (open: boolean) => void;
   titleOf: (checkId: string) => string | null;
   outcome?: OutcomeFilter | undefined;
+  /** The crawl's own scheme and host: URLs on it show their path. */
+  siteOrigin?: string | null | undefined;
+  /** Inspects a URL (the dialog closes): its text is a link then; left out, a click copies it. */
+  onInspect?: ((urlId: number) => void) | undefined;
 }) {
   const [outcome, setOutcome] = useState<OutcomeFilter>(initialOutcome);
   const [everyUrl, setEveryUrl] = useState(false);
@@ -86,6 +85,7 @@ export function RecheckRowsDialog({
       open={open}
       onOpenChange={onOpenChange}
       size="wide"
+      className="si-dialog--rows"
       title={`Recheck ${formatCount(recheck.id)}: ${recheckWhatWords(recheck, titleOf)}`}
       description={recheckResultLine(recheck)}
       scrollLabel="The recheck’s URLs"
@@ -110,8 +110,8 @@ export function RecheckRowsDialog({
             </caption>
             <thead>
               <tr className="text-left text-12 text-text-secondary">
-                {/* The URL takes two fifths, its text cut short in it: the details beside it stay whole. */}
-                <th scope="col" className="w-2/5 border-b border-border py-1.5 pr-3 font-medium">
+                {/* The URL takes half: room for a long path whole, cut in its middle only when it must be. */}
+                <th scope="col" className="w-1/2 border-b border-border py-1.5 pr-3 font-medium">
                   URL
                 </th>
                 {everyUrl ? (
@@ -139,9 +139,12 @@ export function RecheckRowsDialog({
               {listed.map((row) => (
                 <tr key={`${row.role}:${row.urlId}`}>
                   <td className="max-w-0 border-b border-border-subtle py-1.5 pr-3">
-                    <span className="block truncate font-mono text-12" title={row.url}>
-                      {shownUrl(row.url)}
-                    </span>
+                    <Url
+                      url={row.url}
+                      siteOrigin={siteOrigin}
+                      onGo={onInspect ? () => onInspect(row.urlId) : undefined}
+                      goHint={recheck.checkId ? 'Inspect it in this check' : 'Inspect'}
+                    />
                   </td>
                   {everyUrl ? (
                     <td className="border-b border-border-subtle py-1.5 pr-3 whitespace-nowrap">{ROLES[row.role]}</td>

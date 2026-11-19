@@ -2926,6 +2926,12 @@
   }
 
   /* -------------------------------------------------------------- List rows */
+  /* A dialog that lists URLs with what's said of each (a recheck's rows): as wide as they need, within the window. */
+  .si-dialog.si-dialog--rows {
+    width: min(var(--dialog-rows-width), calc(100vw - var(--space-8)));
+    max-width: none;
+  }
+
   /*
     Fix first's example under a check's row (H-18): the first URL the check flags and what's wrong with it, set in from
     the edge by the row's own padding, icon and gap so it starts under the check's name.
