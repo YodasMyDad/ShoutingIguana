@@ -2502,7 +2502,7 @@ An export only reads the crawl.
   | `robotsBlocked` | An origin's blocked URLs | `csv`, `xlsx` | `origin`, and `line`, `reason` and `conflict` (step 3b) to narrow them, as `/robots/blocked` takes them |
   | `check` | One check's sheet of the workbook, as a file of its own | `xlsx`, `csv` | `checkId`, `hiddenChecks` (round 5's review) |
   | `workbook` | The spreadsheet of everything | `xlsx` | `hiddenChecks`, `checks` (round 5) |
-  | `report` | [The report](#report-e5) | `html` | `cut`, `examples`, `lookExamples`, `hiddenChecks` (round 5) |
+  | `report` | [The report](#report-e5) | `html` | `cut`, `examples`, `lookExamples`, `words`, `hiddenChecks` (round 5) |
   | `sitemaps` (E7) | The list of sitemaps, as `GET /sitemaps` lists them | `csv`, `xlsx` | Nothing |
   | `robotsOrigins` (E7) | The origins' robots.txt, as `POST /robots` lists them | `csv`, `xlsx` | `search` and `blocked`, as `/robots` takes them |
   | `linkGroups` (step 3b) | The links grouped by target, as [`/links/groups`](#links-grouped-by-target-step-3b) lists them: one row a target | `csv`, `xlsx` | `filters`, `search`, `sort` (one key: `pages`, `links` or a column of the target) and `hiddenChecks`, as the grouped view takes them; no `columns` |
@@ -2689,8 +2689,8 @@ The report is the one document a crawl ends in: a single self-contained HTML fil
 [the design](v2-ui-simple.md#the-report). Inline CSS, inline SVG, no script, no web font, light only; it prints to A4
 and Letter from the print dialog, which is also how it becomes a PDF.
 
-`GET /api/crawls/{id}/report?cut=full|summary&examples=5&lookExamples=3` returns the document, as `text/html` in
-UTF-8. `not-analyzed` (404) for a crawl never analysed: it has no report. The export job saves the same document to a
+`GET /api/crawls/{id}/report?cut=full|summary&examples=25&lookExamples=10&words=plain|technical` returns the document,
+as `text/html` in UTF-8. `not-analyzed` (404) for a crawl never analysed: it has no report. The export job saves the same document to a
 path (`kind` `report`), and `si report` writes it from the command line.
 
 - **`cut`** is `full` (the default), or `summary`: the report's first page alone (its head, the summary, what to fix
@@ -2699,12 +2699,32 @@ path (`kind` `report`), and `si report` writes it from the command line.
   and on how long the score's table is (page 4 for the 100k crawl's 45 lines). The summary is the full report's own
   opening, so the two can't differ.
 - **`examples`** and **`lookExamples`** are how many of its first pages (by importance: see below) each problem to fix and each
-  thing worth a look lists: 5 and 3 by default, 0 to 50. The rest are in the workbook, on the sheet with the problem's
-  number. A value out of range, another `cut` or another parameter is `invalid-export`, by field.
-- **Its outline** is the design's: the head; the summary (the score as a ring, its word, what it covers, the five
-  counts); "Fix these first" (up to five, by their numbers); "How the score is worked out"; then, from a new page,
-  "What to fix" (every check that found something, in three groups, numbered in the order to fix them: its plain title
-  with its technical title and severity beside it, its count and share, its points, who usually fixes it, what's wrong,
+  thing worth a look lists: 25 and 10 by default (5 and 3 until the UX audit of 2026-11-19, whose A-12 found "The first
+  5 of 8 … And 3 more: the full list is on sheet 1" sending a reader to a second file for three rows), 0 to 50. A
+  problem with no more than that lists them all ("All 8"). The rest are in the workbook, on the sheet with the
+  problem's number. A value out of range, another `cut` or another parameter is `invalid-export`, by field.
+- **`words`** is whose words the rows are in: `plain` (the default), a site owner's, as Simple's screens say them, or
+  `technical`, a working SEO's, as Advanced says them. One outline either way. The app asks for `plain` in Simple and
+  `technical` in Advanced, for the document it shows and the file it saves; `si report --words` takes the same.
+  - *plain*: each row's detail and evidence are the app's own plain sentences ("It is missing (404 Not Found)", "1
+    broken link", "It goes from the main heading to a level-4 heading, skipping levels 2 and 3", "For sharing, its
+    title and description are empty"), never "not indexable", "Inlinks: 1" or "H1 → H4". Evidence that says nothing a
+    site owner can act on (that an address is a page, how long checking it took), or that only repeats the detail, is
+    left out. A check's technical name isn't beside its title: "About this check" lists each problem's once ("What a
+    developer or an SEO tool calls each problem").
+  - *technical*: the detail and evidence as the engine writes them, a fact with its unit, and each check's technical
+    title and severity beside its plain title.
+  - The plain sentences are the app's (`app/src/simple`), mirrored in the engine (`Reporting/ReportPlainWords`,
+    `ReportPlainDetails`): 113 of the catalog's checks have their details mirrored, and another check's detail is the
+    engine's own text, as the app has it for a form it doesn't know. One file of cases holds the two together
+    (`engine/tests/ShoutingIguana.Engine.Tests/Reporting/PlainRows/plain-rows.json`): the app's
+    `screens/report/plainRows.test.ts` holds it to what the app says, and writes it when asked
+    (`SI_WRITE_PLAIN_ROWS=1`); the engine's `PlainRowsTests` holds the mirror to it.
+- **Its outline** is the design's: the head; in the full report, its parts as links ("In this report"); the summary
+  (the score as a ring, its word, what it covers, the five counts); "Fix these first" (up to five, by their numbers);
+  "How the score is worked out"; then, from a new page, "What to fix" (every check that found something, in three
+  groups, numbered in the order to fix them: its plain title, with its technical title and severity beside it in the
+  technical wording, its count and share, its points, who usually fixes it, what's wrong,
   how to fix it, a "One fix" line where one cause is behind most of its pages, and its first pages); "What couldn't be
   checked", with why; "What was checked and found nothing wrong"; and "About this check".
 - **A problem's pages** (evidence) are its most important first, as `/rows` without `sort` gives them (`examples`
@@ -2714,10 +2734,34 @@ path (`kind` `report`), and `si report` writes it from the command line.
     (meta robots)", `301 → https://x/b/ (301) → https://x/c/ (200)`. In plain words the four title and description
     length checks say instead where Google will likely cut, "Google will likely cut this title off after “…for every
     garden and”", or "Only 10 characters long", as Simple does, never px;
-  - *Where to fix it*: for a `sources` check, the pages linking to it with where on each the link is and its text
-    ("/garden/ (footer, “Old range”), /sofas/ (content, “Sale”) and 3 more"), the sitemaps listing it, the start
-    address; for a `targets` check (new: these said only "and N others"), what the page names, each with what it is,
-    in the workbook cell's words (`Image https://x/img/hero.jpg (1.8 MB, 4000×3000 px, shown at 400×300) and 1 other`).
+  - *Where to fix it* (rewritten for the UX audit of 2026-11-19, S-02 and S-11: "people are going to be more
+    interested as to where the broken link is"):
+    - **A missing address** (`internal-client-error`) is mended at the link to it, so its row leads with the page that
+      holds the link, as a link, and under it the link's words and where on the page it is; then the address it leads
+      to; then what's wrong. "Page to edit | It leads to | What's wrong" in plain words ("/blog/ · The link that says
+      “Buy Now”, in the main content"), "Where to fix it | Address | What was found" in technical ones ("/blog/ ·
+      content, “Buy Now”"). One page's links are together. An address no page links to says so, then the sitemap that
+      lists it.
+    - **Any other `sources` check** is fixed at the address, which leads; the pages that link to it follow, each a link
+      on a line of its own with the link's words and place under it, then "And 12 more pages link to it", the sitemap
+      listing it, or that it's the start address ("Where it's linked from" in plain words).
+    - **A `targets` check** lists what to change on the page, up to five (two for a thing worth a look), a line each,
+      then "And 2 other broken links on this page". In plain words the thing on the page leads ("The link that says
+      “Buy Now”, in the main content", "The picture with the alt text “Sofa”, in the main content"), then where it
+      leads and how that answered ("It leads to /old/, which is missing (404 Not Found)") or the image's file with
+      what the check measured ("/img/hero.jpg · The image file is 1.8 MB, 4000×3000 pixels · Shown at 400×300
+      pixels"). In technical words, the URL with what it is and how the page links to it, in the workbook cell's
+      words (`/img/hero.jpg (200; 1.8 MB, image/jpeg, 4000×3000 px, shown at 400×300; content, alt “Sofa”)`).
+- **Its parts are links** (the audit's A-12: 17,000 px with nothing in it leading anywhere but the live site).
+  - Every problem's section is `<article class="problem" id="problem-{check id}" data-check="{check id}">`. In the
+    full report "Fix these first" and the score's rows lead to their sections, and "In this report" to each part
+    (`#summary`, `#since-last-check`, `#fix-first`, `#score`, `#what-to-fix`, `#serious`, `#worth-fixing`,
+    `#worth-a-look`, `#not-checked`, `#passed`, `#about`), each there only when its part is. The summary page has no
+    sections, and none of these.
+  - Each problem's heading holds a comment, `<!--si:open {check id}-->`, where the app's preview puts its own link
+    into that problem ("Open in What to fix", "Open in Issues": see Showing it). A saved file and paper have no
+    control that leads nowhere.
+  - On a screen a link looks like one (coloured, underlined); on paper it is plain text, and a PDF keeps it.
 - **"One fix"** (evidence) is said too for a check that doesn't group, when its `likelyTemplate` is true ("This is on
   nearly every page, so it's probably your site's template: one fix clears it."); and for the image checks, now grouped
   by image, when one image is behind most of their pages.
@@ -2773,7 +2817,8 @@ path (`kind` `report`), and `si report` writes it from the command line.
 **What a site sends can't become markup.** Every string from the crawl is escaped where it's written, as text and
 inside an attribute alike; control characters, and the marks that reverse the text after them, are left out. A URL is
 a link only when it is `http` or `https` (a `javascript:` or `data:` URL a site wrote is shown as text), and a link
-opens apart from the document (`target="_blank" rel="noopener noreferrer nofollow"`). The document carries
+opens apart from the document (`target="_blank" rel="noopener noreferrer nofollow"`). The only other links are to the
+document's own parts (`#problem-title-too-long`), whose ids are the engine's and the catalog's, never a site's text. The document carries
 `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'sha256-…'; base-uri 'none';
 form-action 'none'">`: nothing may be loaded or run, and the only style is its own one sheet, named by its hash. There
 isn't a script, a style attribute, an image or a form in it.
@@ -2800,9 +2845,19 @@ crawl's report in a `srcdoc` frame of a page served under each policy below:
     `style-src` holds has to be looked at there.
 - **Nothing else is needed.** The report loads nothing, so `default-src`, `img-src`, `font-src` and `connect-src` don't
   matter to it, and `frame-src` doesn't govern a `srcdoc` frame (tried with `frame-src 'none'`).
-- **`sandbox`** with no tokens is enough to show it: no script runs (there is none), and the report's links do
-  nothing, as they open a new window and the frame may not (`allow-popups` would let them; in the saved file they
-  work). **To print the frame from the app** (`frame.contentWindow.print()`), the frame needs
+- **`sandbox`** with no tokens is enough to show it: no script runs (there is none), and left to itself the frame
+  does nothing with the report's links, as they open a new window and the frame may not. **The page carries them
+  out** (the UX audit's S-11; `app/src/screens/report/reportAppParts.ts`): with `allow-same-origin` it listens for
+  clicks in the frame's document, each time the frame loads one, and an address outside opens in the browser
+  (`openInBrowser`), a link to a part of the report scrolls it into view, and a problem's own link opens that problem
+  in the app (`/crawls/{id}/issues/{check}`: What to fix's page of it in Simple, Issues with it selected in
+  Advanced). Enter on a focused link is a click, and a middle click opens an outside address too.
+- **What the app adds to the frame's copy**, and never to the file saved: its scroll bars; a link in each problem's
+  heading, where the engine left its comment; and a zoom that fits the sheet to the pane, from 1 to 1.5, on screen
+  only (`body { zoom: var(--si-zoom) }` under `@media screen`, the property set on the frame's root by the page), so
+  the report prints at its own size. Its one `<style>` goes first in the head, ahead of the document's own policy,
+  which would refuse it after; it hides the app's link in print.
+- **To print the frame from the app** (`frame.contentWindow.print()`), the frame needs
   `sandbox="allow-same-origin allow-modals"`: without the first the page may not reach into the frame (a
   `SecurityError`), and without the second a sandboxed document may not open the print dialog. Scripts stay off
   either way. Reaching `print` was tried; the dialog itself, and printing in the built shell on each OS, were not.
@@ -4662,8 +4717,11 @@ Four parts built round 5 at once; this is their one account, merged on `ui/r5-in
   pages, then how many more; the sitemap; the start address); a `targets` page naming several, "and N others".
   `IssueRow` carries the URL's id (`UrlId`).
 - A check's file (the workbook's sheets, `kind: 'check'`, `kind: 'issueRows'`): columns after its own from
-  `Export/WhereFoundColumns`, read a page of rows at a time (`GridExport.WriteGrid`'s `extra`): "Linked from (pages)",
-  "Linked from", "Listed in sitemaps", or "Links to (addresses)", "Links to". Tests: `WorkbookExportTests` (every
+  `Export/WhereFoundColumns`, read a page of rows at a time (`GridExport.WriteGrid`'s `extra`): "Page that links to it",
+  "Where on the page", "Link text", "Linked from (pages)", "Other pages that link to it", "Listed in sitemaps" (the UX
+  audit's S-05: the first page that links to an address has cells of its own, so a sheet can be sorted and filtered by
+  page, where one cell held "https://x/blog/ (content, “Buy Now”)"; the first three lead the row of a check fixed at
+  the link, `internal-client-error`), or "Links to (addresses)", "Links to". Tests: `WorkbookExportTests` (every
   check's sheet's header and its cells against the reader), `GridExportTests`,
   `ReportDocumentTests.AnAddressOtherPagesReferToSaysWhereItIsFound`,
   `GridEndpointsTests.FlaggedUrlsSayWhereTheyAreFoundAndPagesWhatTheyName`.
