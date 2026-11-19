@@ -228,6 +228,12 @@
     background: var(--color-surface-selected);
   }
 
+  /* The panel beside the grid shows another URL than the cursor's row (a hop inside the inspector to a URL that isn't
+     among the rows read): the row left isn't marked as the one inspected. */
+  .si-grid-frame[data-cursor-elsewhere] .si-grid-row[data-selected] {
+    background: none;
+  }
+
   /* What a first load is doing, over its skeleton: a line of words that takes no room from the rows. */
   .si-grid-note {
     position: absolute;

@@ -206,6 +206,14 @@ export interface GridCoreProps<Row> {
   rowKey?: ((row: Row) => string | number) | undefined;
   /** With `startRow` and `rowKey`: the row the grid was left on, so it starts there even if the row has moved. */
   startKey?: string | number | undefined;
+  /**
+   * With `rowKey`: the row something beside the grid is showing (the URL the inspector is on). When it changes to a
+   * row other than the cursor's (a hop inside the inspector), the cursor and its tint go to that row where it's among
+   * the rows read, without telling the move (`onActiveRowChange`): the grid's highlight follows the walk. Where the
+   * row isn't among them, the tint is taken off the row left (`data-cursor-elsewhere` on the frame), so the grid
+   * never marks one URL while the panel shows another.
+   */
+  followKey?: string | number | undefined;
   /** The columns can be resized, moved and pinned: see `GridColumnLayoutProps`. Left out, they're fixed. */
   columnLayout?: GridColumnLayoutProps | undefined;
   /**
@@ -348,6 +356,7 @@ function GridCoreInner<Row>({
   startRow,
   rowKey,
   startKey,
+  followKey,
   columnLayout,
   keyHints,
   rowNoun = ['row', 'rows'],
@@ -511,6 +520,30 @@ function GridCoreInner<Row>({
     anchor.current = { key: rowKey(here), row: nav.active.row, start: false };
   });
   useLayoutEffect(() => reanchor(), [getRow, count, nav.active?.row]);
+
+  // The highlight follows what's shown beside the grid (`followKey`): on its change only, so a cursor the user just
+  // moved is never pulled back while the panel catches up with it.
+  const follow = useEffectEvent(() => {
+    if (followKey === undefined || !rowKey || count === 0) return;
+    const at = nav.active ? Math.min(nav.active.row, count - 1) : view.first;
+    const here = getRow(at);
+    if (nav.active && here !== undefined && rowKey(here) === followKey) return;
+    for (let step = nav.active ? 1 : 0; step <= REANCHOR_REACH; step++) {
+      for (const row of step === 0 ? [at] : [at + step, at - step]) {
+        const candidate = row >= 0 && row < count ? getRow(row) : undefined;
+        if (candidate === undefined || rowKey(candidate) !== followKey) continue;
+        anchor.current = { key: followKey, row, start: false };
+        setNav((current) => ({
+          active: { row, col: current.active?.col ?? 0 },
+          selection: selectOnly(row),
+          follow: true,
+        }));
+        model.scrollToIndex(row);
+        return;
+      }
+    }
+  });
+  useLayoutEffect(() => follow(), [followKey]);
 
   const template = columns.map((column) => `${column.width}px`).join(' ');
   const width = columns.reduce((sum, column) => sum + column.width, 0);
@@ -718,10 +751,11 @@ function GridCoreInner<Row>({
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    // Text selected inside the grid by mouse: let the browser copy that instead.
+    // Text dragged over inside the grid: the browser copies that instead. Not with several rows selected: those are
+    // what Ctrl+C is for then, whatever text a click left selected (the UX audit of 2026-11-19, D-06).
     const textSelected = (window.getSelection()?.toString() ?? '') !== '';
     const mod = isMac ? event.metaKey : event.ctrlKey;
-    if (mod && event.key.toLowerCase() === 'c' && textSelected) return;
+    if (mod && event.key.toLowerCase() === 'c' && textSelected && selectedCount(selection) <= 1) return;
     // Esc closes what's open around the grid (the inspector) before it clears the grid's selection.
     if (event.key === 'Escape' && commands.claims(event.nativeEvent)) return;
     // A control in the header that has focus (a click can give it focus in some browsers) keeps its own keys.
@@ -1060,6 +1094,19 @@ function GridCoreInner<Row>({
     );
   };
 
+  /**
+   * A Shift+click or a Ctrl+click selects rows: the browser mustn't also extend a text selection over them, which
+   * Ctrl+C would then copy in place of the rows. The press is prevented, what was selected is cleared, and the grid
+   * takes the focus the press would have given it.
+   */
+  const onMouseDown = (event: MouseEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || !(event.shiftKey || (isMac ? event.metaKey : event.ctrlKey))) return;
+    if (!positionOf(event.target)) return;
+    event.preventDefault();
+    window.getSelection()?.removeAllRanges();
+    scrollRef.current?.focus({ preventScroll: true });
+  };
+
   const onDoubleClick = (event: MouseEvent<HTMLDivElement>) => {
     const position = positionOf(event.target);
     if (!position) return;
@@ -1139,8 +1186,17 @@ function GridCoreInner<Row>({
       ? undefined
       : clsx('si-grid-cell--pinned', col === offsets.lastPinned && 'si-grid-cell--pin-edge');
   const menuColumn = headerMenu ? columns[headerMenu.col] : undefined;
+  // The row the cursor's tint is on isn't the one shown beside the grid (and that one isn't among the rows read).
+  const cursorRow = active ? getRow(active.row) : undefined;
+  const cursorElsewhere =
+    followKey !== undefined &&
+    rowKey !== undefined &&
+    nav.follow &&
+    cursorRow !== undefined &&
+    rowKey(cursorRow) !== followKey;
   return (
     <div
+      data-cursor-elsewhere={cursorElsewhere || undefined}
       className={clsx('si-grid-frame relative flex min-h-0 flex-col overflow-hidden', className)}
       // With a least height the frame's size is its container's to give and never its rows' (a scroller of millions
       // of pixels): `contain: size` says so, so a container that sizes to its content takes the least height from it.
@@ -1266,6 +1322,7 @@ function GridCoreInner<Row>({
           className="relative"
           style={{ height: skeleton ? SKELETON_ROWS * rowHeight : loading ? 0 : bodyHeight, width }}
           onPointerDown={onPointerDown}
+          onMouseDown={onMouseDown}
           onDoubleClick={onDoubleClick}
           onContextMenu={onContextMenuEvent}
         >
