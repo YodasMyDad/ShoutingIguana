@@ -171,8 +171,10 @@ test('the pages no sitemap lists land on exactly those pages in URLs', async ({ 
   await link.click();
   await expect(page).toHaveURL(/\/urls\?filter=/);
   await expect(shown(page)).toHaveText(said.toLocaleString('en-GB'));
-  // The landing reads as a sentence: the last chip is the one that makes it "not in a sitemap".
-  await expect(main(page).getByRole('group', { name: 'Filters' })).toContainText('In a sitemap is no');
+  // The landing reads as one sentence, the check's own: one chip, not the eight filters it used to take.
+  const bar = main(page).getByRole('group', { name: 'Filters' });
+  await expect(bar).toContainText('Indexable page not in a sitemap');
+  await expect(bar.getByRole('button', { name: /^Remove the filter/ })).toHaveCount(1);
 });
 
 test('the tree is one Tab stop: the arrows move, Left and Right close and open an index, Enter opens', async ({

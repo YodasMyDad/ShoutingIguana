@@ -156,7 +156,9 @@ test('opens the row menu at the pointer every time, and at the row from the keys
   await expect
     .poll(async () => {
       const menu = await menuBox();
-      return Math.abs(menu.y - (row.y + row.height)) <= 2
+      // From the row's bottom edge: down, or up from it where the window has no room under it for the menu (it has
+      // two more items now), as the pointer's menu opens either way from the pointer.
+      return Math.abs(menu.y - (row.y + row.height)) <= 2 || Math.abs(menu.y + menu.height - (row.y + row.height)) <= 2
         ? 'at the row'
         : `menu at ${menu.y}, row ${row.y}+${row.height}`;
     })

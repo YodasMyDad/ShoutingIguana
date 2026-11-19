@@ -427,8 +427,9 @@ test('an origin opens on one click, and its blocked URL, that URL’s rule and t
   await first.getByRole('gridcell').nth(1).click();
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(`robots.txt of ${own.origin}`);
 
-  // The rule in a URL's "Blocked by" shows its line in the file, and narrows nothing.
-  await expect(file(page).locator('.cm-si-line-chosen')).toHaveCount(0);
+  // The rule in a URL's "Blocked by" shows its line in the file, and narrows nothing. (Come back to, the list has its
+  // cursor on a URL already, whose line the file marks: so the mark alone doesn't say the press did it; the address
+  // staying as it is, below, says it narrowed nothing.)
   await blocked(page).getByRole('row').nth(1).getByRole('button', { name: rule.text, exact: true }).click();
   await expect(file(page).locator('.cm-si-line-chosen')).toContainText(rule.text);
   await expect(page).not.toHaveURL(/line=/);

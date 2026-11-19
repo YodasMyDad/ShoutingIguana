@@ -42,7 +42,8 @@ async function inspectPlant(page: Page, plant: string): Promise<Locator> {
     .getByRole('row')
     .filter({ hasText: new RegExp(`/plants/${plant}(?![a-z/-])`) })
     .first();
-  await row.getByRole('gridcell').first().click();
+  // A cell that isn't the URL's: the URL's text is a link that inspects on a click, and its button opens the browser.
+  await row.getByRole('gridcell').nth(1).click();
   await page.keyboard.press('Enter');
   const inspector = inspectorOf(page);
   await expect(inspector).toBeVisible();
