@@ -1211,10 +1211,13 @@ What it settled:
 - **The route holds the view**: `filter`, `q`, `sort` (up to three keys), `cols`, `inspect`. A filter, a search, a
   facet's value and a saved view are each a new place; a sort and the columns replace. `view` stays unused: a preset
   and a saved view are recognised from the route itself, so a link, back and forward always say which.
-- **Column presets** (Overview, the default; Indexability; Content; Performance; Links) are only columns: a preset
+- **Column presets** (Overview, the default; Indexability; Content; Redirects; Performance; Links): a preset
   reads as chosen exactly while the route's columns are its own, in its order, and the default set isn't written to
-  the address. Each leads with the URL; the URL column takes the room the others leave and never less than 240 px, so
-  a preset wider than the window scrolls inside the grid, never the page. The chooser lists every column the engine
+  the address. Three bring filters with their columns (`UrlPreset.filters`, swapped by `presetFilters` as tabs
+  change). Each leads with the URL. Columns take their widths from what the rows read first hold and share the
+  grid's width by need (`grid/columnFit.ts`, applied by `GridCore` to columns with `fit`): words before a URL grows
+  past its longest value, a status or a count never cut, spare width blank at the right, and a column the user sized
+  keeps its width. A preset wider than the window scrolls inside the grid, never the page. The chooser lists every column the engine
   has (a check's own and the id left out) in six groups, with "Show full URLs" under them.
 - **The host named once**: URLs on the crawl's own origin show their path, and the URL column's header says "on
   example.com" (`headerDetail`). "Show full URLs" (a preference, `settings.showFullUrls`, and a palette command) shows

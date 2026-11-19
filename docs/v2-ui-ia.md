@@ -234,9 +234,12 @@ found, 265 pages; the 100k crawl 110,251 and 112,577, and 101,106 pages, everywh
 
 **URLs.**
 
-- The one grid: column presets (Overview, Indexability, Content, Performance, Links), the column chooser and the
-  filter bar. A preset is only columns, and reads as chosen while the columns are its own; one wider than the window
-  scrolls inside the grid.
+- The one grid: column presets (Overview, Indexability, Content, Redirects, Performance, Links), the column chooser
+  and the filter bar. A preset reads as chosen while the columns are its own; one wider than the window scrolls
+  inside the grid. Indexability and Content bring the filters "Type is page" and "On this site is yes" (an
+  indexability and a title are a page's), Redirects "Status class is 3xx"; they are chips like any other, and leaving
+  the tab takes them with it. A URL's text inspects it on one click, a count that stands for a list (inlinks,
+  outlinks, issues, used on) opens that list, and "Clear all" clears the filters, the search and the sort.
 - Quick filters with counts (status, status code, indexability, type, depth, response time, sitemaps, issues), each
   count opening exactly that many URLs, counted when their menu opens; a filter bar over any column the engine filters
   (at most 20).
