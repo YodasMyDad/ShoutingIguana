@@ -17,12 +17,14 @@ function layOut(width: number) {
     }
   }
   vi.stubGlobal('OffscreenCanvas', FakeCanvas);
-  // eslint-disable-next-line @typescript-eslint/unbound-method -- called with its element below
-  const real = Element.prototype.getBoundingClientRect;
   vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
-    return this.classList.contains('si-url') ? ({ width } as DOMRect) : real.call(this);
+    return this.classList.contains('si-url') ? ({ width } as DOMRect) : realRect.call(this);
   });
 }
+
+// The browser's own, kept once: laying out twice in a test must not measure through the first lay-out's stand-in.
+// eslint-disable-next-line @typescript-eslint/unbound-method -- called with its element above
+const realRect = Element.prototype.getBoundingClientRect;
 
 const shownText = (container: HTMLElement) => container.querySelector('.si-url__shown')?.textContent ?? '';
 
@@ -37,7 +39,7 @@ afterEach(() => vi.useRealTimers());
 
 describe('Url', () => {
   it('truncates in the middle to its width, keeping the host and the end, and is read in full', () => {
-    // The open button's room is padding, which jsdom computes as 0: the text gets all 50 characters.
+    // The open button has no size in jsdom: the text gets all 50 characters.
     layOut(50 * CHAR);
     const { container } = render(<Url url={LONG} />);
     const shown = shownText(container);

@@ -2109,7 +2109,10 @@
   /* Monospace; the host muted and the path strong; truncated in the middle, so the host and the end stay. */
   .si-url {
     position: relative;
-    display: block;
+    /* The text, then the open-in-browser button straight after it: never at the far edge of a wide cell. */
+    display: flex;
+    align-items: center;
+    column-gap: var(--space-0-5);
     min-width: 0;
     max-width: 100%;
     font-family: var(--font-mono);
@@ -2118,26 +2121,34 @@
   }
 
   .si-url--inline {
-    display: inline-block;
+    display: inline-flex;
     vertical-align: bottom;
   }
 
   .si-url--wrap {
+    align-items: flex-start;
     white-space: normal;
     overflow-wrap: anywhere;
   }
 
+  /* The text: as wide as the URL, and no wider than the room the button leaves it. */
   .si-url__copy {
     display: block;
-    width: 100%;
+    flex: 0 1 auto;
+    min-width: 0;
     max-width: 100%;
     padding: 0;
+    overflow: hidden;
     border: 0;
     border-radius: var(--radius-xs);
     background: none;
     color: inherit;
     font: inherit;
     text-align: start;
+  }
+
+  /* Only the URL that copies on a click has the copy cursor: text that does nothing looks like text. */
+  button.si-url__copy {
     cursor: copy;
   }
 
@@ -2169,6 +2180,13 @@
 
   .si-url--wrap .si-url__full {
     height: auto;
+  }
+
+  /* A file is laid out by its name, not by its URL's length: the button follows the name. */
+  .si-url--file .si-url__full {
+    position: absolute;
+    width: 1px;
+    white-space: nowrap;
   }
 
   .si-url__shown {
@@ -2226,50 +2244,53 @@
     color: var(--color-accent-text);
   }
 
-  /* The open-in-browser button has its own room at the end, so it never covers the end of the URL. */
-  .si-url--openable {
-    padding-right: calc(var(--control-height-xs) + var(--space-0-5));
-  }
-
-  .si-url__open {
-    position: absolute;
-    top: 50%;
-    right: 0;
-    opacity: 0;
-    transform: translateY(-50%);
-  }
-
-  .si-url:hover .si-url__open,
-  .si-url:focus-within .si-url__open {
-    opacity: 1;
-  }
-
   /*
-   * In a grid's row the button shows on the row's hover, on the row under the cursor while the grid has focus, and
-   * always on a selected row: the grid's own Shift+Enter opens the same URL from the keyboard.
+   * The open-in-browser button, straight after the URL's text. In a list of things to fix it always shows, muted until
+   * it's pointed at. In a big grid (`si-open-on-row` on the grid's frame: URLs, Links) it shows on the row under the
+   * pointer, on the cursor's row and on a selected row, where the grid's own Shift+Enter opens the same URL.
    */
-  .si-grid-row:hover .si-url__open,
-  .si-grid-row[data-selected] .si-url__open,
-  .si-grid:focus .si-grid-row:has(> [data-active]) .si-url__open,
-  .si-where-table tr:hover .si-open-url,
-  .si-where-table tr:focus-within .si-open-url {
+  .si-url__open {
+    flex: none;
+    opacity: 0.6;
+  }
+
+  .si-url__open:hover,
+  .si-url__open:focus-visible,
+  .si-url:hover > .si-url__open {
     opacity: 1;
   }
 
-  /* A URL shown as plain text in a cell (robots.txt's origins): the button sits after it rather than over its end. */
-  .si-url__open--inline {
-    position: static;
-    flex-shrink: 0;
-    transform: none;
+  .si-open-on-row .si-grid-row .si-url__open {
+    opacity: 0;
   }
 
-  /* Simple's lists: the button beside an address, shown on the row's hover or focus. */
+  .si-open-on-row .si-grid-row:hover .si-url__open,
+  .si-open-on-row .si-grid-row[data-selected] .si-url__open,
+  .si-open-on-row .si-grid-row:has(> [data-active]) .si-url__open {
+    opacity: 0.6;
+  }
+
+  .si-open-on-row .si-grid-row .si-url__open:hover,
+  .si-open-on-row .si-grid-row .si-url__open:focus-visible,
+  .si-open-on-row .si-grid-row .si-url:hover > .si-url__open {
+    opacity: 1;
+  }
+
+  /* The same button after a URL shown as plain text in a cell. */
+  .si-url__open--inline {
+    flex-shrink: 0;
+  }
+
+  /* Simple's lists: the button beside an address, always there, muted until it's pointed at. */
   .si-open-url {
-    opacity: 0;
+    opacity: 0.6;
     vertical-align: middle;
   }
 
-  .si-open-url:focus-visible {
+  .si-open-url:hover,
+  .si-open-url:focus-visible,
+  .si-where-table tr:hover .si-open-url,
+  .si-where-table tr:focus-within .si-open-url {
     opacity: 1;
   }
 
@@ -2380,6 +2401,34 @@
   }
 
   /* ----------------------------------------------------------------- Links */
+  /* The inspector's way back after a hop: a strip across its top, naming the URL it came from. */
+  .si-inspector-back {
+    display: flex;
+    flex: none;
+    min-width: 0;
+    padding: var(--space-1) var(--space-3);
+    border-bottom: 1px solid var(--color-border-subtle);
+    background: var(--color-surface-sunken);
+  }
+
+  .si-inspector-back__link {
+    display: flex;
+    gap: var(--space-1-5);
+    align-items: center;
+    min-width: 0;
+    min-height: var(--target-min);
+    padding: 0 var(--space-2);
+    border-radius: var(--radius-sm);
+    color: var(--color-text-secondary);
+    font-size: var(--text-12);
+    cursor: pointer;
+  }
+
+  .si-inspector-back__link:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+  }
+
   .si-link {
     border-radius: var(--radius-xs);
     color: var(--color-accent-text);
