@@ -121,6 +121,16 @@ describe('the summary’s counts', () => {
     expect(within(inspector).queryByRole('button', { name: /links$/ })).toBeNull();
   });
 
+  it('go from the page a URL was found on to that page’s Outlinks, for the link to this URL', async () => {
+    const home = testUrlDetail({ id: 1, url: 'https://example.com/' });
+    const { router, inspector, user } = await open({ 2: PAGE, 1: home }, 2);
+    const found = fact(inspector, 'Found on');
+    await user.click(within(found).getByRole('button', { name: home.url }));
+    await waitFor(() => expect((router.state.location.search as { inspect?: number }).inspect).toBe(1));
+    expect(router.state.location.state.inspectShow).toEqual({ section: 'outlinks', link: 2 });
+    await waitFor(() => expect(selected(inspector, /^Outlinks/)).toBe(true));
+  });
+
   it('open the Issues section from the count of issues', async () => {
     const { inspector, user } = await open({ 2: PAGE }, 2);
     await user.click(within(inspector).getByRole('button', { name: '1 issue' }));

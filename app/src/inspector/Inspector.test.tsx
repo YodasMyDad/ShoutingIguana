@@ -1620,6 +1620,16 @@ describe('the sheet', () => {
     expect(splitter).toHaveAttribute('aria-valuenow', '728');
   });
 
+  it('shows where it resizes: a grip on the edge that drags, in both docks', async () => {
+    const { inspector, user } = await open(`${URLS}?inspect=2`);
+    const handle = within(inspector).getByRole('separator', { name: 'Resize the inspector' });
+    expect(handle.querySelector('.si-inspector-grip')).not.toBeNull();
+    expect(handle).toHaveAttribute('title', 'Drag to resize the inspector');
+    await user.click(within(inspector).getByRole('button', { name: 'Dock at the bottom' }));
+    const docked = within(inspector).getByRole('separator', { name: 'Resize the inspector' });
+    expect(docked.querySelector('.si-inspector-grip')).toHaveClass('si-inspector-grip--bottom');
+  });
+
   it('docks at the bottom and back, and remembers it', async () => {
     const { inspector, user } = await open(`${URLS}?inspect=2`);
     await user.click(within(inspector).getByRole('button', { name: 'Dock at the bottom' }));

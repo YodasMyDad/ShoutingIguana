@@ -13,6 +13,7 @@ import { crawlControls, effectiveStatus } from '../crawl/status';
 import { ErrorState } from '../feedback/ErrorState';
 import { Skeleton } from '../feedback/Skeleton';
 import { useLiveCrawl } from '../live/liveStore';
+import type { InspectShow } from '../routing/inspector';
 import { Badge } from '../ui/Badge';
 import { SeverityMark } from '../ui/SeverityMark';
 import { StatusCode } from '../ui/StatusCode';
@@ -69,6 +70,7 @@ export function WalkUrl({
   outcome,
   showStatus = false,
   truncate = 'middle',
+  show,
   className,
 }: {
   /** Null for a URL the crawl doesn't have (a canonical to somewhere it never went). */
@@ -80,6 +82,8 @@ export function WalkUrl({
   /** Its status after it, when that's the point: where a canonical or a redirect leads. */
   showStatus?: boolean | undefined;
   truncate?: 'middle' | 'wrap' | undefined;
+  /** What to arrive on there: the page a URL was found on opens on its Outlinks, its link to this URL first. */
+  show?: InspectShow | undefined;
   className?: string | undefined;
 }) {
   const { urlId, siteOrigin, walk } = useInspectorContext();
@@ -92,7 +96,7 @@ export function WalkUrl({
         copyable={!walkable}
         openable={!walkable}
         truncate={truncate}
-        onGo={walkable ? () => walk(id) : undefined}
+        onGo={walkable ? () => walk(id, show ? { show } : undefined) : undefined}
         className="min-w-0 flex-1 text-12"
       />
       {showStatus && statusCode !== undefined ? (

@@ -871,7 +871,12 @@ function Discovery({ detail, onShowSection }: SummarySectionProps) {
       </Fact>
       {discovery.foundOn ? (
         <Fact label="Found on">
-          <WalkUrl id={discovery.foundOn.id} url={discovery.foundOn.url} />
+          {/* The page that holds the link the crawl followed here: on its Outlinks, that link first. */}
+          <WalkUrl
+            id={discovery.foundOn.id}
+            url={discovery.foundOn.url}
+            show={{ section: 'outlinks', link: detail.id }}
+          />
         </Fact>
       ) : null}
       <Fact label="Site">{detail.isInternal ? 'This site' : 'Another site'}</Fact>

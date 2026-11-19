@@ -2460,6 +2460,31 @@
     font-weight: var(--font-weight-semibold);
   }
 
+  /* The inspector's resize edge shows where to drag (layout/InspectorSlot.tsx): a short bar at the middle of the edge,
+     upright on the side dock and lying on the bottom one, neutral until the edge is pointed at, focused or dragged. */
+  .si-inspector-grip {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: var(--space-1);
+    height: var(--space-10);
+    border-radius: var(--radius-full);
+    background: var(--color-border-strong);
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+
+  .si-inspector-grip--bottom {
+    width: var(--space-10);
+    height: var(--space-1);
+  }
+
+  [role='separator']:hover > .si-inspector-grip,
+  [role='separator']:focus-visible > .si-inspector-grip,
+  [role='separator']:active > .si-inspector-grip {
+    background: var(--color-text-muted);
+  }
+
   /* An image, at the top of its own summary: the picture whole, no taller than four of Simple's thumbnails, in the
      thumbnail's own box (a hairline, the sunken surface behind a picture with no background of its own). */
   .si-inspector-image {
