@@ -1,6 +1,6 @@
 import * as ToggleGroup from '@radix-ui/react-toggle-group';
 import clsx from 'clsx';
-import { useId } from 'react';
+import { useId, useRef } from 'react';
 import { formatCount } from '../lib/format';
 import { IconSlot, type IconLike } from './Icon';
 import { Tooltip } from './Tooltip';
@@ -39,9 +39,13 @@ export interface SegmentedControlProps<T extends string> {
   groupDescription?: string | undefined;
 }
 
+/** The keys that move between segments. */
+const ARROW_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End']);
+
 /**
  * One choice out of a few, all in view: a radio group drawn as segments. The selected one is lifted, with the 3:1
- * control edge. The arrow keys move between segments and choose as they go, as radio buttons do.
+ * control edge. The arrow keys move between segments and choose as they go, as radio buttons do; focus that arrives
+ * any other way (Tab, or given back by something closing) chooses nothing.
  */
 export function SegmentedControl<T extends string>({
   label,
@@ -61,6 +65,9 @@ export function SegmentedControl<T extends string>({
     const option = options.find((candidate) => candidate.value === next);
     if (option && next !== value) onValueChange(option.value);
   };
+  // Focus chooses only when an arrow key moved it. Focus given back to a segment (a toast or a menu closing, the
+  // palette's Esc) is not the user choosing: it flipped the mode back to the segment last clicked.
+  const byArrow = useRef(false);
   return (
     <>
       <ToggleGroup.Root
@@ -71,6 +78,15 @@ export function SegmentedControl<T extends string>({
         value={value}
         onValueChange={choose}
         loop
+        onKeyDown={(event) => {
+          if (!ARROW_KEYS.has(event.key)) return;
+          // Radix moves the focus from a timer its own key handler has just set: this one runs after it, so the
+          // focus the key caused is the only one that chooses.
+          byArrow.current = true;
+          setTimeout(() => {
+            byArrow.current = false;
+          }, 0);
+        }}
         className={clsx('si-segmented', fill && 'si-segmented--fill', wrap && 'si-segmented--wrap', className)}
       >
         {options.map((option) => {
@@ -81,7 +97,9 @@ export function SegmentedControl<T extends string>({
               value={option.value}
               disabled={option.disabled}
               className={clsx('si-segment', option.iconOnly && count === null && 'si-segment--icon')}
-              onFocus={() => choose(option.value)}
+              onFocus={() => {
+                if (byArrow.current) choose(option.value);
+              }}
               aria-describedby={option.description ? descriptionOf(option) : undefined}
               {...(option.iconOnly ? { 'aria-label': count === null ? option.label : `${option.label} ${count}` } : {})}
             >

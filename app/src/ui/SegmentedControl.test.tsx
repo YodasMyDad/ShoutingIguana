@@ -64,6 +64,23 @@ describe('SegmentedControl', () => {
     expect(onChange).toHaveBeenNthCalledWith(3, 'all');
   });
 
+  // Found fixing H-03 (the audit of 2026-11-19): a toast's button turned Advanced on, the toast closed, focus went back
+  // to the segment last clicked ("Simple"), and that focus chose Simple again.
+  it('chooses nothing when focus is given to a segment: only the arrows, a click, Space and Enter choose', async () => {
+    const onChange = vi.fn();
+    render(<SeverityFilter onChange={onChange} />);
+    act(() => screen.getByRole('radio', { name: 'Warnings 6' }).focus());
+    expect(screen.getByRole('radio', { name: 'All 19' })).toHaveAttribute('aria-checked', 'true');
+    expect(onChange).not.toHaveBeenCalled();
+    // From there the arrows still choose as they move.
+    await userEvent.keyboard('{ArrowLeft}');
+    expect(screen.getByRole('radio', { name: 'Errors 2' })).toHaveFocus();
+    expect(onChange).toHaveBeenCalledExactlyOnceWith('error');
+    // And an arrow that had nowhere to go leaves nothing waiting for the next focus.
+    act(() => screen.getByRole('radio', { name: 'All 19' }).focus());
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps one segment chosen when the chosen one is pressed again', async () => {
     const onChange = vi.fn();
     render(<SeverityFilter onChange={onChange} />);
