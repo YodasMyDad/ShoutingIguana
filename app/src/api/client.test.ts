@@ -394,9 +394,12 @@ describe('the API client', () => {
     );
     await expect(api.report('0123456789abcdef')).resolves.toBe(html);
     await api.report('0123456789abcdef', { cut: 'summary', examples: 2, lookExamples: 0 });
+    // Whose words its rows are in: a site owner's (Simple) or a working SEO's (Advanced).
+    await api.report('0123456789abcdef', { cut: 'full', words: 'technical' });
     expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
       'http://127.0.0.1:5000/api/crawls/0123456789abcdef/report',
       'http://127.0.0.1:5000/api/crawls/0123456789abcdef/report?cut=summary&examples=2&lookExamples=0',
+      'http://127.0.0.1:5000/api/crawls/0123456789abcdef/report?cut=full&words=technical',
     ]);
 
     // A crawl never analysed has no report: the problem, not a document.

@@ -360,11 +360,13 @@ export function crawlFileChoices(item: CrawlListItem, simple: boolean): ExportCh
       fileView: 'report',
       unavailable,
       remedy: 'analyse',
+      // In the words of the mode it's saved from, as the Report screen shows it: the file is the document on screen.
       build: ({ path, cut }) => ({
         kind: 'report',
         format: 'html',
         path,
         ...(cut === 'summary' ? { cut } : {}),
+        words: simple ? 'plain' : 'technical',
         ...hidden(),
       }),
     },
