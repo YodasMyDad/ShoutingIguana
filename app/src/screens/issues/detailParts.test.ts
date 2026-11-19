@@ -30,4 +30,10 @@ describe('a row’s detail, its addresses told from its words', () => {
       { kind: 'text', text: ').' },
     ]);
   });
+
+  it('leaves what isn’t an address a browser could open as words', () => {
+    expect(detailParts('The canonical is “http://[not”, which isn’t a URL')).toEqual([
+      { kind: 'text', text: 'The canonical is “http://[not”, which isn’t a URL' },
+    ]);
+  });
 });

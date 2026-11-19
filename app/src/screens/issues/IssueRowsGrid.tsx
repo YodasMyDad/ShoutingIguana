@@ -637,7 +637,13 @@ export function IssueRowsGrid({
                 if (!own) return null;
                 // Its addresses are links (A-18); the file its row is about is named by its name alone.
                 return own.detail ? (
-                  <DetailWords crawlId={crawlId} detail={own.detail} files={fileUrls} siteOrigin={siteOrigin} />
+                  <DetailWords
+                    crawlId={crawlId}
+                    detail={own.detail}
+                    files={fileUrls}
+                    siteOrigin={siteOrigin}
+                    onInspect={onInspect}
+                  />
                 ) : (
                   <span>–</span>
                 );
@@ -831,7 +837,14 @@ export function IssueRowsGrid({
         <p className="text-13 text-text-secondary" data-said-once>
           <span className="flex min-w-0 flex-wrap items-center gap-x-1">
             <span>{rowCount === 2 ? 'Both' : `All ${formatCount(rowCount)}`}:</span>
-            <DetailWords crawlId={crawlId} detail={saidOnce} files={fileUrls} siteOrigin={siteOrigin} wrap />
+            <DetailWords
+              crawlId={crawlId}
+              detail={saidOnce}
+              files={fileUrls}
+              siteOrigin={siteOrigin}
+              onInspect={onInspect}
+              wrap
+            />
           </span>
         </p>
       ) : null}

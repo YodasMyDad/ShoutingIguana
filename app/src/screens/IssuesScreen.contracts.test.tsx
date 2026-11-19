@@ -10,7 +10,7 @@ import { App } from '../app/App';
 import { createQueryClient } from '../app/queryClient';
 import { createAppRouter } from '../app/router';
 import { installKeyboard } from '../keyboard/registry';
-import { TEST_CRAWL_ID, fakeSidecar, json } from '../test/fakeSidecar';
+import { TEST_CRAWL_ID, fakeSidecar, json, problem } from '../test/fakeSidecar';
 import { ISSUE_ROWS, ISSUES_ANALYSIS, ISSUES_CHECKS, issuesRoutes } from '../test/issuesSidecar';
 
 const ISSUES = `/crawls/${TEST_CRAWL_ID}/issues`;
@@ -68,6 +68,15 @@ async function open(
         'GET',
         /^\/api\/crawls\/[0-9a-f]{16}\/sitemaps$/,
         () => json({ sitemaps: [{ id: 4, url: `${SITE}/sitemap.xml` }] }),
+      ],
+      // An address looked up in the crawl: it has /shop/ and nothing else.
+      [
+        'POST',
+        /^\/api\/crawls\/[0-9a-f]{16}\/urls\/lookup$/,
+        (request) =>
+          (request.body as { url: string }).url === `${SITE}/shop/`
+            ? json({ id: 9, url: `${SITE}/shop/`, requested: null })
+            : problem({ type: 'not-found', title: 'The crawl doesn’t have this URL.', status: 404 }),
       ],
       ...issuesRoutes({
         checks,
@@ -139,6 +148,26 @@ describe('a check of the site’s own files', () => {
     expect(detail.querySelector('[data-open-url]')).toHaveAttribute('data-open-url', `${SITE}/sitemap.xml`);
     fireEvent.click(sitemap);
     await waitFor(() => expect(router.state.location.pathname).toBe(`/crawls/${TEST_CRAWL_ID}/sitemaps/4`));
+  });
+
+  it('inspects any other address its detail names, looked up when it’s pressed, and says so when the crawl hasn’t it', async () => {
+    const router = await open(
+      `${ISSUES}/robots-txt-no-sitemap`,
+      analysisWith({ 'robots-txt-no-sitemap': [{ url: `${SITE}/robots.txt`, sitemapId: null }] }),
+      CHECKS,
+      [{ id: 1, url: `${SITE}/`, detail: `Names ${SITE}/shop/ and ${SITE}/gone/` }],
+    );
+    const grid = await screen.findByRole('grid', { name: /robots\.txt names no sitemap/ });
+    // Every address is a link (rule 1), never text with a copy cursor.
+    const shop = await within(grid).findByRole('button', { name: `${SITE}/shop/` });
+    const gone = within(grid).getByRole('button', { name: `${SITE}/gone/` });
+    expect(shop).toHaveClass('si-url__go');
+    expect(gone).toHaveClass('si-url__go');
+    fireEvent.click(shop);
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ inspect: 9 }));
+    fireEvent.click(gone);
+    expect(await screen.findByText('The crawl doesn’t have this URL')).toBeVisible();
+    expect(router.state.location.search).toMatchObject({ inspect: 9 });
   });
 
   it('names the first sitemap and how many more, with the way to it in Sitemaps', async () => {

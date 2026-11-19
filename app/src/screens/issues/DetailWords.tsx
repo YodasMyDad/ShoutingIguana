@@ -1,7 +1,9 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
+import { api } from '../../api/client';
 import { sitemapsQuery } from '../../api/queries';
+import { notifyResult } from '../../feedback/notify';
 import { robotsOriginOf } from '../../inspector/placeLinks';
 import { IssueUrl } from './IssueUrl';
 import { detailParts } from './detailParts';
@@ -14,14 +16,18 @@ export interface DetailWordsProps {
   siteOrigin: string | null;
   /** Over the list, where there's room for more than a line; in a row it's one line. */
   wrap?: boolean | undefined;
+  /** Inspects a URL of the crawl: what a click on any other address it names does, once it's looked up. */
+  onInspect?: ((urlId: number) => void) | undefined;
 }
 
 /**
  * A row's detail (A-18): its words, with each address it names a link like any other, to its own screen where it has
- * one (a sitemap in Sitemaps, a robots.txt of its origin), with its open-in-browser button after it. A detail that
- * names no address is its words alone, as it always was.
+ * one (a sitemap in Sitemaps, a robots.txt of its origin), else to the inspector (the address is looked up in the crawl
+ * when it's pressed, and a toast says so if the crawl doesn't have it), with its open-in-browser button after it. A
+ * detail that names no address is its words alone, as it always was.
  */
-export function DetailWords({ crawlId, detail, files = [], siteOrigin, wrap = false }: DetailWordsProps) {
+export function DetailWords({ crawlId, detail, files = [], siteOrigin, wrap = false, onInspect }: DetailWordsProps) {
+  const queryClient = useQueryClient();
   const parts = detailParts(detail, files);
   const names = parts.some((part) => part.kind === 'url');
   const navigate = useNavigate();
@@ -64,14 +70,27 @@ export function DetailWords({ crawlId, detail, files = [], siteOrigin, wrap = fa
                   params: { crawl: crawlId, origin },
                   search: {},
                 })
-            : undefined;
+            : onInspect && robotsOriginOf(part.url) !== null
+              ? () =>
+                  void queryClient
+                    .query({
+                      queryKey: ['crawl', crawlId, 'lookup', part.url],
+                      queryFn: ({ signal }) => api.lookupUrl(crawlId, part.url, signal),
+                      retry: false,
+                      staleTime: Infinity,
+                    })
+                    .then(
+                      (found) => onInspect(found.id),
+                      () => notifyResult('The crawl doesn’t have this URL', { description: part.url }),
+                    )
+              : undefined;
         return (
           <IssueUrl
             key={at}
             url={part.url}
             siteOrigin={siteOrigin}
             onInspect={go}
-            goHint={sitemap ? 'Open in Sitemaps' : 'Open robots.txt'}
+            goHint={sitemap ? 'Open in Sitemaps' : origin ? 'Open robots.txt' : 'Inspect'}
             className="shrink-0"
           />
         );

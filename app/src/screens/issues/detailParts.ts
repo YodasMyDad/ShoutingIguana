@@ -32,6 +32,8 @@ export function detailParts(detail: string, files: readonly string[] = []): Deta
   let from = 0;
   for (const match of detail.matchAll(ADDRESS)) {
     const url = match[0].replace(TRAILING, '');
+    // What isn't an address a browser could open ("http://[not", an invalid canonical) stays words.
+    if (!URL.canParse(url)) continue;
     if (match.index > from) parts.push({ kind: 'text', text: detail.slice(from, match.index) });
     parts.push(files.includes(url) ? { kind: 'file', url, name: fileName(url) } : { kind: 'url', url });
     from = match.index + url.length;
