@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
 import {
+  ArrowLeft,
   Check,
   Copy,
   ExternalLink,
@@ -30,7 +31,14 @@ import { useCommands, type Command } from '../keyboard/registry';
 import { copyText } from '../lib/clipboard';
 import { isMac } from '../lib/platform';
 import { useLiveCrawl } from '../live/liveStore';
-import { arrivedByName, useGoneToByName, useInspector } from '../routing/inspector';
+import {
+  arrivedByName,
+  useGoneToByName,
+  useInspectShow,
+  useInspectTrail,
+  useInspector,
+  type InspectShow,
+} from '../routing/inspector';
 import { updateSettings, useSettings } from '../settings/settingsStore';
 import { openInBrowser } from '../shell/os';
 import { Button } from '../ui/Button';
@@ -53,6 +61,7 @@ import { RedirectsSection } from './RedirectsSection';
 import {
   SECTION_IDS,
   SECTION_TITLES,
+  isSectionId,
   rememberSection,
   rememberedSection,
   sectionCounts,
@@ -173,6 +182,17 @@ export function Inspector({ crawlId, urlId, onClose }: InspectorProps) {
     setSection(next);
     setSearchRequest(null);
   }, []);
+  // Arriving somewhere that asks for a section (the link's own list from a "linked from" row, the section a hop left
+  // on the way back): shown once, on arrival, then the tabs are the reader's again.
+  const show = useInspectShow();
+  const [shown, setShown] = useState<{ urlId: number; show: InspectShow | undefined } | null>(null);
+  if (shown?.urlId !== urlId || shown.show !== show) {
+    setShown({ urlId, show });
+    if (isSectionId(show?.section) && show.section !== section) {
+      rememberSection(show.section);
+      setSection(show.section);
+    }
+  }
 
   // An inspector is open, so its source may be asked for: the viewer's code loads while the app is idle.
   useEffect(() => preloadSourceViewer(), []);
@@ -237,10 +257,30 @@ export function Inspector({ crawlId, urlId, onClose }: InspectorProps) {
     arrivedByName();
     sheet.current?.querySelector<HTMLElement>('[role="tabpanel"][data-state="active"]')?.focus({ preventScroll: true });
   }, [byName]);
-  const walk = inspector.walk;
+  // A hop remembers the section it left, for the way back.
+  const walk = useCallback<InspectorContextValue['walk']>(
+    (to, options) => inspector.walk(to, { ...options, leaving: section }),
+    [inspector, section],
+  );
+  const trail = useInspectTrail();
+  const cameFrom = trail.at(-1);
+  // The back control goes with the hop it retraces: the keyboard it had moves to the section shown, never to the page,
+  // from where an arrow key would move the view behind.
+  const wentBack = useRef(false);
+  const back = useCallback(() => {
+    wentBack.current = true;
+    inspector.back();
+  }, [inspector]);
+  useEffect(() => {
+    if (!wentBack.current) return;
+    wentBack.current = false;
+    const focused = document.activeElement;
+    if (focused !== null && focused !== document.body && sheet.current?.contains(focused)) return;
+    sheet.current?.querySelector<HTMLElement>('[role="tabpanel"][data-state="active"]')?.focus({ preventScroll: true });
+  }, [urlId, trail]);
   const context = useMemo<InspectorContextValue>(
-    () => ({ crawlId, urlId, siteOrigin, walk, crawling }),
-    [crawlId, urlId, siteOrigin, walk, crawling],
+    () => ({ crawlId, urlId, siteOrigin, walk, crawling, marked: show?.link }),
+    [crawlId, urlId, siteOrigin, walk, crawling, show],
   );
 
   const url = own?.url;
@@ -398,6 +438,7 @@ export function Inspector({ crawlId, urlId, onClose }: InspectorProps) {
         onKeyDown={onSheetKeyDown}
       >
         {refreshing ? <RefreshLine label="Reading this URL again" /> : null}
+        {cameFrom ? <WalkBack crawlId={crawlId} urlId={cameFrom.url} siteOrigin={siteOrigin} onBack={back} /> : null}
         {/* Docked at the bottom the sheet is short: what the URL is, the URL and the actions share one line. */}
         <div className={clsx('flex flex-wrap items-center gap-x-3 px-5', compact ? 'pt-2 pb-1' : 'pt-3 pb-2')}>
           <Kind detail={own} loading={state.status === 'loading'} crawling={crawling} compact={compact} />
@@ -474,6 +515,38 @@ export function Inspector({ crawlId, urlId, onClose }: InspectorProps) {
         )}
       </div>
     </InspectorContext>
+  );
+}
+
+/**
+ * The way back after a hop inside the inspector: the URL it came from, by name. One press returns to it, on the
+ * section it was left on. (Back in history closes the inspector instead: the hops aren't places of their own.)
+ */
+function WalkBack({
+  crawlId,
+  urlId,
+  siteOrigin,
+  onBack,
+}: {
+  crawlId: string;
+  urlId: number;
+  siteOrigin: string | null;
+  onBack: () => void;
+}) {
+  // Read a moment ago, when the inspector was on it: from the cache, nearly always.
+  const from = useQuery({ ...urlDetailQuery(crawlId, urlId), staleTime: Infinity }).data?.url;
+  return (
+    <div className="si-inspector-back">
+      <button type="button" className="si-inspector-back__link" title={from} onClick={onBack}>
+        <Icon icon={ArrowLeft} size="sm" className="shrink-0" />
+        <span className="shrink-0">Back to</span>
+        {from === undefined ? (
+          <span>the URL before</span>
+        ) : (
+          <span className="truncate font-mono text-(length:--mono-scale)">{urlDisplay(from, siteOrigin).shown}</span>
+        )}
+      </button>
+    </div>
   );
 }
 

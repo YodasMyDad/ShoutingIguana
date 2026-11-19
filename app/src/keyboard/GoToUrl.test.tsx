@@ -85,7 +85,7 @@ beforeAll(async () => {
 }, 60_000);
 
 describe('“Go to URL…” in the palette', () => {
-  it('looks a path up in the open crawl and opens the inspector on it, a step back retraces', async () => {
+  it('looks a path up in the open crawl and moves the open inspector to it, in place', async () => {
     const { router, history, user } = await open(`${CRAWL}/urls?inspect=2`);
     await screen.findByRole('grid', { name: 'URLs' });
     const before = history.length;
@@ -94,7 +94,8 @@ describe('“Go to URL…” in the palette', () => {
     await user.type(field, '/b{Enter}');
     await waitFor(() => expect(inspected(router)).toBe(3));
     expect(screen.queryByRole('dialog', { name: 'Command palette' })).toBeNull();
-    expect(history.length).toBe(before + 1);
+    // A hop of the open inspector: no new place in history, so back still leaves for where it opened.
+    expect(history.length).toBe(before);
     expect(sidecar.requests.find((request) => request.path.endsWith('/urls/lookup'))?.body).toEqual({ url: '/b' });
     expect(await screen.findByRole('heading', { level: 2, name: B.url })).toBeVisible();
     // The URL was asked for by name: the keyboard goes where it shows, in the inspector.

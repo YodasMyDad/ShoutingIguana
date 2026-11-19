@@ -377,7 +377,7 @@ describe('the inspector on the URL grid', () => {
   });
   afterEach(() => uninstall());
 
-  it('opens on Enter and follows the cursor in place, so back after Esc leaves the screen', async () => {
+  it('opens on Enter as one new place and follows the cursor in place, so Esc returns and back then leaves', async () => {
     sidecar({ summary: { available: true, reason: null } });
     const history = createMemoryHistory({
       initialEntries: [`/crawls/${TEST_CRAWL_ID}/overview`, URLS],
@@ -396,7 +396,8 @@ describe('the inspector on the URL grid', () => {
     // The cursor moves, and the inspector with it, in place.
     fireEvent.keyDown(grid, { key: 'ArrowDown' });
     await waitFor(() => expect(router.state.location.search).toMatchObject({ inspect: TEST_URL_ROWS[1]?.id }));
-    expect(history.length).toBe(2);
+    // Opening it was one new place (back closes it); following the cursor adds none.
+    expect(history.length).toBe(3);
     fireEvent.keyDown(grid, { key: 'Escape' });
     await waitFor(() => expect(router.state.location.search).not.toHaveProperty('inspect'));
     await act(async () => {

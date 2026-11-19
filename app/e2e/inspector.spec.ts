@@ -141,7 +141,7 @@ test('back along a walk keeps the keyboard in the link grid, on the row the walk
 
 /** The steps the inspector has walked to this history entry, as the history model counts them. */
 const walkedSteps = (page: Page) =>
-  page.evaluate(() => (history.state as { inspectSteps?: number } | null)?.inspectSteps ?? 0);
+  page.evaluate(() => (history.state as { inspectTrail?: unknown[] } | null)?.inspectTrail?.length ?? 0);
 
 /**
  * Walks `steps` inlinks with Enter on the Inlinks grid's first row: every page has a page linking to it, and the

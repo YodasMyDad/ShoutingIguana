@@ -14,7 +14,7 @@ import { onAnnounce } from '../feedback/announce';
 import { SKELETON_DELAY_MS } from '../feedback/useDelayedLoading';
 import { commands, installKeyboard } from '../keyboard/registry';
 import { liveStore } from '../live/liveStore';
-import { inspectFromGrid } from '../routing/inspector';
+import { inspectFromGrid, walkedSteps } from '../routing/inspector';
 import { DEFAULT_SETTINGS } from '../settings/schema';
 import { getSettings, updateSettings } from '../settings/settingsStore';
 import { TEST_CRAWL_ID, fakeSidecar, type FakeSidecar } from '../test/fakeSidecar';
@@ -1052,7 +1052,7 @@ describe('the source', () => {
 });
 
 describe('walking the site', () => {
-  it('walks an inlink then an outlink, back and forward retrace it, and Esc closes to where it opened', async () => {
+  it('walks an inlink then an outlink in place, its own back retraces the hops, and back in history leaves', async () => {
     const history = createMemoryHistory({
       initialEntries: [`/crawls/${TEST_CRAWL_ID}/overview`, `${URLS}?inspect=2`],
       initialIndex: 1,
@@ -1060,6 +1060,8 @@ describe('walking the site', () => {
     const { router, inspector, user } = await open('', SITE, history);
     await within(inspector).findByRole('heading', { level: 2, name: PAGE.url });
     const before = history.length;
+    // Nothing walked yet: no way back to offer.
+    expect(within(inspector).queryByRole('button', { name: /^Back to/ })).toBeNull();
 
     await user.click(within(inspector).getByRole('tab', { name: /^Inlinks/ }));
     const inlinks = await within(inspector).findByRole('grid', { name: 'Inlinks' });
@@ -1069,7 +1071,8 @@ describe('walking the site', () => {
     act(() => inlinks.focus());
     fireEvent.keyDown(inlinks, { key: 'Enter' });
     await waitFor(() => expect(inspected(router)).toBe(1));
-    expect(history.length).toBe(before + 1);
+    // A hop is no new place in history: back still leaves for the view the inspector opened from.
+    expect(history.length).toBe(before);
     await within(inspector).findByRole('heading', { level: 2, name: HOME.url });
     // Still on Inlinks, in the new URL's grid, with the keyboard still in it.
     expect(within(inspector).getByRole('tab', { name: /^Inlinks/ })).toHaveAttribute('aria-selected', 'true');
@@ -1079,21 +1082,26 @@ describe('walking the site', () => {
     const outlinks = await within(inspector).findByRole('grid', { name: 'Outlinks' });
     await user.dblClick(await within(outlinks).findByText('Patio set'));
     await waitFor(() => expect(inspected(router)).toBe(2));
-    expect(history.length).toBe(before + 2);
+    expect(history.length).toBe(before);
+    await within(inspector).findByRole('heading', { level: 2, name: PAGE.url });
 
-    await act(async () => {
-      history.back();
-      await router.load();
-    });
-    expect(inspected(router)).toBe(1);
+    // The inspector's own back names the URL the hop left, and returns to it on the section it was left on.
+    const back = within(inspector).getByRole('button', { name: /^Back to/ });
+    expect(back).toHaveAttribute('title', HOME.url);
+    await user.click(back);
+    await waitFor(() => expect(inspected(router)).toBe(1));
     await within(inspector).findByRole('heading', { level: 2, name: HOME.url });
-    await act(async () => {
-      history.forward();
-      await router.load();
-    });
-    expect(inspected(router)).toBe(2);
+    expect(within(inspector).getByRole('tab', { name: /^Outlinks/ })).toHaveAttribute('aria-selected', 'true');
+    // The keyboard stays in the inspector: an arrow key never moves the view behind it.
+    await waitFor(() => expect(inspector.contains(document.activeElement)).toBe(true));
+    await user.click(within(inspector).getByRole('button', { name: /^Back to/ }));
+    await waitFor(() => expect(inspected(router)).toBe(2));
+    await within(inspector).findByRole('heading', { level: 2, name: PAGE.url });
+    expect(within(inspector).getByRole('tab', { name: /^Inlinks/ })).toHaveAttribute('aria-selected', 'true');
+    await waitFor(() => expect(within(inspector).queryByRole('button', { name: /^Back to/ })).toBeNull());
+    expect(history.length).toBe(before);
 
-    // Esc goes back over both steps and closes it there: the screen as it was before the inspector opened.
+    // Esc closes it: the screen without the inspector, and back from there leaves it.
     fireEvent.keyDown(document.body, { key: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Inspector' })).toBeNull());
     expect(router.state.location.pathname).toBe(URLS);
@@ -1114,7 +1122,7 @@ describe('walking the site', () => {
     await user.dblClick(await within(inlinks).findByRole('button', { name: HOME.url }));
     await waitFor(() => expect(inspected(router)).toBe(1));
     await within(inspector).findByRole('heading', { level: 2, name: HOME.url });
-    expect(history.length).toBe(2);
+    expect(walkedSteps(router.state.location.state)).toBe(1);
 
     // The second click landing on the grid that came, on a row beside its URL: one press there, then the
     // double-click, which isn't this grid's.
@@ -1130,15 +1138,16 @@ describe('walking the site', () => {
     fireEvent.doubleClick(link);
     await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
     expect(inspected(router)).toBe(1);
-    expect(history.length).toBe(2);
+    expect(walkedSteps(router.state.location.state)).toBe(1);
 
     // A double-click of its own on a row still walks.
     await user.dblClick(within(next).getByText('Home'));
     await waitFor(() => expect(inspected(router)).toBe(3));
-    expect(history.length).toBe(3);
+    expect(walkedSteps(router.state.location.state)).toBe(2);
+    expect(history.length).toBe(1);
   });
 
-  it('keeps the keyboard in the link grid, on the row it was left on, back and forward along a walk', async () => {
+  it('keeps the link grid’s cursor on the row a hop left from, and the keyboard in the inspector, on the way back', async () => {
     const history = createMemoryHistory({ initialEntries: [`${URLS}?inspect=2`] });
     const { router, inspector, user } = await open('', SITE, history);
     await user.click(await within(inspector).findByRole('tab', { name: /^Inlinks/ }));
@@ -1157,21 +1166,12 @@ describe('walking the site', () => {
     await waitFor(() => expect(inspected(router)).toBe(3));
     await within(inspector).findByRole('heading', { level: 2, name: OTHER.url });
 
-    // Back: the first URL's inlinks, the keyboard still in them, on the row the walk left from.
-    await act(async () => {
-      history.back();
-      await router.load();
-    });
+    // The inspector's back: the first URL's inlinks, on the row the hop left from, the keyboard still in the inspector.
+    await user.click(within(inspector).getByRole('button', { name: /^Back to/ }));
+    await waitFor(() => expect(inspected(router)).toBe(2));
     await within(inspector).findByRole('heading', { level: 2, name: PAGE.url });
-    await waitFor(() => expect(within(inspector).getByRole('grid', { name: 'Inlinks' })).toHaveFocus());
     await waitFor(() => expect(cursorRow()).toBe('3'));
-    // Forward again: the keyboard stays in the inspector, so an arrow key never moves the view behind it.
-    await act(async () => {
-      history.forward();
-      await router.load();
-    });
-    await within(inspector).findByRole('heading', { level: 2, name: OTHER.url });
-    await waitFor(() => expect(within(inspector).getByRole('grid', { name: 'Inlinks' })).toHaveFocus());
+    await waitFor(() => expect(inspector.contains(document.activeElement)).toBe(true));
   });
 
   it('keeps focus in the inspector when back takes away a source that had it', async () => {

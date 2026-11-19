@@ -5,6 +5,7 @@ import { createContext, use, useMemo } from 'react';
 import type { UrlDetail, UrlIssue } from '../api/inspector';
 import { checksQuery } from '../api/queries';
 import type { Check } from '../api/types';
+import type { InspectShow } from '../routing/inspector';
 
 /** What every section needs to know about where it is: the crawl, its origin, and how to walk to another URL. */
 export interface InspectorContextValue {
@@ -13,8 +14,13 @@ export interface InspectorContextValue {
   urlId: number;
   /** The crawl's own scheme and host: URLs on it show their path. */
   siteOrigin: string | null;
-  /** A link inside the inspector: a step of the walk, a new place in history. */
-  walk: (urlId: number) => void;
+  /**
+   * A link inside the inspector: a hop to that URL, in place, which the inspector's own back retraces. `show` is the
+   * section to arrive on and the link to mark there.
+   */
+  walk: (urlId: number, options?: { show?: InspectShow | undefined }) => void;
+  /** The link the reader came for, by the URL at its other end: first in its list, marked. */
+  marked?: number | undefined;
   /** A crawl is running: what's shown may change, in place. */
   crawling: boolean;
 }
