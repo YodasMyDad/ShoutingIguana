@@ -243,6 +243,8 @@ export interface IssuesSearch {
   inspect?: number | undefined;
   /** The fix loop: the checks that moved this way since the crawl compared with (New, Fixed, Fewer, More, Changed). */
   change?: ChangeFilterSearch | undefined;
+  /** Opens the list with the checks that passed shown: where Overview's "118 passed" leads. */
+  passed?: 1 | undefined;
 }
 
 export function validateIssuesSearch(search: Record<string, unknown>): IssuesSearch {
@@ -256,6 +258,7 @@ export function validateIssuesSearch(search: Record<string, unknown>): IssuesSea
     sort: parseSort(search.sort),
     inspect: positiveInteger(search.inspect),
     change: CHANGE_FILTERS.find((filter) => filter === search.change),
+    passed: search.passed === 1 || search.passed === '1' ? 1 : undefined,
   });
 }
 
