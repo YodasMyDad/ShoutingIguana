@@ -57,12 +57,14 @@ public sealed class WorkbookExportTests : IDisposable
         Assert.Equal(FixFirstOrder.Of(results.Counts), order);
         Assert.True(IssueCatalog.Find(order[0])!.SiteWide, order[0]);
 
-        for (var number = 1; number <= order.Count; number++)
+        // The sheets in the report's order, by its labels: each job's, then those of the checks folded under it ("2a").
+        var listed = GridListing.Listed(order);
+        for (var number = 1; number <= listed.Count; number++)
         {
-            var check = IssueCatalog.Find(order[number - 1])!;
+            var check = IssueCatalog.Find(listed[number - 1].Id)!;
             var sheet = file.Sheets[number];
             Assert.True(sheet.Name.Length <= 31, sheet.Name);
-            Assert.StartsWith($"{number} ", sheet.Name, StringComparison.Ordinal);
+            Assert.StartsWith($"{listed[number - 1].Sheet} ", sheet.Name, StringComparison.Ordinal);
             Assert.Equal(1, sheet.FrozenRows);
             Assert.Equal(Titles(check.Id), sheet.Values[0]);
             Assert.All(sheet.Rows[0], cell => Assert.Equal(1u, cell.Style));
@@ -84,13 +86,14 @@ public sealed class WorkbookExportTests : IDisposable
         CrawlExporter.Export(_crawl.Path, new ExportRequest { Kind = ExportKind.Workbook, Format = ExportFormat.Xlsx }, path);
         var order = IssueReader.ReadResults(_crawl.Path)!.FixFirst.ToList();
         var sheets = XlsxFile.Read(path).Sheets;
-        object?[] Header(string checkId) => sheets[order.IndexOf(checkId) + 1].Values[0];
+        var listed = GridListing.Listed(order).Select(each => each.Id).ToList();
+        object?[] Header(string checkId) => sheets[listed.IndexOf(checkId) + 1].Values[0];
 
         Assert.Equal(["Address", "Page title"], Header("canonical-missing"));
         Assert.Equal(["Address", "Page title", "What was found", "Canonical"], Header("canonical-broken"));
         Assert.DoesNotContain("Final URL", Header("sitemap-non-indexable"));
         Assert.Equal(["File", "What was found"], Header("sitemap-error"));
-        Assert.Equal($"{_crawl.Server.BaseUri.GetLeftPart(UriPartial.Authority)}/sitemaps/missing.xml", sheets[order.IndexOf("sitemap-error") + 1].Values[1][0]);
+        Assert.Equal($"{_crawl.Server.BaseUri.GetLeftPart(UriPartial.Authority)}/sitemaps/missing.xml", sheets[listed.IndexOf("sitemap-error") + 1].Values[1][0]);
     }
 
     [Fact]
@@ -175,8 +178,10 @@ public sealed class WorkbookExportTests : IDisposable
 
         var workbook = Path.Combine(_folder, "hidden-for-one.xlsx");
         CrawlExporter.Export(_crawl.Path, new ExportRequest { Kind = ExportKind.Workbook, Format = ExportFormat.Xlsx, Report = new() { HiddenChecks = hidden } }, workbook);
-        var inTheWorkbook = XlsxFile.Read(workbook).Sheets[4].Name;
-        Assert.StartsWith("4 ", inTheWorkbook, StringComparison.Ordinal);
+        var listed = GridListing.Listed([.. order.Where(id => !hidden.Contains(id))]);
+        var place = listed.FindIndex(each => each.Id == check);
+        var inTheWorkbook = XlsxFile.Read(workbook).Sheets[place + 1].Name;
+        Assert.StartsWith($"{listed[place].Sheet} ", inTheWorkbook, StringComparison.Ordinal);
 
         var one = Path.Combine(_folder, "one-with-hidden.xlsx");
         CrawlExporter.Export(_crawl.Path, new ExportRequest { Kind = ExportKind.Check, Format = ExportFormat.Xlsx, CheckId = check, Report = new() { HiddenChecks = hidden } }, one);
@@ -416,11 +421,13 @@ public sealed class WorkbookExportTests : IDisposable
         var checks = summary.Skip(header + 1).ToList();
         Assert.Equal(IssueCatalog.All.Select(check => check.Id).Order(StringComparer.Ordinal), checks.Select(row => (string)row[7]!).Order(StringComparer.Ordinal));
 
-        for (var number = 1; number <= order.Count; number++)
+        // In the report's order: a check folded under its job has no number of its own, and its sheet's is its job's with a letter.
+        var listed = GridListing.Listed(order);
+        for (var number = 1; number <= listed.Count; number++)
         {
             var row = checks[number - 1];
-            var check = IssueCatalog.Find(order[number - 1])!;
-            Assert.Equal((double)number, row[0]);
+            var check = IssueCatalog.Find(listed[number - 1].Id)!;
+            Assert.Equal(listed[number - 1].Folded ? null : (double)listed[number - 1].Number, row[0]);
             Assert.Equal(sheets[number], row[1]);
             Assert.Equal("Found", row[2]);
             Assert.Equal(check.Severity switch { IssueSeverity.Error => "Serious", IssueSeverity.Warning => "Worth fixing", _ => "Worth a look" }, row[3]);
@@ -432,8 +439,7 @@ public sealed class WorkbookExportTests : IDisposable
             Assert.Equal((double)results.Counts[check.Id], row[9]);
 
             // The share is the score's line: of the pages or the URLs the analysis counted. A check reported once has none.
-            var line = score.Lines[number - 1];
-            Assert.Equal(check.Id, line.CheckId);
+            var line = score.Lines.Single(each => each.CheckId == check.Id);
             if (check.ReportedOnce)
             {
                 Assert.Equal((null, "Checked once, for the whole site", null), (row[10], row[11], row[12]));

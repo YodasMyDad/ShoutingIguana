@@ -100,6 +100,7 @@ internal static class ReportDocument
           .problem__meta { margin-top: 2px; font-size: 9pt; color: var(--muted); }
           .problem__meta b { color: var(--text); font-weight: 600; }
           .problem__along { margin-top: 2px; font-size: 9pt; color: var(--secondary); }
+          .problem--along { margin-left: 24px; }
           .problem h4 { margin: 8px 0 1px; font-size: 9pt; font-weight: 600; }
           .problem p, .problem .steps { font-size: 9.5pt; line-height: 1.42; }
           .problem p + p { margin-top: 4px; }
@@ -509,7 +510,11 @@ internal static class ReportDocument
     private static void FixFirst(StringBuilder html, ReportModel model, bool full)
     {
         var score = model.Score;
-        var first = model.Problems.Where(problem => problem.Check.Severity != IssueSeverity.Notice).Take(FIRST).ToList();
+        // The analysis's five, as the score's "if fixed" has them, in the order the report lists them: each job followed by
+        // what's folded under it.
+        var five = model.Problems.Where(problem => problem.Check.Severity != IssueSeverity.Notice).OrderBy(problem => problem.Rank).Take(FIRST)
+            .Select(problem => problem.Check.Id).ToHashSet(StringComparer.Ordinal);
+        var first = model.Problems.Where(problem => five.Contains(problem.Check.Id)).ToList();
         if (first.Count == 0 && score is null)
         {
             return;
@@ -530,13 +535,13 @@ internal static class ReportDocument
             return;
         }
 
-        // The five are the analysis's (the score's "if fixed" is of them), as jobs: one a fix of another among them clears
-        // entirely is under that one, as Simple's Summary has it, keeping its number (its section's and its sheet's).
-        var foldedUnder = ReportJobs.FoldedUnder(first);
+        // As jobs, as Simple's Summary has them: one a fix of another clears entirely is under that one, unnumbered.
         html.Append("  <h2>Fix these first</h2>\n  <ol class=\"first\">\n");
-        foreach (var (problem, folded) in ReportJobs.InJobs(first, foldedUnder))
+        foreach (var problem in first)
         {
-            html.Append(folded ? "    <li class=\"first__also\">" : "    <li>").Append("<span class=\"first__n\">").Append(problem.Number).Append("</span>");
+            var folded = problem.Along is not null;
+            html.Append(folded ? "    <li class=\"first__also\"><span class=\"first__n\"></span>" : "    <li><span class=\"first__n\">").Append(folded ? string.Empty : problem.Number)
+                .Append(folded ? string.Empty : "</span>");
             if (folded)
             {
                 html.Append("<span></span>");
@@ -548,11 +553,14 @@ internal static class ReportDocument
 
             html.Append("<span class=\"first__title\">").AppendText(problem.Words.Title).Append("</span><span class=\"first__count\">")
                 .Append(problem.Line is { } line ? CountOf(line, problem.Check) : CountOf(problem.Count, problem.Check)).Append("</span>")
-                .Append(folded ? "<span class=\"first__along\">Fixed along with the problem above</span>" : string.Empty).Append("</li>\n");
+                .Append(!folded ? string.Empty
+                    : five.Contains(problem.Along!) ? "<span class=\"first__along\">Fixed along with the problem above</span>"
+                    : $"<span class=\"first__along\">Fixed along with problem {problem.Number}</span>")
+                .Append("</li>\n");
         }
 
         html.Append("  </ol>\n  <p class=\"first__foot\">");
-        var jobs = first.Count - foldedUnder.Count;
+        var jobs = first.Count(problem => problem.Along is null || !five.Contains(problem.Along));
         var these = jobs == 1 ? "this one" : $"these {COUNT_WORDS[jobs]}";
         if (score is { IfFixed.CheckIds.Count: > 0 } && score.IfFixed.Value != score.Value)
         {
@@ -580,7 +588,7 @@ internal static class ReportDocument
             .Append(siteWide ? "(60 if it is a fault of the whole site) " : string.Empty)
             .Append("and up to 4 for one worth fixing, by how much of the site it affects. Things worth a look take nothing off.</p>\n")
             .Append("  <table class=\"score-table\">\n    <thead><tr><th scope=\"col\">What took points off</th><th scope=\"col\">How much of the site</th><th scope=\"col\" class=\"num\">Points</th></tr></thead>\n    <tbody>\n");
-        foreach (var problem in model.Problems.Where(problem => problem.Check.Severity != IssueSeverity.Notice))
+        foreach (var problem in model.Problems.Where(problem => problem.Check.Severity != IssueSeverity.Notice).OrderBy(problem => problem.Rank))
         {
             if (problem.Line is not { } line)
             {
@@ -662,16 +670,13 @@ internal static class ReportDocument
 
         html.Append("  <div class=\"new-page\">\n  <h2>What to fix</h2>\n  <p class=\"lead\">Every check that found something: what’s wrong, why it matters, how to fix it, and the first pages ")
             .Append("it’s on. The full lists are in the spreadsheet that goes with this report, on the sheet with the same number.</p>\n");
-        // As Simple's What to fix: a problem a fix of another of its severity clears entirely says which.
-        var foldedUnder = ReportJobs.FoldedUnder(model.Problems);
-        Group(html, model, options, foldedUnder, IssueSeverity.Error, "These stop pages working or being found. Fix them first.");
-        Group(html, model, options, foldedUnder, IssueSeverity.Warning, "These hold pages back. Fix them when the serious ones are done.");
-        Group(html, model, options, foldedUnder, IssueSeverity.Notice, "Often fine as they are. They don’t change the score: read each one and decide.");
+        Group(html, model, options, IssueSeverity.Error, "These stop pages working or being found. Fix them first.");
+        Group(html, model, options, IssueSeverity.Warning, "These hold pages back. Fix them when the serious ones are done.");
+        Group(html, model, options, IssueSeverity.Notice, "Often fine as they are. They don’t change the score: read each one and decide.");
         html.Append("  </div>\n\n");
     }
 
-    private static void Group(StringBuilder html, ReportModel model, ReportOptions options, IReadOnlyDictionary<string, ReportProblem> foldedUnder,
-        IssueSeverity severity, string lead)
+    private static void Group(StringBuilder html, ReportModel model, ReportOptions options, IssueSeverity severity, string lead)
     {
         var problems = model.Problems.Where(problem => problem.Check.Severity == severity).ToList();
         if (problems.Count == 0)
@@ -684,21 +689,23 @@ internal static class ReportDocument
         html.Append(Severity(severity)).Append(" <span>").Append(problems.Count).Append("</span></h3>\n    <p class=\"lead lead--group muted\">").Append(lead).Append("</p>\n");
         foreach (var problem in problems)
         {
-            Problem(html, model, problem, severity == IssueSeverity.Notice ? options.LookExamples : options.Examples, foldedUnder.GetValueOrDefault(problem.Check.Id));
+            Problem(html, model, problem, severity == IssueSeverity.Notice ? options.LookExamples : options.Examples);
         }
     }
 
-    /// <param name="along">The problem a fix of which clears this one entirely, which it's one job with; null when none.</param>
-    private static void Problem(StringBuilder html, ReportModel model, ReportProblem problem, int listed, ReportProblem? along)
+    /// <summary>A problem's section: one folded under its job (<see cref="ReportProblem.Along"/>) follows it, unnumbered, and says so.</summary>
+    private static void Problem(StringBuilder html, ReportModel model, ReportProblem problem, int listed)
     {
         // Things worth a look set their text beside their examples, to save paper.
         var compact = problem.Check.Severity == IssueSeverity.Notice;
         var line = problem.Line;
-        html.Append(compact ? "    <article class=\"problem problem--compact\">\n      " : "    <article class=\"problem\">\n      <div class=\"keep\">");
+        var along = problem.Along is not null;
+        html.Append("    <article class=\"problem").Append(compact ? " problem--compact" : string.Empty).Append(along ? " problem--along" : string.Empty)
+            .Append(compact ? "\">\n      " : "\">\n      <div class=\"keep\">");
 
         html.Append("<h3>");
         Mark(html, MarkOf(problem.Check.Severity), 14);
-        html.Append("<span>").Append(problem.Number).Append(". ").AppendText(problem.Words.Title).Append("</span><span class=\"problem__tech\">").AppendText(problem.Check.Title)
+        html.Append("<span>").Append(along ? string.Empty : $"{problem.Number}. ").AppendText(problem.Words.Title).Append("</span><span class=\"problem__tech\">").AppendText(problem.Check.Title)
             .Append(" · ").Append(Technical(problem.Check.Severity)).Append("</span></h3>\n      <p class=\"problem__meta\"><b>")
             .Append(line is null ? CountOf(problem.Count, problem.Check) : CountOf(line, problem.Check)).Append("</b>");
         if (line is not null)
@@ -712,9 +719,9 @@ internal static class ReportDocument
         }
 
         html.Append("</p>\n");
-        if (along is not null)
+        if (along)
         {
-            html.Append("      <p class=\"problem__along\">Fixed along with problem ").Append(along.Number).Append(", “").AppendText(along.Words.Title).Append("”.</p>\n");
+            html.Append("      <p class=\"problem__along\">Fixed along with the problem above.</p>\n");
         }
 
         if (compact)
@@ -815,7 +822,7 @@ internal static class ReportDocument
         var more = problem.Count - rows.Count;
         if (rows.Count == 0)
         {
-            html.Append("<p class=\"more\">The full list is on sheet ").Append(problem.Number).Append(" of the spreadsheet.</p>");
+            html.Append("<p class=\"more\">The full list is on sheet ").Append(problem.Sheet).Append(" of the spreadsheet.</p>");
             return;
         }
 
@@ -897,7 +904,7 @@ internal static class ReportDocument
         html.Append("</tbody>\n        </table>");
         if (more > 0)
         {
-            html.Append("<p class=\"more\">And ").Append(Number(more)).Append(" more: the full list is on sheet ").Append(problem.Number).Append(" of the spreadsheet.</p>");
+            html.Append("<p class=\"more\">And ").Append(Number(more)).Append(" more: the full list is on sheet ").Append(problem.Sheet).Append(" of the spreadsheet.</p>");
         }
     }
 

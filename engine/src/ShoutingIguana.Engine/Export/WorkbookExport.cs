@@ -51,13 +51,14 @@ internal static class WorkbookExport
         List<string> names = ["Summary"];
         foreach (var problem in model.Problems)
         {
-            names.Add(XlsxWriter.SheetName(SheetTitle(problem.Number, problem.Words.Title), names));
+            names.Add(XlsxWriter.SheetName(SheetTitle(problem.Sheet, problem.Words.Title), names));
         }
 
         WriteSummary(table.Workbook, table.Reserve(names[0]), model, names);
-        foreach (var problem in model.Problems)
+        // In the report's order: each job's sheet, then the sheets of the problems folded under it.
+        for (var index = 0; index < model.Problems.Count; index++)
         {
-            WriteSheet(run, table, names[problem.Number], problem.Check.Id);
+            WriteSheet(run, table, names[index + 1], model.Problems[index].Check.Id);
         }
 
         if (model.Comparison is { } since && cleared.Count > 0)
@@ -81,9 +82,15 @@ internal static class WorkbookExport
         var results = IssueReader.ReadResults(run.CrawlPath) ?? throw new ExportException(ExportFailure.NotAnalyzed, GridExport.NOT_ANALYZED);
         var check = IssueCatalog.Find(run.Request.CheckId!)!;
         var hidden = run.Request.Report.HiddenChecks;
-        var number = ReportSources.FixFirst(results).Where(id => !hidden.Contains(id, StringComparer.Ordinal)).ToList().IndexOf(check.Id) + 1;
+        // Labelled as the report lists it: its job's number, and a letter when a fix of another clears it entirely.
+        var causes = IssueCauseReader.Read(run.CrawlPath, run.Settings.Cache, run.Token) is { } read && read.AnalyzedAt == results.Analysis.AnalyzedAt ? read.Checks : null;
+        var listed = ReportJobs.Listed([
+            .. ReportSources.FixFirst(results).Where(id => !hidden.Contains(id, StringComparer.Ordinal))
+                .Select(id => (id, IssueCatalog.Find(id)!.Severity, causes?.GetValueOrDefault(id)?.Clears ?? (IReadOnlyList<ClearedCheck>)[]))
+        ]);
+        var label = listed.FirstOrDefault(each => each.Id == check.Id).Sheet;
         var title = ReportSources.Words(check, ReportSources.Settings(results)).Title;
-        WriteSheet(run, table, number > 0 ? SheetTitle(number, title) : title, check.Id);
+        WriteSheet(run, table, label is not null ? SheetTitle(label, title) : title, check.Id);
     }
 
     /// <summary>
@@ -165,7 +172,10 @@ internal static class WorkbookExport
     private static string Short(DateTimeOffset moment, TimeZoneInfo zone) => TimeZoneInfo.ConvertTime(moment, zone).ToString("d MMM", CultureInfo.InvariantCulture);
 
     /// <summary>A problem's sheet, before it's cut to what a sheet's name holds: its number, then its title.</summary>
-    internal static string SheetTitle(int number, string title) => $"{number} {title}";
+    internal static string SheetTitle(int number, string title) => SheetTitle(number.ToString(CultureInfo.InvariantCulture), title);
+
+    /// <summary>A problem's sheet, before it's cut to what a sheet's name holds: its label (its job's number, and a letter when it's folded), then its title.</summary>
+    internal static string SheetTitle(string label, string title) => $"{label} {title}";
 
     /// <summary>
     /// A check's sheet: its own four columns, then its evidence (each under its title, but the page's title, which is there
@@ -287,13 +297,14 @@ internal static class WorkbookExport
             : changes.TryGetValue(checkId, out var change) ? [change.Then is { } then ? Count(then) : XlsxCell.Empty, XlsxCell.Text(Changed(change.State))]
             : [XlsxCell.Empty, XlsxCell.Empty];
 
-        foreach (var problem in model.Problems)
+        foreach (var (problem, index) in model.Problems.Select((problem, index) => (problem, index)))
         {
             var line = problem.Line;
             var once = problem.Check.ReportedOnce || line is { Unit: ScoreUnit.Site };
             Row([
-                XlsxCell.Number(problem.Number),
-                XlsxCell.Text(sheets[problem.Number]),
+                // A problem folded under its job has no number of its own: its sheet says whose it is ("2a").
+                problem.Along is null ? XlsxCell.Number(problem.Number) : XlsxCell.Empty,
+                XlsxCell.Text(sheets[index + 1]),
                 XlsxCell.Text("Found"),
                 XlsxCell.Text(ReportWords.Severity(problem.Check.Severity)),
                 XlsxCell.Text(ReportWords.Technical(problem.Check.Severity)),
