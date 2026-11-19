@@ -28,6 +28,7 @@ const ROUTE = '/crawls/$crawl/sitemaps/{-$sitemap}';
 const LIST_COUNTS: readonly SitemapCount[] = ['listed', 'crawled', 'blocked', 'notCrawled', 'nonIndexable'];
 
 // Five counts, how the sitemap was found and what became of it have to fit beside its address in a 1280 px window.
+// How it was found is at least this wide, and as wide as the list's words need ("Default location" whole: 3b final).
 const FOUND_WIDTH = 112;
 /**
  * What became of a sitemap: at least this wide, and wider for the longest words in the list ("Couldn’t be read: 404 Not
@@ -97,6 +98,19 @@ function stateWidth(rows: readonly SitemapRow[], crawling: boolean): number {
     ...rows.map((row) => textWidth(stateWords(row.sitemap, crawling, row.subtree).short, font)),
   );
   return Math.min(STATE_MAX_WIDTH, Math.max(STATE_WIDTH, Math.ceil(widest + padding + COUNT_SLACK)));
+}
+
+/**
+ * The Found via column as wide as the longest of its words in this list, measured at the weight of an index's row,
+ * the heaviest, with the cells' padding; never narrower than `FOUND_WIDTH`. Only a list with a long one pays for it:
+ * the words stay those of the sitemap's facts and the export, and the extra room comes out of what Status would have
+ * grown into before the address gives any.
+ */
+function foundWidth(sitemaps: readonly Sitemap[]): number {
+  const font = `${tokenValue('--font-weight-semibold', '600')} ${tokenValue('--grid-font-size', '13px')} ${tokenValue('--font-sans', 'sans-serif')}`;
+  const padding = 2 * (Number.parseFloat(tokenValue('--grid-cell-x', '12px')) || 12);
+  const widest = Math.max(0, ...sitemaps.map((sitemap) => textWidth(foundViaWords(sitemap.foundVia).short, font)));
+  return Math.max(FOUND_WIDTH, Math.ceil(widest + padding + COUNT_SLACK));
 }
 
 /** A sitemap's row is its sitemap, wherever a running crawl moves it in the tree. */
@@ -190,7 +204,9 @@ export function SitemapTree({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the fonts and the density change what's measured
     [sitemaps, discovery, crawling, fontsIn, metrics],
   );
-  const others = FOUND_WIDTH + LIST_COUNTS.reduce((sum, count) => sum + counted[count], 0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the fonts and the density change what's measured
+  const foundViaWidth = useMemo(() => foundWidth(sitemaps), [sitemaps, fontsIn, metrics]);
+  const others = foundViaWidth + LIST_COUNTS.reduce((sum, count) => sum + counted[count], 0);
   // The room the address and the Status share; Status takes what the address leaves past `URL_ROOM_FIRST`.
   const shared = (width ?? 960) - others - FRAME_SLACK;
   const stated = Math.max(STATE_WIDTH, Math.min(stateNeeds, shared - URL_ROOM_FIRST));
@@ -258,7 +274,7 @@ export function SitemapTree({
     const found: GridColumn<SitemapRow> = {
       id: 'foundVia',
       header: 'Found via',
-      width: FOUND_WIDTH,
+      width: foundViaWidth,
       cell: (row) => {
         const words = foundViaWords(row.sitemap.foundVia);
         return (
@@ -289,7 +305,7 @@ export function SitemapTree({
       text: (row) => (countsKnown(row.sitemap, row.subtree) ? String(countOf(row.sitemap, count) ?? '') : ''),
     }));
     return narrow ? [address, ...counts, state, found] : [address, found, state, ...counts];
-  }, [crawlId, siteOrigin, crawling, urlWidth, grouped, narrow, counted, stated]);
+  }, [crawlId, siteOrigin, crawling, urlWidth, grouped, narrow, counted, stated, foundViaWidth]);
   // The columns as the user laid them out (resized, moved, pinned), kept for this grid with the preferences.
   const laid = useColumnLayout('sitemaps.list', columns);
 

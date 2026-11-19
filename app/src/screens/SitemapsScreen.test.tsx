@@ -22,6 +22,7 @@ import {
   withoutNewCounts,
   type SitemapsRobotsOptions,
 } from '../test/sitemapsRobotsSidecar';
+import { textWidth } from '../lib/textWidth';
 import { resetPlaces } from './listPlace';
 import { INDEXABLE_SITE_PAGES } from './sitemaps/sitemapWords';
 
@@ -1011,6 +1012,22 @@ describe('Sitemaps in a short or narrow window', () => {
       'Not crawled',
       'Non-indexable',
     ]);
+  });
+
+  it('gives how a sitemap was found its whole words: “Default location” is never cut', async () => {
+    // A 1440 px window's list (3b final: "Default loca…" in a column sized for "robots.txt").
+    frameWidth(1_166);
+    const probed = TEST_SITEMAPS.map((sitemap) =>
+      sitemap.id === 1 ? { ...sitemap, foundVia: 'defaultLocation' as const } : sitemap,
+    );
+    sidecar({ sitemaps: { ...TEST_SITEMAP_LIST, sitemaps: probed } });
+    await open(SITEMAPS);
+    const tree = await screen.findByRole('treegrid', { name: 'Sitemaps' });
+    expect(headersOf(tree)[1]).toBe('Found via');
+    expect(rowOf(`${SITE}/sitemap.xml`).querySelector('[aria-colindex="2"]')).toHaveTextContent('Default location');
+    const widths = tree.style.getPropertyValue('--grid-template').split(' ').map(Number.parseFloat);
+    // The words at an index row's weight, the heaviest, with the cells' padding.
+    expect(widths[1]).toBeGreaterThanOrEqual(textWidth('Default location', '600 13px sans-serif') + 2 * 12);
   });
 
   it('keeps one sitemap’s grid room for five rows under whatever is over it, and lets its filters take a second line', async () => {
