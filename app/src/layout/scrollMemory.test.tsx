@@ -28,7 +28,7 @@ async function open(path: string) {
   return router;
 }
 
-const main = () => document.getElementById('main') as HTMLElement;
+const main = () => document.getElementById('main')!;
 
 /** The user scrolls: the browser moves the pane and says so. */
 function scrollTo(top: number) {
