@@ -372,11 +372,12 @@ test('opens a link’s target in the inspector, walks to a page that links to it
   const source = inlinks.getByRole('row').nth(1).getByRole('button').first();
   const sourceUrl = (await source.getAttribute('aria-label')) ?? (await source.innerText());
   await source.click();
-  // A step of the walk: the inspector is on the page the link is on, still on Inlinks.
+  // A step of the walk: the inspector is on the page the link is on, on its Outlinks, where that link is first.
   await expect(inspector.getByRole('heading', { level: 2 })).not.toContainText(new URL(target).pathname);
-  await expect(inspector.getByRole('tab', { name: /^Inlinks/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(inspector.getByRole('tab', { name: /^Outlinks/ })).toHaveAttribute('aria-selected', 'true');
   expect(sourceUrl).not.toBe('');
-  await page.goBack();
+  // The inspector's own way back: the walk is one place in history, so the browser's Back would close it.
+  await inspector.getByRole('button', { name: /^Back to/ }).click();
   await expect(inspector.getByRole('heading', { level: 2 })).toContainText(new URL(target).pathname);
   // Esc closes it to the view as it was: the broken links, with nothing inspected.
   await page.keyboard.press('Escape');

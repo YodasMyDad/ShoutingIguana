@@ -37,10 +37,11 @@ const BADGE_GAP = 8;
 const BADGE_ROOM = 40;
 
 /**
- * The groups measured: about what a tall window shows of the view's first, so one long address further down (a page's
- * many-parametered link) doesn't take the room from the anchor text and the places of every row in sight.
+ * The groups measured: what a tall window shows of the view's first (a 2560 x 1380 window draws about 35), so nothing
+ * in sight is cut beside room to spare, and one long address further down (a page's many-parametered link) doesn't
+ * take the room from the anchor text and the places of every row in sight.
  */
-export const MEASURED_GROUPS = 30;
+export const MEASURED_GROUPS = 40;
 
 const isFlexible = (id: string): id is Flexible => (FLEXIBLE_GROUP_COLUMNS as readonly string[]).includes(id);
 

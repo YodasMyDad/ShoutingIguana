@@ -1,6 +1,6 @@
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, ClipboardList, Copy, ExternalLink, Layers, List, PanelRight } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { api } from '../../api/client';
 import type { GridFilter, GridPage, GridSort, LinkGroup, LinkRow } from '../../api/grids';
 import { queryKeys } from '../../api/queries';
@@ -159,6 +159,8 @@ function LinkedFrom({
 }
 
 const FRAME_SLACK = 24;
+/** How far the pointer may move between its press and its release and still be a click on a row, px. */
+const DRAG_SLOP = 4;
 const WIDTHS: Record<string, number> = {
   target: 420,
   status: 128,
@@ -659,10 +661,14 @@ export function LinkGroupsGrid({
    * press). Its links, its buttons and the chevron keep their own press; a click that extends the selection is the
    * selection's.
    */
+  const pressedAt = useRef<{ x: number; y: number } | null>(null);
   const onRowClick = (event: MouseEvent<HTMLDivElement>) => {
     if (event.button !== 0 || event.detail > 1 || event.shiftKey || event.ctrlKey || event.metaKey) return;
     const target = event.target instanceof Element ? event.target : null;
     if (!target || target.closest('button, a, [data-tree-toggle]')) return;
+    // The end of a drag over the row's text is a selection, not a press.
+    const from = pressedAt.current;
+    if (from && Math.hypot(event.clientX - from.x, event.clientY - from.y) > DRAG_SLOP) return;
     const cell = target.closest<HTMLElement>('[role="row"][aria-level="1"] [data-row]');
     if (!cell) return;
     const index = Number(cell.dataset.row);
@@ -684,6 +690,9 @@ export function LinkGroupsGrid({
     <div
       ref={measure}
       className="flex min-h-0 flex-1 flex-col"
+      onPointerDownCapture={(event) => {
+        pressedAt.current = { x: event.clientX, y: event.clientY };
+      }}
       onClick={onRowClick}
       onDoubleClickCapture={onRowDoubleClick}
     >
