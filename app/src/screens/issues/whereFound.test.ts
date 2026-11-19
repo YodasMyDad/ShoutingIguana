@@ -159,7 +159,8 @@ describe('where a URL is found, in words', () => {
         },
       ],
     });
-    expect(many.map(whereRowText)).toEqual([`${ORIGIN}/x/ (404)`, 'All 9 in the inspector']);
+    // The way on to the rest is to Links, where they all are.
+    expect(many.map(whereRowText)).toEqual([`${ORIGIN}/x/ (404)`, 'Show all 9 in Links']);
   });
 
   it('finds the one page most of the URLs are linked from, with where on it when they share it', () => {
@@ -168,6 +169,8 @@ describe('where a URL is found, in words', () => {
     expect(
       sharedSource([footer(10), footer(11), found({ urlId: 12, links: 1, pages: 1, sources: [link(2, '/b/')] })]),
     ).toEqual({
+      // Its id too: the callout's link inspects it, and its links are shown in Links.
+      id: 1,
       url: `${ORIGIN}/garden-furniture/`,
       urls: 2,
       of: 3,

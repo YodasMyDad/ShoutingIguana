@@ -27,6 +27,7 @@ import {
   issueRowsPage,
   issuesRoutes,
 } from '../test/issuesSidecar';
+import { forgetCheckPlaces } from './issues/issuesPlace';
 
 /** The Issues fixture's catalog as a fix-loop sidecar serves it: each check says what a recheck reads again. */
 const CHECKS = {
@@ -223,6 +224,8 @@ afterEach(() => {
   uninstall();
   liveStore.reset();
   resetPendingRechecks();
+  // The view chosen for a check ("Grouped by cause") is kept for the session: the next test starts with none.
+  forgetCheckPlaces();
   updateSettings({ compareWithByCrawl: {}, checkSort: { advanced: 'fixFirst', simple: 'fixFirst' } });
   setTransport(fakeSidecar([]));
 });
@@ -310,11 +313,22 @@ describe('the Issues head compared with the previous crawl (Advanced)', () => {
 describe('a check’s detail compared with the previous crawl (Advanced)', () => {
   it('says its count then, offers Recheck beside Copy URLs, and gives its groups their URLs then and moves', async () => {
     await open(`${ISSUES}/internal-client-error`);
-    const detail = within(await screen.findByRole('article', { name: 'Internal URL returns 4xx' }));
+    const article = await screen.findByRole('article', { name: 'Internal URL returns 4xx' });
+    const detail = within(article);
+    // Its counts, in one line: how many, of how much, and how that moved since then.
     expect(await detail.findByText('7 fewer since 17 Oct')).toBeVisible();
+    expect(article.querySelector('[data-counts]')).toHaveTextContent(
+      /^2 URLs·5% of the 40 URLs crawled·7 fewer since 17 Oct$/,
+    );
     expect(await detail.findByRole('button', { name: 'Recheck 5 URLs' })).toBeVisible();
+    // Its list has no group to compare; its groups, once shown, each say their URLs then and how they moved.
+    expect(detail.queryByRole('columnheader', { name: 'Change' })).toBeNull();
+    await userEvent.click(detail.getByRole('radio', { name: 'Grouped by cause' }));
     expect(await detail.findByRole('columnheader', { name: 'Change' })).toBeVisible();
+    expect(detail.getByRole('columnheader', { name: '17 Oct' })).toBeVisible();
     // The group: 9 URLs then, 2 now.
+    const group = await detail.findByRole('row', { name: /404 Not Found/ });
+    expect(group).toHaveTextContent('404 Not Found29−77 fewer since 17 Oct');
     expect((await detail.findAllByText('7 fewer since 17 Oct')).length).toBe(2);
   });
 

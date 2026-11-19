@@ -864,7 +864,7 @@ export function IssueRowsGrid({
             ? { keyHints: tree ? ISSUE_KEY_HINTS : ISSUE_KEY_HINTS.filter((hint) => hint.chord !== 'arrowright') }
             : {})}
           rowNoun={tree ? ['row', 'rows'] : ['URL', 'URLs']}
-          className="si-issue-list flex-1 rounded-md border border-border"
+          className="flex-1 rounded-md border border-border"
         />
         <IssuePageMenu<ListRow>
           crawlId={crawlId}
@@ -882,6 +882,7 @@ export function IssueRowsGrid({
           }
           imagesIn={menuRow?.kind === 'issue' && check.category === 'images' ? imagesOfPage(menuRow.row.id) : null}
           linkingPage={menuRow ? linkingPageOf(menuRow) : null}
+          isPage={check.subject !== 'url'}
           urlOf={(row) => urlOfRow(row)?.url ?? null}
           onInspect={onInspect}
           recheck={{

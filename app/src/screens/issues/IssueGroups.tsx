@@ -83,6 +83,7 @@ import {
   detailSaysMore,
   foundOnRows,
   groupUrlHeader,
+  linkFactsOnly,
   moreReferences,
   referencesOf,
   targetLead,
@@ -1124,7 +1125,7 @@ export function IssueGroups({
           onContextMenu={rowMenu.onContextMenu}
           busy={groups.isRefreshing}
           {...(legend ? { keyHints: ISSUE_KEY_HINTS } : {})}
-          className="si-issue-tree si-issue-list flex-1 rounded-md border border-border"
+          className="si-issue-tree flex-1 rounded-md border border-border"
         />
       </div>
       <IssuePageMenu<TreeRow>
@@ -1265,7 +1266,8 @@ function PageWhere({
       return (
         <span className="flex min-w-0 items-center gap-3" data-where-found="read">
           {own.id === row.id ? <span className="shrink-0 text-text-secondary">A link to {SAME_PAGE}</span> : null}
-          <ReferenceFacts where={{ kind: 'target', target: own }} view={view} />
+          {/* How this page links to it: what the URL itself is, its group's row says. */}
+          <ReferenceFacts where={{ kind: 'target', target: own }} view={{ check: linkFactsOnly(check), siteOrigin }} />
           {opens ? <MoreToggle count={moreReferences(where)} open={open} /> : null}
         </span>
       );

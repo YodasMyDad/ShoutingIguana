@@ -89,6 +89,14 @@ export function targetsSummary(
 const LINK_FACTS: ReadonlySet<string> = new Set(['kind', 'text', 'position', 'fragment', 'flags', 'links', 'img']);
 
 /**
+ * A check as a page's row under a group of the URL it names reads it: with the facts of the page's link alone, the
+ * URL's own (its status, its size, where it redirects to) being its group's row's to say.
+ */
+export function linkFactsOnly<C extends Pick<Check, 'targetFacts'>>(check: C): C {
+  return { ...check, targetFacts: (check.targetFacts ?? []).filter((fact) => LINK_FACTS.has(fact)) };
+}
+
+/**
  * What one page under a group of a `targets` check says of the group's URL: how this page links to it, as the check's
  * `targetFacts` say it ("Footer · “Old range” · 2 links", "shown at 400×300 · alt “Sofa” · lazy"), then how many other
  * URLs its issue names. The group's row says what the URL itself is. Null where the page's link to it isn't among
@@ -186,8 +194,9 @@ export function groupUrlHeader(check: Pick<Check, 'id'> & Partial<Pick<Check, 'c
   if (check.id.startsWith('image-')) return 'Image';
   if (check.category === 'canonicals' || check.id.startsWith('canonical')) return 'Canonical target';
   if (check.id.startsWith('hreflang')) return 'Alternate URL';
-  if (check.id.includes('redirect')) return 'Redirects to';
+  // A page's link to a URL that redirects is a link: the column holds the URL linked to, not where it ends.
   if (check.category === 'links' || check.references === 'targets') return 'Linked URL';
+  if (check.id.includes('redirect')) return 'Redirects to';
   return 'Related URL';
 }
 
@@ -306,7 +315,7 @@ export function targetRows(
 
 /** "Show all 12 links in Links", "Show the link in Links"; for what a page names, "Show all 9 in Links". */
 export function allWords(row: Extract<WhereRow, { kind: 'all' }>): string {
-  if (row.of === 'targets') return `Show all ${formatCount(row.total)} in Links`;
+  if (row.of === 'targets') return row.total === 1 ? 'Show it in Links' : `Show all ${formatCount(row.total)} in Links`;
   return row.total === 1 ? 'Show the link in Links' : `Show all ${formatCount(row.total)} links in Links`;
 }
 
