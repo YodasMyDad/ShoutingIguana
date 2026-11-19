@@ -711,7 +711,7 @@ describe('the Issues screen', () => {
     expect(document.getElementById(sorted.getAttribute('aria-activedescendant') ?? '')).toHaveTextContent('Detail');
   });
 
-  it('opens the inspector from a flat check’s grid, and follows its cursor in place', async () => {
+  it('opens the inspector from a flat check’s grid as one new place, and follows its cursor in place', async () => {
     sidecar();
     const { router, history } = await open(`${ISSUES}/title-too-long`);
     const grid = await screen.findByRole('grid', { name: /Title too long: affected pages/ });
@@ -721,7 +721,8 @@ describe('the Issues screen', () => {
     await waitFor(() => expect(router.state.location.search).toMatchObject({ inspect: 12 }));
     fireEvent.keyDown(grid, { key: 'ArrowDown' });
     await waitFor(() => expect(router.state.location.search).toMatchObject({ inspect: 13 }));
-    expect(history.length).toBe(1);
+    // Opening pushed one entry (back closes the inspector and returns to the check as it was); the cursor adds none.
+    expect(history.length).toBe(2);
   });
 
   it('copies the check’s URLs, one per line, and the open group’s when one is open', async () => {
