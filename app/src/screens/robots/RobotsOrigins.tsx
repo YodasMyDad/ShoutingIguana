@@ -261,7 +261,8 @@ export function RobotsOrigins({ crawlId, crawl }: RobotsOriginsProps) {
           onContextMenu={rowMenu.onContextMenu}
           // Live refreshes update in place: the progress line is for a refresh the user asked for.
           busy={rows.isRefreshing && !crawl.crawling}
-          className="flex-1 rounded-lg border border-border-card"
+          // The row the list was left on is marked, coming back, though the grid hasn't focus.
+          className="si-mark-cursor flex-1 rounded-lg border border-border-card"
         />
       </div>
     );

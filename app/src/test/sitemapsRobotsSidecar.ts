@@ -268,6 +268,9 @@ export function sitemapUrlsPage(
       if (filter.op === 'is') return value(row, filter.column) === filter.value;
       if (filter.op === 'in') return filter.values.includes(value(row, filter.column) as string | number);
       if (filter.op === 'notIn') return !filter.values.includes(value(row, filter.column) as string | number);
+      // A row's place in the list, and whether the list has it: what a page landing on one URL asks.
+      if (filter.op === 'lt') return Number(value(row, filter.column)) < Number(filter.value);
+      if (filter.op === 'eq') return value(row, filter.column) === filter.value;
       return true;
     }),
   );

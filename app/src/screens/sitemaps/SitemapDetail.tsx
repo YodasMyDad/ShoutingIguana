@@ -1,7 +1,7 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { ArrowLeft, Copy, ExternalLink, ListFilter, RefreshCw } from 'lucide-react';
-import { useCallback, useMemo, useRef, type ReactNode } from 'react';
+import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api } from '../../api/client';
 import { isProblem, missingPlaceWords } from '../../api/errors';
 import type { GridFilter, GridSort, Sitemap, SitemapList, UrlRow } from '../../api/grids';
@@ -40,6 +40,7 @@ import { copyText } from '../../lib/clipboard';
 import { statusWords, withRecorded } from '../../lib/failure';
 import { formatCount, formatCountOf, formatShownOf } from '../../lib/format';
 import { useInspector } from '../../routing/inspector';
+import { useSettings } from '../../settings/settingsStore';
 import { openInBrowser } from '../../shell/os';
 import { Banner } from '../../ui/Banner';
 import { Button } from '../../ui/Button';
@@ -54,6 +55,8 @@ import { SegmentedControl } from '../../ui/SegmentedControl';
 import { TextLink } from '../../ui/TextLink';
 import { Url } from '../../ui/Url';
 import { urlDisplay } from '../../ui/urlText';
+import { useStrayClickGuard } from '../listPlace';
+import { fixedUrlColumns } from '../urls/urlGridParts';
 import { oneUrlFilter } from '../urls/urlPlaces';
 import {
   URL_COLUMNS_UNAVAILABLE_BECAUSE,
@@ -95,6 +98,9 @@ export interface SitemapDetailProps {
  * One sitemap: its facts, then the URLs it lists as the URL grid narrowed to it (an index: those of every sitemap
  * under it), with the URL grid's filters, sort, search, live refresh and inspector, and quick filters for what people
  * come for. The sitemap is in the path and the grid's view in the search, so a link or a reload lands back here.
+ *
+ * A link can land on one URL of it: `?inspect=<the URL's id>` (the inspector's "In a sitemap: Yes: extra.xml"). The
+ * inspector then stays on that URL, and the grid starts with its cursor on that URL's row, marked and in view.
  */
 export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetailProps) {
   const search = useSearch({ from: ROUTE });
@@ -110,6 +116,8 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
   const searchHint = useSearchApplyHint(searchText.trim() !== (q ?? ''));
   // A chip removed, a banner's button gone once its action worked: focus goes to the view's title.
   useFocusRescue(container, () => title.current);
+  // The list's rows open on one click: the second click of a double-click isn't meant for what's under it here.
+  useStrayClickGuard(container);
 
   const sitemaps = list.data?.sitemaps;
   const sitemap = sitemapId === null ? undefined : sitemaps?.find((candidate) => candidate.id === sitemapId);
@@ -138,6 +146,36 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
   );
   const rows = usePagedRows<UrlRow>({ queryKey, fetchPage, rowHeight, enabled });
   const inspector = useInspector();
+  const fullUrls = useSettings((settings) => settings.showFullUrls);
+
+  // Arriving with a URL to land on (`inspect`, as the page was opened): its row is where the grid starts. The list is
+  // in the crawl's order while nothing sorts it, so the URL's row is as many rows down as the list has URLs before it:
+  // one count, under the view's own filters. A second says whether the list has the URL at all: one it doesn't list
+  // (a link from before a re-crawl) leaves the grid at its top. A view that arrives sorted or searched has no such
+  // count, and starts at its top too.
+  const [landing] = useState(() =>
+    search.inspect !== undefined && sort.length === 0 && !q
+      ? { urlId: search.inspect, filters, view: JSON.stringify(queryKey) }
+      : null,
+  );
+  const landsHere = landing !== null && enabled && landing.view === JSON.stringify(queryKey);
+  const rowsBefore = useQuery({
+    ...sitemapCountQuery(crawlId, sitemapId ?? 0, [
+      ...(landing?.filters ?? []),
+      { column: 'id', op: 'lt', value: landing?.urlId ?? 0 },
+    ]),
+    enabled: landsHere,
+  });
+  const listsIt = useQuery({
+    ...sitemapCountQuery(crawlId, sitemapId ?? 0, [
+      ...(landing?.filters ?? []),
+      { column: 'id', op: 'eq', value: landing?.urlId ?? 0 },
+    ]),
+    enabled: landsHere,
+  });
+  // The grid waits for its place (a moment: two counts), so it's made once, on the row. A count that fails gives none.
+  const placing = landsHere && (rowsBefore.isPending || listsIt.isPending);
+  const landRow = landsHere && listsIt.data === 1 && typeof rowsBefore.data === 'number' ? rowsBefore.data : undefined;
   const rowMenu = useRowMenu<UrlRow>();
   // The row as it was when the menu opened: rows can move under a running crawl while it is open.
   const menuRow = rowMenu.state?.menu.row;
@@ -154,7 +192,11 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
       cell: (row) => outcomeWords(row, crawl.crawling),
       text: (row) => outcomeWords(row, crawl.crawling),
     };
-    const [url, ...rest] = URL_GRID_COLUMNS;
+    const [url, ...rest] = fixedUrlColumns({
+      siteOrigin: fullUrls ? null : crawl.siteOrigin,
+      // One click on a URL opens the inspector on it, as in every grid.
+      onGo: (row) => inspector.open(row.id),
+    });
     return [...(url ? [url] : []), outcome, ...rest].map((column) => {
       const sorted = sort.find((entry) => entry.column === column.id);
       return {
@@ -163,7 +205,7 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
         ...(sorted ? { sort: sorted.desc ? ('descending' as const) : ('ascending' as const) } : {}),
       };
     });
-  }, [sort, sortable, crawl.crawling]);
+  }, [sort, sortable, crawl.crawling, crawl.siteOrigin, fullUrls, inspector]);
   // The columns as the user laid them out (resized, moved, pinned), kept for this grid with the preferences.
   const laid = useColumnLayout('sitemaps.urls', columns);
   // The words of a filter the row menu would add ("Status is 404"), as the chips word them.
@@ -362,31 +404,37 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
       <GridHeader
         titleRef={title}
         titleClassName="min-w-0"
-        title={sitemap ? <Url url={sitemap.url} copyable={false} openable={false} /> : 'A sitemap’s URLs'}
-        count={count}
+        // The sitemap's URL whole: it wraps where the window is too narrow for it, and is never cut in the middle.
+        title={
+          sitemap ? <Url url={sitemap.url} truncate="wrap" copyable={false} openable={false} /> : 'A sitemap’s URLs'
+        }
+        // Straight after the URL they act on, not at the header's far edge: open it in the browser, copy it.
+        count={
+          <span className="inline-flex items-center gap-3">
+            <span className="inline-flex items-center gap-0.5">
+              <IconButton
+                label="Open the sitemap in the browser"
+                icon={ExternalLink}
+                size="sm"
+                command="sitemaps.open"
+                disabled={!sitemap}
+                onClick={() => (sitemap ? void openInBrowser(sitemap.url) : undefined)}
+              />
+              <IconButton
+                label="Copy the sitemap’s URL"
+                icon={Copy}
+                size="sm"
+                command="sitemaps.copyUrl"
+                disabled={!sitemap}
+                onClick={() => void copySitemapUrl()}
+              />
+            </span>
+            {count}
+          </span>
+        }
         badge={crawl.crawling ? <LiveBadge /> : null}
         className="px-6 pb-1"
-        actions={
-          <>
-            <IconButton
-              label="Copy the sitemap’s URL"
-              icon={Copy}
-              size="sm"
-              command="sitemaps.copyUrl"
-              disabled={!sitemap}
-              onClick={() => void copySitemapUrl()}
-            />
-            <IconButton
-              label="Open the sitemap in the browser"
-              icon={ExternalLink}
-              size="sm"
-              command="sitemaps.open"
-              disabled={!sitemap}
-              onClick={() => (sitemap ? void openInBrowser(sitemap.url) : undefined)}
-            />
-            <ExportButton />
-          </>
-        }
+        actions={<ExportButton />}
       />
       {sitemap ? (
         <SitemapFacts
@@ -487,61 +535,70 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
         )
       ) : (
         <GridScreenBody className="mx-6 pb-4">
-          <GridCore
-            key={JSON.stringify(queryKey)}
-            // Never fewer than five rows' room, nor less than its empty state needs: a short window scrolls the screen.
-            minRows={GRID_SCREEN_MIN_ROWS}
-            label={sitemap ? `URLs listed by ${sitemap.url}` : 'URLs this sitemap lists'}
-            columns={laid.columns}
-            columnLayout={laid.columnLayout}
-            keyHints={GRID_KEY_HINTS}
-            rowNoun={['URL', 'URLs']}
-            rowCount={enabled ? rows.rowCount : null}
-            getRow={rows.getRow}
-            // Under a sort, a running crawl's new URLs come in among these: the cursor stays on its URL.
-            rowKey={urlOf}
-            rowHeight={rowHeight}
-            headerHeight={headerHeight}
-            onRangeChange={rows.onRangeChange}
-            onScrollOffset={rows.onScrollOffset}
-            fetchRows={rows.fetchRows}
-            onCopy={onCopy}
-            onSort={(column, focused) => {
-              const next = nextSort(sort, column);
-              handoff.sorted(column, focused, next);
-              void navigate({
-                params: here,
-                search: (previous) => ({ ...previous, sort: next.length > 0 ? next : undefined }),
-                replace: true,
-                state: true,
-              });
-            }}
-            focusHeader={handoff.focusHeader}
-            onActivate={(_index, row) => {
-              if (row) inspector.open(row.id);
-            }}
-            // While it's open, the inspector follows the cursor, in place.
-            onActiveRowChange={(index) => {
-              const row = inspecting && index !== null ? rows.getRow(index) : undefined;
-              if (row) inspector.open(row.id);
-            }}
-            onContextMenu={rowMenu.onContextMenu}
-            // Live refreshes update in place: the progress line is for a refresh the user asked for.
-            busy={rows.isRefreshing && !crawl.crawling}
-            emptyState={
-              filtered ? (
-                <FilteredEmptyState
-                  title="None of this sitemap’s URLs match."
-                  level="none"
-                  filters={filters.length > 0 ? chips : undefined}
-                  onClear={clearView}
-                />
-              ) : (
-                <NothingListed sitemap={sitemap} subtree={subtree} crawling={crawl.crawling} />
-              )
-            }
-            className="flex-1 rounded-lg border border-border-card"
-          />
+          {placing ? (
+            // A grid reads where it starts when it's made: its frame alone, the moment the row a link lands on is found.
+            <div aria-busy="true" className="min-h-0 flex-1 rounded-lg border border-border-card" />
+          ) : (
+            <GridCore
+              key={JSON.stringify(queryKey)}
+              startRow={landRow}
+              startKey={landRow === undefined ? undefined : landing?.urlId}
+              // Never fewer than five rows' room, nor less than its empty state needs: a short window scrolls the screen.
+              minRows={GRID_SCREEN_MIN_ROWS}
+              label={sitemap ? `URLs listed by ${sitemap.url}` : 'URLs this sitemap lists'}
+              columns={laid.columns}
+              columnLayout={laid.columnLayout}
+              keyHints={GRID_KEY_HINTS}
+              rowNoun={['URL', 'URLs']}
+              rowCount={enabled ? rows.rowCount : null}
+              getRow={rows.getRow}
+              // Under a sort, a running crawl's new URLs come in among these: the cursor stays on its URL.
+              rowKey={urlOf}
+              rowHeight={rowHeight}
+              headerHeight={headerHeight}
+              onRangeChange={rows.onRangeChange}
+              onScrollOffset={rows.onScrollOffset}
+              fetchRows={rows.fetchRows}
+              onCopy={onCopy}
+              onSort={(column, focused) => {
+                const next = nextSort(sort, column);
+                handoff.sorted(column, focused, next);
+                void navigate({
+                  params: here,
+                  search: (previous) => ({ ...previous, sort: next.length > 0 ? next : undefined }),
+                  replace: true,
+                  state: true,
+                });
+              }}
+              focusHeader={handoff.focusHeader}
+              onActivate={(_index, row) => {
+                if (row) inspector.open(row.id);
+              }}
+              // While it's open, the inspector follows the cursor, in place.
+              onActiveRowChange={(index) => {
+                const row = inspecting && index !== null ? rows.getRow(index) : undefined;
+                if (row) inspector.open(row.id);
+              }}
+              onContextMenu={rowMenu.onContextMenu}
+              // Live refreshes update in place: the progress line is for a refresh the user asked for.
+              busy={rows.isRefreshing && !crawl.crawling}
+              emptyState={
+                filtered ? (
+                  <FilteredEmptyState
+                    title="None of this sitemap’s URLs match."
+                    level="none"
+                    filters={filters.length > 0 ? chips : undefined}
+                    onClear={clearView}
+                  />
+                ) : (
+                  <NothingListed sitemap={sitemap} subtree={subtree} crawling={crawl.crawling} />
+                )
+              }
+              // A big grid: a URL's open-in-browser button shows on the row pointed at and the cursor's. The cursor's row
+              // is marked though the grid hasn't focus: the row a link landed on.
+              className="si-open-on-row si-mark-cursor flex-1 rounded-lg border border-border-card"
+            />
+          )}
         </GridScreenBody>
       )}
       <RowMenu

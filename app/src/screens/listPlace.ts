@@ -1,3 +1,5 @@
+import { useEffect, type RefObject } from 'react';
+
 // Where a list was left: the row something was opened from, kept for the session, so coming back to the list (Back,
 // "All sitemaps", the sidebar) starts on that row instead of at the top. The list gives it to its grid as `startRow`,
 // and, for a list whose rows a running crawl moves, the row's own key with it (`startKey`), so the grid starts on
@@ -74,4 +76,28 @@ const STRAY_CLICK_MS = 500;
  */
 export function isStrayClick(detail: number, openedAt: number, now: number = performance.now()): boolean {
   return detail > 1 && now - openedAt < STRAY_CLICK_MS;
+}
+
+/**
+ * Keeps the second click of the double-click that opened a page (`isStrayClick`) from whatever is under the pointer
+ * there: for the page a list's row opens, on the element that holds it. The click is stopped on its way down, so
+ * nothing in the page hears it.
+ */
+export function useStrayClickGuard(page: RefObject<HTMLElement | null>): void {
+  useEffect(() => {
+    const node = page.current;
+    if (!node) return undefined;
+    const openedAt = performance.now();
+    const stop = (event: MouseEvent) => {
+      if (!isStrayClick(event.detail, openedAt)) return;
+      event.stopPropagation();
+      event.preventDefault();
+    };
+    node.addEventListener('click', stop, true);
+    node.addEventListener('dblclick', stop, true);
+    return () => {
+      node.removeEventListener('click', stop, true);
+      node.removeEventListener('dblclick', stop, true);
+    };
+  }, [page]);
 }

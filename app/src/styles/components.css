@@ -2283,6 +2283,12 @@
     cursor: pointer;
   }
 
+  /* A grid that starts on a row (the one a list was left on, the URL a link landed on) marks it though the grid hasn't
+     focus: while nothing is selected, the cursor's row has the selection's tint. A selection, once made, is the mark. */
+  .si-mark-cursor:not(:has(.si-grid-row[data-selected])) .si-grid-row:has(> [data-active]) {
+    background: var(--color-surface-selected);
+  }
+
   /* The same button after a URL shown as plain text in a cell. */
   .si-url__open--inline {
     flex-shrink: 0;

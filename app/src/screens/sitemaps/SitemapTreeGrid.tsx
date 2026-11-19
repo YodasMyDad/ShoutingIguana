@@ -430,7 +430,8 @@ export function SitemapTree({
           openUrlOf={(row) => row.sitemap.url}
           onContextMenu={rowMenu.onContextMenu}
           busy={busy}
-          className="si-grid-frame--two-line-head flex-1 rounded-lg border border-border-card"
+          // The row the list was left on is marked, coming back, though the grid hasn't focus.
+          className="si-grid-frame--two-line-head si-mark-cursor flex-1 rounded-lg border border-border-card"
         />
       </div>
       <RowMenu

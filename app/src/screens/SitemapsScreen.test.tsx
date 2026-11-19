@@ -24,6 +24,7 @@ import {
 } from '../test/sitemapsRobotsSidecar';
 import { textWidth } from '../lib/textWidth';
 import { resetPlaces } from './listPlace';
+import { FIXED_URL_COLUMNS } from './urls/urlGridParts';
 import { INDEXABLE_SITE_PAGES } from './sitemaps/sitemapWords';
 
 const SITEMAPS = `/crawls/${TEST_CRAWL_ID}/sitemaps`;
@@ -915,6 +916,107 @@ describe('Sitemaps: one sitemap', () => {
     fireEvent.keyDown(grid, { key: 'Enter' });
     await waitFor(() => expect(searchOf(router).inspect).toBe(7));
     expect(pathOf(router)).toBe(`${SITEMAPS}/5`);
+  });
+
+  it('makes each URL a link that opens the inspector on it in one click', async () => {
+    sidecar();
+    const { router } = await open(`${SITEMAPS}/5`);
+    const grid = await screen.findByRole('grid');
+    await screen.findByText(`${SITE}/news/b`);
+    const link = within(grid).getByRole('button', { name: `${SITE}/news/b` });
+    expect(link).toHaveClass('si-url__go');
+    // The grid is the one Tab stop.
+    expect(link).toHaveAttribute('tabindex', '-1');
+    fireEvent.click(link);
+    await waitFor(() => expect(searchOf(router).inspect).toBe(8));
+    expect(pathOf(router)).toBe(`${SITEMAPS}/5`);
+  });
+
+  it('shows its URLs as the URL grid does: paths with the host named once, a status marked by its class', async () => {
+    sidecar();
+    await open(`${SITEMAPS}/3`);
+    const grid = await screen.findByRole('grid', { name: `URLs listed by ${SITE}/sitemaps/products.xml` });
+    await screen.findByText(`${SITE}/p/gone`);
+    // The host once, in the header; each row its path.
+    expect(within(grid).getByRole('columnheader', { name: /^URL/ })).toHaveTextContent('on example.com');
+    const gone = rowOf(`${SITE}/p/gone`);
+    expect(gone.querySelector('.si-url__path')).toHaveTextContent(/^\/p\/gone$/);
+    expect(gone.querySelector('.si-url__origin')).toBeNull();
+    // The status with its class's mark, as on URLs; a URL with no answer has a dash, its outcome beside it.
+    expect(gone.querySelector('[aria-colindex="3"] .si-code--4xx')).toHaveTextContent('404');
+    expect(rowOf(`${SITE}/p/unreached`).querySelector('[aria-colindex="3"]')).toHaveTextContent('–');
+    // A big grid: its open-in-browser buttons show on the row pointed at, and the cursor's.
+    expect(grid.closest('.si-open-on-row')).not.toBeNull();
+  });
+
+  it('sizes its URL and Title columns by what they hold, as the URL grid does', async () => {
+    sidecar();
+    await open(`${SITEMAPS}/3`);
+    const grid = await screen.findByRole('grid', { name: `URLs listed by ${SITE}/sitemaps/products.xml` });
+    await screen.findByText(`${SITE}/p/gone`);
+    expect(FIXED_URL_COLUMNS.find((column) => column.id === 'url')?.fit).toBe('url');
+    expect(FIXED_URL_COLUMNS.find((column) => column.id === 'title')?.fit).toBe('text');
+    expect(within(grid).getAllByRole('columnheader')).toHaveLength(10);
+  });
+
+  it('shows the sitemap’s own URL whole in its heading, with open in the browser and copy straight after it', async () => {
+    sidecar();
+    const opened = vi.spyOn(window, 'open').mockReturnValue(null);
+    await open(`${SITEMAPS}/3`);
+    const heading = await screen.findByRole('heading', { level: 1, name: `${SITE}/sitemaps/products.xml` });
+    // Never cut in the middle: it wraps where a window is too narrow for it.
+    expect(heading.querySelector('.si-url')).toHaveClass('si-url--wrap');
+    const open_ = screen.getByRole('button', { name: /^Open the sitemap in the browser/ });
+    const copy = screen.getByRole('button', { name: /^Copy the sitemap’s URL/ });
+    // Straight after the heading, before the count: not with Export at the header’s far edge.
+    const actions = screen.getByRole('button', { name: /^Export/ }).closest('.si-grid-header__actions')!;
+    expect(actions).not.toContainElement(open_);
+    expect(actions).not.toContainElement(copy);
+    expect(heading.compareDocumentPosition(open_) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(open_);
+    expect(opened).toHaveBeenCalledWith(`${SITE}/sitemaps/products.xml`, '_blank', 'noopener,noreferrer');
+    opened.mockRestore();
+  });
+
+  it('lands on the URL a link names: its row is the cursor’s, and the inspector stays on it', async () => {
+    const { transport } = sidecar();
+    const { router } = await open(`${SITEMAPS}/2?inspect=4`);
+    const grid = await screen.findByRole('grid', { name: `URLs listed by ${SITE}/sitemaps/pages.xml` });
+    await screen.findByText(`${SITE}/contact`);
+    // One count places it: the URLs listed before it, in the crawl’s order.
+    expect(gridRequests(transport).map((query) => query.filters)).toContainEqual([
+      { column: 'id', op: 'lt', value: 4 },
+    ]);
+    await waitFor(() => {
+      const cursor = grid.querySelector('[data-active]');
+      expect(cursor?.closest('[role="row"]')).toHaveTextContent('/contact');
+    });
+    // Marked without the grid having focus.
+    expect(grid.closest('.si-mark-cursor')).not.toBeNull();
+    expect(searchOf(router).inspect).toBe(4);
+  });
+
+  it('starts at the top when the URL a link names isn’t in the sitemap', async () => {
+    sidecar();
+    await open(`${SITEMAPS}/5?inspect=4`);
+    const grid = await screen.findByRole('grid', { name: `URLs listed by ${SITE}/news-sitemap.xml` });
+    await screen.findByText(`${SITE}/news/a`);
+    expect(grid.querySelector('[data-active]')).toBeNull();
+    act(() => grid.focus());
+    const cursor = document.getElementById(grid.getAttribute('aria-activedescendant') ?? '');
+    expect(cursor?.closest('[role="row"]')).toHaveTextContent('/news/a');
+  });
+
+  it('takes no second click of the double-click that opened it: a filter under the pointer isn’t chosen', async () => {
+    sidecar();
+    const { router } = await open(`${SITEMAPS}/3`);
+    await screen.findByText(`${SITE}/p/gone`);
+    const crawled = () => screen.getByRole('radio', { name: /^Crawled/ });
+    fireEvent.click(crawled(), { detail: 2 });
+    expect(searchOf(router).filter).toBeUndefined();
+    // A click of its own is the user’s.
+    fireEvent.click(crawled(), { detail: 1 });
+    await waitFor(() => expect(searchOf(router).filter).toBeDefined());
   });
 
   it('says a sitemap that couldn’t be read has no URLs to show, and why', async () => {
