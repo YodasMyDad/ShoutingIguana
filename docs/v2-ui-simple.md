@@ -195,7 +195,10 @@ Simple has its own word wherever Advanced's is technical. Each maps to one gloss
   check. No rate chart and no status codes: they are Advanced's.
 - **How long.** "At least 12 minutes to go. It's still finding new pages, so this can grow." The figure is what is
   queued over the current pace, said as a floor. Why no percentage: the total isn't known until the end, and a bar
-  that ran backwards would be a lie.
+  that ran backwards would be a lie. Still to check counts what waits its turn and what is on its way, as Advanced's Queued does: the
+  addresses a section the site limits holds back are among them. While only those are left it says "Reading the last
+  pages slowly. 1,041 addresses are left. The site only lets them be read one at a time, so this can take a while.",
+  never "Nearly done".
 - **Can I close the window?** The header says so: "You can close this window: the check carries on, and a
   notification tells you when it's done."
 - **Is anything in the way?** A card that says "Nothing so far" until the engine raises an alert, then says it in
@@ -208,6 +211,7 @@ Simple has its own word wherever Advanced's is technical. Each maps to one gloss
   | robots.txt can't be read | "The site's rules file for search engines isn't answering, so the check can't tell where it may go. It's waiting, and will try again." | Stop |
   | The site stopped answering | "The site has stopped answering. The check is waiting, and will carry on by itself when it's back." | Stop |
   | A Crawl-delay is being obeyed | "The site asks visitors like this one to go slowly, so the check waits between pages." | Nothing to do |
+  | The site limits a section (its notice and its wait, said once) | "The site only lets some of its pages be read slowly, so the check reads those one at a time. The rest isn't held up." | Nothing to do |
   | The start URL leads to another site | "This address forwards to another site, example.org." | Check example.org instead |
 
 - **Pause and Stop** are in the top bar. The page says what each does: "Pause holds the check. Stop ends it and
