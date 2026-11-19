@@ -10,6 +10,8 @@ import { Card } from '../../ui/Card';
 import { EmptyState } from '../../ui/EmptyState';
 import { LiveDot } from '../../ui/LiveBadge';
 import { ProgressBar } from '../../ui/ProgressBar';
+import { asksForACrawl } from '../overview/answer';
+import { CrawlAgainButton } from '../overview/CrawlAgain';
 
 /** "Checking each page · Step 2 of 5", with the phase's own progress, and Cancel. */
 export function AnalysisProgress({
@@ -79,6 +81,7 @@ export function AnalysisNotes({
   canAnalyse,
   onAnalyse,
   notes = true,
+  crawlId,
 }: {
   analysis: Analysis;
   crawling: boolean;
@@ -87,6 +90,8 @@ export function AnalysisNotes({
   onAnalyse: () => void;
   /** False where the screen says what wasn't checked itself (Overview's "Not checked on this crawl"): no banner too. */
   notes?: boolean | undefined;
+  /** The crawl, where a note that recommends crawling again should carry "Crawl again…" as a control (H-04). */
+  crawlId?: string | undefined;
 }) {
   const partial = notes && (analysis.isPartial === true || (analysis.isPartial === null && analysis.notes.length > 0));
   return (
@@ -98,7 +103,7 @@ export function AnalysisNotes({
         canAnalyse={canAnalyse}
         onAnalyse={onAnalyse}
       />
-      {partial ? <PartialNotes analysis={analysis} /> : null}
+      {partial ? <PartialNotes analysis={analysis} crawlId={crawlId} /> : null}
     </>
   );
 }
@@ -107,7 +112,8 @@ export function AnalysisNotes({
  * A partial analysis: says so in one line, with the notes a press away when there are several (they'd push the list
  * off a small window), and in full when there's one. Each skipped check also gives its reason in the list.
  */
-function PartialNotes({ analysis }: { analysis: Analysis }) {
+function PartialNotes({ analysis, crawlId }: { analysis: Analysis; crawlId: string | undefined }) {
+  const again = crawlId !== undefined && analysis.notes.some(asksForACrawl);
   const [open, setOpen] = useState(false);
   const id = useId();
   const many = analysis.notes.length > 1;
@@ -123,17 +129,22 @@ function PartialNotes({ analysis }: { analysis: Analysis }) {
         ) : undefined
       }
       actions={
-        many ? (
-          <Button
-            size="sm"
-            variant="ghost"
-            iconEnd={open ? ChevronUp : ChevronDown}
-            aria-expanded={open}
-            aria-controls={open ? id : undefined}
-            onClick={() => setOpen((value) => !value)}
-          >
-            {open ? 'Hide the notes' : `Show the ${analysis.notes.length} notes`}
-          </Button>
+        many || again ? (
+          <>
+            {many ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                iconEnd={open ? ChevronUp : ChevronDown}
+                aria-expanded={open}
+                aria-controls={open ? id : undefined}
+                onClick={() => setOpen((value) => !value)}
+              >
+                {open ? 'Hide the notes' : `Show the ${analysis.notes.length} notes`}
+              </Button>
+            ) : null}
+            {again ? <CrawlAgainButton crawlId={crawlId} /> : null}
+          </>
         ) : null
       }
     >

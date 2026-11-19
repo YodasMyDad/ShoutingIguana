@@ -1,12 +1,10 @@
 import { useQueries } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { RotateCcw } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { CheckChange } from '../../api/fixLoop';
 import type { Checks } from '../../api/types';
 import { affectedNoun, affectedWords, checkReach, type CrawlCounts } from '../../crawl/checkSubject';
 import { formatCount, formatCountOf } from '../../lib/format';
-import { Button } from '../../ui/Button';
 import { Card, CardBody, CardHeader } from '../../ui/Card';
 import { ListRow } from '../../ui/ListRow';
 import { Num } from '../../ui/Num';
@@ -27,6 +25,7 @@ import {
   skippedGroups,
   skippedReasonWords,
 } from './answer';
+import { CrawlAgainButton } from './CrawlAgain';
 import { fixFirstExampleQuery } from './fixFirstExample';
 import { linkProps } from './overviewLinks';
 
@@ -338,15 +337,7 @@ export function SkippedChecks({ crawlId, entries }: { crawlId: string; entries: 
             {formatCountOf(count, 'check')} skipped
           </TextLink>
         }
-        actions={
-          again ? (
-            <Button asChild size="sm" icon={RotateCcw}>
-              <Link to="/new" search={{ from: crawlId }}>
-                Crawl again…
-              </Link>
-            </Button>
-          ) : null
-        }
+        actions={again ? <CrawlAgainButton crawlId={crawlId} /> : null}
       />
       <CardBody>
         <ul className="flex flex-col gap-4">

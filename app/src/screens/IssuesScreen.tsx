@@ -691,6 +691,7 @@ export function IssuesScreen() {
           analysing={analysing}
           canAnalyse={canAnalyse}
           onAnalyse={analyse}
+          crawlId={crawlId}
         />
         <div
           className={clsx(

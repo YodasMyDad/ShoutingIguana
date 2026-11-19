@@ -357,6 +357,7 @@ export function OverviewScreen() {
             // The "Not checked on this crawl" card says what was skipped and why, with what to do: the banner says
             // it again only when the analysis left more notes than the card has reasons (H-11).
             notes={skippedReasons === 0 || analysis.data.notes.length > skippedReasons}
+            crawlId={crawlId}
           />
         ) : null}
 

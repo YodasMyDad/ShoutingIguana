@@ -209,7 +209,7 @@ export function skippedGroups(entries: readonly CheckEntry[]): SkippedGroup[] {
   return [...groups.values()];
 }
 
-/** Whether a skip reason's remedy is a fresh crawl: the card then carries "Crawl again…" as a control. */
+/** Whether a skip reason's or a note's remedy is a fresh crawl: what says it then carries "Crawl again…" as a control. */
 export function asksForACrawl(reason: string | null): boolean {
   return reason !== null && /crawl again/i.test(reason);
 }

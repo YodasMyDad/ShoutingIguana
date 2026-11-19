@@ -25,6 +25,8 @@ import type { CheckChange } from '../../api/fixLoop';
 import { Tabs } from '../../ui/Tabs';
 import { checkChangeCell, periodLabel, type ComparedPeriod } from '../compare/changeCell';
 import { FixedList } from '../compare/FixedList';
+import { asksForACrawl } from '../overview/answer';
+import { CrawlAgainButton } from '../overview/CrawlAgain';
 import { RecheckBanner } from '../rechecks/RecheckBanner';
 import { RecheckControl, type OpenGroup } from '../rechecks/RecheckControl';
 import { useSharedSource } from '../../simple/useSharedSource';
@@ -311,6 +313,8 @@ export function CheckDetail({
                 </>
               )
             }
+            // The reason's remedy, as a control beside it (the shell audit's H-04).
+            actions={asksForACrawl(entry.skipReason) ? <CrawlAgainButton crawlId={crawlId} /> : undefined}
           />
         </div>
       ) : fixedCheck && compare ? (
