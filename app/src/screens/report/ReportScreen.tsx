@@ -16,6 +16,7 @@ import { useFocusRescue } from '../../feedback/useFocusRescue';
 import { useCommands } from '../../keyboard/registry';
 import { formatCountOf, formatExactTime, formatRelativeTime } from '../../lib/format';
 import { useLive } from '../../live/liveStore';
+import { openInBrowser } from '../../shell/os';
 import { useMode } from '../../mode/mode';
 import { Banner } from '../../ui/Banner';
 import { Button } from '../../ui/Button';
@@ -27,7 +28,7 @@ import { SegmentedControl } from '../../ui/SegmentedControl';
 import { useAnalysisAnswer } from '../issues/useAnalysisAnswer';
 import { useAnalysisControl } from '../issues/useAnalysisControl';
 import { ReportFrame, type ReportFrameHandle } from './ReportFrame';
-import { reportDocumentQuery } from './reportQuery';
+import { reportDocumentQuery, reportWording } from './reportQuery';
 import { ReportSheetSkeleton } from './ReportSheetSkeleton';
 import { outOfDateText, reportWords, type ReportWords } from './reportWords';
 import { useHiddenChecks } from '../../settings/hiddenChecks';
@@ -50,10 +51,12 @@ function longDateOf(iso: string | null | undefined): string | null {
 
 /**
  * The Report (docs/v2-ui-simple.md, "The Report screen"): the same screen in both modes. A toolbar (what the report
- * is of; Full report or Summary page; Spreadsheet of everything, Save, and Print or save as PDF, the primary action,
- * Ctrl+P), then the engine's document as a sheet on the canvas, in a sandboxed frame. Before there is a document it
- * says why, with the one action that helps: a crawl never analysed offers to analyse it, and one that runs says the
- * report comes when it ends. The document says the rest itself (stopped early, out of date, no score).
+ * is of; Full report or Summary page; Save spreadsheet, Save as HTML, and Print or save as PDF, the primary action,
+ * Ctrl+P), then the engine's document as a sheet on the canvas, in a sandboxed frame. The document is in the mode's
+ * words (a site owner's in Simple, a working SEO's in Advanced), and its links work: an address opens in the browser,
+ * and each problem's heading leads to that problem in the app. Before there is a document it says why, with the one
+ * action that helps: a crawl never analysed offers to analyse it, and one that runs says the report comes when it
+ * ends. The document says the rest itself (stopped early, out of date, no score).
  */
 export function ReportScreen() {
   const { crawl: crawlId } = useParams({ from: ROUTE });
@@ -79,8 +82,9 @@ export function ReportScreen() {
   const control = useAnalysisControl(crawlId, analysing, neverAnalysed);
   // The document of the cut asked for. While another cut is fetched, the one shown stays, as refreshing: switching
   // never blanks the sheet.
+  const wording = reportWording(mode);
   const report = useQuery({
-    ...reportDocumentQuery(crawlId, cut, hiddenChecks),
+    ...reportDocumentQuery(crawlId, cut, wording, hiddenChecks),
     enabled: readable && analysis.data !== undefined,
     placeholderData: keepPreviousData,
   });
@@ -89,9 +93,9 @@ export function ReportScreen() {
   useEffect(() => {
     if (!shown) return;
     void queryClient
-      .query(reportDocumentQuery(crawlId, cut === 'full' ? 'summary' : 'full', hiddenChecks))
+      .query(reportDocumentQuery(crawlId, cut === 'full' ? 'summary' : 'full', wording, hiddenChecks))
       .catch(() => undefined);
-  }, [shown, queryClient, crawlId, cut, hiddenChecks]);
+  }, [shown, queryClient, crawlId, cut, wording, hiddenChecks]);
 
   const screenRef = useRef<HTMLDivElement>(null);
   useFocusRescue(screenRef, () => control.titleRef.current);
@@ -113,7 +117,12 @@ export function ReportScreen() {
     printRef.current?.focus();
     void navigate({ search: (previous) => ({ ...previous, print: undefined }), replace: true });
   }, [printOnOpen, shown, navigate]);
-  // Save and Spreadsheet of everything are the app's one export flow: the export dialog on that choice (the report in
+  // A link in the report: an address outside opens in the browser, and a problem's own link opens that problem, which
+  // is What to fix's page of it in Simple and Issues with it selected in Advanced (one route).
+  const openUrl = (url: string) => void openInBrowser(url);
+  const openCheck = (check: string) =>
+    void navigate({ to: '/crawls/$crawl/issues/{-$check}', params: { crawl: crawlId, check } });
+  // Save as HTML and Save spreadsheet are the app's one export flow: the export dialog on that choice (the report in
   // the cut shown), then the native save dialog, then the export's toast, as Overview's and Issues' are.
   const save = (choiceId: 'report' | 'workbook') => {
     if (item) openExportDialog(overviewOffer(item, crawling, mode === 'simple'), { choiceId, cut });
@@ -141,7 +150,7 @@ export function ReportScreen() {
       },
       {
         id: 'report.save',
-        title: 'Save the report…',
+        title: 'Save the report as HTML…',
         group: 'View',
         keys: ['mod+e'],
         keywords: ['export', 'html', 'report', 'file'],
@@ -150,7 +159,7 @@ export function ReportScreen() {
       },
       {
         id: 'report.workbook',
-        title: 'Spreadsheet of everything…',
+        title: 'Save the spreadsheet of everything…',
         group: 'View',
         keywords: ['excel', 'xlsx', 'workbook', 'export', 'spreadsheet'],
         enabled: () => ready,
@@ -243,7 +252,14 @@ export function ReportScreen() {
           />
         ) : null}
         <div className="flex min-h-(--report-sheet-min) flex-1 justify-center overflow-hidden rounded-t-lg bg-surface-hover px-6 pt-6 inset-ring inset-ring-border">
-          <ReportFrame ref={frameRef} document={documentText} title={`The report for ${site}`} />
+          <ReportFrame
+            ref={frameRef}
+            document={documentText}
+            title={`The report for ${site}`}
+            openLabel={mode === 'simple' ? 'Open in What to fix' : 'Open in Issues'}
+            onOpenUrl={openUrl}
+            onOpenCheck={openCheck}
+          />
         </div>
       </>
     );
@@ -305,7 +321,8 @@ function ReportBar({
     : [];
   // The title and its line on a row of their own, the controls on the next: side by side they wrapped at 1280 px, the
   // line leaving "read" alone and Print or save as PDF on a row of its own (the gallery in the release shell). The line
-  // wraps only between its parts, never inside one; the controls wrap as two groups, the cut and the three ways out.
+  // wraps only between its parts, never inside one; the controls wrap as two groups, the cut and the three ways out,
+  // each named for what it does (the UX audit's A-12: "Save…" didn't say what it saved).
   return (
     <header className="flex flex-col gap-3">
       <div className="min-w-0">
@@ -330,10 +347,10 @@ function ReportBar({
         <SegmentedControl label="How much of the report" options={CUTS} value={cut} onValueChange={onCut} wrap />
         <div className="ml-auto flex flex-wrap items-center gap-3">
           <Button icon={Sheet} command="report.workbook" disabled={!ready} onClick={() => onSave('workbook')}>
-            Spreadsheet of everything…
+            Save spreadsheet…
           </Button>
           <Button icon={Download} command="report.save" disabled={!ready} onClick={() => onSave('report')}>
-            Save…
+            Save as HTML…
           </Button>
           <Button
             ref={printRef}
