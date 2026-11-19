@@ -13,7 +13,7 @@ import { announce } from '../../feedback/announce';
 import { copyText } from '../../lib/clipboard';
 import { formatCount, formatExactTime } from '../../lib/format';
 import { useLiveCrawl } from '../../live/liveStore';
-import { atUrlLimit, crawledSoFar } from '../../screens/overview/liveFigures';
+import { atUrlLimit, crawledSoFar, queuedSoFar } from '../../screens/overview/liveFigures';
 import { Banner } from '../../ui/Banner';
 import { Button } from '../../ui/Button';
 import { Callout, type CalloutTone } from '../../ui/Callout';
@@ -30,6 +30,7 @@ import {
   alertKey,
   inTheWay,
   pagesWhenRaised,
+  sectionHeld,
   siteAnswers,
   simplePhaseProgress,
   simplePhaseWords,
@@ -94,7 +95,9 @@ export function CheckingScreen({
   // The three figures from one read, so they agree: the progress event, or the crawl file's stats.
   const checked = progress ? crawledSoFar(progress) : (stats.data?.urlCount ?? null);
   const pages = progress ? progress.htmlPages : (stats.data?.htmlPageCount ?? null);
-  const queued = progress ? progress.queued : (stats.data?.queuedCount ?? null);
+  // Waiting their turn and on their way, as Advanced's Queued counts them: the addresses a section the site limits
+  // holds back are on their way (gallery 7's views 06 and 31: Still to check 0 while 1,041 were held back).
+  const queued = progress ? queuedSoFar(progress) : (stats.data?.queuedCount ?? null);
 
   const runStartedAt = history?.runs?.at(-1)?.startedAt ?? null;
   const alerts = useMemo(() => [...(fileAlerts ?? []), ...(live?.alerts ?? [])], [fileAlerts, live?.alerts]);
@@ -145,6 +148,7 @@ export function CheckingScreen({
         ? Math.max(0, progress.maxUrls - progress.internalFetched)
         : null,
     internalFound: progress?.internalFound,
+    heldInSections: status === 'running' && progress ? sectionHeld(progress.waits, progress.moreWaits) : 0,
   });
 
   return (

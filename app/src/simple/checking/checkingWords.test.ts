@@ -7,6 +7,7 @@ import {
   simplePhaseProgress,
   simplePhaseWords,
   pagesWhenRaised,
+  sectionHeld,
   timeLeftWords,
 } from './checkingWords';
 
@@ -141,6 +142,36 @@ describe('what’s in the way', () => {
     expect(entries.map((entry) => entry.text)).toEqual(["The engine's words for new-thing"]);
   });
 
+  // Views 06 and 07 of gallery 7: the engine's notice that a section is limited, and the wait it holds, said it twice.
+  it('says a section the site limits once, in plain words, whether its notice or its wait says so', () => {
+    const entries = inTheWay({
+      ...base,
+      alerts: [alert('section-rate-limited', '2026-11-01T07:00:00Z', { host: 'example.com', url: '/p/' }, 1)],
+      waits: [{ reason: 'sectionLimited', host: 'example.com', urls: 1041, durationMs: 4000, section: '/p/' }],
+    });
+    expect(entries.map((entry) => [entry.text, entry.actions.length])).toEqual([
+      [
+        'The site only lets some of its pages be read slowly, so the check reads those one at a time. The rest isn’t held up.',
+        0,
+      ],
+    ]);
+  });
+
+  it('says the slowdown beside a section the site limits: they are two things', () => {
+    const entries = inTheWay({
+      ...base,
+      alerts: [],
+      waits: [
+        { reason: 'sectionLimited', host: 'example.com', urls: 1041, durationMs: 4000, section: '/p/' },
+        { reason: 'backoff', host: 'example.com', durationMs: 2000 },
+      ],
+    });
+    expect(entries.map((entry) => entry.text)).toEqual([
+      'The site only lets some of its pages be read slowly, so the check reads those one at a time. The rest isn’t held up.',
+      'The site asked the check to slow down, so it has. It will take longer.',
+    ]);
+  });
+
   it('writes a message to send on, with the pages read', () => {
     expect(blockedMessage('example.com', 312)).toContain('after 312 pages');
     expect(blockedMessage('example.com', null)).not.toContain('after');
@@ -208,6 +239,47 @@ describe('how long is left', () => {
     expect(timeLeftWords({ status: 'stopping', queued: 10, urlsPerSecond: 3, atLimit: false }).lead).toBe('Stopping.');
     expect(timeLeftWords({ status: 'running', queued: 10, urlsPerSecond: 3, atLimit: true }).lead).toBe('Nearly done.');
     expect(timeLeftWords({ status: 'running', queued: 0, urlsPerSecond: 3, atLimit: false }).lead).toBe('Nearly done.');
+  });
+
+  // Views 06 and 31 of gallery 7: "Nearly done" while 1,041 of a section the site limits were still to read.
+  it('never says "Nearly done" while a section the site limits still has addresses waiting', () => {
+    const lastOnes = {
+      lead: 'Reading the last pages slowly.',
+      rest: '1,041 addresses are left. The site only lets them be read one at a time, so this can take a while.',
+    };
+    expect(
+      timeLeftWords({ status: 'running', queued: 1041, urlsPerSecond: 0.2, atLimit: false, heldInSections: 1041 }),
+    ).toEqual(lastOnes);
+    // Its limit reached for the rest, or no pace to go by: still the last ones, read slowly.
+    expect(
+      timeLeftWords({ status: 'running', queued: 1041, urlsPerSecond: 0.2, atLimit: true, heldInSections: 1041 }),
+    ).toEqual(lastOnes);
+    expect(
+      timeLeftWords({ status: 'running', queued: 1041, urlsPerSecond: 0, atLimit: false, heldInSections: 1041 }),
+    ).toEqual(lastOnes);
+    expect(
+      timeLeftWords({ status: 'running', queued: 1, urlsPerSecond: 0.2, atLimit: false, heldInSections: 1 }).rest,
+    ).toBe('1 address is left. The site only lets it be read slowly, so this can take a while.');
+    // With more of the site to read besides, the floor stands, the section's addresses in it.
+    expect(
+      timeLeftWords({ status: 'running', queued: 2041, urlsPerSecond: 2, atLimit: false, heldInSections: 1041 }).lead,
+    ).toBe('At least 17 minutes to go.');
+  });
+
+  it('counts the addresses waiting in the sections the site limits, from the progress’s waits', () => {
+    expect(
+      sectionHeld(
+        [
+          { reason: 'sectionLimited', host: 'example.com', urls: 1041, section: '/p/' },
+          { reason: 'backoff', host: 'example.com', durationMs: 2000 },
+          { reason: 'sectionLimited', host: 'example.com', urls: 9, section: '/c/' },
+        ],
+        {},
+      ),
+    ).toBe(1050);
+    // Sections beyond those listed hold one address each at least.
+    expect(sectionHeld([{ reason: 'sectionLimited', urls: 4 }], { sectionLimited: 3, backoff: 2 })).toBe(7);
+    expect(sectionHeld([], {})).toBe(0);
   });
 
   it('says hours and minutes in words', () => {

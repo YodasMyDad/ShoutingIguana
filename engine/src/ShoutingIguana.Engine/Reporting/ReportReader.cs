@@ -55,6 +55,9 @@ internal static class ReportReader
         // The files the checks of robots.txt and the sitemaps are about, of this analysis only.
         var files = IssueFileReader.Read(crawlPath, export.Cache, cancellationToken) is { } stored && stored.AnalyzedAt == results.Analysis.AnalyzedAt ? stored.Checks : null;
 
+        // What a fix of each check also clears, of this analysis only: a problem another's fix clears entirely is one job with it.
+        var causes = IssueCauseReader.Read(crawlPath, export.Cache, cancellationToken) is { } read && read.AnalyzedAt == results.Analysis.AnalyzedAt ? read.Checks : null;
+
         List<ReportProblem> problems = [];
         foreach (var id in fixFirst.Where(Lists))
         {
@@ -84,7 +87,8 @@ internal static class ReportReader
                 ],
                 oneFix)
             {
-                Files = check.About is not null && files?.GetValueOrDefault(id) is { Count: > 0 } named ? [.. named.Select(file => file.Url)] : null
+                Files = check.About is not null && files?.GetValueOrDefault(id) is { Count: > 0 } named ? [.. named.Select(file => file.Url)] : null,
+                Clears = causes?.GetValueOrDefault(id)?.Clears ?? []
             });
         }
 
