@@ -135,6 +135,83 @@ Work on branch `ui/step-3`, worktree `.claude/worktrees/ui-step-3`. Since 2026-1
 the owner says deploy); `origin/ui/step-3` is behind. `v2` and `master` were not moved. This section is the place to
 resume. Merging to `master` or releasing still needs an explicit yes.
 
+**PAUSED 2026-11-19, about 09:15, for usage, mid-way through a UX round (session `da833503`). Resume here.**
+Nothing is running: every agent stopped, every sidecar, Vite server and test site is down, every worktree is clean.
+Nothing was pushed. Nothing below is merged into `ui/step-3` except the two severity changes. The whole record is in
+[`docs/handoff/2026-11-19/`](handoff/2026-11-19/): read [`checkpoint.md`](handoff/2026-11-19/checkpoint.md) first.
+
+*What the owner asked (2026-11-19, on the installed app and their own garden crawl):* "The UI looks nice in most cases
+but the UX really falls short." In Issues > "Internal URL returns 4xx" the page that holds each broken link was plain
+text; reaching it took an expand, a "Show the link in Links" and another screen. They asked for a high-level UX audit
+of every screen, done by using the app as an SEO, and for the faults to be sorted out, in Simple too ("people are going
+to be probably more interested as to where the broken link is"). Later the same morning: a correct "Internal links
+without anchor text" finding read as a false positive because the pane never showed which link or what to type: "if
+there's an obvious fix, it needs to be very easy to read."
+
+*Done and on `ui/step-3` (local only):*
+
+- **Two severities changed at the owner's word** (`e02b185a`, `4a7fab91`): `canonical-to-first-page` is a Notice
+  ("good SEO practice", reworded as a common, often deliberate setup) and `broken-external-links` is an Error ("it's a
+  broken link"). Catalog: 17 Errors, 52 Warnings, 101 Notices. The garden fixture is 2 / 3 / 23 and scores 87.
+  Engine tests 2,403 + 331 + 45 and the 100k bench passed; Vitest passed whole only with `--maxWorkers=8` (5,513); the
+  e2e specs and stories were updated and **not run**; readbench was **not run**.
+- **The audit** (`2a2cc140`): four auditors used the app at **2560 × 1380, the owner's window** (every earlier audit
+  and gallery was 1280 × 720), then at 1280 × 720, on copies of the three real crawls and the synthetic one. About 80
+  findings in `audit-issues.md`, `audit-data.md`, `audit-shell.md` and `audit-simple.md`.
+- **The rules every screen follows from now on** (`fix-common.md`): a URL's text is a link; open-in-browser sits
+  directly after it; the page that holds a fault is in the row with the element that identifies it; opening that page
+  lands on the fault (`urlAtText`, `app/src/lib/textFragment.ts`, on the base); counts are links to exactly their
+  list; one scroller per pane; columns share spare width by need; Back keeps your place.
+
+*Built on lane branches, **not merged, and none has had a whole-suite run at its head**.* Each lane's exact state,
+finding by finding, with what ran and what didn't, is in its `state-<lane>.md`:
+
+| Lane | Branch (worktree `.claude/worktrees/<name>`) | Base | Head | State |
+| --- | --- | --- | --- | --- |
+| issues | `ui/ux-issues` (`ux-issues`) | `2a2cc140` | `8c918b47` | 12 findings done, 5 partly (A-07, A-09, A-10, A-15, A-18). The owner's 404 task held at 2560 × 1380 when last seen, before the last two commits. At 1280 × 720 the card still scrolled on five busy checks |
+| data | `ui/ux-data` (`ux-data`) | `2a2cc140` | `5922ad44` | 6 done, 8 partly, 5 not started. Links, Sitemaps, robots.txt and the inspector changed; **URLs and the grid core are as on the base**. Known fault: `Url`'s open button sits about 270 px after an on-site URL's text. No "after" screen was looked at |
+| shell | `ui/ux-shell` (`ux-shell`) | `2a2cc140` | `1f2419f9` | 9 done (H-01, H-02, H-03, H-05, H-06, H-11, H-18, H-19, H-23), 2 partly (H-04, H-07), 13 not started |
+| simple | `ui/ux-simple` (`ux-simple`) | `4a7fab91` | `4a7fab91` | **Nothing built**: its agent ended on a server error after deciding how; the decisions are in `state-simple.md` |
+| simple's report | `ui/ux-simple-report` (`ux-simple-report`) | `4a7fab91` | `84b2641a` | The report in two wordings, with working links and "where to fix"; the spreadsheet's linking-page columns. e2e rewritten, not run (`state-simple-report.md`) |
+| engine | `ui/ux-engine` (`ux-engine`) | `4a7fab91` | `c71fe5bd` | The lost sitemap list traced and three more row losses on a recheck fixed; a damaged file says so; the recheck's numbers and words fixed. `AnalysisFreshness.VERSION` is **21** there. The whole engine suite, bench and readbench were **not run at head** |
+| fix as code | `ui/ux-fix` (`ux-fix`) | `f2ae0922` | `179f838a` | Finished as a component, **not mounted**: 67 checks carry a fix as before and after code (`fixExamples`), with `CodeExample` and `HowToFix`. Mounting it in the Issues pane is one element, once `ui/ux-issues` lands (`fix-lane.md`) |
+
+*The lost sitemap list (the data audit's D-01) was not a fault of any installed build.* An in-progress engine build of
+18 Nov (`8cbd8c24`) deleted a sitemap's rows on a recheck, then failed inserting them into a file without a `lastmod`
+column; `2afdf35d` had already fixed it, and the damaged file was a lane's test copy. The owner's library was not
+opened to confirm.
+
+*To resume, in this order:*
+
+1. Read `docs/handoff/2026-11-19/checkpoint.md`, then each `state-<lane>.md`. Check every lane worktree is still clean
+   and at the head in the table (`git worktree list`).
+2. **Finish the lanes**, one fresh agent each, briefed with `fix-common.md`, `lane-briefs.md`, the lane's audit and its
+   state file, working from that file's "next five steps": **simple first** (nothing is built: merge
+   `ui/ux-simple-report` into it, then S-01 and the "Where to fix it" card), then **data** (the `Url` open-button
+   fault, column sizing, the URLs screen), **shell** (13 findings), **issues** (the five partly done, the 1280 × 720
+   scroll), **engine** (its gates at head).
+3. **Merge** into an integration branch off `ui/step-3`, in this order: data, issues, fix as code, shell, simple (with
+   its report), engine. Expect conflicts in `app/src/ui/Url.tsx` (data's `a57d5990` and issues' `4b38b12b` both add
+   `openUrl` / `openHint`, to the same agreed shape: keep data's), `app/src/styles/components.css` and `tokens.css`
+   (appended blocks: keep all), `IssueCatalog.cs`, and the `Shared:` commits each state file lists. Capture
+   `app/src/test/simple/engine-checks.json` once from the merged sidecar instead of merging it by hand. Then mount
+   `HowToFix` in the Issues pane as `fix-lane.md` says.
+4. **The whole-suite gates on the merge**, since no lane ran them: `verify-engine.sh` (bench and readbench),
+   `verify-app.sh`, `e2e:filled`, `tauri build --no-bundle`, `smoke:shell`; Linux in Docker if `src-tauri` changed.
+5. **Look at it as the owner**: drive the merged app at 2560 × 1380 and 1280 × 720 on the crawl copies
+   (`.claude/worktrees/_handoff/2026-11-19/crawls/`, driver in `docs/handoff/2026-11-19/tools/`), redo the owner's 404
+   task and each audit's tasks with click counts, in both modes. Fix what still fails `fix-common.md`'s rules.
+6. Merge into `ui/step-3`, update this section, a new gallery shot **at the owner's window size**, the installer, and
+   upgrade the owner's install only while the app is closed. Never push.
+
+*Left for the owner to decide (features, not UX fixes, so not in this round):* URL include and exclude patterns,
+JavaScript rendering, a URL-list crawl mode (all three are step 4 of the plan and were asked about on 2026-11-19: the
+old app's ListMode and CustomExtraction plugins and its browser rendering are the only parts not yet carried over); a
+per-URL new/gone comparison between crawls; a "worst pages" list in Simple. Also open: whether `image-legacy-format`
+should pass an image whose `<picture>` offers a modern source (`fix-lane.md`, "Found on the way").
+
+Still waiting from before this round: the owner's walkthrough below (the Jitsunami signature), and the release.
+
 **Step 3b, under way since 2026-11-17 (session `a539aa23`).** The owner asked for step 3b and, with it, a UX audit
 done as the site owner ("For every single view / UI it must be actually useful … easy to scan, understand and action"),
 plus a check that every setting of the old app is here. Every brief, finding and the orchestrator's checkpoint are in
