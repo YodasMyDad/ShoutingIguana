@@ -1,9 +1,9 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { RotateCcw } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { api } from '../../../api/client';
 import { isProblem } from '../../../api/errors';
-import { queryKeys } from '../../../api/queries';
+import { libraryQuery, queryKeys } from '../../../api/queries';
 import type { AnalysisLimit, AnalysisSettings } from '../../../api/types';
 import { announce } from '../../../feedback/announce';
 import { ErrorState } from '../../../feedback/ErrorState';
@@ -12,12 +12,18 @@ import { Skeleton } from '../../../feedback/Skeleton';
 import { useDelayedLoading } from '../../../feedback/useDelayedLoading';
 import { Button } from '../../../ui/Button';
 import { Callout } from '../../../ui/Callout';
+import { formatCount } from '../../../lib/format';
 import { TextField } from '../../../ui/TextField';
+import { TextLink } from '../../../ui/TextLink';
 import {
   changeOf,
   ANALYSIS_SETTINGS_KEY,
   charactersHint,
+  convertedError,
   draftOf,
+  groupedLimits,
+  isConverted,
+  limitDescription,
   limitName,
   rangeWords,
   sameAsSaved,
@@ -49,6 +55,7 @@ export function Section() {
   const loading = useDelayedLoading(read.isPending);
   return (
     <SectionPage
+      wide
       title="Analysis"
       purpose="The limits the checks judge by: a title wider than this is too long. A change applies to the next analysis of any crawl, and crawls analysed with other limits read as out of date until they’re analysed again."
     >
@@ -86,7 +93,7 @@ export function LimitsForm({
   const [state, setState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const limits = settings.limits;
   const ids = limits.map((limit) => limit.id);
-  const key = JSON.stringify(changeOf(draft));
+  const key = JSON.stringify(changeOf(draft, limits));
   const unchanged = sameAsSaved(draft, limits);
   // The draft as it is now, for a save's answer that arrives after more typing: it isn't news of what's shown.
   const draftKey = useRef(key);
@@ -105,7 +112,7 @@ export function LimitsForm({
   const save = async (values: LimitDraft, saving: string) => {
     setState('saving');
     try {
-      const next = await api.saveAnalysisSettings(changeOf(values));
+      const next = await api.saveAnalysisSettings(changeOf(values, limits));
       // What the engine keeps now, whatever has been typed since: the next save is of the newer draft.
       took(next);
       if (draftKey.current !== saving) return;
@@ -176,7 +183,9 @@ export function LimitsForm({
   // Every error is beside its limit. One on a limit the user didn't change (the engine keys "the widest must be more
   // than the narrowest" on the widest, whichever was changed) is said above the form too, named, as that's where
   // the eye is.
-  const shownError = (limit: AnalysisLimit) => byLimit[limit.id] ?? null;
+  // A size's or a likeness's refusal is the engine's in bytes or bits: the field gives its range in the unit typed.
+  const shownError = (limit: AnalysisLimit) =>
+    byLimit[limit.id] ? (convertedError(limit) ?? byLimit[limit.id] ?? null) : null;
   const elsewhere = Object.entries(byLimit)
     .filter(([id]) => !touched.has(id))
     .map(([id, message]) => `${limitName(id)}: ${message}`);
@@ -192,22 +201,26 @@ export function LimitsForm({
           ))}
         </Callout>
       ) : null}
-      <div className="flex flex-col gap-5">
-        {limits.map((limit) => (
-          <LimitField
-            key={limit.id}
-            limit={limit}
-            value={draft[limit.id] ?? ''}
-            error={shownError(limit)}
-            onChange={(text) => {
-              setDraft((current) => ({ ...current, [limit.id]: text }));
-              setTouched((current) => new Set(current).add(limit.id));
-              setState('idle');
-            }}
-            onReset={() => void reset([limit.id])}
-          />
-        ))}
-      </div>
+      <OutOfDateCrawls />
+      {/* By what they judge, each group a card, its limits in two columns once the window is wide (H-15). */}
+      {groupedLimits(limits).map((group) => (
+        <LimitGroup key={group.title} title={group.title}>
+          {group.limits.map((limit) => (
+            <LimitField
+              key={limit.id}
+              limit={limit}
+              value={draft[limit.id] ?? ''}
+              error={shownError(limit)}
+              onChange={(text) => {
+                setDraft((current) => ({ ...current, [limit.id]: text }));
+                setTouched((current) => new Set(current).add(limit.id));
+                setState('idle');
+              }}
+              onReset={() => void reset([limit.id])}
+            />
+          ))}
+        </LimitGroup>
+      ))}
       <div className="flex flex-wrap items-center gap-3">
         <Button icon={RotateCcw} disabled={settings.isDefault && unchanged} onClick={() => void reset(null)}>
           Put back every limit
@@ -227,6 +240,45 @@ export function LimitsForm({
   );
 }
 
+/** A group of limits: a card with its name, the limits in two columns in a wide window. */
+function LimitGroup({ title, children }: { title: string; children: ReactNode }) {
+  const id = useId();
+  return (
+    <section aria-labelledby={id} className="si-card flex flex-col gap-5 p-5">
+      <h2 id={id} className="text-14 font-semibold text-text">
+        {title}
+      </h2>
+      <div className="grid grid-cols-1 items-start gap-x-10 gap-y-5 wide:grid-cols-2">{children}</div>
+    </section>
+  );
+}
+
+/**
+ * What a change here did to the library (H-15: "after a change the page says nothing about what went out of date"):
+ * how many crawls now read as out of date, and the way to them. Nothing while none does.
+ */
+function OutOfDateCrawls() {
+  const library = useQuery(libraryQuery()).data;
+  const count = (library ?? []).filter((item) => item.outOfDate && !item.missing).length;
+  if (count === 0) return null;
+  return (
+    <Callout
+      tone="info"
+      title={
+        count === 1
+          ? '1 crawl was analysed with other limits, and is out of date'
+          : `${formatCount(count)} crawls were analysed with other limits, and are out of date`
+      }
+    >
+      {count === 1 ? 'It keeps' : 'They keep'} the issues {count === 1 ? 'it' : 'they'} had until analysed again, which
+      takes no new crawl.{' '}
+      <TextLink variant="inline" to="/" search={{}}>
+        Analyse {count === 1 ? 'it' : 'them'} again from Home
+      </TextLink>
+    </Callout>
+  );
+}
+
 function LimitField({
   limit,
   value,
@@ -241,15 +293,17 @@ function LimitField({
   onReset: () => void;
 }) {
   const changed = limit.value !== limit.default;
-  // A width says the characters it holds, from what's typed.
-  const hint = charactersHint(limit, value);
+  // A width says the characters it holds, from what's typed: not while it's the engine's own, which the range's
+  // words say already (H-15: "about 20 characters" twice under one field).
+  const typed = charactersHint(limit, value);
+  const hint = typed !== null && Number(value.trim().replace(/,/g, '')) !== limit.default ? typed : null;
   return (
     <div className="flex flex-wrap items-end gap-3">
       <TextField
         label={limitName(limit.id)}
         description={
           <>
-            {limit.description} {rangeWords(limit)}
+            {limitDescription(limit)} {rangeWords(limit)}
             {hint ? (
               <>
                 {' '}
@@ -258,12 +312,12 @@ function LimitField({
             ) : null}
           </>
         }
-        inputMode="numeric"
+        inputMode={isConverted(limit.unit) ? 'decimal' : 'numeric'}
         value={value}
         error={error}
         end={<span className="text-12 text-text-muted">{unitWords(limit.unit)}</span>}
         onChange={(event) => onChange(event.target.value)}
-        className="w-(--limit-field-width) max-w-full"
+        className="w-(--limit-field-width) max-w-full min-w-0 flex-1"
       />
       {changed ? (
         <Button size="sm" variant="ghost" icon={RotateCcw} onClick={onReset}>

@@ -17,7 +17,8 @@ export function SettingsScreen() {
   const Current = current?.Section;
 
   return (
-    <div className="flex gap-8 px-(--page-gutter) py-6">
+    // The list and the section, together, in the middle of the pane: each section is a form's measure wide (H-24).
+    <div className="mx-auto flex w-fit max-w-full gap-8 px-(--page-gutter) py-6">
       <nav aria-label="Settings" className="flex w-(--settings-nav-width) shrink-0 flex-col gap-4">
         <ul className="flex flex-col gap-0.5">
           {SETTINGS_SECTIONS.map((entry) => (
@@ -34,7 +35,7 @@ export function SettingsScreen() {
           ))}
         </ul>
       </nav>
-      <div className="min-w-0 flex-1">{Current ? <Current /> : null}</div>
+      <div className="min-w-0">{Current ? <Current /> : null}</div>
     </div>
   );
 }
