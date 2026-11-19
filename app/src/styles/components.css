@@ -3840,6 +3840,10 @@
     font-weight: var(--font-weight-semibold);
   }
 
+  .si-code-example__where {
+    color: var(--color-text-secondary);
+  }
+
   .si-code-example__end {
     display: flex;
     flex: none;
