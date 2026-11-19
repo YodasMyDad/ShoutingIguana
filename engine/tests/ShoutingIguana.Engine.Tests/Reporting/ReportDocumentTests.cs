@@ -73,18 +73,27 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
             [Of(IssueSeverity.Error), Of(IssueSeverity.Warning), Of(IssueSeverity.Notice), results.Counts.Count(count => count.Value == 0), IssueCatalog.All.Count - results.Counts.Count],
             document.QuerySelectorAll(".tally b").Select(count => int.Parse(count.TextContent)));
 
-        // Every check that found something has its section, numbered in the order to fix them: its plain words, with its
-        // technical name beside them, how much of the site it is on and what it costs the score.
+        // The problems a fix of another of their severity clears entirely, as the analysis has them, are the two GridListing
+        // folds under the 4xx: they're one job with it, and the report lists them so.
+        var causes = IssueCauseReader.Read(crawl.Path)!.Checks;
+        Assert.Equal(
+            GridListing.FOLDED.Select(id => (GridListing.JOB, id)),
+            order.SelectMany(id => causes[id].Clears.Where(cleared => cleared.All && order.Contains(cleared.CheckId)
+                    && IssueCatalog.Find(cleared.CheckId)!.Severity == IssueCatalog.Find(id)!.Severity).Select(cleared => (id, cleared.CheckId))));
+        var inReport = GridListing.Listed(order);
+
+        // Every check that found something has its section, the jobs numbered in the order to fix them, each followed by
+        // what's folded under it: its plain words, with its technical name beside them, how much of the site it is on and
+        // what it costs the score.
         var problems = document.QuerySelectorAll("article.problem").ToList();
         Assert.Equal(order.Count, problems.Count);
         Assert.Contains(order, id => IssueCatalog.Find(id)!.ReportedOnce);
-        for (var index = 0; index < order.Count; index++)
+        for (var index = 0; index < inReport.Count; index++)
         {
-            var check = IssueCatalog.Find(order[index])!;
+            var check = IssueCatalog.Find(inReport[index].Id)!;
             var plain = PlainLimits.Fill(check.Plain!, settings);
-            var line = score.Lines[index];
-            Assert.Equal(check.Id, line.CheckId);
-            Assert.Equal($"{index + 1}. {plain.Title}", problems[index].QuerySelector("h3 > span")!.TextContent);
+            var line = score.Lines.Single(each => each.CheckId == check.Id);
+            Assert.Equal(inReport[index].Folded ? plain.Title : $"{inReport[index].Number}. {plain.Title}", problems[index].QuerySelector("h3 > span")!.TextContent);
             Assert.Equal($"{check.Title} · {check.Severity}", problems[index].QuerySelector(".problem__tech")!.TextContent);
 
             // A check reported once for the whole site says so: "1 of 240 pages" would say the fault is one page's.
@@ -112,7 +121,7 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
                 problems[index].QuerySelectorAll(".examples tbody tr").Select(row => row.QuerySelector("td .mono a")!.GetAttribute("href")));
             if (results.Counts[check.Id] > most)
             {
-                Assert.Equal($"And {results.Counts[check.Id] - most:N0} more: the full list is on sheet {index + 1} of the spreadsheet.", problems[index].QuerySelector(".more")!.TextContent);
+                Assert.Equal($"And {results.Counts[check.Id] - most:N0} more: the full list is on sheet {inReport[index].Sheet} of the spreadsheet.", problems[index].QuerySelector(".more")!.TextContent);
             }
         }
 
@@ -137,15 +146,11 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
     }
 
     /// <summary>
-    /// The score is the one the analysis stored, line for line: the report works none out. A file whose stored score
-    /// says another number has a report that says that number.
-    /// </summary>
-    /// <summary>Discovery decision 2: the checks the user hid are left out of the report's lists and counts; the score stays.</summary>
-    /// <summary>
     /// Gallery 7's view 20: Simple's Summary and What to fix fold a problem that a fix of another clears entirely (the
-    /// analysis's clears, all) under that one, in the same severity, as one job. So does the report: "Fix these first"
-    /// lists the folded one under its job, not as a job of its own, and counts the jobs; What to fix says which problem
-    /// it's fixed along with. Its number stays its own: the workbook's sheet carries it.
+    /// analysis's clears, all) under that one, in the same severity, as one job, numbering only the jobs. So does the
+    /// report: in "Fix these first" and in What to fix the folded one has no number and follows its job, "Fixed along
+    /// with the problem above", the jobs are numbered 1 to 4 and "Fixing these four" counts them. Its full list is on its
+    /// job's sheet's number with a letter, "2a", in the workbook as in the report.
     /// </summary>
     [Fact]
     public void AProblemAFixOfAnotherClearsEntirelyIsOneJobWithIt()
@@ -163,18 +168,23 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
         var results = IssueReader.ReadResults(copy)!;
         var score = results.Score!;
         var order = results.FixFirst;
-        var errorFolded = IssueCauseReader.Read(copy)!.Checks["internal-client-error"].Clears.Where(cleared => cleared.All).Select(cleared => cleared.CheckId).ToList();
-        Assert.Contains("broken-internal-links", errorFolded);
+        // What restoring the 4xx clears entirely, among the serious problems: the broken links, and others of the synthetic site.
+        var folded = IssueCauseReader.Read(copy)!.Checks["internal-client-error"].Clears
+            .Where(cleared => cleared.All && order.Contains(cleared.CheckId) && IssueCatalog.Find(cleared.CheckId)!.Severity == IssueSeverity.Error)
+            .Select(cleared => cleared.CheckId).ToList();
+        Assert.Equal(["broken-internal-links", "canonical-broken", "hreflang-broken-target"], folded);
         Assert.Equal(["no-https", "internal-client-error", "broken-internal-links", "redirect-loop", "redirect-broken"], order.Take(5));
         Assert.Equal(score.IfFixed.CheckIds, order.Take(5));
+        Assert.DoesNotContain(order, id => id != "internal-client-error" && IssueCatalog.Find(id)!.Clears.Count > 0
+            && IssueCauseReader.Read(copy)!.Checks[id].Clears.Any(cleared => cleared.All && order.Contains(cleared.CheckId) && IssueCatalog.Find(cleared.CheckId)!.Severity == IssueCatalog.Find(id)!.Severity));
 
         var document = Parse(ReportExport.Build(copy, settings: SETTINGS));
         string Title(string id) => PlainLimits.Fill(IssueCatalog.Find(id)!.Plain!, results.Analysis.Settings!).Title;
 
-        // Fix these first: the engine's five, four jobs, the broken links under the 4xx they're fixed along with.
+        // Fix these first: the engine's five as four jobs numbered 1 to 4, the broken links under the 4xx, unnumbered.
         var first = document.QuerySelectorAll("ol.first > li").ToList();
         Assert.Equal(order.Take(5).Select(Title), first.Select(item => item.QuerySelector(".first__title")!.TextContent));
-        Assert.Equal(["1", "2", "3", "4", "5"], first.Select(item => item.QuerySelector(".first__n")!.TextContent));
+        Assert.Equal(["1", "2", "", "3", "4"], first.Select(item => item.QuerySelector(".first__n")!.TextContent));
         Assert.Equal([false, false, true, false, false], first.Select(item => item.ClassList.Contains("first__also")));
         Assert.Equal("Fixed along with the problem above", first[2].QuerySelector(".first__along")!.TextContent);
         Assert.Empty(first[2].QuerySelectorAll("svg"));
@@ -182,17 +192,58 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
             score.IfFixed.Value == score.Value ? $"Fixing these four leaves the score at {score.Value} " : $"Fixing these four takes the score from {score.Value} to {score.IfFixed.Value}. ",
             document.QuerySelector(".first__foot")!.TextContent, StringComparison.Ordinal);
 
-        // What to fix: each problem a fix of another of its severity clears entirely says which, by its number; no other does.
+        // What to fix: the jobs numbered from 1 in the order to fix them, each followed by what's folded under it, unnumbered.
+        List<string> listed = [.. order.Where(id => !folded.Contains(id))];
+        listed.InsertRange(listed.IndexOf("internal-client-error") + 1, folded);
         var problems = document.QuerySelectorAll("article.problem").ToList();
-        var along = problems.Select(problem => problem.QuerySelector(".problem__along")?.TextContent).ToList();
-        var foldedErrors = errorFolded.Where(id => order.Contains(id) && IssueCatalog.Find(id)!.Severity == IssueSeverity.Error).ToList();
-        Assert.True(foldedErrors.Count >= 2, string.Join(", ", foldedErrors));
-        for (var index = 0; index < order.Count; index++)
+        Assert.Equal(listed.Count, problems.Count);
+        var number = 0;
+        List<string> sheets = [];
+        for (var index = 0; index < listed.Count; index++)
         {
-            Assert.Equal(foldedErrors.Contains(order[index]) ? $"Fixed along with problem 2, “{Title("internal-client-error")}”." : null, along[index]);
+            var isFolded = folded.Contains(listed[index]);
+            number += isFolded ? 0 : 1;
+            var sheet = isFolded ? $"2{(char)('a' + folded.IndexOf(listed[index]))}" : $"{number}";
+            sheets.Add(sheet);
+            Assert.Equal(isFolded ? Title(listed[index]) : $"{number}. {Title(listed[index])}", problems[index].QuerySelector("h3 > span")!.TextContent);
+            Assert.Equal(isFolded, problems[index].ClassList.Contains("problem--along"));
+            Assert.Equal(isFolded ? "Fixed along with the problem above." : null, problems[index].QuerySelector(".problem__along")?.TextContent);
+            if (problems[index].QuerySelector(".more") is { } more)
+            {
+                Assert.EndsWith($" on sheet {sheet} of the spreadsheet.", more.TextContent, StringComparison.Ordinal);
+            }
         }
+
+        Assert.Equal(["1", "2", "2a", "2b", "2c", "3"], sheets.Take(6));
+
+        // The workbook's sheets are the report's, in its order and by its labels; the summary numbers the jobs only.
+        var path = Path.Combine(_folder, "jobs.xlsx");
+        CrawlExporter.Export(copy, new ExportRequest { Kind = ExportKind.Workbook, Format = ExportFormat.Xlsx }, path, SETTINGS);
+        var file = XlsxFile.Read(path);
+        Assert.Equal(listed.Count + 1, file.Sheets.Count);
+        for (var index = 0; index < listed.Count; index++)
+        {
+            Assert.StartsWith($"{sheets[index]} ", file.Sheets[index + 1].Name, StringComparison.Ordinal);
+        }
+
+        var summary = file.Sheets[0].Values;
+        var header = summary.FindIndex(row => (row[0] as string) == "Number");
+        Assert.Equal(
+            listed.Select((id, index) => folded.Contains(id) ? null : (object?)double.Parse(sheets[index], System.Globalization.CultureInfo.InvariantCulture)),
+            summary.Skip(header + 1).Take(listed.Count).Select(row => row[0]));
+        Assert.Equal(file.Sheets.Skip(1).Select(sheet => (object?)sheet.Name), summary.Skip(header + 1).Take(listed.Count).Select(row => row[1]));
+
+        // One check's file of its own is named as its sheet in the workbook.
+        var one = Path.Combine(_folder, "one.xlsx");
+        CrawlExporter.Export(copy, new ExportRequest { Kind = ExportKind.Check, CheckId = "canonical-broken", Format = ExportFormat.Xlsx }, one, SETTINGS);
+        Assert.Equal(file.Sheets[listed.IndexOf("canonical-broken") + 1].Name, Assert.Single(XlsxFile.Read(one).Sheets).Name);
     }
 
+    /// <summary>
+    /// The score is the one the analysis stored, line for line: the report works none out. A file whose stored score
+    /// says another number has a report that says that number.
+    /// </summary>
+    /// <summary>Discovery decision 2: the checks the user hid are left out of the report's lists and counts; the score stays.</summary>
     [Fact]
     public void TheReportLeavesOutTheChecksTheUserHidAndSaysSo()
     {
@@ -490,15 +541,15 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
     {
         var document = Parse(ReportExport.Build(crawl.Path, new ReportOptions { Examples = 2, LookExamples = 0 }, SETTINGS));
         var results = IssueReader.ReadResults(crawl.Path)!;
-        var order = ReportSources.FixFirst(results);
+        var listed = GridListing.Listed(ReportSources.FixFirst(results));
         var problems = document.QuerySelectorAll("article.problem").ToList();
-        for (var index = 0; index < order.Count; index++)
+        for (var index = 0; index < listed.Count; index++)
         {
-            var notice = IssueCatalog.Find(order[index])!.Severity == IssueSeverity.Notice;
-            Assert.Equal(notice ? 0 : (int)Math.Min(2, results.Counts[order[index]]), problems[index].QuerySelectorAll(".examples tbody tr").Length);
+            var notice = IssueCatalog.Find(listed[index].Id)!.Severity == IssueSeverity.Notice;
+            Assert.Equal(notice ? 0 : (int)Math.Min(2, results.Counts[listed[index].Id]), problems[index].QuerySelectorAll(".examples tbody tr").Length);
             if (notice)
             {
-                Assert.Equal($"The full list is on sheet {index + 1} of the spreadsheet.", problems[index].QuerySelector(".more")!.TextContent);
+                Assert.Equal($"The full list is on sheet {listed[index].Sheet} of the spreadsheet.", problems[index].QuerySelector(".more")!.TextContent);
             }
         }
 
@@ -921,9 +972,10 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
         Assert.Equal(order.Take(5).Select(id => IssueCatalog.Find(id)!.Plain!.Title), document.QuerySelectorAll("ol.first .first__title").Select(title => title.TextContent));
         Assert.Equal("Each is explained under the same number in “What to fix”, with the first pages it’s on.", document.QuerySelector(".first__foot")!.TextContent);
         var lines = document.QuerySelectorAll(".problem__meta b").Select(line => line.TextContent).ToList();
-        for (var index = 0; index < order.Count; index++)
+        var listed = GridListing.Listed(order);
+        for (var index = 0; index < listed.Count; index++)
         {
-            var check = IssueCatalog.Find(order[index])!;
+            var check = IssueCatalog.Find(listed[index].Id)!;
             Assert.Equal(
                 check.ReportedOnce ? "Checked once, for the whole site" : ReportWords.Plural(results.Counts[check.Id], check.Subject == IssueSubject.Page ? "page" : "address", check.Subject == IssueSubject.Page ? "pages" : "addresses"),
                 lines[index]);

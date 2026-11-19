@@ -92,6 +92,9 @@ internal static class ReportReader
             });
         }
 
+        // Numbered as jobs, each followed by the problems a fix of it clears entirely, which have no number of their own.
+        problems = ReportJobs.Listed(problems);
+
         // Whatever was read above is one analysis's only if that analysis is still the last.
         if (IssueReader.ReadAnalysis(crawlPath)?.AnalyzedAt != results.Analysis.AnalyzedAt)
         {

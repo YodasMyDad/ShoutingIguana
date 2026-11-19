@@ -681,7 +681,8 @@ font, light only. It prints to A4 and Letter from the system print dialog, which
 2. **Summary.** The score as a ring, its word, the sentence, what it covers; the five counts.
 3. **Fix these first.** Up to five: mark, plain title, count and share. "Fixing these five takes the score from 85
    to 98." Related problems are one job, as on the Summary: one a fix of another among the five clears entirely is
-   listed under it, "Fixed along with the problem above", keeping its number, and "these four" counts the jobs.
+   listed under it, indented and unnumbered, "Fixed along with the problem above"; only the jobs are numbered, 1 to
+   4, and "these four" counts them.
 4. **How the score is worked out.** The two sentences, the line for each check that cost points, the sum, the
    bands in one line, the version.
 5. **What to fix**, from a new page. Every check that found something, in three groups. For each: the plain title,
@@ -690,8 +691,9 @@ font, light only. It prints to A4 and Letter from the system print dialog, which
    for a template fault; then its first pages, with what was found on each, and "And 56 more: the full list is on
    sheet 3 of the spreadsheet". Problems are numbered in "Fix first" order, 1 to 19 on the garden crawl, so the list
    on page 1, the section here and the workbook's sheet all carry one number.
-   A problem a fix of another of its severity clears entirely says so under its count: "Fixed along with problem 2,
-   “Pages or files that can’t be found”."
+   Only jobs are numbered: a problem a fix of another of its severity clears entirely follows that one, indented and
+   unnumbered, and says "Fixed along with the problem above." Its full list is on its job's sheet number with a
+   letter, "sheet 2a".
 6. **What couldn't be checked**, with each reason and what would let the check run.
 7. **What was checked and found nothing wrong**: every passed check's good-news line, by category.
 8. **About this check.** Where it started, when, how long, what was read, how many pages can appear in search,
@@ -730,7 +732,9 @@ The full lists go in an Excel workbook beside the report, which the export work 
 score, the counts, every check with its severity, plain and technical titles, count and share), then a sheet a
 check that found something, with every URL, its title, its detail and the other URL involved. A sheet is named by
 the problem's number in the report and the start of its plain title ("3 Large images that slow pages…"), as Excel
-allows 31 characters, and the summary sheet lists each number with its full title. Header rows are frozen and
+allows 31 characters, and the summary sheet lists each number with its full title. A problem folded under a job has
+no number of its own: its sheet follows its job's and is named by the job's number with a letter ("2a Links that
+lead…"), and the summary leaves its Number empty. One check's file of its own is named as its sheet is. Header rows are frozen and
 formatted.
 
 ### The Report screen
