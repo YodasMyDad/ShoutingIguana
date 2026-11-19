@@ -747,3 +747,11 @@
     --highlight-accent: none;
   }
 }
+
+/*
+  The UX round of 2026-11-19, lane ui/ux-fix: one block, appended whole, so a merge with the other lanes is an addition.
+*/
+:root {
+  /* A check's explanation where there is room: what is wrong and why it matters, then how to fix it with its code. */
+  --how-to-fix-columns: minmax(0, 46ch) minmax(0, 1fr);
+}

@@ -130,7 +130,8 @@
       ],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "internal-server-error",
@@ -175,7 +176,8 @@
       ],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "internal-unreachable",
@@ -219,7 +221,8 @@
       ],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "internal-blocked",
@@ -255,7 +258,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "content-type-mismatch",
@@ -290,7 +294,25 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "httpHeader",
+          "after": "Content-Type: text/javascript; charset=utf-8",
+          "before": "Content-Type: text/plain",
+          "when": "The file is a script (.js)",
+          "where": "in the server's or CDN's response for the file",
+          "case": "script"
+        },
+        {
+          "language": "httpHeader",
+          "after": "Content-Type: text/css; charset=utf-8",
+          "before": "Content-Type: text/plain",
+          "when": "The file is a stylesheet (.css)",
+          "where": "in the server's or CDN's response for the file",
+          "case": "stylesheet"
+        }
+      ]
     },
     {
       "id": "soft-404",
@@ -326,7 +348,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "redirect-chain",
@@ -361,7 +384,8 @@
       "clears": ["links-to-redirects", "pagination-broken"],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "redirect-loop",
@@ -397,7 +421,8 @@
       "clears": ["broken-internal-links", "canonical-broken"],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "redirect-broken",
@@ -439,7 +464,8 @@
       ],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "redirect-temporary",
@@ -476,7 +502,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "redirect-temporary-cached",
@@ -510,7 +537,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "httpHeader",
+          "after": "Cache-Control: no-store",
+          "before": "Cache-Control: max-age=604800",
+          "when": "The redirect really is temporary",
+          "where": "in the redirect's response headers",
+          "case": null
+        }
+      ]
     },
     {
       "id": "redirect-downgrade",
@@ -546,7 +583,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "meta-refresh",
@@ -583,7 +621,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "broken-internal-links",
@@ -619,7 +658,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "broken-external-links",
@@ -656,7 +696,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "links-to-redirects",
@@ -693,7 +734,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "internal-nofollow-links",
@@ -730,7 +772,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<a href=\"/delivery/\">Delivery</a>",
+          "before": "<a href=\"/delivery/\" rel=\"nofollow\">Delivery</a>",
+          "when": null,
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "empty-anchor-text",
@@ -738,7 +790,7 @@
       "severity": "notice",
       "title": "Internal links without anchor text",
       "description": "The page has internal links with nothing to read: no text, no alt text on an image inside, and no aria-label, aria-labelledby or title. A link to the page itself counts too, as a logo on the home page is; links written as a fragment (#, #top) and links in the <head>, such as rel=\"amphtml\", don't.",
-      "fix": "Add visible text, alt text on the image inside the link, or an aria-label on icon links. For a logo that links home, alt text with the site name is enough.",
+      "fix": "Add visible text, alt text on the image inside the link, or an aria-label on icon links. For a logo that links home, the site name is enough: as alt text on an <img>, or for an inline SVG as an aria-label on the link or a <title> inside the SVG.",
       "why": "Screen readers announce these as just \"link\" or read out the URL, so their users can't tell where they go. Google uses anchor text to understand the page a link points to, and the alt text of a linked image as its anchor text, so an empty link tells it nothing. Icon-only links in a template, such as a logo, a basket or a search icon, usually account for most of them.",
       "learnMore": "https://developers.google.com/search/docs/crawling-indexing/links-crawlable#anchor-text-placement",
       "grouping": "relatedUrl",
@@ -767,7 +819,33 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<a href=\"/\" aria-label=\"Example Furniture\"><svg viewBox=\"0 0 120 32\">…</svg></a>",
+          "before": "<a href=\"/\"><svg viewBox=\"0 0 120 32\">…</svg></a>",
+          "when": "The link wraps an icon or an inline SVG",
+          "where": null,
+          "case": "icon-link"
+        },
+        {
+          "language": "html",
+          "after": "<a href=\"/\"><img src=\"/img/logo.png\" alt=\"Example Furniture\"></a>",
+          "before": "<a href=\"/\"><img src=\"/img/logo.png\" alt=\"\"></a>",
+          "when": "The link wraps an image",
+          "where": null,
+          "case": "image-link"
+        },
+        {
+          "language": "html",
+          "after": "<a href=\"/sale/\">Sale</a>",
+          "before": "<a href=\"/sale/\"></a>",
+          "when": "The link has nothing inside",
+          "where": null,
+          "case": "empty-link"
+        }
+      ]
     },
     {
       "id": "broken-fragment-links",
@@ -804,7 +882,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<h2 id=\"delivery-times\">Delivery times</h2>",
+          "before": "<h2>Delivery times</h2>",
+          "when": "The link is right and the section has lost its id",
+          "where": "on the page a link to #delivery-times leads to",
+          "case": null
+        }
+      ]
     },
     {
       "id": "orphan-page",
@@ -840,7 +928,8 @@
       "clears": [],
       "recheck": [],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "uncrawlable-links",
@@ -875,7 +964,33 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<a href=\"/sale/\">Sale</a>",
+          "before": "<a onclick=\"location.href='/sale/'\">Sale</a>",
+          "when": "The link navigates only through onclick",
+          "where": null,
+          "case": "onclick"
+        },
+        {
+          "language": "html",
+          "after": "<a href=\"/sale/\">Sale</a>",
+          "before": "<a href=\"javascript:window.location='/sale/'\">Sale</a>",
+          "when": "The href is a javascript: URL",
+          "where": null,
+          "case": "javascript-href"
+        },
+        {
+          "language": "html",
+          "after": "<a href=\"/sale/\">Sale</a>",
+          "before": "<span href=\"/sale/\">Sale</span>",
+          "when": "Another element has the href",
+          "where": null,
+          "case": "other-element"
+        }
+      ]
     },
     {
       "id": "broken-resources",
@@ -911,7 +1026,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "links-to-localhost",
@@ -946,7 +1062,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<a href=\"https://www.example.com/contact/\">Contact</a>",
+          "before": "<a href=\"http://localhost:3000/contact/\">Contact</a>",
+          "when": null,
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "few-internal-outlinks",
@@ -981,7 +1107,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "generic-anchor-text",
@@ -1016,7 +1143,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "non-indexable-inlinks-only",
@@ -1052,7 +1180,8 @@
       "clears": [],
       "recheck": [],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "deep-page",
@@ -1087,7 +1216,8 @@
       "clears": [],
       "recheck": [],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "too-many-links",
@@ -1122,7 +1252,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "slow-external-links",
@@ -1157,7 +1288,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "pagination-not-linked",
@@ -1191,7 +1323,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<a href=\"/blog/page/3/\">Next</a>",
+          "before": null,
+          "when": null,
+          "where": "in the page's <body>, under the list",
+          "case": null
+        }
+      ]
     },
     {
       "id": "pagination-broken",
@@ -1224,7 +1366,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "pagination-to-non-indexable",
@@ -1258,7 +1401,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "pagination-sequence-error",
@@ -1293,7 +1437,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "noindex-page",
@@ -1330,7 +1475,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<meta name=\"robots\" content=\"index, follow\">",
+          "before": "<meta name=\"robots\" content=\"noindex, follow\">",
+          "when": "The page should appear in search, and a robots meta tag holds the noindex",
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "nofollow-page",
@@ -1366,7 +1521,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<meta name=\"robots\" content=\"index, follow\">",
+          "before": "<meta name=\"robots\" content=\"index, nofollow\">",
+          "when": "A robots meta tag holds the nofollow",
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "blocked-by-robots",
@@ -1404,7 +1569,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "robotsTxt",
+          "after": "User-agent: *\nDisallow: /cart/",
+          "before": "User-agent: *\nDisallow: /blog/\nDisallow: /cart/",
+          "when": "The URL should be crawled",
+          "where": "in robots.txt, at the rule the detail names",
+          "case": null
+        }
+      ]
     },
     {
       "id": "snippet-blocked",
@@ -1440,7 +1615,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<meta name=\"robots\" content=\"index, follow\">",
+          "before": "<meta name=\"robots\" content=\"index, follow, nosnippet\">",
+          "when": "The directive isn't intended, and a robots meta tag holds it",
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "robots-txt-unreachable",
@@ -1477,7 +1662,8 @@
       "clears": [],
       "recheck": ["robotsTxt"],
       "about": "robotsTxt",
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "robots-txt-unreachable-other-origin",
@@ -1513,7 +1699,8 @@
       "clears": [],
       "recheck": ["robotsTxt"],
       "about": "robotsTxt",
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "robots-txt-missing",
@@ -1551,7 +1738,17 @@
       "clears": [],
       "recheck": ["robotsTxt"],
       "about": "robotsTxt",
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "robotsTxt",
+          "after": "User-agent: *\nDisallow:\n\nSitemap: https://www.example.com/sitemap.xml",
+          "before": null,
+          "when": null,
+          "where": "in a text file at the origin's root, https://www.example.com/robots.txt",
+          "case": null
+        }
+      ]
     },
     {
       "id": "site-hidden-from-search",
@@ -1589,7 +1786,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "robots-directives-conflict",
@@ -1624,7 +1822,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "noindex-near-home",
@@ -1660,7 +1859,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "unavailable-after-passed",
@@ -1696,7 +1896,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "media-preview-blocked",
@@ -1731,7 +1932,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<meta name=\"robots\" content=\"max-image-preview:large\">",
+          "before": "<meta name=\"robots\" content=\"max-image-preview:none\">",
+          "when": "The page's pictures should appear in search",
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "translation-blocked",
@@ -1766,7 +1977,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "indexifembedded-without-noindex",
@@ -1801,7 +2013,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<meta name=\"robots\" content=\"noindex, indexifembedded\">",
+          "before": "<meta name=\"robots\" content=\"indexifembedded\">",
+          "when": "The content should be indexed only where other pages embed it",
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "canonicalised-page",
@@ -1837,7 +2059,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "canonical-missing",
@@ -1872,7 +2095,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<link rel=\"canonical\" href=\"https://www.example.com/oak-dining-tables/\">",
+          "before": null,
+          "when": null,
+          "where": "in the page's <head>, with the page's own full URL",
+          "case": null
+        }
+      ]
     },
     {
       "id": "canonical-multiple",
@@ -1908,7 +2141,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<link rel=\"canonical\" href=\"https://www.example.com/oak-dining-tables/\">",
+          "before": "<link rel=\"canonical\" href=\"https://www.example.com/oak-dining-tables/\">\n<link rel=\"canonical\" href=\"https://www.example.com/tables/\">",
+          "when": null,
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "canonical-broken",
@@ -1944,7 +2187,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "canonical-to-redirect",
@@ -1980,7 +2224,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "canonical-to-non-indexable",
@@ -2016,7 +2261,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "canonical-outside-head",
@@ -2052,7 +2298,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "canonical-relative",
@@ -2088,7 +2335,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<link rel=\"canonical\" href=\"https://www.example.com/oak-dining-tables/\">",
+          "before": "<link rel=\"canonical\" href=\"/oak-dining-tables/\">",
+          "when": null,
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "canonical-invalid",
@@ -2123,7 +2380,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<link rel=\"canonical\" href=\"https://www.example.com/oak-dining-tables/\">",
+          "before": "<link rel=\"canonical\" href=\"\">",
+          "when": null,
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "noindex-with-canonical",
@@ -2159,7 +2426,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "canonical-to-first-page",
@@ -2196,7 +2464,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<link rel=\"canonical\" href=\"https://www.example.com/blog/page/2/\">",
+          "before": "<link rel=\"canonical\" href=\"https://www.example.com/blog/\">",
+          "when": "The later pages' items aren't listed anywhere else",
+          "where": "on page 2 of the series, /blog/page/2/",
+          "case": null
+        }
+      ]
     },
     {
       "id": "canonical-other-domain",
@@ -2232,7 +2510,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "canonical-loop",
@@ -2266,7 +2545,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "canonical-on-redirect",
@@ -2301,7 +2581,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "canonical-fragment",
@@ -2336,7 +2617,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<link rel=\"canonical\" href=\"https://www.example.com/oak-dining-tables/\">",
+          "before": "<link rel=\"canonical\" href=\"https://www.example.com/oak-dining-tables/#reviews\">",
+          "when": null,
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "canonical-invalid-attribute",
@@ -2371,7 +2662,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<link rel=\"canonical\" href=\"https://www.example.com/oak-dining-tables/\">",
+          "before": "<link rel=\"canonical\" href=\"https://www.example.com/oak-dining-tables/\" hreflang=\"en-GB\">",
+          "when": null,
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "canonical-unlinked",
@@ -2405,7 +2706,8 @@
       "clears": [],
       "recheck": [],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "sitemap-non-indexable",
@@ -2442,7 +2744,8 @@
       "clears": [],
       "recheck": ["urls", "sitemaps"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "not-in-sitemap",
@@ -2479,7 +2782,17 @@
       "clears": [],
       "recheck": ["urls", "sitemaps"],
       "about": null,
-      "rowOrder": "fewestLinksFirst"
+      "rowOrder": "fewestLinksFirst",
+      "fixExamples": [
+        {
+          "language": "xml",
+          "after": "<url>\n  <loc>https://www.example.com/oak-dining-tables/</loc>\n</url>",
+          "before": null,
+          "when": null,
+          "where": "in your XML sitemap, inside <urlset>",
+          "case": null
+        }
+      ]
     },
     {
       "id": "sitemap-error",
@@ -2516,7 +2829,8 @@
       "clears": [],
       "recheck": ["sitemaps"],
       "about": "sitemap",
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "sitemap-missing",
@@ -2553,7 +2867,8 @@
       "clears": [],
       "recheck": ["sitemaps"],
       "about": "sitemap",
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "sitemap-url-other-host",
@@ -2590,7 +2905,8 @@
       "clears": [],
       "recheck": ["urls", "sitemaps"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "robots-txt-no-sitemap",
@@ -2625,7 +2941,17 @@
       "clears": [],
       "recheck": ["robotsTxt", "sitemaps"],
       "about": "robotsTxt",
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "robotsTxt",
+          "after": "Sitemap: https://www.example.com/sitemap.xml",
+          "before": null,
+          "when": null,
+          "where": "anywhere in robots.txt",
+          "case": null
+        }
+      ]
     },
     {
       "id": "sitemap-over-limit",
@@ -2660,7 +2986,8 @@
       "clears": [],
       "recheck": ["sitemaps"],
       "about": "sitemap",
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "sitemap-near-limit",
@@ -2695,7 +3022,8 @@
       "clears": [],
       "recheck": ["sitemaps"],
       "about": "sitemap",
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "sitemap-empty",
@@ -2731,7 +3059,8 @@
       "clears": [],
       "recheck": ["sitemaps"],
       "about": "sitemap",
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "sitemap-url-repeated",
@@ -2766,7 +3095,8 @@
       "clears": [],
       "recheck": ["sitemaps"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "sitemap-lastmod-invalid",
@@ -2801,7 +3131,17 @@
       "clears": [],
       "recheck": ["sitemaps"],
       "about": "sitemap",
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "xml",
+          "after": "<lastmod>2026-11-17</lastmod>",
+          "before": "<lastmod>17/11/2026</lastmod>",
+          "when": null,
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "title-missing",
@@ -2837,7 +3177,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<title>Oak dining tables | Example Furniture</title>",
+          "before": null,
+          "when": null,
+          "where": "in the page's <head>",
+          "case": null
+        }
+      ]
     },
     {
       "id": "title-multiple",
@@ -2873,7 +3223,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<title>Oak dining tables | Example Furniture</title>",
+          "before": "<title>Oak dining tables | Example Furniture</title>\n<title>Example Furniture</title>",
+          "when": null,
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "title-too-long",
@@ -2909,7 +3269,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "title-too-short",
@@ -2946,7 +3307,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "title-duplicate",
@@ -2983,7 +3345,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "description-missing",
@@ -3019,7 +3382,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<meta name=\"description\" content=\"Solid oak dining tables in six sizes, made to order and delivered free.\">",
+          "before": null,
+          "when": null,
+          "where": "in the page's <head>",
+          "case": null
+        }
+      ]
     },
     {
       "id": "description-multiple",
@@ -3055,7 +3428,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<meta name=\"description\" content=\"Solid oak dining tables in six sizes, made to order and delivered free.\">",
+          "before": "<meta name=\"description\" content=\"Solid oak dining tables in six sizes, made to order and delivered free.\">\n<meta name=\"description\" content=\"Example Furniture: tables, chairs and sofas.\">",
+          "when": null,
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "description-too-long",
@@ -3091,7 +3474,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "description-too-short",
@@ -3126,7 +3510,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "description-duplicate",
@@ -3162,7 +3547,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "h1-missing",
@@ -3199,7 +3585,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<h1 class=\"page-title\">Oak dining tables</h1>",
+          "before": "<div class=\"page-title\">Oak dining tables</div>",
+          "when": null,
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "h1-multiple",
@@ -3236,7 +3632,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<h1>Oak dining tables</h1>\n<h2>Delivery and returns</h2>",
+          "before": "<h1>Oak dining tables</h1>\n<h1>Delivery and returns</h1>",
+          "when": null,
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "h1-duplicate",
@@ -3272,7 +3678,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "heading-levels-skipped",
@@ -3306,7 +3713,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<h2>Delivery</h2>\n<h3>Returns</h3>",
+          "before": "<h2>Delivery</h2>\n<h4>Returns</h4>",
+          "when": null,
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "h1-image-only",
@@ -3340,7 +3757,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<img src=\"/img/logo.svg\" alt=\"Example Furniture\">\n<h1>Oak dining tables</h1>",
+          "before": "<h1><img src=\"/img/logo.svg\" alt=\"Example Furniture\"></h1>",
+          "when": null,
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "heading-too-long",
@@ -3371,7 +3798,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "h2-missing",
@@ -3402,7 +3830,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "low-word-count",
@@ -3438,7 +3867,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "duplicate-content",
@@ -3474,7 +3904,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "near-duplicate-content",
@@ -3511,7 +3942,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "duplicate-site-version",
@@ -3548,7 +3980,8 @@
       "clears": [],
       "recheck": ["siteVersions"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "placeholder-text",
@@ -3582,7 +4015,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "readability-low",
@@ -3615,7 +4049,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "boilerplate-heavy",
@@ -3649,7 +4084,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "image-missing-alt",
@@ -3685,7 +4121,25 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<img src=\"/img/oak-table.jpg\" alt=\"Oak dining table set for six\">",
+          "before": "<img src=\"/img/oak-table.jpg\">",
+          "when": "The image shows something",
+          "where": null,
+          "case": "content-image"
+        },
+        {
+          "language": "html",
+          "after": "<img src=\"/img/divider.svg\" alt=\"\">",
+          "before": "<img src=\"/img/divider.svg\">",
+          "when": "The image is only decoration",
+          "where": null,
+          "case": "decorative-image"
+        }
+      ]
     },
     {
       "id": "image-alt-too-long",
@@ -3721,7 +4175,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "image-missing-dimensions",
@@ -3757,7 +4212,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<img src=\"/img/oak-table.jpg\" alt=\"Oak dining table\" width=\"1200\" height=\"800\">",
+          "before": "<img src=\"/img/oak-table.jpg\" alt=\"Oak dining table\">",
+          "when": null,
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "image-broken",
@@ -3794,7 +4259,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "image-too-large",
@@ -3840,7 +4306,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "image-missing-src",
@@ -3876,7 +4343,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<img src=\"/img/oak-table.jpg\" alt=\"Oak dining table\">",
+          "before": "<img alt=\"Oak dining table\">",
+          "when": null,
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "image-no-srcset",
@@ -3910,7 +4387,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<img src=\"/img/hero-1600.jpg\" alt=\"Oak dining table\"\n     srcset=\"/img/hero-480.jpg 480w, /img/hero-800.jpg 800w, /img/hero-1600.jpg 1600w\"\n     sizes=\"(max-width: 800px) 100vw, 800px\">",
+          "before": "<img src=\"/img/hero-1600.jpg\" alt=\"Oak dining table\">",
+          "when": null,
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "image-legacy-format",
@@ -3944,7 +4431,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<img src=\"/img/oak-table.webp\" alt=\"Oak dining table\">",
+          "before": "<img src=\"/img/oak-table.jpg\" alt=\"Oak dining table\">",
+          "when": null,
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "image-alt-unhelpful",
@@ -3978,7 +4475,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<img src=\"/img/oak-table.jpg\" alt=\"Oak dining table set for six\">",
+          "before": "<img src=\"/img/oak-table.jpg\" alt=\"IMG_1234.jpg\">",
+          "when": null,
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "image-hotlinked",
@@ -4012,7 +4519,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "image-inline-large",
@@ -4043,7 +4551,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<img src=\"/img/free-delivery.png\" alt=\"Free delivery\">",
+          "before": "<img src=\"data:image/png;base64,iVBORw0KGgo…\" alt=\"Free delivery\">",
+          "when": null,
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "hreflang-invalid-code",
@@ -4079,7 +4597,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<link rel=\"alternate\" hreflang=\"en-GB\" href=\"https://www.example.com/uk/\">",
+          "before": "<link rel=\"alternate\" hreflang=\"en-UK\" href=\"https://www.example.com/uk/\">",
+          "when": null,
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "hreflang-missing-self",
@@ -4115,7 +4643,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<link rel=\"alternate\" hreflang=\"en-GB\" href=\"https://www.example.com/uk/oak-dining-tables/\">",
+          "before": null,
+          "when": null,
+          "where": "in this page's <head>, beside its other hreflang entries, with this page's own URL",
+          "case": null
+        }
+      ]
     },
     {
       "id": "hreflang-missing-return",
@@ -4151,7 +4689,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<link rel=\"alternate\" hreflang=\"en-GB\" href=\"https://www.example.com/uk/oak-dining-tables/\">",
+          "before": null,
+          "when": null,
+          "where": "in the <head> of each alternate, naming this page with exactly this URL",
+          "case": null
+        }
+      ]
     },
     {
       "id": "hreflang-broken-target",
@@ -4187,7 +4735,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "hreflang-to-non-indexable",
@@ -4223,7 +4772,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "hreflang-duplicate-code",
@@ -4259,7 +4809,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "hreflang-missing-x-default",
@@ -4294,7 +4845,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<link rel=\"alternate\" hreflang=\"x-default\" href=\"https://www.example.com/\">",
+          "before": null,
+          "when": null,
+          "where": "in the <head> of every page in the set",
+          "case": null
+        }
+      ]
     },
     {
       "id": "hreflang-outside-head",
@@ -4330,7 +4891,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "hreflang-inconsistent-code",
@@ -4364,7 +4926,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "hreflang-header-mismatch",
@@ -4397,7 +4960,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "hreflang-unlinked",
@@ -4431,7 +4995,8 @@
       "clears": [],
       "recheck": [],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "hreflang-lang-mismatch",
@@ -4465,7 +5030,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "hreflang-self-only",
@@ -4499,7 +5065,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "structured-data-invalid",
@@ -4535,7 +5102,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "json",
+          "after": "{\n  …\n  \"name\": \"Oak dining table\"\n}",
+          "before": "{\n  …\n  \"name\": \"Oak dining table\",\n}",
+          "when": "A comma follows the last property",
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "structured-data-missing-required",
@@ -4571,7 +5148,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "structured-data-schema-errors",
@@ -4606,7 +5184,41 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "json",
+          "after": "\"@type\": \"Organization\"",
+          "before": "\"@type\": \"Organisation\"",
+          "when": "A type or property is misspelt",
+          "where": null,
+          "case": "spelling"
+        },
+        {
+          "language": "json",
+          "after": "\"datePublished\": \"2026-11-17\"",
+          "before": "\"datePublished\": \"17/11/2026\"",
+          "when": "A date isn't ISO 8601",
+          "where": null,
+          "case": "date"
+        },
+        {
+          "language": "json",
+          "after": "\"priceCurrency\": \"GBP\"",
+          "before": "\"priceCurrency\": \"£\"",
+          "when": "A currency isn't a three-letter code",
+          "where": null,
+          "case": "currency"
+        },
+        {
+          "language": "json",
+          "after": "\"@context\": \"https://schema.org\",",
+          "before": null,
+          "when": "The block has no @context",
+          "where": "at the top of the JSON-LD block",
+          "case": "context"
+        }
+      ]
     },
     {
       "id": "structured-data-missing-recommended",
@@ -4642,7 +5254,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "structured-data-on-noindex",
@@ -4678,7 +5291,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "no-https",
@@ -4716,7 +5330,8 @@
       "clears": [],
       "recheck": [],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "http-page",
@@ -4752,7 +5367,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "mixed-content",
@@ -4789,7 +5405,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<img src=\"https://www.example.com/img/oak-table.jpg\" alt=\"Oak dining table\">",
+          "before": "<img src=\"http://www.example.com/img/oak-table.jpg\" alt=\"Oak dining table\">",
+          "when": null,
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "security-headers-missing",
@@ -4825,7 +5451,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "httpHeader",
+          "after": "Strict-Transport-Security: max-age=31536000\nX-Content-Type-Options: nosniff\nReferrer-Policy: strict-origin-when-cross-origin\nContent-Security-Policy: frame-ancestors 'self'",
+          "before": null,
+          "when": null,
+          "where": "in the server's or CDN's response headers, for every page",
+          "case": null
+        }
+      ]
     },
     {
       "id": "security-headers-weak",
@@ -4859,7 +5495,25 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "httpHeader",
+          "after": "Strict-Transport-Security: max-age=31536000",
+          "before": "Strict-Transport-Security: max-age=86400",
+          "when": "Strict-Transport-Security is under a year",
+          "where": null,
+          "case": "hsts"
+        },
+        {
+          "language": "httpHeader",
+          "after": "X-Content-Type-Options: nosniff",
+          "before": "X-Content-Type-Options: no-sniff",
+          "when": "X-Content-Type-Options isn't nosniff",
+          "where": null,
+          "case": "nosniff"
+        }
+      ]
     },
     {
       "id": "cookies-insecure",
@@ -4893,7 +5547,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "httpHeader",
+          "after": "Set-Cookie: sessionid=38afes7a8; Path=/; Secure; HttpOnly; SameSite=Lax",
+          "before": "Set-Cookie: sessionid=38afes7a8; Path=/",
+          "when": null,
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "form-not-secure",
@@ -4927,7 +5591,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<form action=\"https://www.example.com/subscribe\" method=\"post\">",
+          "before": "<form action=\"http://www.example.com/subscribe\" method=\"post\">",
+          "when": null,
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "protocol-relative-links",
@@ -4958,7 +5632,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<script src=\"https://cdn.example.com/app.js\"></script>",
+          "before": "<script src=\"//cdn.example.com/app.js\"></script>",
+          "when": null,
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "url-uppercase",
@@ -4994,7 +5678,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "url-underscores",
@@ -5030,7 +5715,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "url-too-long",
@@ -5067,7 +5753,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "url-tracking-parameters",
@@ -5100,7 +5787,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<a href=\"/sale/\">Sale</a>",
+          "before": "<a href=\"/sale/?utm_source=homepage&utm_medium=banner\">Sale</a>",
+          "when": null,
+          "where": "on the pages that link to it",
+          "case": null
+        }
+      ]
     },
     {
       "id": "url-multiple-slashes",
@@ -5134,7 +5831,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "url-space",
@@ -5168,7 +5866,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "url-parameters",
@@ -5202,7 +5901,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<link rel=\"canonical\" href=\"https://www.example.com/sofas/\">",
+          "before": "<link rel=\"canonical\" href=\"https://www.example.com/sofas/?sort=price\">",
+          "when": "The parameters only sort, filter or track",
+          "where": "on the address with the parameters, /sofas/?sort=price",
+          "case": null
+        }
+      ]
     },
     {
       "id": "url-non-ascii",
@@ -5236,7 +5945,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "url-repetitive-path",
@@ -5270,7 +5980,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<a href=\"/shop/\">Shop</a>",
+          "before": "<a href=\"shop/\">Shop</a>",
+          "when": "A relative link builds the address",
+          "where": "on the pages that link to it",
+          "case": null
+        }
+      ]
     },
     {
       "id": "url-internal-search",
@@ -5304,7 +6024,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<meta name=\"robots\" content=\"noindex\">",
+          "before": null,
+          "when": null,
+          "where": "in the <head> of the search results page",
+          "case": null
+        }
+      ]
     },
     {
       "id": "slow-response",
@@ -5340,7 +6070,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "large-page",
@@ -5377,7 +6108,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "html-past-crawl-limit",
@@ -5413,7 +6145,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "resource-past-crawl-limit",
@@ -5448,7 +6181,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "viewport-missing",
@@ -5484,7 +6218,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">",
+          "before": null,
+          "when": null,
+          "where": "in the page's <head>",
+          "case": null
+        }
+      ]
     },
     {
       "id": "lang-missing",
@@ -5519,7 +6263,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<html lang=\"en-GB\">",
+          "before": "<html>",
+          "when": null,
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "charset-missing",
@@ -5554,7 +6308,25 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<meta charset=\"utf-8\">",
+          "before": null,
+          "when": "In the page's HTML",
+          "where": "first in the page's <head>",
+          "case": "meta-tag"
+        },
+        {
+          "language": "httpHeader",
+          "after": "Content-Type: text/html; charset=utf-8",
+          "before": null,
+          "when": "From the server",
+          "where": "in the page's response headers",
+          "case": "header"
+        }
+      ]
     },
     {
       "id": "open-graph-missing",
@@ -5590,7 +6362,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<meta property=\"og:title\" content=\"Oak dining tables\">\n<meta property=\"og:description\" content=\"Solid oak dining tables in six sizes, made to order.\">\n<meta property=\"og:image\" content=\"https://www.example.com/img/oak-table-1200x630.jpg\">",
+          "before": null,
+          "when": null,
+          "where": "in the page's <head>",
+          "case": null
+        }
+      ]
     },
     {
       "id": "x-card-missing",
@@ -5624,7 +6406,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<meta name=\"twitter:card\" content=\"summary_large_image\">",
+          "before": null,
+          "when": null,
+          "where": "in the page's <head>",
+          "case": null
+        }
+      ]
     },
     {
       "id": "x-card-incomplete",
@@ -5658,7 +6450,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<meta name=\"twitter:card\" content=\"summary_large_image\">",
+          "before": "<meta property=\"twitter:card\" content=\"summary_large_image\">",
+          "when": "The twitter: tags are written with property=",
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "social-image-relative",
@@ -5689,7 +6491,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<meta property=\"og:image\" content=\"https://www.example.com/img/share.jpg\">",
+          "before": "<meta property=\"og:image\" content=\"/img/share.jpg\">",
+          "when": null,
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "og-url-not-canonical",
@@ -5723,7 +6535,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<meta property=\"og:url\" content=\"https://www.example.com/oak-dining-tables/\">",
+          "before": "<meta property=\"og:url\" content=\"https://www.example.com/\">",
+          "when": null,
+          "where": "on /oak-dining-tables/",
+          "case": null
+        }
+      ]
     },
     {
       "id": "social-tags-multiple",
@@ -5757,7 +6579,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<meta property=\"og:title\" content=\"Oak dining tables\">",
+          "before": "<meta property=\"og:title\" content=\"Oak dining tables\">\n<meta property=\"og:title\" content=\"Example Furniture\">",
+          "when": null,
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "og-title-duplicate",
@@ -5790,7 +6622,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "og-description-duplicate",
@@ -5823,7 +6656,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "social-image-broken",
@@ -5854,7 +6688,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "social-image-too-large",
@@ -5885,7 +6720,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "social-image-too-small",
@@ -5916,7 +6752,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "head-tags-in-body",
@@ -5951,7 +6788,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "html-structure-errors",
@@ -5985,7 +6823,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "viewport-invalid",
@@ -6018,7 +6857,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">",
+          "before": "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no\">",
+          "when": null,
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "charset-invalid",
@@ -6051,7 +6900,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     },
     {
       "id": "lang-invalid",
@@ -6084,7 +6934,17 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": [
+        {
+          "language": "html",
+          "after": "<html lang=\"en-GB\">",
+          "before": "<html lang=\"en_GB\">",
+          "when": null,
+          "where": null,
+          "case": null
+        }
+      ]
     },
     {
       "id": "mobile-alternate",
@@ -6118,7 +6978,8 @@
       "clears": [],
       "recheck": ["urls"],
       "about": null,
-      "rowOrder": "importance"
+      "rowOrder": "importance",
+      "fixExamples": []
     }
   ]
 }
