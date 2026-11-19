@@ -78,14 +78,17 @@ export function AnalysisNotes({
   analysing,
   canAnalyse,
   onAnalyse,
+  notes = true,
 }: {
   analysis: Analysis;
   crawling: boolean;
   analysing: boolean;
   canAnalyse: boolean;
   onAnalyse: () => void;
+  /** False where the screen says what wasn't checked itself (Overview's "Not checked on this crawl"): no banner too. */
+  notes?: boolean | undefined;
 }) {
-  const partial = analysis.isPartial === true || (analysis.isPartial === null && analysis.notes.length > 0);
+  const partial = notes && (analysis.isPartial === true || (analysis.isPartial === null && analysis.notes.length > 0));
   return (
     <>
       <LastAnalysisBanner
