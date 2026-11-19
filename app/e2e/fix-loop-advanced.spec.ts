@@ -130,7 +130,11 @@ test('a recheck of a check from Issues says "k of n fixed" as the sidecar settle
   const card = main(page).getByRole('region', { name: 'Rechecks' });
   await expect(card).toBeVisible({ timeout: 20_000 });
   await expect(card).toContainText(`${recheck.result!.fixed} of ${recheck.judged} fixed`);
-  await card.getByRole('button', { name: `URLs of recheck ${recheck.id}` }).click();
+  // The result line is the control that opens its URLs (the UX round of 2026-11-19, H-23): no far-right "URLs" button.
+  await card
+    .getByRole('button', { name: new RegExp(`^${recheck.result!.fixed} of ${recheck.judged} fixed.*, its URLs$`) })
+    .first()
+    .click();
   const dialog = page.getByRole('dialog', { name: new RegExp(`^Recheck ${recheck.id}:`) });
   await expect(dialog.getByRole('row').nth(1)).toBeVisible();
   await expectNoViolations(page);
@@ -200,14 +204,25 @@ test('a second crawl is compared with the first: Overview’s card, Issues’ ch
   if (comparison.score && comparison.score.change !== null) {
     await expect(card).toContainText(`${comparison.score.then.value} → ${comparison.score.now.value}`);
   }
+  // The card says each move in words since the UX round of 2026-11-19 (H-06): "4 checks fixed", "2 checks flag more".
+  const moveWords = (state: string) => {
+    const one = count(state) === 1;
+    const words = {
+      fixed: one ? 'check fixed' : 'checks fixed',
+      new: one ? 'check found something new' : 'checks found something new',
+      fewer: one ? 'check flags fewer' : 'checks flag fewer',
+      more: one ? 'check flags more' : 'checks flag more',
+    }[state];
+    return `${count(state)} ${words}`;
+  };
   for (const state of ['fixed', 'new', 'fewer', 'more']) {
-    if (count(state) > 0) await expect(card.getByRole('link', { name: `${count(state)} ${state}` })).toBeVisible();
+    if (count(state) > 0) await expect(card.getByRole('link', { name: moveWords(state) })).toBeVisible();
   }
   await expectNoViolations(page);
 
   // Issues narrowed to the checks fixed since: the chip, and each fixed check listed.
   if (count('fixed') > 0) {
-    await card.getByRole('link', { name: `${count('fixed')} fixed` }).click();
+    await card.getByRole('link', { name: moveWords('fixed') }).click();
     await showChecks(page);
     await expect(main(page).getByRole('button', { name: /^Remove .*Since / })).toBeVisible({ timeout: 20_000 });
     await expect(main(page).getByRole('listbox', { name: 'Checks' }).getByRole('option')).toHaveCount(count('fixed'));

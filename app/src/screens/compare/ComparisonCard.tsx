@@ -396,7 +396,8 @@ function MovedList({
         ))}
       </p>
       {shown.length > 0 ? (
-        <ul className="flex flex-col gap-1">
+        // A line and its gap are 24 px and over: each check's name is a target of its own (WCAG 2.5.8).
+        <ul className="flex flex-col gap-1.5">
           {shown.map((check) => (
             <li key={check.checkId} className="flex flex-wrap items-baseline gap-x-2">
               {check.severity ? (
