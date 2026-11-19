@@ -3,7 +3,7 @@
 // and axe at zero violations in both themes and under forced colours.
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { showChecks, siteRow } from './support';
+import { seededCrawl, showChecks, siteRow } from './support';
 
 async function expectNoViolations(page: Page) {
   const results = await new AxeBuilder({ page })
@@ -254,4 +254,66 @@ test('under forced colours, the selected check and the open group stay visible, 
   await page.keyboard.press('ArrowRight');
   await expect(groups.getByRole('row', { expanded: true })).toBeVisible();
   await expectNoViolations(page);
+});
+
+// The owner's task (the UX round of 2026-11-19, A-01, A-06, A-07): from a broken URL to the page that holds the link,
+// at the link, with no expanding and one click; and back from Links, the check is as it was left.
+test('the 404s name the page that holds each broken link, open it at the link in one click, and keep their place', async ({
+  page,
+}) => {
+  const crawl = await seededCrawl();
+  await page.goto(`/crawls/${crawl.id}/issues/internal-client-error`);
+  const grid = page.getByRole('treegrid', { name: /Internal URL returns 4xx: affected URLs/ });
+  // On arrival, a list: each broken URL with the page linking to it, the link's words and where on the page it is.
+  await expect(grid.getByRole('columnheader', { name: 'Linked from' })).toBeVisible();
+  await expect(grid.getByRole('columnheader', { name: 'Link text' })).toBeVisible();
+  const source = grid.locator('[data-where="source"]').first();
+  await expect(source).toBeVisible();
+  // The linking page is a link, with its open button directly after it, always there: it opens the page, at the
+  // link's words where the link has some.
+  const open = source.locator('[data-open-url]');
+  await expect(open).toBeVisible();
+  const target = (await open.getAttribute('data-open-url')) ?? '';
+  expect(target).toMatch(/^https?:\/\//);
+  const [popup] = await Promise.all([page.waitForEvent('popup'), open.click()]);
+  await popup.close();
+  // Its text inspects the linking page: one click, and the check stays.
+  await source.locator('.si-url__go').click();
+  await expect(page).toHaveURL(/\/issues\/internal-client-error\?.*inspect=\d+/);
+  await expect(page.getByRole('complementary', { name: 'Inspector' })).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  // One scroller: the rows' own. The card around them never scrolls.
+  const scrollers = await page.locator('[data-check-detail]').evaluate((card) =>
+    [card, ...card.querySelectorAll('*')]
+      .filter((element) => {
+        const style = getComputedStyle(element);
+        return /auto|scroll/.test(style.overflowY) && element.scrollHeight > element.clientHeight + 1;
+      })
+      .map((element): string => (element === card ? 'card' : (element.getAttribute('class') ?? ''))),
+  );
+  expect(scrollers.filter((name) => !name.includes('si-grid'))).toEqual([]);
+
+  // Away to Links and back: the rows are where they were left.
+  const titles = page.getByRole('grid', { name: /Title too long: affected pages/ });
+  await page.goto(`/crawls/${crawl.id}/issues/title-too-long`);
+  await expect(titles.getByRole('row').nth(2)).toBeVisible();
+  const rows = page.locator('[data-check-detail] .si-grid').first();
+  const most = await rows.evaluate((element) => element.scrollHeight - element.clientHeight);
+  test.skip(most < 64, 'The seeded crawl’s long titles all fit: nothing to scroll');
+  const offset = Math.min(most, 96);
+  await rows.evaluate((element, top) => {
+    element.dispatchEvent(new WheelEvent('wheel'));
+    element.scrollTop = top;
+  }, offset);
+  await expect.poll(() => rows.evaluate((element) => element.scrollTop)).toBe(offset);
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('link', { name: /^Links/ })
+    .click();
+  await expect(page).toHaveURL(/\/links/);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/issues\/title-too-long/);
+  await expect(titles.getByRole('row').nth(2)).toBeVisible();
+  await expect.poll(() => rows.evaluate((element) => element.scrollTop)).toBe(offset);
 });
