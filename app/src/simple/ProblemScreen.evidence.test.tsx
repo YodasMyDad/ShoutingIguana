@@ -126,10 +126,12 @@ describe.skipIf(TABLE_STUBBED)('what a problem found, in Simple', () => {
     expect(cut.parentElement).toHaveTextContent(
       '“Garden sofas and chairs for every season, delivered free across the UK | Example”',
     );
+    expect(where().getByText('80 characters: about 23 more than Google shows.')).toBeVisible();
+    // What the grey is, said once, over the column.
     expect(
-      where().getByText(
-        '80 characters: about 23 more than Google shows. The greyed words are the ones that won’t show.',
-      ),
+      where().getByRole('columnheader', {
+        name: 'Its title: the words in grey are the ones Google will likely cut off',
+      }),
     ).toBeVisible();
     expect(where().getAllByText(/more than Google shows\./)).toHaveLength(3);
     // The engine's detail and the evidence's widths are Advanced's.

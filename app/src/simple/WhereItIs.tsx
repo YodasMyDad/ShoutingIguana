@@ -18,7 +18,7 @@ import { OneFixTag } from '../ui/PlainCheckRow';
 import { evidenceOf } from '../screens/issues/evidenceColumns';
 import { FoundOnWords } from './FoundOnWords';
 import { OpenLink } from './OpenLink';
-import { cutTextOf, settingNames, sitemapLine } from './developerNotes';
+import { cutHeading, cutTextOf, settingNames, sitemapLine } from './developerNotes';
 import { announce } from '../feedback/announce';
 import { copyText } from '../lib/clipboard';
 import { saysShownAt, useShownAt } from '../screens/issues/useShownAt';
@@ -106,7 +106,7 @@ function Found({ row, check, origin }: { row: IssueRow; check: Check; origin: st
           </span>
           ”
         </span>
-        <span className="mt-1 block text-13">{cut.words} The greyed words are the ones that won’t show.</span>
+        <span className="mt-1 block text-13">{cut.words}</span>
       </>
     );
   }
@@ -193,6 +193,9 @@ function PageLine({ row, origin }: { row: IssueRow; origin: string | null }) {
 /** The table's headings: what its causes hold and the pages they're on, or a check's pages and what each has. */
 function headings(check: Check): [string, string] {
   const pages = (check.subject ?? 'page') === 'page';
+  // A text cut in search results is shown whole: the heading says once what its grey part is.
+  const cut = cutHeading(check);
+  if (cut) return ['Page', cut];
   if (check.grouping === 'none') return [pages ? 'Page' : 'Address', 'What was found'];
   const words = causeWords(check);
   return [words.heading, words.pagesHeading];

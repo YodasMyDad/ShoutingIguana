@@ -50,6 +50,12 @@ const CUT_COLUMNS: Readonly<Record<string, { text: string; inResults: string }>>
   'description-too-long': { text: 'description', inResults: 'descriptionInResults' },
 };
 
+/** The heading over such texts: what the grey part of each is, said once. Null for any other check. */
+export function cutHeading(check: Pick<Check, 'id'>): string | null {
+  const columns = CUT_COLUMNS[check.id];
+  return columns ? `Its ${columns.text}: the words in grey are the ones Google will likely cut off` : null;
+}
+
 /**
  * A long title or description in full, split where Google will likely cut it ("…to help keep your" | " garden clutter
  * free."), with its length and how far over it is. It read "Search description: “Wide selection of fantastic…”" cut at
