@@ -55,6 +55,7 @@ import { IMAGES_LISTED } from './images';
 import { ImagesSection } from './ImagesSection';
 import { InspectorContext, type InspectorContextValue } from './inspectorContext';
 import { IssuesSection } from './IssuesSection';
+import { promiseKeyboardToLinksOf } from './links';
 import { LinksSection } from './LinksSection';
 import { SectionError, SectionSkeleton } from './parts';
 import { RedirectsSection } from './RedirectsSection';
@@ -271,8 +272,12 @@ export function Inspector({ crawlId, urlId, onClose }: InspectorProps) {
   const wentBack = useRef(0);
   const back = useCallback(() => {
     wentBack.current = BACK_FOCUS_TRIES;
+    // Back to a list of links: its grid takes the keyboard, on the row the hop was made from.
+    if (cameFrom && (cameFrom.section === 'inlinks' || cameFrom.section === 'outlinks')) {
+      promiseKeyboardToLinksOf(cameFrom.url);
+    }
     inspector.back();
-  }, [inspector]);
+  }, [inspector, cameFrom]);
   useEffect(() => {
     if (wentBack.current === 0) return;
     wentBack.current -= 1;

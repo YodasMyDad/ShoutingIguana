@@ -153,3 +153,26 @@ export function linkStatusWords(
 ): string {
   return row.statusCode === null ? noStatusWords(row.outcome, row.fetched) : String(row.statusCode);
 }
+
+/** How long a link grid may take to come and take the keyboard it was promised: longer, and the promise is dropped. */
+const KEYBOARD_PROMISE_MS = 2_000;
+
+/** The URL whose link grid takes the keyboard when it comes, and when that was asked. */
+let keyboardPromised: { urlId: number; at: number } | null = null;
+
+/**
+ * Promises the keyboard to the link grid of a URL the inspector is on its way to: a hop made with the keyboard in a
+ * link grid (the grid it leads to may be another section's, shown a moment before the URL it's for), and the
+ * inspector's own back to a link list. Null takes the promise back.
+ */
+export function promiseKeyboardToLinksOf(urlId: number | null): void {
+  keyboardPromised = urlId === null ? null : { urlId, at: Date.now() };
+}
+
+/** Whether the link grid of this URL was promised the keyboard, a moment ago: asked once, as the grid takes it. */
+export function takeKeyboardPromisedTo(urlId: number): boolean {
+  const at = keyboardPromised?.urlId === urlId ? keyboardPromised.at : null;
+  if (at === null) return false;
+  keyboardPromised = null;
+  return Date.now() - at <= KEYBOARD_PROMISE_MS;
+}

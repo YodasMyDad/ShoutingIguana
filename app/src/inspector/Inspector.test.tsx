@@ -1174,7 +1174,8 @@ describe('walking the site', () => {
     await waitFor(() => expect(inspected(router)).toBe(2));
     await within(inspector).findByRole('heading', { level: 2, name: PAGE.url });
     await waitFor(() => expect(cursorRow()).toBe('3'));
-    await waitFor(() => expect(inspector.contains(document.activeElement)).toBe(true));
+    // The keyboard is in the list the hop was made from, so an arrow key moves on in it, never in the view behind.
+    await waitFor(() => expect(within(inspector).getByRole('grid', { name: 'Inlinks' })).toHaveFocus());
   });
 
   it('keeps focus in the inspector when back takes away a source that had it', async () => {

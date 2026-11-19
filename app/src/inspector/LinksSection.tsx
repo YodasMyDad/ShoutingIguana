@@ -39,6 +39,8 @@ import {
   linkCountWords,
   linkStatusWords,
   linkRowKey,
+  promiseKeyboardToLinksOf,
+  takeKeyboardPromisedTo,
   rememberLinkRow,
   rememberedLinkRow,
   type KindChoice,
@@ -98,13 +100,6 @@ const WIDE_LAYOUT_WIDTH =
 const MIN_STACKED_WIDTH = 160;
 /** A stacked row's second line, beside the grid's row height. */
 const STACKED_EXTRA_HEIGHT = 16;
-
-/**
- * The URL a hop made with the keyboard in a link grid leads to, until that URL's grid has taken the keyboard: an
- * inlink's hop arrives on another section (the page's Outlinks), whose grid is another component's, and which is
- * shown a moment before the URL it's for.
- */
-let hoppedTo: number | null = null;
 
 /**
  * What a link is, after its URL on a stacked row: its anchor or alt text (or that it has none), where on the page it
@@ -211,13 +206,11 @@ export function LinksSection({ direction }: { direction: LinkDirection }) {
     [router, urlId],
   );
   useEffect(() => {
-    const hopped = hoppedTo === urlId;
-    if (!refocus.current && !hopped) return;
     // The section a hop leaves for another (an inlink's hop, for the page's Outlinks) is on its way out: the grid of
-    // the section shown takes the keyboard.
+    // the section shown takes the keyboard, once it's the grid of the URL the hop leads to.
     if (frame.current?.closest('[role="tabpanel"]')?.getAttribute('data-state') === 'inactive') return;
+    if (!refocus.current && !takeKeyboardPromisedTo(urlId)) return;
     refocus.current = false;
-    if (hopped) hoppedTo = null;
     frame.current?.querySelector<HTMLElement>('[role="grid"]')?.focus({ preventScroll: true });
   }, [gridKey, urlId]);
 
@@ -241,8 +234,9 @@ export function LinksSection({ direction }: { direction: LinkDirection }) {
   // The page that holds a link to this URL is walked to where the link is: its Outlinks, this link first.
   const go = useCallback(
     (row: LinkRow) => {
+      // A hop made with the keyboard in this grid: the grid it leads to takes the keyboard, whichever section's it is.
       const inGrid = frame.current?.querySelector('[role="grid"]')?.contains(document.activeElement) ?? false;
-      hoppedTo = inGrid ? row.id : null;
+      promiseKeyboardToLinksOf(inGrid ? row.id : null);
       walk(row.id, direction === 'inlinks' ? { show: { section: 'outlinks', link: urlId } } : undefined);
     },
     [walk, direction, urlId],
