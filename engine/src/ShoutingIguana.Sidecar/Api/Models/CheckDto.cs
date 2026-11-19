@@ -77,6 +77,12 @@ internal sealed record CheckDto(
     /// </summary>
     public IssueRowOrder RowOrder { get; init; }
 
+    /// <summary>
+    /// The fix as code (fix examples): one example, or one for each case the check has, the likeliest first. Empty for a
+    /// check whose fix is editorial or structural, which <see cref="Fix"/> says alone.
+    /// </summary>
+    public IReadOnlyList<FixExampleDto> FixExamples { get; init; } = [];
+
     /// <param name="settings">The thresholds the plain words' limits are filled from.</param>
     public static CheckDto From(IssueDefinition check, AnalysisSettings settings)
     {
@@ -85,7 +91,7 @@ internal sealed record CheckDto(
             GridRequests.Grouping(check.Grouping), check.Subject, check.References, check.SiteWide, check.ReportedOnce,
             plain?.Title, plain?.What, plain?.Fix, plain?.Fixer, plain?.Passed, plain?.OneFix, plain?.LooksFor, check.Evidence, check.TargetFacts, check.Clears, check.Recheck)
         {
-            About = check.About, RowOrder = check.RowOrder
+            About = check.About, RowOrder = check.RowOrder, FixExamples = [.. check.FixExamples.Select(FixExampleDto.From)]
         };
     }
 }
