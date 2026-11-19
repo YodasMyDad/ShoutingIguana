@@ -60,6 +60,7 @@ internal static class ExportRequests
         Only(body.Cut is not null, "cut");
         Only(body.Examples is not null, "examples");
         Only(body.LookExamples is not null, "lookExamples");
+        Only(body.Words is not null, "words");
         Only(body.HiddenChecks is not null, "hiddenChecks");
         Only(body.Checks is not null, "checks");
         // A grid's are its query's, checked as the grid's call checks them (invalid-query); the report's and the workbook's here.
@@ -89,6 +90,7 @@ internal static class ExportRequests
             var other => Refuse<RobotsBlockReason?>(errors, "reason", $"There's no reason called '{other}': there are rule, unreachable and unknown.")
         };
         var cut = Cut(body.Cut, errors);
+        var wording = Wording(body.Words, errors);
         var sitemap = body.SitemapId switch
         {
             null => (int?)null,
@@ -119,7 +121,7 @@ internal static class ExportRequests
             Conflict = body.Conflict,
             CheckId = body.CheckId,
             Group = body.Group is { } group ? new IssueGroupKey(group.Detail, group.RelatedUrlId) : null,
-            Report = Report(cut, body.Examples, body.LookExamples) with { HiddenChecks = body.HiddenChecks ?? [], Checks = body.Checks }
+            Report = Report(cut, body.Examples, body.LookExamples) with { Wording = wording, HiddenChecks = body.HiddenChecks ?? [], Checks = body.Checks }
         };
     }
 
@@ -142,8 +144,8 @@ internal static class ExportRequests
     }
 
     /// <summary>
-    /// The report's options from a query string: <c>cut</c>, <c>examples</c>, <c>lookExamples</c>, <c>hiddenChecks</c> and
-    /// <c>compareWith</c> (the fix loop: <c>previous</c>, <c>none</c> or a crawl's id), each optional.
+    /// The report's options from a query string: <c>cut</c>, <c>examples</c>, <c>lookExamples</c>, <c>words</c>, <c>hiddenChecks</c>
+    /// and <c>compareWith</c> (the fix loop: <c>previous</c>, <c>none</c> or a crawl's id), each optional.
     /// </summary>
     public static ReportOptions Report(IQueryCollection query, out string? compareWith)
     {
@@ -163,6 +165,7 @@ internal static class ExportRequests
 
         var cut = Cut(query["cut"].Count == 0 ? null : query["cut"].ToString(), errors);
         var (examples, lookExamples) = (Number("examples"), Number("lookExamples"));
+        var wording = Wording(query["words"].Count == 0 ? null : query["words"].ToString(), errors);
         // The checks the user hid, comma-separated, as the export takes them: the report shown is the report saved.
         IReadOnlyList<string> hidden = query["hiddenChecks"].Count == 0
             ? []
@@ -174,12 +177,12 @@ internal static class ExportRequests
             { Count: 1 } one when !string.IsNullOrEmpty(one[0]) => one[0],
             _ => Refuse<string?>(errors, "compareWith", "compareWith is previous, none, or one crawl's id.")
         };
-        if (query.Keys.FirstOrDefault(key => key is not ("cut" or "examples" or "lookExamples" or "hiddenChecks" or "compareWith")) is { } unknown)
+        if (query.Keys.FirstOrDefault(key => key is not ("cut" or "examples" or "lookExamples" or "words" or "hiddenChecks" or "compareWith")) is { } unknown)
         {
-            errors[unknown] = ["The report takes cut, examples, lookExamples, hiddenChecks and compareWith."];
+            errors[unknown] = ["The report takes cut, examples, lookExamples, words, hiddenChecks and compareWith."];
         }
 
-        return errors.Count > 0 ? throw Problems.InvalidExport(errors) : Report(cut, examples, lookExamples) with { HiddenChecks = hidden };
+        return errors.Count > 0 ? throw Problems.InvalidExport(errors) : Report(cut, examples, lookExamples) with { Wording = wording, HiddenChecks = hidden };
     }
 
     private static ReportOptions Report(ReportCut cut, int? examples, int? lookExamples) => new()
@@ -194,6 +197,14 @@ internal static class ExportRequests
         null or "full" => ReportCut.Full,
         "summary" => ReportCut.Summary,
         _ => Refuse<ReportCut>(errors, "cut", $"There's no cut called '{cut}': there are full and summary.")
+    };
+
+    /// <summary>Whose words the report's rows are in: <c>plain</c> (Simple's, and what an absent one means) or <c>technical</c> (Advanced's).</summary>
+    private static ReportWording Wording(string? words, Dictionary<string, IReadOnlyList<string>> errors) => words switch
+    {
+        null or "plain" => ReportWording.Plain,
+        "technical" => ReportWording.Technical,
+        _ => Refuse<ReportWording>(errors, "words", $"There are no words called '{words}': there are plain and technical.")
     };
 
     private static T Refuse<T>(Dictionary<string, IReadOnlyList<string>> errors, string field, string message)

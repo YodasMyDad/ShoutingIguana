@@ -372,7 +372,7 @@ public sealed class FixLoopChangesTests(FixLoopCrawls crawls) : IClassFixture<Fi
         var then = Id(FixLoopCrawls.AddTo(_sidecar, crawls.Then, "then"));
         var now = Id(FixLoopCrawls.AddTo(_sidecar, crawls.Now, "now", 10));
         var other = Id(FixLoopCrawls.AddTo(_sidecar, crawls.Then, "other", 5, path => TestCrawlFiles.SetStartUrl(path, crawls.Url("/").Replace("127.0.0.1", "localhost"))));
-        const string SINCE = "<h2>Since your last check on ";
+        const string SINCE = "<h2 id=\"since-last-check\">Since your last check on ";
         const string COMPARED = "<dt>Compared with</dt>";
 
         Assert.Contains(SINCE, await ReportAsync(now));

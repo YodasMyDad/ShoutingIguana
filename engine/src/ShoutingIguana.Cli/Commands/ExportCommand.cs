@@ -60,6 +60,7 @@ internal static class ExportCommand
         {
             Description = "For report: the first pages listed for each thing worth a look.", DefaultValueFactory = _ => ReportOptions.DEFAULT_LOOK_EXAMPLES
         };
+        var words = new Option<string?>("--words") { Description = "For report: whose words its rows are in: plain (the default, a site owner's) or technical (a working SEO's)." };
         var hiddenChecks = new Option<string?>("--hidden-checks")
         {
             Description = "For report, workbook, check and the grids: checks hidden in the app, by id, comma-separated, left out of the lists and counts (title-too-long,thin-content)."
@@ -68,7 +69,7 @@ internal static class ExportCommand
         var command = new Command("export", "Write what a crawl holds to a file: a grid as CSV or Excel, the workbook of everything, or the report.")
         {
             database, kind, output, format, columns, filters, search, sort, linkEnds, linkFilters, linkSearch, blocked, sitemap, origin, line, reason, conflict, check, cut, examples,
-            lookExamples, hiddenChecks, onlyChecks
+            lookExamples, words, hiddenChecks, onlyChecks
         };
 
         command.SetAction((parse, cancellationToken) => Task.FromResult(CommandErrors.Run(() =>
@@ -92,7 +93,7 @@ internal static class ExportCommand
                 (columns, "columns"), (filters, "filters"), (search, "search"), (sort, "sort"), (linkEnds, "linkEnds"), (linkFilters, "linkEnds"), (linkSearch, "linkEnds"),
                 (blocked, "blocked"), (sitemap, "sitemapId"), (origin, "origin"), (line, "line"), (reason, "reason"), (conflict, "conflict"), (check, "checkId"), (cut, "cut"),
                 (examples, "examples"),
-                (lookExamples, "lookExamples"), (hiddenChecks, "hiddenChecks"), (onlyChecks, "checks")
+                (lookExamples, "lookExamples"), (words, "words"), (hiddenChecks, "hiddenChecks"), (onlyChecks, "checks")
             ];
             var misplaced = owned.Where(option => parse.GetResult(option.Option) is { Implicit: false } && !ExportFields.Takes(exportKind, option.Field)).ToList();
             foreach (var (option, field) in misplaced)
@@ -106,7 +107,7 @@ internal static class ExportCommand
                 return 2;
             }
 
-            if (!TryReason(parse.GetValue(reason), out var blockReason) || !TryCut(parse.GetValue(cut), out var reportCut) ||
+            if (!TryReason(parse.GetValue(reason), out var blockReason) || !TryCut(parse.GetValue(cut), out var reportCut) || !TryWords(parse.GetValue(words), out var wording) ||
                 Query(exportKind, parse.GetValue(columns), parse.GetValue(filters) ?? [], parse.GetValue(search), parse.GetValue(sort) ?? []) is not { } query ||
                 !TryLinkEnds(parse.GetValue(linkEnds), parse.GetValue(linkFilters) ?? [], parse.GetValue(linkSearch), out var ends))
             {
@@ -134,6 +135,7 @@ internal static class ExportCommand
                     Cut = reportCut,
                     Examples = parse.GetValue(examples),
                     LookExamples = parse.GetValue(lookExamples),
+                    Wording = wording,
                     HiddenChecks = Ids(parse.GetValue(hiddenChecks)) ?? [],
                     Checks = Ids(parse.GetValue(onlyChecks))
                 }
@@ -155,14 +157,15 @@ internal static class ExportCommand
         {
             Description = "The first pages listed for each thing worth a look.", DefaultValueFactory = _ => ReportOptions.DEFAULT_LOOK_EXAMPLES
         };
+        var words = new Option<string?>("--words") { Description = "Whose words its rows are in: plain (the default, a site owner's) or technical (a working SEO's)." };
         var command = new Command("report", "Write the report of a crawl's last analysis: one self-contained HTML file, which prints to a PDF.")
         {
-            database, output, cut, examples, lookExamples
+            database, output, cut, examples, lookExamples, words
         };
 
         command.SetAction((parse, cancellationToken) => Task.FromResult(CommandErrors.Run(() =>
         {
-            if (!TryCut(parse.GetValue(cut), out var reportCut))
+            if (!TryCut(parse.GetValue(cut), out var reportCut) || !TryWords(parse.GetValue(words), out var wording))
             {
                 return 2;
             }
@@ -171,7 +174,7 @@ internal static class ExportCommand
             {
                 Kind = ExportKind.Report,
                 Format = ExportFormat.Html,
-                Report = new ReportOptions { Cut = reportCut, Examples = parse.GetValue(examples), LookExamples = parse.GetValue(lookExamples) }
+                Report = new ReportOptions { Cut = reportCut, Examples = parse.GetValue(examples), LookExamples = parse.GetValue(lookExamples), Wording = wording }
             };
             return Run(parse.GetValue(database)!, request, parse.GetValue(output)!, cancellationToken);
         })));
@@ -260,6 +263,18 @@ internal static class ExportCommand
         if (text is not null && reason is null)
         {
             Console.Error.WriteLine("--reason must be rule, unreachable or unknown.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool TryWords(string? text, out ReportWording wording)
+    {
+        wording = string.Equals(text, "technical", StringComparison.OrdinalIgnoreCase) ? ReportWording.Technical : ReportWording.Plain;
+        if (text is not null && wording == ReportWording.Plain && !string.Equals(text, "plain", StringComparison.OrdinalIgnoreCase))
+        {
+            Console.Error.WriteLine("--words must be plain or technical.");
             return false;
         }
 

@@ -36,6 +36,7 @@ public static class ExportFields
         ["cut"] = REPORT,
         ["examples"] = REPORT,
         ["lookExamples"] = REPORT,
+        ["words"] = REPORT,
         // The report and the workbook leave the hidden checks out; a check's file leaves them out and is numbered as the
         // workbook is; a grid leaves them out of its issue counts.
         ["hiddenChecks"] = [ExportKind.Report, ExportKind.Workbook, ExportKind.Check, .. GRIDS, .. GROUPED],
