@@ -5,6 +5,7 @@
 import type { IssueTarget, IssueTargetsOfUrl, LinkRow, SitemapRef, UrlFoundOn } from '../../api/inspector';
 import type { Check, CheckReferences } from '../../api/types';
 import { affectedWords } from '../../crawl/checkSubject';
+import type { TargetFact } from '../../api/types';
 import { FACT_GAP, noStatusWords, targetFactParts } from '../../crawl/evidence';
 import { KIND_WORDS, POSITION_WORDS } from '../../inspector/words';
 import { formatCount } from '../../lib/format';
@@ -147,6 +148,109 @@ export function linkPlaceWords(link: Pick<LinkRow, 'kind' | 'position' | 'text'>
   return [place, text ? `“${text}”` : null].filter((part) => part).join(' · ');
 }
 
+/**
+ * Where on its page a link is, without what it says (which has a column of its own): "Footer", "Image in the content",
+ * "Canonical"; a redirect, which is on no page, "Redirects here". Empty where the crawl stored neither.
+ */
+export function linkWhereWords(link: Pick<LinkRow, 'kind' | 'position'>): string {
+  if (link.kind === 'redirect') return 'Redirects here';
+  const where = link.position ? POSITION_WORDS[link.position] : null;
+  if (link.kind && link.kind !== 'hyperlink') {
+    return where ? `${KIND_WORDS[link.kind]} in the ${where.toLowerCase()}` : KIND_WORDS[link.kind];
+  }
+  return where ?? '';
+}
+
+/**
+ * How a page stands to a URL its issue names, to lead a line that names it: "Links to", "Embeds" (an image),
+ * "Canonical to", "Alternate" (hreflang), "Loads" (mixed content). What "Names" used to say of them all (A-05).
+ */
+export function targetLead(
+  check: Pick<Check, 'id'> & Partial<Pick<Check, 'category'>>,
+  target: Pick<IssueTarget, 'kind'>,
+): string {
+  if (check.category === 'canonicals' || check.id.startsWith('canonical') || target.kind === 'canonical') {
+    return 'Canonical to';
+  }
+  if (check.id.startsWith('hreflang') || target.kind === 'hreflang') return 'Alternate';
+  if (check.id.startsWith('image') || target.kind === 'image') return 'Embeds';
+  if (check.id === 'mixed-content') return 'Loads';
+  return 'Links to';
+}
+
+/**
+ * What heads the column of the URL a check's groups are of, named by what it holds (A-15): "Image", "Linked URL",
+ * "Canonical target", "Alternate URL"; "Related URL" only where the check says nothing of what it is.
+ */
+export function groupUrlHeader(check: Pick<Check, 'id'> & Partial<Pick<Check, 'category' | 'references'>>): string {
+  if (check.id.startsWith('image-')) return 'Image';
+  if (check.category === 'canonicals' || check.id.startsWith('canonical')) return 'Canonical target';
+  if (check.id.startsWith('hreflang')) return 'Alternate URL';
+  if (check.id.includes('redirect')) return 'Redirects to';
+  if (check.category === 'links' || check.references === 'targets') return 'Linked URL';
+  return 'Related URL';
+}
+
+/** The columns a check's references take in its list: what heads each, and which it has. */
+export interface ReferenceColumns {
+  /** The other URL's column: the page holding the link, or the URL the page names. */
+  other: string;
+  /** The column of what the link says (its anchor text, a hreflang link's language); null for a check without one. */
+  text: string | null;
+  /** Whether where on the page the link is has a column. */
+  place: boolean;
+}
+
+/**
+ * The columns of a check's references (A-06): for a URL other pages refer to, "Linked from", "Link text" and "Where on
+ * the page"; for a page holding the bad references, what it names by its kind ("Links to", "Image", "Canonical to").
+ * Null for a check that refers to nothing.
+ */
+export function referenceColumns(
+  check: Pick<Check, 'id' | 'references'> & Partial<Pick<Check, 'category'>>,
+): ReferenceColumns | null {
+  const references = referencesOf(check);
+  if (references === 'none') return null;
+  if (references === 'sources') return { other: 'Linked from', text: 'Link text', place: true };
+  const lead = targetLead(check, { kind: null });
+  if (lead === 'Canonical to') return { other: lead, text: null, place: false };
+  if (lead === 'Alternate') return { other: lead, text: 'Language', place: false };
+  // An image's alt text is among its facts ("alt “Sofa”", "no alt text"), with the size it's shown at.
+  if (lead === 'Embeds') return { other: 'Image', text: null, place: true };
+  if (lead === 'Loads') return { other: lead, text: null, place: true };
+  return { other: lead, text: 'Link text', place: true };
+}
+
+/**
+ * What a check says of a URL its page names beyond what the list's own columns say (its status, the link's text and
+ * where on the page it is): "→ /new/ 200", "2 links", "nofollow", "1.8 MB · JPEG · shown at 400×300". Empty where the
+ * check says nothing more.
+ */
+export function targetRestWords(
+  target: IssueTarget,
+  check: Pick<Check, 'id' | 'references' | 'targetFacts'> & Partial<Pick<Check, 'category'>>,
+  siteOrigin: string | null,
+): string {
+  const columns = referenceColumns(check);
+  const inColumns = new Set<TargetFact>(['statusCode']);
+  if (columns?.text) inColumns.add('text');
+  if (columns?.place) inColumns.add('position');
+  const facts = (check.targetFacts ?? []).filter((fact) => !inColumns.has(fact));
+  return targetFactParts(target, facts, siteOrigin, check.id).join(FACT_GAP);
+}
+
+/**
+ * How many references a URL has beyond the first, which its row shows: "+2 more" opens them in place. A URL found on
+ * pages counts its links, the sitemaps listing it and its being the start URL; a page counts the URLs its issue names.
+ */
+export function moreReferences(where: { foundOn: UrlFoundOn | null; targets: IssueTargetsOfUrl | null }): number {
+  if (where.foundOn) {
+    const found = where.foundOn;
+    return Math.max(0, found.links + found.sitemaps.total + (found.start ? 1 : 0) - 1);
+  }
+  return where.targets ? Math.max(0, where.targets.total - 1) : 0;
+}
+
 /** A row under an expanded URL: a link to it, a sitemap listing it, its being the start URL, a URL it names, or the rest. */
 export type WhereRow =
   | { kind: 'source'; link: LinkRow }
@@ -200,9 +304,9 @@ export function targetRows(
   return rows.length > 0 ? rows : [{ kind: 'nothing', words: 'It names no other URL' }];
 }
 
-/** "Show all 12 links in Links", "Show it in Links"; for a page's targets, "All 9 in the inspector". */
+/** "Show all 12 links in Links", "Show the link in Links"; for what a page names, "Show all 9 in Links". */
 export function allWords(row: Extract<WhereRow, { kind: 'all' }>): string {
-  if (row.of === 'targets') return `All ${formatCount(row.total)} in the inspector`;
+  if (row.of === 'targets') return `Show all ${formatCount(row.total)} in Links`;
   return row.total === 1 ? 'Show the link in Links' : `Show all ${formatCount(row.total)} links in Links`;
 }
 
@@ -232,22 +336,22 @@ export function whereRowText(row: WhereRow): string {
  */
 export function sharedSource(
   found: readonly UrlFoundOn[],
-): { url: string; urls: number; of: number; position: LinkRow['position'] } | null {
-  const byPage = new Map<number, { url: string; urls: number; positions: Set<string | null> }>();
+): { id: number; url: string; urls: number; of: number; position: LinkRow['position'] } | null {
+  const byPage = new Map<number, { id: number; url: string; urls: number; positions: Set<string | null> }>();
   for (const url of found) {
     for (const page of sourcePages(url)) {
-      const entry = byPage.get(page.id) ?? { url: page.url, urls: 0, positions: new Set() };
+      const entry = byPage.get(page.id) ?? { id: page.id, url: page.url, urls: 0, positions: new Set() };
       entry.urls += 1;
       entry.positions.add(page.position);
       byPage.set(page.id, entry);
     }
   }
-  let best: { url: string; urls: number; positions: Set<string | null> } | null = null;
+  let best: { id: number; url: string; urls: number; positions: Set<string | null> } | null = null;
   for (const entry of byPage.values()) if (!best || entry.urls > best.urls) best = entry;
   if (!best || best.urls < 2 || best.urls * 2 < found.length) return null;
   const positions = [...best.positions];
   const position = positions.length === 1 ? (positions[0] as LinkRow['position']) : null;
-  return { url: best.url, urls: best.urls, of: found.length, position };
+  return { id: best.id, url: best.url, urls: best.urls, of: found.length, position };
 }
 
 /**
@@ -288,7 +392,7 @@ const FIXED_BY_THEIR_LINKS: ReadonlySet<string> = new Set(['links', 'responseCod
  * alone: removing the links there isn't its fix.
  */
 export function sharedSourceCallout(
-  shared: NonNullable<ReturnType<typeof sharedSource>>,
+  shared: Pick<NonNullable<ReturnType<typeof sharedSource>>, 'url' | 'urls' | 'of' | 'position'>,
   check: Pick<Check, 'id' | 'category' | 'subject'>,
   count: number,
   siteOrigin: string | null,

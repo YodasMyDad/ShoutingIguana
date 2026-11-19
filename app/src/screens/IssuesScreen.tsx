@@ -57,6 +57,7 @@ import { checkUrlsReader, copyUrls } from './issues/copyUrls';
 import { groupRefOf, groupsGridPageOf, type GroupsGridPage } from './issues/groupTree';
 import { useAnalysisAnswer } from './issues/useAnalysisAnswer';
 import { useAnalysisControl } from './issues/useAnalysisControl';
+import { useShortWindow } from './issues/useShortWindow';
 import { hiddenScopeOf, setCheckHidden, useHiddenChecks, type HiddenScope } from '../settings/hiddenChecks';
 import { comparisonCounts, countedChecks, marksRows } from '../changes/changes';
 import type { ChangeFilterSearch } from '../routing/search';
@@ -628,8 +629,13 @@ export function IssuesScreen() {
   };
   // The list is behind its button only while a check is open: with none, the list is what there is to pick from.
   const listBehind = selected !== null && !checksOpen;
+  const short = useShortWindow();
   const visibleChecks = list?.visible ?? [];
   const checkAt = visibleChecks.findIndex((entry) => entry.check.id === checkId);
+  // Its place among the checks that found something, which is what the sidebar counts (A-15: never "1 of 54" when
+  // 31 checks fired); a passed or skipped check, listed after them, says no place.
+  const foundChecks = visibleChecks.filter((entry) => entry.outcome !== 'passed' && entry.outcome !== 'skipped');
+  const foundAt = foundChecks.findIndex((entry) => entry.check.id === checkId);
 
   const loading = (checks.isPending || (analysis.isPending && !rereading)) && !checks.error && !analysis.error;
   const skeleton = useDelayedLoading(loading);
@@ -637,7 +643,9 @@ export function IssuesScreen() {
   const hiddenNote = hiddenChecks ? hiddenWords(hiddenChecks) : null;
   const movedLine = things && period ? thingsMovedWords(things) : null;
   const subtitle = totals ? (
-    <>
+    // In a short window with the check alone in view, the answer is with the list, behind "All checks": the check's
+    // rows get its room (A-09).
+    <span className={clsx(short && listBehind && '@max-checks-beside:hidden')}>
       <AnswerHeadline totals={totals} />
       {hiddenNote ? ` ${hiddenNote.count}${hiddenNote.rest}` : ''}
       {/* The fix loop: what moved since the crawl compared with, in the headline's unit. */}
@@ -648,7 +656,7 @@ export function IssuesScreen() {
           {movedLine.slice(1)}
         </span>
       ) : null}
-    </>
+    </span>
   ) : neverAnalysed ? (
     'No issues to show yet.'
   ) : undefined;
@@ -684,13 +692,16 @@ export function IssuesScreen() {
         {analysing ? (
           <AnalysisProgress event={analysisEvent} onCancel={cancel} cancelling={cancelling} cancelRef={cancelRef} />
         ) : null}
-        <AnalysisNotes
-          analysis={analysis.data}
-          crawling={crawling}
-          analysing={analysing}
-          canAnalyse={canAnalyse}
-          onAnalyse={analyse}
-        />
+        {/* In a short window with the check alone in view, the notes are with the list, behind "All checks". */}
+        <div className={clsx('contents', short && listBehind && '@max-checks-beside:hidden')}>
+          <AnalysisNotes
+            analysis={analysis.data}
+            crawling={crawling}
+            analysing={analysing}
+            canAnalyse={canAnalyse}
+            onAnalyse={analyse}
+          />
+        </div>
         <div
           className={clsx(
             'grid min-h-0 flex-1 grid-cols-(--issues-columns) gap-4 @max-split:flex-none @max-split:grid-cols-1',
@@ -737,7 +748,7 @@ export function IssuesScreen() {
               filterRef={filterRef}
             />
           </Card>
-          <Card data-check-detail className="min-h-0 overflow-auto @max-split:overflow-visible">
+          <Card data-check-detail className="flex min-h-0 flex-col overflow-auto @max-split:overflow-visible">
             {selected ? (
               // The list's way back, while it's behind its button: the check's place among those listed, and the
               // checks on either side of it.
@@ -755,9 +766,9 @@ export function IssuesScreen() {
                 >
                   All checks
                 </Button>
-                {checkAt >= 0 ? (
+                {foundAt >= 0 ? (
                   <span className="text-13 text-text-muted tabular-nums">
-                    {formatCount(checkAt + 1)} of {formatCount(visibleChecks.length)}
+                    {formatCount(foundAt + 1)} of {formatCountOf(foundChecks.length, 'check')} with issues
                   </span>
                 ) : null}
                 <span className="ml-auto flex items-center gap-1">

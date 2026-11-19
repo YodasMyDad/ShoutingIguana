@@ -2290,6 +2290,44 @@
     font-size: var(--text-12);
   }
 
+  /*
+   * A URL in an Issues table (rules 1 and 2 of the 2026-11-19 UX round): its box is no wider than its text and its
+   * open button, so the button sits directly after the text; and in these lists of things to fix the button always
+   * shows, quiet until its row or the URL is pointed at (the rules above bring it to full strength then).
+   */
+  .si-issue-url {
+    display: block;
+    flex: 0 1 auto;
+  }
+
+  .si-issue-url .si-url__open {
+    opacity: 0.5;
+  }
+
+  /* "+2 more" on a row with more references than the one it shows: it opens the rest under the row. */
+  .si-more-toggle {
+    flex: none;
+    padding: var(--space-0-5) var(--space-1-5);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-sunken);
+    color: var(--color-accent-text);
+    font-size: var(--text-12);
+    font-weight: var(--font-weight-medium);
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .si-more-toggle:hover {
+    text-decoration: underline;
+    text-underline-offset: var(--underline-offset);
+  }
+
+  @media (forced-colors: active) {
+    .si-more-toggle {
+      color: LinkText;
+    }
+  }
+
   /* -------------------------------------------------------------- Favicons */
   .si-favicon {
     display: inline-grid;
