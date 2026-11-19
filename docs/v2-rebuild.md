@@ -142,12 +142,34 @@ Nothing was pushed. Nothing below is merged into `ui/step-3` except the two seve
 outstanding"**. The whole record is in
 [`docs/handoff/2026-11-19/`](handoff/2026-11-19/): read [`checkpoint.md`](handoff/2026-11-19/checkpoint.md) first.
 
-**RESUMED 2026-11-19 (session `848ba86b`).** Step 1 of the resume list held: every lane worktree clean and at the
-head in the table. Step 2 is under way: five agents, one per lane (simple, data, shell, issues, engine), each in its
-own worktree. The issues agent merges `ui/step-3` into `ui/ux-issues` itself and does items 1 to 3 of the fix as code
-there, so that conflict is not left for the integration merge. Each agent writes its lane's state to
-`.claude/worktrees/_handoff/2026-11-19/lanes/<lane>-fix/state-after.md` (untracked). If this session dies: check each
-lane worktree's `git status` and `git log`, read those files, and carry on from step 2 or 3. Nothing merged yet.
+**RESUMED 2026-11-19 (session `848ba86b`), then PAUSED AGAIN the same day for usage. This block is the current
+status; it replaces the lane table and steps 1 and 2 of the resume list below.** Nothing is running: every agent
+stopped, every server down, every worktree clean. Nothing was pushed. **Nothing is merged into `ui/step-3`**: steps 3
+to 6 of the resume list are not started. Each lane's state, finding by finding, is in
+`docs/handoff/2026-11-19/state-after-<lane>.md` (they replace the `state-<lane>.md` files, which are the morning's).
+
+| Lane | Branch | Head | State |
+| --- | --- | --- | --- |
+| engine | `ui/ux-engine` | `a2f9db6f` | **Finished and gated.** `verify-engine.sh` whole at head: build clean, 2,419 + 331 + 45 tests, 100k bench, readbench (23 gates). `AnalysisFreshness.VERSION` 21. A sitemap cut short on a recheck now keeps what the crawl read |
+| shell | `ui/ux-shell` | `505c7f94` | **Finished.** 19 of 24 findings done, H-08, H-16, H-22 partly, H-12 (simple's files) and H-13 (polish) not. Whole Vitest passed at head (5,687). e2e: 13 specs ran one commit before head (1 failure, since fixed), 3 rerun at head; stories not run. The crawl's sidebar item is now "This crawl's settings" |
+| data | `ui/ux-data` | `e254de30` | **Stopped early, committed clean.** D-02 (the `Url` button), D-06, D-09, D-12 done, D-10 done differently; D-04, D-08, D-11, D-14, D-16, D-17, D-18, D-20 partly. Whole Vitest passed three commits before head (5,751); data e2e at head 108 passed. Other e2e and stories not run |
+| issues | `ui/ux-issues` | `2b915000` (WIP: e2e specs only) | **Stopped early.** `ui/step-3` is merged in, and **items 1, 2 and 3 of the fix as code are done there** (the fix in the check's head, "On this site", "1 link, to / in the header, repeated on 260 pages"). A-07, A-09, A-10, A-12, A-15, A-18 done bar small leftovers. The owner's 404 task: 1 click to the linking page at the link. Whole Vitest had 2 failures, fixed, **not rerun whole**; the 11 changed e2e specs **not rerun at head** |
+| simple | `ui/ux-simple` | `24907078` (WIP) | **Stopped early.** `ui/ux-simple-report` merged in (fast-forward; its e2e passed). S-01 to S-04, S-07 ("Where to fix it"), S-12, S-13, S-16 to S-19 done; S-05, S-06, S-10, S-14, S-15, S-20, S-21 partly. Owner's task: 3 clicks from Home to the page at the link. **Whole Vitest never run**; last e2e 53 passed, 4 failed, the fixes committed and **unrun**. Engine catalog wording not done |
+
+*To resume from here:*
+
+1. Check the heads above (`git worktree list`), read each `state-after-<lane>.md`.
+2. **Close the three lanes stopped early**, one agent each, gates before new work: **simple** (rerun its 12 e2e specs,
+   whole Vitest, lint, format, stories; replace the WIP commit), **issues** (the 11 changed e2e specs, whole Vitest,
+   stories `--forced` and `--reduced-motion`), **data** (the unrun e2e and stories; D-14 on Links; delete the old
+   width code). Their partly done findings are in the state files: finish them or leave them listed.
+3. Then steps 3 to 6 of the list below as written (integration branch; merge data, issues, shell, simple, engine;
+   whole-suite gates; the walk as the owner; merge, gallery, installer). Changes to that list: the
+   `CheckDetail.tsx` fix-as-code conflict is already resolved on `ui/ux-issues`, but shell's `b484f6e5` also touches
+   `CheckDetail.tsx`, `AnalysisState.tsx` and `IssuesScreen.tsx`; tests that find the crawl's "Settings" item need
+   "This crawl's settings"; data made a click on a URL grid's first cell open the inspector and renamed the facet
+   button "Filter by status class", so other lanes' specs need the same edits; simple's `c1b7c50d` touches
+   `Sidebar.tsx`, `TopBar.tsx`, `goToSection.ts`; capture `engine-checks.json` once from the merged sidecar.
 
 *What the owner asked (2026-11-19, on the installed app and their own garden crawl):* "The UI looks nice in most cases
 but the UX really falls short." In Issues > "Internal URL returns 4xx" the page that holds each broken link was plain
