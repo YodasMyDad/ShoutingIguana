@@ -11,9 +11,10 @@ namespace ShoutingIguana.Engine.Export;
 
 /// <summary>
 /// Where to fix each URL a check's file lists, as columns after its own, so a sheet handed to a developer says what to
-/// change. A check whose URLs other pages refer to (<see cref="IssueReferences.Sources"/>: a 404, a redirect) gets how
-/// many pages link to each, the first of them (each with where on the page the link is and its text), and the sitemaps
-/// listing it; a check whose pages hold the bad references (<see cref="IssueReferences.Targets"/>) gets how many URLs each
+/// change. A check whose URLs other pages refer to (<see cref="IssueReferences.Sources"/>: a 404, a redirect) gets the
+/// first page that links to each in cells of its own (the page, where on it the link is, the link's text: a sheet can be
+/// sorted and filtered by the page), how many pages link to it, the others of them in one cell, and the sitemaps listing
+/// it; for a check fixed at the link (<see cref="FixedAtTheLink"/>) the page's three cells lead the row; a check whose pages hold the bad references (<see cref="IssueReferences.Targets"/>) gets how many URLs each
 /// page's issue names and the first of them with their status. Every other one gets nothing. The full list of the links
 /// to one URL is the Links screen's: these name the first <see cref="LISTED"/>, then how many more.
 /// </summary>
@@ -28,7 +29,7 @@ internal static class WhereFoundColumns
     /// <summary>The columns for a check's file; null for a check that refers to nothing, or one the engine doesn't know.</summary>
     public static ExportExtraColumns? For(ExportRun run, string? checkId) => (checkId is null ? null : IssueCatalog.Find(checkId)) switch
     {
-        { References: IssueReferences.Sources } => new ExportExtraColumns(["Linked from (pages)", "Linked from", "Listed in sitemaps"], ids => Sources(run, ids)),
+        { References: IssueReferences.Sources } check => new ExportExtraColumns(SOURCE_TITLES, ids => Sources(run, ids)) { Leading = FixedAtTheLink(check) ? 3 : 0 },
         { References: IssueReferences.Targets } check => TargetColumns(run, check),
         _ => null
     };
@@ -70,20 +71,60 @@ internal static class WhereFoundColumns
             [page.Total, Joined([.. page.Targets.Select(target => Target(check, target))], page.Total - page.Targets.Count)]));
     }
 
+    /// <summary>
+    /// The columns of a check whose URLs other pages refer to. The first three are the first page that links to the URL, in
+    /// cells of their own: the UX audit's S-05 found the page, the place and the link's text in one cell ("https://x/blog/
+    /// (content, “Buy Now”)"), which can't be sorted or filtered by page.
+    /// </summary>
+    internal static readonly IReadOnlyList<string> SOURCE_TITLES =
+        ["Page that links to it", "Where on the page", "Link text", "Linked from (pages)", "Other pages that link to it", "Listed in sitemaps"];
+
+    /// <summary>
+    /// The checks of addresses whose fix is at the link to them: a missing page is mended by changing the link on the page
+    /// that holds it, so that page leads its row, in a sheet as in the report. Any other check of addresses is fixed at the
+    /// address itself (a server error, a chain of redirects), which leads.
+    /// </summary>
+    internal static bool FixedAtTheLink(IssueDefinition check) => check == IssueCatalog.INTERNAL_CLIENT_ERROR;
+
     private static IReadOnlyDictionary<int, object?[]> Sources(ExportRun run, IReadOnlyList<int> ids) =>
-        FoundOnReader.ReadFoundOn(run.CrawlPath, ids, LISTED, run.Settings.Cache, run.Token).ToDictionary(url => url.UrlId, url => new object?[]
+        FoundOnReader.ReadFoundOn(run.CrawlPath, ids, LISTED, run.Settings.Cache, run.Token).ToDictionary(url => url.UrlId, url =>
         {
-            url.Pages,
-            Joined([.. Pages(url), .. url.Start ? ["The start address"] : Array.Empty<string>()], url.Pages - url.Sources.Select(source => source.Id).Distinct().Count()),
-            Joined([.. url.Sitemaps.Sitemaps.Select(sitemap => sitemap.Url)], url.Sitemaps.Total - url.Sitemaps.Sitemaps.Count)
+            // Each page once, by its first link; the first of them apart, the others as one cell says them.
+            List<LinkRow> pages = [.. url.Sources.GroupBy(source => source.Id).Select(links => links.First())];
+            var first = pages.FirstOrDefault();
+            return new object?[]
+            {
+                first?.Url,
+                first is null ? null : Where(first),
+                first is null || string.IsNullOrWhiteSpace(first.Text) ? null : OneLine(first.Text),
+                url.Pages,
+                Joined([.. pages.Skip(1).Select(Page), .. url.Start ? ["The start address"] : Array.Empty<string>()], url.Pages - pages.Count),
+                Joined([.. url.Sitemaps.Sitemaps.Select(sitemap => sitemap.Url)], url.Sitemaps.Total - url.Sitemaps.Sitemaps.Count)
+            };
         });
 
     private static IReadOnlyDictionary<int, object?[]> Targets(ExportRun run, IssueDefinition check, IReadOnlyList<int> ids, Func<IssueTargetsOfUrl, object?[]> cells) =>
         (FoundOnReader.ReadTargets(run.CrawlPath, check.Id, ids, LISTED, run.Settings.Cache, run.Token) ?? []).ToDictionary(page => page.UrlId, cells);
 
-    /// <summary>Each page linking to the URL once, with where on it its first link is and the link's text.</summary>
-    private static IEnumerable<string> Pages(UrlFoundOn url) => url.Sources.GroupBy(source => source.Id).Select(links =>
-        Place(links.First()) is { } place ? $"{links.First().Url} ({place})" : links.First().Url);
+    /// <summary>A page linking to the URL, with where on it its first link is and the link's text.</summary>
+    private static string Page(LinkRow link) => Place(link) is { } place ? $"{link.Url} ({place})" : link.Url;
+
+    /// <summary>Where on its page a link is, and what kind it is when not a hyperlink: "footer", "image, content"; null with neither.</summary>
+    private static string? Where(LinkRow link)
+    {
+        List<string> what = [];
+        if (link.Kind is { } kind and not LinkKind.Hyperlink)
+        {
+            what.Add(KindWord(kind));
+        }
+
+        if (link.Position is { } position)
+        {
+            what.Add(PositionWord(position));
+        }
+
+        return what.Count == 0 ? null : string.Join(", ", what);
+    }
 
     /// <summary>Where on its page a link is, what kind it is when not a hyperlink, and its text: "footer, “Old range”"; null with none of them.</summary>
     internal static string? Place(LinkRow link)

@@ -904,14 +904,6 @@ internal static class ReportDocument
         html.Append("</p>");
     }
 
-    /// <summary>
-    /// The checks of addresses whose fix is at the link to them: a missing page is mended by changing the link on the page
-    /// that holds it, so that page leads the row as the page to edit (the UX audit's S-02, S-11: "people are going to be
-    /// more interested as to where the broken link is"). Any other check of addresses is fixed at the address itself (a
-    /// server error, a chain of forwards), which leads its row, with the pages that link to it after.
-    /// </summary>
-    private static readonly HashSet<string> FIXED_AT_THE_LINK = new(StringComparer.Ordinal) { IssueCatalog.INTERNAL_CLIENT_ERROR.Id };
-
     private static void Examples(StringBuilder html, ReportModel model, ReportProblem problem, int listed, bool compact, ReportWording wording)
     {
         var rows = problem.Examples.Take(listed).ToList();
@@ -927,7 +919,7 @@ internal static class ReportDocument
         var caption = more > 0 ? $"The first {rows.Count} of {Number(problem.Count)}" : problem.Count == 1 ? "Where it is" : $"All {problem.Count}";
         var sources = check.References == IssueReferences.Sources;
         var targets = check.References == IssueReferences.Targets;
-        var linkFirst = sources && !compact && FIXED_AT_THE_LINK.Contains(check.Id);
+        var linkFirst = sources && !compact && WhereFoundColumns.FixedAtTheLink(check);
         if (linkFirst)
         {
             // The links on one page together, the pages in the order the list first has them: one page is one visit to the editor.
