@@ -356,6 +356,12 @@
     border-bottom: 0;
   }
 
+  /* The end of a title or description that search results cut off: greyed, never struck through (it reads poorly). */
+  .si-cut-text {
+    color: var(--color-text-muted);
+    background: var(--color-surface-sunken);
+  }
+
   /*
     An address, a page's name or a link's words that open in the browser (the UX fix round's rules 1 and 3): the text
     is the link. Underlined so it reads as one without its colour, quietly until it's pointed at.

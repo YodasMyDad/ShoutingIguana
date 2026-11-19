@@ -112,21 +112,26 @@ describe.skipIf(TABLE_STUBBED)('what a problem found, in Simple', () => {
     );
     cleanup();
     await open('title-too-long');
-    expect((await where().findAllByText(/^Google will likely cut this title off/)).length).toBe(3);
+    expect((await where().findAllByText(/more than Google shows\./)).length).toBe(3);
     expect(screen.queryByText(/One fix clears/)).toBeNull();
   });
 
-  it('says where Google will likely cut a long title, in place of its width, and never says pixels', async () => {
+  // The UX audit of 2026-11-19, S-13: it pinned "Google will likely cut this title off after “…every season, delivered
+  // free”", which showed neither the words lost nor how far over the title was.
+  it('shows a long title whole with the part Google cuts greyed, and how far over it is, never in pixels', async () => {
     await open('title-too-long');
+    const cut = (await where().findAllByTitle('Google will likely cut this part off'))[0]!;
+    expect(cut).toHaveTextContent('across the UK | Example');
+    expect(cut).toHaveClass('si-cut-text');
+    expect(cut.parentElement).toHaveTextContent(
+      '“Garden sofas and chairs for every season, delivered free across the UK | Example”',
+    );
     expect(
-      await where().findByText('Google will likely cut this title off after “…every season, delivered free”'),
+      where().getByText(
+        '80 characters: about 23 more than Google shows. The greyed words are the ones that won’t show.',
+      ),
     ).toBeVisible();
-    expect(
-      where().getByText('Google will likely cut this title off after “…small gardens and balconies in”'),
-    ).toBeVisible();
-    expect(
-      where().getByText('Google will likely cut this title off after “…cushions and storage boxes”'),
-    ).toBeVisible();
+    expect(where().getAllByText(/more than Google shows\./)).toHaveLength(3);
     // The engine's detail and the evidence's widths are Advanced's.
     expect(where().queryByText(/742 px/)).toBeNull();
     expect(screen.getByRole('main')).not.toHaveTextContent(/\bpx\b|pixels/);

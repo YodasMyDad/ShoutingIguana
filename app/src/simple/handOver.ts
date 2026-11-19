@@ -15,6 +15,7 @@ import { openExportDialog } from '../export/exportFlow';
 import type { ExportOffer } from '../export/exportOffer';
 import { issuesOffer } from '../export/offers';
 import { longDate } from './dates';
+import { settingNames, sitemapLine } from './developerNotes';
 import { plainDetail, plainDetailColumn } from './plainEvidence';
 import { plainTitle } from './plainWords';
 import { evidenceOf } from '../screens/issues/evidenceColumns';
@@ -70,8 +71,12 @@ export interface ProblemCause {
 }
 
 /** A row's detail as the page says it: a few checks' details are said plainly ("Google will likely cut this title…"). */
-const detailOf = (check: Check, row: IssueRow): string | null =>
-  plainDetail(check, row as unknown as Record<string, unknown>) ?? row.detail ?? null;
+const detailOf = (check: Check, row: IssueRow): string | null => {
+  const said = plainDetail(check, row as unknown as Record<string, unknown>) ?? row.detail ?? null;
+  // S-16: the names a developer will ask for, after the plain words.
+  const names = settingNames(check, row.detail);
+  return said && names.length > 0 ? `${said} [${names.join(', ')}]` : said;
+};
 
 /**
  * What a file a cause names is, where the check judges it by that: "2.1 MB, 4000×3000 pixels" for an oversized
@@ -138,6 +143,9 @@ export function problemListText(
     for (const file of files) lines.push(`${label}: ${file.url}`);
     const found = rows.map((row) => detailOf(check, row)).filter((detail): detail is string => Boolean(detail));
     for (const detail of new Set(found)) lines.push(`What was found: ${detail}`);
+    for (const line of new Set(rows.map((row) => sitemapLine(check, row.detail)))) {
+      if (line) lines.push(`Line to add: ${line}`);
+    }
     return lines.join('\n');
   }
   if (check.grouping === 'none' || causes === null) {

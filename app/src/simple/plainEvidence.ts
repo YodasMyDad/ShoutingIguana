@@ -556,6 +556,12 @@ function plainOnlyCharacters(characters: unknown): string | null {
   return `Only ${formatCount(characters)} ${characters === 1 ? 'character' : 'characters'} long`;
 }
 
+/** A short title: its length against the room search results have (S-13: the row gave a length and no measure). */
+function plainShortTitle(characters: unknown): string | null {
+  const only = plainOnlyCharacters(characters);
+  return only ? `${only}: search results have room for about 60` : null;
+}
+
 /**
  * The checks whose page Simple says plainly in place of the engine's detail ("612 px, over 580 (64 characters)"), each
  * from one of its evidence columns: where Google will likely cut a title, how many characters a short one has.
@@ -563,7 +569,7 @@ function plainOnlyCharacters(characters: unknown): string | null {
 const PLAIN_DETAILS: Readonly<Record<string, { column: string; say: (value: unknown) => string | null }>> = {
   'title-too-long': { column: 'titleInResults', say: (value) => plainCutOff('title', value) },
   'description-too-long': { column: 'descriptionInResults', say: (value) => plainCutOff('description', value) },
-  'title-too-short': { column: 'titleLength', say: plainOnlyCharacters },
+  'title-too-short': { column: 'titleLength', say: plainShortTitle },
   'description-too-short': { column: 'descriptionLength', say: plainOnlyCharacters },
 };
 

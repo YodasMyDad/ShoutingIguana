@@ -18,6 +18,9 @@ import { OneFixTag } from '../ui/PlainCheckRow';
 import { evidenceOf } from '../screens/issues/evidenceColumns';
 import { FoundOnWords } from './FoundOnWords';
 import { OpenLink } from './OpenLink';
+import { cutTextOf, settingNames, sitemapLine } from './developerNotes';
+import { announce } from '../feedback/announce';
+import { copyText } from '../lib/clipboard';
 import { saysShownAt, useShownAt } from '../screens/issues/useShownAt';
 import { ImageThumb } from '../ui/ImageThumb';
 import { fileLabelOf } from '../ui/urlText';
@@ -82,6 +85,48 @@ function EvidenceLines({ row, check, origin }: { row: IssueRow; check: Check; or
         </span>
       ))}
     </span>
+  );
+}
+
+/**
+ * What was found on one page of a check that lists its pages: the engine's detail, unless the check says it plainly
+ * ("Google will likely cut…"), then its evidence. A title or description too long is shown whole, the part Google cuts
+ * greyed, with its length (S-13); a security check names its settings for whoever will add them (S-16).
+ */
+function Found({ row, check, origin }: { row: IssueRow; check: Check; origin: string | null }) {
+  const values = row as unknown as Record<string, unknown>;
+  const cut = cutTextOf(check, values);
+  if (cut) {
+    return (
+      <>
+        <span className="block text-text" data-site-text>
+          “{cut.shown}
+          <span className="si-cut-text" title="Google will likely cut this part off">
+            {cut.cut}
+          </span>
+          ”
+        </span>
+        <span className="mt-1 block text-13">{cut.words} The greyed words are the ones that won’t show.</span>
+      </>
+    );
+  }
+  const names = settingNames(check, row.detail);
+  return (
+    <>
+      {plainDetail(check, values) ?? row.detail ?? ''}
+      {names.length > 0 ? (
+        <span className="mt-1 block text-13">
+          Their names, for your developer or host:{' '}
+          {names.map((name, index) => (
+            <span key={name}>
+              {index > 0 ? ', ' : null}
+              <code className="font-mono text-text">{name}</code>
+            </span>
+          ))}
+        </span>
+      ) : null}
+      <EvidenceLines row={row} check={check} origin={origin} />
+    </>
   );
 }
 
@@ -300,9 +345,7 @@ export function WhereItIs({
                   </td>
                   {saysFound ? (
                     <td className="text-text-secondary">
-                      {/* The engine's detail, unless the check says it plainly ("Google will likely cut…"). */}
-                      {plainDetail(check, row as unknown as Record<string, unknown>) ?? row.detail ?? ''}
-                      <EvidenceLines row={row} check={check} origin={origin} />
+                      <Found row={row} check={check} origin={origin} />
                     </td>
                   ) : null}
                 </tr>
@@ -400,11 +443,34 @@ function FilesRow({
             <span key={row.id} className="block">
               {said}
               <EvidenceLines row={row} check={check} origin={origin} />
+              <LineToAdd line={sitemapLine(check, row.detail)} />
             </span>
           ))}
         </td>
       ) : null}
     </tr>
+  );
+}
+
+/** The line a file needs, to copy into it (S-16: the rules file's row said a line was missing and didn't give it). */
+function LineToAdd({ line }: { line: string | null }) {
+  if (!line) return null;
+  return (
+    <span className="mt-2 block text-text">
+      <span className="block text-13 text-text-secondary">Add this line to it:</span>
+      <span className="mt-1 flex flex-wrap items-center gap-2">
+        <code className="rounded-sm bg-surface-sunken px-2 py-1 font-mono text-13">{line}</code>
+        <Button
+          size="sm"
+          icon={Copy}
+          onClick={() =>
+            void copyText(line).then((copied) => announce(copied ? 'Copied the line' : 'The line couldn’t be copied'))
+          }
+        >
+          Copy the line
+        </Button>
+      </span>
+    </span>
   );
 }
 
