@@ -487,9 +487,13 @@ describe('a URL the crawl didn’t read', () => {
     const meter = await within(inspector).findByRole('meter', { name: 'Image size' });
     expect(meter).toHaveAttribute('aria-valuetext', '300 KB, Limit 200 KB, over the limit');
     expect(within(inspector).getByText('100 KB over the 200 KB limit')).toBeVisible();
-    // The check is on the pages that use the image: its link opens their group, named after this URL.
-    const link = await within(inspector).findByRole('link', { name: 'Image too large' });
-    expect(groupOf(link)).toEqual({ detail: null, relatedUrlId: 2 });
+    // The check is on the pages that use the image: its link opens their group, named after this URL, from the
+    // size it's about and from the image's issues, which are those pages' (never "No issues").
+    const links = await within(inspector).findAllByRole('link', { name: 'Image too large' });
+    expect(links).toHaveLength(2);
+    for (const link of links) expect(groupOf(link)).toEqual({ detail: null, relatedUrlId: 2 });
+    expect(within(inspector).getByRole('heading', { name: '1 issue, filed on the page that shows it' })).toBeVisible();
+    expect(within(inspector).queryByText('No issues')).toBeNull();
     // The figure at the top carries the limit too.
     expect(within(inspector).getByText('Size').parentElement).toHaveTextContent('Limit 200 KB');
   });

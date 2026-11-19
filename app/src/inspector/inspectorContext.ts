@@ -6,6 +6,8 @@ import type { UrlDetail, UrlIssue } from '../api/inspector';
 import { checksQuery } from '../api/queries';
 import type { Check } from '../api/types';
 import type { InspectShow } from '../routing/inspector';
+import { useHiddenChecks } from '../settings/hiddenChecks';
+import { splitHidden } from './sections';
 
 /** What every section needs to know about where it is: the crawl, its origin, and how to walk to another URL. */
 export interface InspectorContextValue {
@@ -60,4 +62,14 @@ export function useIssuesIn(issues: readonly UrlIssue[] | null, categories: read
     () => (issues ?? []).filter((issue) => categories.includes(byId.get(issue.checkId)?.category ?? '')),
     [issues, categories, byId],
   );
+}
+
+/**
+ * The issues on other URLs that name this one, by check: the ones counted, the ones on checks the user hid from the
+ * Issues list, and how many issues the counted ones are.
+ */
+export function useNamedBy(detail: Pick<UrlDetail, 'namedBy'>) {
+  const { crawlId } = useInspectorContext();
+  const named = splitHidden(detail.namedBy?.checks ?? [], useHiddenChecks(crawlId));
+  return { ...named, total: named.counted.reduce((total, entry) => total + entry.count, 0) };
 }

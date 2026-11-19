@@ -2455,8 +2455,37 @@
   }
 
   .si-grid-row:has(.si-came-for) > .si-grid-cell,
-  .si-grid-row:has(.si-came-for) .si-url__path {
+  .si-grid-row:has(.si-came-for) .si-url__path,
+  .si-grid-row:has(.si-came-for) .si-url__file {
     font-weight: var(--font-weight-semibold);
+  }
+
+  /* An image, at the top of its own summary: the picture whole, no taller than four of Simple's thumbnails, in the
+     thumbnail's own box (a hairline, the sunken surface behind a picture with no background of its own). */
+  .si-inspector-image {
+    display: inline-grid;
+    flex: none;
+    place-items: center;
+    min-width: var(--thumb-lg);
+    max-width: 100%;
+    min-height: var(--thumb-lg);
+    overflow: hidden;
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-sunken);
+    box-shadow: 0 0 0 var(--hairline) var(--color-border);
+  }
+
+  .si-inspector-image__picture {
+    display: block;
+    max-width: min(100%, calc(var(--thumb-lg) * 6));
+    max-height: calc(var(--thumb-lg) * 4);
+    object-fit: contain;
+  }
+
+  @media (forced-colors: active) {
+    .si-inspector-image {
+      outline: var(--hairline) solid CanvasText;
+    }
   }
 
   .si-link {

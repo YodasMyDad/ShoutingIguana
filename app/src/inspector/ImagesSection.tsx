@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { ImageOff } from 'lucide-react';
+import clsx from 'clsx';
 import { useMemo } from 'react';
 import type { PageImage } from '../api/inspector';
 import { urlDetailQuery, urlImagesQuery } from '../api/queries';
@@ -19,6 +20,7 @@ import { LiveBadge } from '../ui/LiveBadge';
 import { SeverityMark } from '../ui/SeverityMark';
 import { TextLink } from '../ui/TextLink';
 import { Url } from '../ui/Url';
+import { fileNameOf } from '../ui/urlText';
 import { IMAGES_LISTED, imageUsesFilters, imagesSummaryWords, isLargeImage, shownWords } from './images';
 import { useInspectorContext } from './inspectorContext';
 import { SectionError, SectionSkeleton } from './parts';
@@ -30,16 +32,21 @@ const PIXELS_WIDTH = 112;
 const ALT_WIDTH = 192;
 const SHOWN_WIDTH = 160;
 const MIN_URL_WIDTH = 260;
+/** Of the width the image's name and its alt text share, the name's part. */
+const URL_SHARE = 0.5;
+/** Room the thumbnail and the open-in-browser button take beside an image's name. */
+const THUMB_AND_BUTTON_WIDTH = 60;
 const FRAME_SLACK = 24;
 
 /**
  * The images the page shows (step 3b): each file once, the largest first, with its picture, its size and pixels after
  * any redirects, its alt text and where the page shows it; one over the analysis's limit for a large image is flagged,
  * as the large-image check flags it. A click on an image walks the inspector to it; Enter opens every page that shows
- * it in Links, and "All N in Links" this page's images there, sorted the same way.
+ * it in Links, and "All N in Links" this page's images there, sorted the same way. The image the reader came from
+ * (its own summary's "Used on: this page") is first, marked, whatever its size.
  */
 export function ImagesSection() {
-  const { crawlId, urlId, siteOrigin, walk, crawling } = useInspectorContext();
+  const { crawlId, urlId, siteOrigin, walk, crawling, marked } = useInspectorContext();
   const navigate = useNavigate();
   const images = useQuery(urlImagesQuery(crawlId, urlId, IMAGES_LISTED));
   const limit = useQuery(urlDetailQuery(crawlId, urlId)).data?.limits.largeImageBytes;
@@ -47,23 +54,34 @@ export function ImagesSection() {
   const [measure, width] = useElementWidth();
   // A crawl made before images' pixel sizes were read has none: no column of dashes, one line that says so.
   const unmeasured = images.data?.pixelSizes === false;
-  const urlWidth = Math.max(
-    MIN_URL_WIDTH,
-    (width ?? 0) - SIZE_WIDTH - (unmeasured ? 0 : PIXELS_WIDTH) - ALT_WIDTH - SHOWN_WIDTH - FRAME_SLACK,
-  );
+  // The image and its alt text share what the short columns leave: neither is cut beside the other's blank space.
+  const shared = (width ?? 0) - SIZE_WIDTH - (unmeasured ? 0 : PIXELS_WIDTH) - SHOWN_WIDTH - FRAME_SLACK;
+  const urlWidth = Math.max(MIN_URL_WIDTH, Math.round(shared * URL_SHARE));
+  const altWidth = Math.max(ALT_WIDTH, shared - urlWidth);
+  const listed = useMemo(() => {
+    const rows = images.data?.rows ?? [];
+    if (marked === undefined) return rows;
+    return [...rows.filter((row) => row.id === marked), ...rows.filter((row) => row.id !== marked)];
+  }, [images.data, marked]);
+  const cameFirst = marked !== undefined && listed[0]?.id === marked;
   const columns = useMemo<GridColumn<PageImage>[]>(
     () => [
       {
         id: 'image',
         header: 'Image',
         width: urlWidth,
+        fit: 'url',
+        fitText: (row) => fileNameOf(row.url),
+        fitExtra: THUMB_AND_BUTTON_WIDTH,
         cell: (row) => (
-          <span className="flex min-w-0 items-center gap-2">
+          <span className={clsx('flex min-w-0 items-center gap-2', row.id === marked && 'si-came-for')}>
+            {row.id === marked ? <span className="sr-only">The image you came from: </span> : null}
             <ImageThumb url={row.url} broken={isBrokenImage(row.target)} />
             <Url
               url={row.url}
               siteOrigin={siteOrigin}
               tabbable={false}
+              copyable={false}
               onGo={() => walk(row.id)}
               label="file"
               className="min-w-0 flex-1"
@@ -109,7 +127,8 @@ export function ImagesSection() {
       {
         id: 'alt',
         header: 'Alt text',
-        width: ALT_WIDTH,
+        width: altWidth,
+        fit: 'text',
         cell: (row) =>
           row.text ? <span title={row.text}>{row.text}</span> : <span className="text-text-muted">None</span>,
         text: (row) => row.text ?? '',
@@ -123,7 +142,7 @@ export function ImagesSection() {
         text: shownWords,
       },
     ],
-    [urlWidth, siteOrigin, walk, limit],
+    [urlWidth, altWidth, siteOrigin, walk, limit, marked],
   );
   const visible = useMemo(
     () => (unmeasured ? columns.filter((column) => column.id !== 'pixels') : columns),
@@ -154,6 +173,7 @@ export function ImagesSection() {
               : imagesSummaryWords(page, limit)}
           {page.total > page.rows.length ? `, the largest ${formatCount(page.rows.length)} listed` : ''}
         </p>
+        {cameFirst ? <p className="text-13 font-semibold text-text">The image you came from is first</p> : null}
         {page.pixelSizes === false && page.total > 0 ? (
           <p className="text-13 text-text-muted">Image dimensions weren’t measured in this crawl.</p>
         ) : null}
@@ -172,12 +192,12 @@ export function ImagesSection() {
       </div>
       <div ref={measure} className="flex min-h-0 flex-1 flex-col px-2 pb-2">
         <GridCore<PageImage>
-          key={`${crawlId}:${urlId}`}
+          key={`${crawlId}:${urlId}:${marked ?? ''}`}
           label="Images"
           columns={laid.columns}
           columnLayout={laid.columnLayout}
-          rowCount={page.rows.length}
-          getRow={(index) => page.rows[index]}
+          rowCount={listed.length}
+          getRow={(index) => listed[index]}
           rowHeight={rowHeight}
           headerHeight={headerHeight}
           rowNoun={['image', 'images']}

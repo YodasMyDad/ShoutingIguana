@@ -10,6 +10,7 @@ import { App } from '../app/App';
 import { createQueryClient } from '../app/queryClient';
 import { createAppRouter } from '../app/router';
 import { TEST_CRAWL_ID, fakeSidecar, standardRoutes } from '../test/fakeSidecar';
+import { inspectFromGrid } from '../routing/inspector';
 import { inspectorRoutes, testPageImage, testUrlDetail } from '../test/inspectorSidecar';
 import { resetRememberedSection } from './sections';
 
@@ -106,6 +107,23 @@ describe('the inspector’s Images', () => {
       { column: 'selfLink', op: 'is', value: false },
       { column: 'kind', op: 'in', values: ['image'] },
     ]);
+  });
+
+  it('puts the image the reader came from first, marked, and says so', async () => {
+    const { router, inspector } = await open(`${URLS}?inspect=2`);
+    // From the image's own summary ("Used on 1 page: /page/"): the page's Images, for that image.
+    await act(() => inspectFromGrid(router, 2, undefined, { section: 'images', link: 41 }));
+    const panel = await screen.findByRole('tabpanel', { name: /^Images/ });
+    const grid = await within(panel).findByRole('grid', { name: 'Images' });
+    await within(grid).findByText('1.2 KB');
+    // The icon first, though the hero is the larger file.
+    const [first, second] = within(grid).getAllByRole('row').slice(1);
+    expect(first).toHaveTextContent('1.2 KB');
+    expect(first!.querySelector('.si-came-for')).not.toBeNull();
+    expect(first).toHaveTextContent(/The image you came from/);
+    expect(second).toHaveTextContent('2.1 MB');
+    expect(second!.querySelector('.si-came-for')).toBeNull();
+    expect(within(inspector).getByText('The image you came from is first')).toBeVisible();
   });
 
   it('says a page that shows no image has none', async () => {

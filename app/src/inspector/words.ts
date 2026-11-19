@@ -200,3 +200,12 @@ export function protocolWords(version: string | null | undefined): string | null
 export function wordFor<T extends string>(words: Record<T, string>, value: T | null | undefined): string {
   return value === null || value === undefined ? 'Unknown' : words[value];
 }
+
+/**
+ * What a URL is told when its only issues are filed on other URLs: an image's are on the pages that show it (the
+ * large-image check flags the page, and names the image), so "No issues" there would be untrue.
+ */
+export function namedByWords(type: UrlType, issues: number): string {
+  if (type !== 'image') return 'Named by issues on other URLs';
+  return `${formatCountOf(issues, 'issue')}, filed on the ${issues === 1 ? 'page that shows' : 'pages that show'} it`;
+}
