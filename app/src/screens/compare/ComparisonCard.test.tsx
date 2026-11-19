@@ -67,7 +67,13 @@ describe('Overview’s comparison card (Advanced)', () => {
         .closest('[aria-hidden="true"]'),
     ).not.toBeNull();
     expect(within(card).getByText(/^Errors: \d+ then, \d+ now/)).toBeInTheDocument();
-    expect(within(card).getByText(/^Checks:/).parentElement).toHaveTextContent(/^Checks: \d+ fixed · /);
+    // The checks that moved are named, what got worse apart from what got better, each with both counts (H-06).
+    const better = within(within(card).getByRole('region', { name: 'Got better' }));
+    expect(within(card).getByRole('region', { name: 'Got better' })).toHaveTextContent(
+      /Got better · \d+ checks? fixed/,
+    );
+    expect(better.getAllByRole('listitem').length).toBeGreaterThan(0);
+    expect(better.getAllByRole('listitem')[0]).toHaveTextContent(/\d+ → \d+ (pages?|URLs?)/);
     expect(within(card).getByText(/^Issues:/).parentElement).toHaveTextContent(/^Issues: \d+ fixed · /);
   });
 

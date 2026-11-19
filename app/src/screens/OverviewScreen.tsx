@@ -69,7 +69,7 @@ import { useHiddenChecks } from '../settings/hiddenChecks';
 import type { CheckChange } from '../api/fixLoop';
 import { checkChangeOf } from '../changes/changes';
 import { rechecksCountWords } from '../changes/recheckWords';
-import { ComparisonCard, type ChangeLink } from './compare/ComparisonCard';
+import { ComparisonCard, type ChangeLink, type ComparisonLinks } from './compare/ComparisonCard';
 import { CompareWithMenu } from './compare/CompareWithMenu';
 import { useComparison } from './compare/useComparison';
 import { RECHECKS_CARD_ID, RechecksCard } from './rechecks/RechecksCard';
@@ -153,6 +153,47 @@ export function OverviewScreen() {
       {children}
     </TextLink>
   );
+  // Every other figure of the card that names something opens it (H-06): a moved check its check, "Since 17 Nov" that
+  // crawl, the score how it's worked out, the things to fix and worth a look the checks of those severities that moved.
+  const comparisonLinks: ComparisonLinks = {
+    check: (checkId, children) => (
+      <TextLink to="/crawls/$crawl/issues/{-$check}" params={{ crawl: crawlId, check: checkId }}>
+        {children}
+      </TextLink>
+    ),
+    crawl: (otherId, children) => (
+      <Link
+        to="/crawls/$crawl/overview"
+        params={{ crawl: otherId }}
+        className="si-link si-link--subtle si-link--inline"
+        title="Open that crawl"
+      >
+        {children}
+      </Link>
+    ),
+    score: (children) => (
+      <Link
+        to="/crawls/$crawl/overview"
+        params={{ crawl: crawlId }}
+        search={(previous) => ({ ...previous, score: 1 })}
+        className="si-link si-link--subtle si-link--inline block"
+        title="How the score is worked out"
+      >
+        {children}
+      </Link>
+    ),
+    things: (kind, children) => (
+      <Link
+        to="/crawls/$crawl/issues/{-$check}"
+        params={{ crawl: crawlId }}
+        search={{ change: 'changed', severity: kind === 'fix' ? ['error', 'warning'] : ['notice'] }}
+        className="si-link si-link--subtle si-link--inline block"
+        title={kind === 'fix' ? 'The errors and warnings that moved' : 'The notices that moved'}
+      >
+        {children}
+      </Link>
+    ),
+  };
   const titleOf = useCallback(
     (checkId: string) => checks.data?.checks.find((check) => check.id === checkId)?.title ?? null,
     [checks.data],
@@ -275,6 +316,7 @@ export function OverviewScreen() {
             crawlId={crawlId}
             comparison={comparison}
             linkTo={compareLink}
+            links={comparisonLinks}
             pickerOpen={pickerOpen || askedToCompare}
             onPickerOpenChange={onPickerOpenChange}
             things={things}

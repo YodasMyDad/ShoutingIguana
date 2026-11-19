@@ -15,7 +15,7 @@ import { installKeyboard } from '../keyboard/registry';
 import { liveStore } from '../live/liveStore';
 import { updateSettings } from '../settings/settingsStore';
 import { TEST_CRAWL_ID, fakeSidecar, json, testCrawlItem, type FakeRoute } from '../test/fakeSidecar';
-import { changesRoute, gardenComparison, recheckRecord, recheckRoutes } from '../test/fixLoopSidecar';
+import { EARLIER_ID, changesRoute, gardenComparison, recheckRecord, recheckRoutes } from '../test/fixLoopSidecar';
 import { overviewRoutes } from '../test/overviewSidecar';
 import { ISSUES_ANALYSIS } from '../test/issuesSidecar';
 import type { Analysis } from '../api/types';
@@ -110,12 +110,43 @@ describe('Overview’s comparison (Advanced)', () => {
     await open({ previous: PREVIOUS }, [changesRoute(comparison()), ...recheckRoutes()]);
     const card = within(await main().findByRole('region', { name: /^Since 17 Oct, \d\d:\d\d$/ }));
     expect(card.getByRole('button', { name: /^Compared with 17 Oct/ })).toBeVisible();
-    const fixed = await card.findByRole('link', { name: '1 fixed' });
+    // The moves say what moved, in words (H-06: "2 more" read as nothing), and each still opens Issues narrowed to it.
+    const fixed = await card.findByRole('link', { name: '1 check fixed' });
     const href = new URL((fixed as HTMLAnchorElement).href);
     expect(href.pathname).toBe(`/crawls/${TEST_CRAWL_ID}/issues`);
     expect(href.searchParams.get('change')).toBe('fixed');
-    expect(card.getByRole('link', { name: '1 new' })).toBeVisible();
-    expect(card.getByRole('link', { name: '1 fewer' })).toBeVisible();
+    expect(card.getByRole('link', { name: '1 check found something new' })).toBeVisible();
+    expect(card.getByRole('link', { name: '1 check flags fewer' })).toBeVisible();
+  });
+
+  // The audit of 2026-11-19, H-06: the card's only links were "2 fixed · 2 more"; a check that went from 18 pages to
+  // 257 showed nowhere in it, and the crawl compared with, the score and the things to fix were dead text.
+  it('names each check that moved with its count then and now, what got worse apart from what got better', async () => {
+    await open({ previous: PREVIOUS }, [changesRoute(comparison()), ...recheckRoutes()]);
+    const card = within(await main().findByRole('region', { name: /^Since 17 Oct, \d\d:\d\d$/ }));
+    const worse = within(await card.findByRole('region', { name: 'Got worse' }));
+    const better = within(card.getByRole('region', { name: 'Got better' }));
+    for (const list of [worse, better]) {
+      const rows = list.getAllByRole('listitem');
+      expect(rows.length).toBeGreaterThan(0);
+      for (const row of rows) {
+        expect(row).toHaveTextContent(/[\d,]+ → [\d,]+ (pages?|URLs?)/);
+        // The check's name opens that check.
+        const link = within(row).getByRole('link');
+        expect(new URL((link as HTMLAnchorElement).href).pathname).toMatch(
+          new RegExp(`^/crawls/${TEST_CRAWL_ID}/issues/[a-z0-9-]+$`),
+        );
+      }
+    }
+  });
+
+  it('opens the crawl compared with from its heading, and the score’s workings from the score', async () => {
+    await open({ previous: PREVIOUS }, [changesRoute(comparison()), ...recheckRoutes()]);
+    const card = within(await main().findByRole('region', { name: /^Since 17 Oct, \d\d:\d\d$/ }));
+    const since = await card.findByRole('link', { name: /^Since 17 Oct/ });
+    expect(new URL((since as HTMLAnchorElement).href).pathname).toBe(`/crawls/${EARLIER_ID}/overview`);
+    const score = card.getByRole('link', { name: /^Score: \d+ then, \d+ now/ });
+    expect(new URL((score as HTMLAnchorElement).href).searchParams.get('score')).toBe('1');
   });
 
   it('says in Fix first what a check’s count was', async () => {
@@ -186,7 +217,12 @@ describe('Overview’s comparison in the headline’s unit (Advanced)', () => {
     // Not checks of each severity beside it: one unit.
     expect(card.queryByText(/^Errors:/)).toBeNull();
     // The checks' moves still lead to Issues.
-    expect(card.getByRole('link', { name: '1 fixed' })).toBeVisible();
+    expect(card.getByRole('link', { name: '1 check fixed' })).toBeVisible();
+    // And the things themselves open the checks of their severities that moved.
+    const fix = card.getByRole('link', { name: /^Things to fix: 10 then, 2 now/ });
+    const search = new URL((fix as HTMLAnchorElement).href).searchParams;
+    expect(search.get('change')).toBe('changed');
+    expect(search.get('severity')).toBe('["error","warning"]');
   });
 });
 

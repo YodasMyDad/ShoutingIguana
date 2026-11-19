@@ -5,7 +5,7 @@ import type { CheckChangeState, CrawlComparison } from '../../api/fixLoop';
 import { errorTitle } from '../../api/errors';
 import { checksQuery, comparisonReads } from '../../api/queries';
 import { isLive } from '../../api/types';
-import { severitiesOf } from '../../changes/changes';
+import { countedChecks, severitiesOf } from '../../changes/changes';
 import { differencesTitle, differenceWords, isNoteOnly, needsAnalysisWords } from '../../changes/changeWords';
 import { analyseCrawl } from '../../crawl/actions';
 import { statusLabel } from '../../crawl/status';
@@ -23,6 +23,7 @@ import { outcomeWord } from '../../ui/severity';
 import { CompareWithMenu } from './CompareWithMenu';
 import { periodWords } from './comparing';
 import { comparisonFigures, figureWords, type ComparisonFigures } from './comparisonFigures';
+import { movedChecks, type MovedCheck } from './movedChecks';
 import type { AdvancedComparison } from './useComparison';
 import { thingsMovedWords, type ThingsMoved } from './thingsMoved';
 
@@ -35,16 +36,36 @@ export type ChangeLink = (state: ChangeFilter, children: ReactNode) => ReactNode
 const plain: ChangeLink = (_state, children) => children;
 
 /**
+ * Where the card's other parts lead (the audit of 2026-11-19, H-06: only "2 fixed · 2 more" was a link). Each wraps
+ * what it's given in its link; left out, that part is text. The card itself knows no route.
+ */
+export interface ComparisonLinks {
+  /** A moved check's name: that check in Issues. */
+  check?: ((checkId: string, children: ReactNode) => ReactNode) | undefined;
+  /** "Since 17 Nov, 06:49": the crawl compared with. */
+  crawl?: ((crawlId: string, children: ReactNode) => ReactNode) | undefined;
+  /** The score then and now: how it's worked out. */
+  score?: ((children: ReactNode) => ReactNode) | undefined;
+  /** "Things to fix" and "Worth a look": the checks of those severities that moved. */
+  things?: ((kind: 'fix' | 'look', children: ReactNode) => ReactNode) | undefined;
+}
+
+/** How many moved checks each list names before it says how many more there are. */
+const MOVED_LIMIT = 8;
+
+/**
  * Overview's comparison card (docs/v2-fix-loop.md, Advanced, "Overview"): "Since 3 Nov, 09:12 (4,480 URLs, done)" with
  * Compare with… at its right; the score and the checks with issues of each severity then and now, their moves as text
- * with a glyph (neutral, never colour alone); the checks and the issues by how they moved, each leading to Issues; the
- * differences that make it partial or counts only, folded (open for counts only). While the other crawl was analysed by
+ * with a glyph (neutral, never colour alone); the checks that moved, named, what got worse beside what got better, each
+ * with its count then and now and leading to its check; the differences that make it partial or counts only, folded
+ * (open for counts only). Every figure that names something opens it (`links`). While the other crawl was analysed by
  * other rules: counts only, with Analyse it again. Nothing for a site's first crawl, nor while this one is live.
  */
 export function ComparisonCard({
   crawlId,
   comparison,
   linkTo = plain,
+  links = {},
   pickerOpen,
   onPickerOpenChange,
   things = null,
@@ -57,6 +78,7 @@ export function ComparisonCard({
    */
   things?: ThingsMoved | null | undefined;
   linkTo?: ChangeLink | undefined;
+  links?: ComparisonLinks | undefined;
   pickerOpen?: boolean | undefined;
   onPickerOpenChange?: ((open: boolean) => void) | undefined;
 }) {
@@ -66,9 +88,10 @@ export function ComparisonCard({
   const picker = (
     <CompareWithMenu crawlId={crawlId} comparison={comparison} open={pickerOpen} onOpenChange={onPickerOpenChange} />
   );
-  const header = (meta: ReactNode = null) => (
+  const period = periodWords(comparing.startedAt, comparing.later);
+  const header = (meta: ReactNode = null, otherId: string | null = null) => (
     <CardHeader
-      title={periodWords(comparing.startedAt, comparing.later)}
+      title={otherId && links.crawl ? links.crawl(otherId, period) : period}
       titleId={titleId}
       level={2}
       meta={meta}
@@ -112,12 +135,13 @@ export function ComparisonCard({
   const meta = `(${formatCountOf(other.crawledUrlCount, 'URL')}, ${statusLabel(other.status as CrawlStatus).toLowerCase()})`;
   return (
     <Card as="section" aria-labelledby={titleId}>
-      {header(meta)}
+      {header(meta, other.id)}
       <CardBody className="flex flex-col gap-3">
         <ComparisonBody
           crawlId={crawlId}
           comparison={shown}
           linkTo={linkTo}
+          links={links}
           needsAnalysis={stage.kind === 'needsAnalysis'}
           things={stage.kind === 'shown' ? things : null}
         />
@@ -130,29 +154,37 @@ function ComparisonBody({
   crawlId,
   comparison,
   linkTo,
+  links,
   needsAnalysis,
   things,
 }: {
   crawlId: string;
   comparison: CrawlComparison;
   linkTo: ChangeLink;
+  links: ComparisonLinks;
   needsAnalysis: boolean;
   things: ThingsMoved | null;
 }) {
   const hiddenIds = useHiddenChecks(crawlId);
   const catalog = useQuery(checksQuery()).data;
   const severityOf = severitiesOf(catalog?.checks ?? []);
-  const figures = comparisonFigures(comparison, new Set(hiddenIds), severityOf);
+  const hidden = new Set(hiddenIds);
+  const figures = comparisonFigures(comparison, hidden, severityOf);
+  const moved = movedChecks(
+    countedChecks(comparison, hidden, 'advanced', severityOf),
+    catalog?.checks ?? [],
+    severityOf,
+  );
   const countsOnly = comparison.comparable === 'countsOnly';
   return (
     <>
-      <FigureRow figures={figures} things={things} />
+      <FigureRow figures={figures} things={things} links={links} />
       {things ? (
         <p className="text-14 font-medium text-text">
           {thingsMovedWords(things) ?? 'Nothing moved among the things to fix or worth a look.'}
         </p>
       ) : null}
-      <ChecksLine figures={figures} linkTo={linkTo} />
+      <MovedChecks figures={figures} worse={moved.worse} better={moved.better} linkTo={linkTo} links={links} />
       {figures.issues && !countsOnly ? (
         things ? (
           <NotCheckedLine count={figures.issues.notChecked} />
@@ -172,21 +204,47 @@ function ComparisonBody({
 }
 
 /** "Score 71 → 85 ▲14 │ Errors 3 → 2 ▼1 │ …": each its words for a screen reader, its glyph for the eye. */
-function FigureRow({ figures, things }: { figures: ComparisonFigures; things: ThingsMoved | null }) {
-  const items: { key: string; label: ReactNode; words: ReturnType<typeof figureWords>; note?: string }[] = [];
+function FigureRow({
+  figures,
+  things,
+  links,
+}: {
+  figures: ComparisonFigures;
+  things: ThingsMoved | null;
+  links: ComparisonLinks;
+}) {
+  const items: {
+    key: string;
+    label: ReactNode;
+    words: ReturnType<typeof figureWords>;
+    note?: string;
+    /** Wraps the figure in what it opens. */
+    link?: ((children: ReactNode) => ReactNode) | undefined;
+  }[] = [];
   if (figures.score) {
     items.push({
       key: 'score',
       label: 'Score',
       words: figureWords('Score', figures.score.then, figures.score.now, figures.score.change),
       ...(figures.score.partial ? { note: 'so far' } : {}),
+      link: links.score,
     });
   }
   // In the headline's unit when both analyses counted their things; else the checks of each severity.
   if (things) {
     items.push(
-      { key: 'fix', label: 'Things to fix', words: figureWords('Things to fix', things.fixThen, things.fixNow) },
-      { key: 'look', label: 'Worth a look', words: figureWords('Worth a look', things.lookThen, things.lookNow) },
+      {
+        key: 'fix',
+        label: 'Things to fix',
+        words: figureWords('Things to fix', things.fixThen, things.fixNow),
+        link: links.things ? (children) => links.things?.('fix', children) : undefined,
+      },
+      {
+        key: 'look',
+        label: 'Worth a look',
+        words: figureWords('Worth a look', things.lookThen, things.lookNow),
+        link: links.things ? (children) => links.things?.('look', children) : undefined,
+      },
     );
   }
   for (const figure of things ? [] : figures.severities) {
@@ -204,20 +262,27 @@ function FigureRow({ figures, things }: { figures: ComparisonFigures; things: Th
   }
   return (
     <ul className="flex flex-wrap items-stretch gap-y-2 text-13">
-      {items.map((item, index) => (
-        <li key={item.key} className={index > 0 ? 'border-l border-border-subtle pr-4 pl-4' : 'pr-4'}>
-          <span className="sr-only">
-            {item.words.spoken}
-            {item.note ? `, ${item.note}` : ''}
-          </span>
-          <span aria-hidden="true" className="flex items-baseline gap-2 whitespace-nowrap">
-            <span className="text-text-secondary">{item.label}</span>
-            <span className="figures font-medium text-text">{item.words.shown}</span>
-            {item.words.glyph ? <span className="figures text-text-secondary">{item.words.glyph}</span> : null}
-            {item.note ? <span className="text-12 text-text-muted">{item.note}</span> : null}
-          </span>
-        </li>
-      ))}
+      {items.map((item, index) => {
+        const figure = (
+          <>
+            <span className="sr-only">
+              {item.words.spoken}
+              {item.note ? `, ${item.note}` : ''}
+            </span>
+            <span aria-hidden="true" className="flex items-baseline gap-2 whitespace-nowrap">
+              <span className="text-text-secondary">{item.label}</span>
+              <span className="figures font-medium text-text">{item.words.shown}</span>
+              {item.words.glyph ? <span className="figures text-text-secondary">{item.words.glyph}</span> : null}
+              {item.note ? <span className="text-12 text-text-muted">{item.note}</span> : null}
+            </span>
+          </>
+        );
+        return (
+          <li key={item.key} className={index > 0 ? 'border-l border-border-subtle pr-4 pl-4' : 'pr-4'}>
+            {item.link ? item.link(figure) : figure}
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -227,31 +292,135 @@ function nonZero<T extends { count: number }>(parts: readonly T[]): T[] {
   return parts.filter((part) => part.count > 0);
 }
 
-/** "Checks: 5 fixed · 2 new · 6 fewer · 1 more · 1 new check", the four moves leading to Issues. */
-function ChecksLine({ figures, linkTo }: { figures: ComparisonFigures; linkTo: ChangeLink }) {
+/**
+ * The checks that moved, named (H-06): what got worse beside what got better, each list headed by how many moved each
+ * way (those counts open Issues narrowed to them) and naming its checks, the largest move first, each with its count
+ * then and now and opening its check. A check that went from 18 pages to 257 is a line of its own, not "1 more". The
+ * checks that only started or stopped running are said after, apart: they are neither.
+ */
+function MovedChecks({
+  figures,
+  worse,
+  better,
+  linkTo,
+  links,
+}: {
+  figures: ComparisonFigures;
+  worse: readonly MovedCheck[];
+  better: readonly MovedCheck[];
+  linkTo: ChangeLink;
+  links: ComparisonLinks;
+}) {
   const { checks } = figures;
-  const parts = nonZero<{ key: string; count: number; words: string; state: ChangeFilter | null }>([
-    { key: 'fixed', count: checks.fixed, words: 'fixed', state: 'fixed' },
-    { key: 'new', count: checks.new, words: 'new', state: 'new' },
-    { key: 'fewer', count: checks.fewer, words: 'fewer', state: 'fewer' },
-    { key: 'more', count: checks.more, words: 'more', state: 'more' },
-    { key: 'newCheck', count: checks.newCheck, words: checks.newCheck === 1 ? 'new check' : 'new checks', state: null },
-    { key: 'notCheckedNow', count: checks.notCheckedNow, words: 'not checked now', state: null },
+  const other = nonZero([
+    { key: 'newCheck', count: checks.newCheck, words: checks.newCheck === 1 ? 'new check' : 'new checks' },
+    { key: 'notCheckedNow', count: checks.notCheckedNow, words: 'not checked now' },
   ]);
+  const moved = checks.fixed + checks.new + checks.fewer + checks.more;
   return (
-    <p className="text-13 text-text">
-      <span className="text-text-secondary">Checks: </span>
-      {parts.length === 0
-        ? 'none moved'
-        : parts.map((part, index) => (
-            <Fragment key={part.key}>
-              {index > 0 ? <span className="text-text-muted"> · </span> : null}
-              {part.state
-                ? linkTo(part.state, `${formatCount(part.count)} ${part.words}`)
-                : `${formatCount(part.count)} ${part.words}`}
-            </Fragment>
+    <>
+      {moved === 0 ? (
+        <p className="text-13 text-text">
+          <span className="text-text-secondary">Checks: </span>none moved
+        </p>
+      ) : (
+        <div className="grid grid-cols-2 gap-x-8 gap-y-4 @max-split:grid-cols-1">
+          <MovedList
+            title="Got worse"
+            list={worse}
+            links={links}
+            counts={[
+              {
+                state: 'new',
+                count: checks.new,
+                words: checks.new === 1 ? 'check found something new' : 'checks found something new',
+              },
+              { state: 'more', count: checks.more, words: checks.more === 1 ? 'check flags more' : 'checks flag more' },
+            ]}
+            linkTo={linkTo}
+          />
+          <MovedList
+            title="Got better"
+            list={better}
+            links={links}
+            counts={[
+              { state: 'fixed', count: checks.fixed, words: checks.fixed === 1 ? 'check fixed' : 'checks fixed' },
+              {
+                state: 'fewer',
+                count: checks.fewer,
+                words: checks.fewer === 1 ? 'check flags fewer' : 'checks flag fewer',
+              },
+            ]}
+            linkTo={linkTo}
+          />
+        </div>
+      )}
+      {other.length > 0 ? (
+        <p className="text-13 text-text-secondary">
+          {`Also: ${other.map((part) => `${formatCount(part.count)} ${part.words}`).join(' · ')}.`}
+        </p>
+      ) : null}
+    </>
+  );
+}
+
+function MovedList({
+  title,
+  list,
+  counts,
+  linkTo,
+  links,
+}: {
+  title: string;
+  list: readonly MovedCheck[];
+  counts: { state: ChangeFilter; count: number; words: string }[];
+  linkTo: ChangeLink;
+  links: ComparisonLinks;
+}) {
+  const titleId = useId();
+  const parts = nonZero(counts);
+  if (parts.length === 0) return null;
+  const shown = list.slice(0, MOVED_LIMIT);
+  return (
+    <section aria-labelledby={titleId} className="flex min-w-0 flex-col gap-1.5 text-13">
+      <p className="text-text">
+        <span id={titleId} className="font-semibold">
+          {title}
+        </span>
+        <span className="text-text-muted"> · </span>
+        {parts.map((part, index) => (
+          <Fragment key={part.state}>
+            {index > 0 ? <span className="text-text-muted"> · </span> : null}
+            {linkTo(part.state, `${formatCount(part.count)} ${part.words}`)}
+          </Fragment>
+        ))}
+      </p>
+      {shown.length > 0 ? (
+        <ul className="flex flex-col gap-1">
+          {shown.map((check) => (
+            <li key={check.checkId} className="flex flex-wrap items-baseline gap-x-2">
+              {check.severity ? (
+                <span className="self-center">
+                  <SeverityMark severity={check.severity} decorative />
+                </span>
+              ) : null}
+              <span className="min-w-0">
+                {check.severity ? <span className="sr-only">{outcomeWord(check.severity)}: </span> : null}
+                {links.check ? links.check(check.checkId, check.title) : check.title}
+              </span>
+              <span className="figures whitespace-nowrap text-text-secondary">
+                <span className="sr-only">{check.spoken}</span>
+                <span aria-hidden="true">{check.counts}</span>
+                {check.state === 'fixed' ? ' · fixed' : check.state === 'new' ? ' · new' : ''}
+              </span>
+            </li>
           ))}
-    </p>
+        </ul>
+      ) : null}
+      {list.length > shown.length ? (
+        <p className="text-text-secondary">And {formatCountOf(list.length - shown.length, 'more check')}.</p>
+      ) : null}
+    </section>
   );
 }
 
