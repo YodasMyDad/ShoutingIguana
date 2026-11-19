@@ -48,6 +48,15 @@ import { RefreshLine } from '../ui/ProgressBar';
 import { Icon } from '../ui/Icon';
 import { Kbd } from '../ui/Kbd';
 import { MenuAt, MenuItem, MenuSeparator } from '../ui/Menu';
+import {
+  FIT_SAMPLE_ROWS,
+  columnNeeds,
+  fitColumns,
+  fontMeasure,
+  sameNeeds,
+  type ColumnNeed,
+  type FitMeasure,
+} from './columnFit';
 import { RESIZE_STEP, clampWidth, movedOrder } from './columnLayout';
 import { footWords, type GridKeyHint } from './gridFoot';
 
@@ -250,6 +259,34 @@ function coveredWidth(element: HTMLElement, windowed: boolean): number {
   return Number.isFinite(size) ? size : 0;
 }
 
+/**
+ * How a grid's text draws, for columns sized to what they hold (grid/columnFit.ts): the fonts of a cell, of a URL in
+ * one and of a header, and a cell's padding, read from cells put in the grid for the reading and taken out again.
+ */
+function readFitMeasure(grid: HTMLElement): FitMeasure {
+  const element = (className: string, parent: HTMLElement) => {
+    const made = document.createElement('div');
+    made.className = className;
+    parent.appendChild(made);
+    return made;
+  };
+  const probe = element('', grid);
+  probe.setAttribute('aria-hidden', 'true');
+  probe.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none';
+  const head = element('si-grid-cell', element('si-grid-row si-grid-head', probe));
+  const cell = element('si-grid-cell', element('si-grid-row', probe));
+  const url = element('si-url', cell);
+  const fontOf = (of: HTMLElement) => {
+    const style = getComputedStyle(of);
+    return `${style.fontStyle || 'normal'} ${style.fontWeight || '400'} ${style.fontSize || '13px'} ${style.fontFamily || 'sans-serif'}`;
+  };
+  const style = getComputedStyle(cell);
+  const padding = (Number.parseFloat(style.paddingLeft) || 0) + (Number.parseFloat(style.paddingRight) || 0);
+  const measure = fontMeasure({ text: fontOf(cell), mono: fontOf(url), head: fontOf(head) }, padding);
+  probe.remove();
+  return measure;
+}
+
 /** The footer's height (tokens.css `--grid-foot-height`), for the room a grid with a least height keeps. */
 const FOOT_HEIGHT_FALLBACK = 36;
 function footHeight(): number {
@@ -319,12 +356,17 @@ function GridCoreInner<Row>({
   const id = useId();
   // A column's edge being dragged: its width as it goes, before the layout keeps it on letting go.
   const [dragWidth, setDragWidth] = useState<{ id: string; width: number } | null>(null);
+  // Columns sized to what they hold (`fit`): the room the grid has, and what each needs for the rows read first.
+  const fits = givenColumns.some((column) => column.fit !== undefined);
+  const [available, setAvailable] = useState<number | null>(null);
+  const [needs, setNeeds] = useState<Record<string, ColumnNeed> | null>(null);
+  const fittedColumns = useMemo(() => fitColumns(givenColumns, available, needs), [givenColumns, available, needs]);
   const columns = useMemo(
     () =>
       dragWidth === null
-        ? givenColumns
-        : givenColumns.map((column) => (column.id === dragWidth.id ? { ...column, width: dragWidth.width } : column)),
-    [givenColumns, dragWidth],
+        ? fittedColumns
+        : fittedColumns.map((column) => (column.id === dragWidth.id ? { ...column, width: dragWidth.width } : column)),
+    [fittedColumns, dragWidth],
   );
   const offsets = useMemo(() => columnOffsets(columns), [columns]);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -353,6 +395,47 @@ function GridCoreInner<Row>({
   const count = loading ? 0 : rowCount;
 
   const { view, model } = useRowWindow(scrollRef, { count, rowHeight, headerHeight, overscan });
+
+  // The room the columns share: the grid's own width, less what its scrollbar covers.
+  useLayoutEffect(() => {
+    const element = scrollRef.current;
+    if (!fits || !element || typeof ResizeObserver === 'undefined') return undefined;
+    const read = () => setAvailable(Math.floor(element.clientWidth - coveredWidth(element, view.windowed)));
+    read();
+    const observer = new ResizeObserver(read);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [fits, view.windowed]);
+  // What the columns need, measured on the rows read first and again only when those change: scrolling never moves a
+  // column. A view with no row to measure keeps the last measure, so a refresh doesn't jump the columns.
+  const fitMeasure = useRef<{ rowHeight: number; measure: FitMeasure } | null>(null);
+  const [fontsLoaded, setFontsLoaded] = useState(0);
+  const measureNeeds = useEffectEvent(() => {
+    const element = scrollRef.current;
+    if (!fits || !element || available === null) return;
+    const rows: Row[] = [];
+    for (let index = 0; index < Math.min(count, FIT_SAMPLE_ROWS); index++) {
+      const row = getRow(index);
+      if (row !== undefined && spanRow?.(row, index) == null) rows.push(row);
+    }
+    if (rows.length === 0) return;
+    // The fonts are read once for a density (the row's height is its mark), and again when a face has loaded.
+    if (fitMeasure.current?.rowHeight !== rowHeight) {
+      fitMeasure.current = { rowHeight, measure: readFitMeasure(element) };
+    }
+    const next = columnNeeds(givenColumns, rows, fitMeasure.current.measure);
+    setNeeds((current) => (sameNeeds(current, next) ? current : next));
+  });
+  useLayoutEffect(() => measureNeeds(), [getRow, count, givenColumns, available, rowHeight, fontsLoaded]);
+  useEffect(() => {
+    if (!fits || typeof document.fonts === 'undefined') return undefined;
+    const reread = () => {
+      fitMeasure.current = null;
+      setFontsLoaded((times) => times + 1);
+    };
+    document.fonts.addEventListener('loadingdone', reread);
+    return () => document.fonts.removeEventListener('loadingdone', reread);
+  }, [fits]);
 
   const exposeModel = useEffectEvent(() => {
     modelRef?.(model);
@@ -1374,11 +1457,15 @@ function GridFoot({ hints, where }: { hints: readonly GridKeyHint[]; where: stri
   return (
     <div className="si-grid-foot">
       {hints.map((hint) => (
-        <span key={hint.chord} className="si-grid-foot__hint">
-          {hint.chord.split(' ').map((chord) => (
-            <Kbd key={chord} chord={chord} size="sm" aria-hidden />
-          ))}
-          <span className="sr-only">{hint.chord.split(' ').join(' or ')}</span>
+        <span key={hint.chord || hint.words} className="si-grid-foot__hint">
+          {hint.chord === '' ? null : (
+            <>
+              {hint.chord.split(' ').map((chord) => (
+                <Kbd key={chord} chord={chord} size="sm" aria-hidden />
+              ))}
+              <span className="sr-only">{hint.chord.split(' ').join(' or ')}</span>
+            </>
+          )}
           {hint.words}
         </span>
       ))}

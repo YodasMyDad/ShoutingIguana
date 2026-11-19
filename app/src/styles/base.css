@@ -207,6 +207,12 @@
     font-size: var(--grid-mono-size);
   }
 
+  /* A URL sets its own size against the text beside it: in a monospace cell it would be scaled twice, and read
+     smaller on URLs than the same URL on Links. */
+  .si-grid-cell.font-mono:has(> .si-url) {
+    font-size: inherit;
+  }
+
   .si-grid-cell--numeric {
     text-align: end;
     font-variant-numeric: tabular-nums lining-nums;

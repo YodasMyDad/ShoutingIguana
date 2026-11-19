@@ -90,8 +90,11 @@ export function applyColumnLayout<Row>(
   const pins = new Map(pinned.map((id, index) => [id, index]));
   const withWidths = ordered.map((column) => {
     const width = widths[column.id];
+    // A width the user set is theirs: the column no longer sizes itself to what it holds (`fit`).
     const sized =
-      width === undefined ? column : { ...column, width: Math.max(column.minWidth ?? 0, clampWidth(width)) };
+      width === undefined
+        ? column
+        : { ...column, width: Math.max(column.minWidth ?? 0, clampWidth(width)), fit: undefined };
     return pins.has(column.id) ? { ...sized, pinned: true } : sized;
   });
   const front = withWidths

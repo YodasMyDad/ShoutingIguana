@@ -13,11 +13,12 @@ export interface GridColumn<Row> {
    * The column takes its width from what it holds, and shares the grid's width by need (grid/columnFit.ts), instead
    * of having `width` whatever the window: `url` for a URL (as wide as the longest among the rows read first, never
    * wider, so the next column starts where the URLs end), `text` for words people read (a title, an anchor, a
-   * description: the same, and the first to be given room). `width` is then what it has before any row is read.
-   * Where room is short every column gives way, these down to a usable width, before the grid scrolls sideways. A
-   * column the user has sized keeps that size.
+   * description: the same, and the first to be given room), `value` for a short value that is never cut (a status, a
+   * count: `width`, or its header and widest value where those are wider; just those where room is short, before a
+   * URL is cut). `width` is what a column has before any row is read. Where room is short URLs and words give way
+   * down to a usable width before the grid scrolls sideways. A column the user has sized keeps that size.
    */
-  fit?: 'url' | 'text' | undefined;
+  fit?: 'url' | 'text' | 'value' | undefined;
   /** What a `fit` column measures, where it isn't `text` (a URL shown as its path). */
   fitText?: ((row: Row) => string) | undefined;
   /** Room a `fit` column's cell needs beside its text, px: the open-in-browser button, a status dot. */

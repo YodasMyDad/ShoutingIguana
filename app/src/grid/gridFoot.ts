@@ -2,14 +2,21 @@
 // under its rows, and where the cursor is, in words. Pure.
 import { formatCount, formatCountOf } from '../lib/format';
 
-/** A key hint in a grid's footer: its keys and what they do ("Enter", "Inspect"). */
+/**
+ * A hint in a grid's footer: its keys and what they do ("Enter", "Inspect"). With no keys it's what the pointer does
+ * ("Click a URL to inspect it"): nothing a grid does is only on a key or a double-click.
+ */
 export interface GridKeyHint {
   chord: string;
   words: string;
 }
 
+/** What a click on a URL's text does, said where the keys are: the grids whose URLs are links to the inspector. */
+export const GRID_CLICK_HINT: GridKeyHint = { chord: '', words: 'Click a URL to inspect it' };
+
 /** The grid's footer hints as the design has them (docs/v2-ui-design.md: "the grid's key hints in its footer"). */
 export const GRID_KEY_HINTS: readonly GridKeyHint[] = [
+  GRID_CLICK_HINT,
   { chord: 'arrowup arrowdown', words: 'Move' },
   { chord: 'enter', words: 'Inspect' },
   { chord: 'space', words: 'Select' },

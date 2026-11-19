@@ -210,13 +210,7 @@ export function Url({
   return (
     <span
       ref={rootRef}
-      className={clsx(
-        'si-url',
-        inline && 'si-url--inline',
-        truncate === 'wrap' && 'si-url--wrap',
-        file && 'si-url--file',
-        className,
-      )}
+      className={clsx('si-url', inline && 'si-url--inline', truncate === 'wrap' && 'si-url--wrap', className)}
     >
       {onGo ? (
         <Tooltip content={url} hint={goHint} triggerName={display.full}>
