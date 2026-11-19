@@ -175,7 +175,8 @@ internal static class ReportReader
             IssueReferences.Sources => (FoundOnReader.ReadFoundOn(crawlPath, ids, LISTED_SOURCES, export.Cache, cancellationToken).ToDictionary(url => url.UrlId),
                 new Dictionary<int, Storage.Models.IssueTargetsOfUrl>()),
             IssueReferences.Targets => (new Dictionary<int, Storage.Models.UrlFoundOn>(),
-                (FoundOnReader.ReadTargets(crawlPath, check.Id, ids, LISTED_TARGETS, export.Cache, cancellationToken) ?? []).ToDictionary(url => url.UrlId)),
+                (FoundOnReader.ReadTargets(crawlPath, check.Id, ids, check.Severity == IssueSeverity.Notice ? LISTED_LOOK_TARGETS : LISTED_TARGETS, export.Cache, cancellationToken) ?? [])
+                    .ToDictionary(url => url.UrlId)),
             _ => (new Dictionary<int, Storage.Models.UrlFoundOn>(), new Dictionary<int, Storage.Models.IssueTargetsOfUrl>())
         };
     }
@@ -226,6 +227,12 @@ internal static class ReportReader
 
     /// <summary>The URLs a listed page's issue names that the report shows, before "and N others": the five broken links on one page are all there.</summary>
     internal const int LISTED_TARGETS = 5;
+
+    /// <summary>
+    /// The same for a thing worth a look: often on every page (twenty images with no size set on each of 225), and its list
+    /// sits beside its text, so two say what kind of thing it is and the rest are counted.
+    /// </summary>
+    internal const int LISTED_LOOK_TARGETS = 2;
 
     /// <summary>The site's home page: where the start URL's redirects end, or the start URL when the crawl has no such page.</summary>
     private static string Home(string crawlPath, string startUrl, CancellationToken cancellationToken)

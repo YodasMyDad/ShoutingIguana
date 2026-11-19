@@ -997,12 +997,15 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
             Assert.Equal(more > 0, lines[^1].TextContent == ReportPlainWords.Sentence(ReportPlainWords.Others(check.Id, more)));
         }
 
-        // A page naming more than the report lists says how many more, by what they are.
-        var redirects = FoundOnReader.ReadTargets(crawl.Path, "links-to-redirects", [.. FirstRows("links-to-redirects", 10).Select(row => row.Id)], ReportReader.LISTED_TARGETS)!;
+        // A page naming more than the report lists says how many more, by what they are. A thing worth a look, which is
+        // often on every page and sets its list beside its text, names two to a page, where a problem to fix names five.
+        Assert.Equal((5, 2), (ReportReader.LISTED_TARGETS, ReportReader.LISTED_LOOK_TARGETS));
+        Assert.Equal(IssueSeverity.Notice, IssueCatalog.Find("links-to-redirects")!.Severity);
+        var redirects = FoundOnReader.ReadTargets(crawl.Path, "links-to-redirects", [.. FirstRows("links-to-redirects", 10).Select(row => row.Id)], ReportReader.LISTED_LOOK_TARGETS)!;
         var most = redirects.First(page => page.Total > page.Targets.Count);
-        Assert.Contains(
-            ReportPlainWords.Sentence(ReportPlainWords.Others("links-to-redirects", most.Total - most.Targets.Count)),
-            plain.QuerySelectorAll("article.problem[data-check=links-to-redirects] .where").Select(line => line.TextContent));
+        var listed = plain.QuerySelectorAll("article.problem[data-check=links-to-redirects] tbody tr").First(row => row.TextContent.Contains(" other link", StringComparison.Ordinal)).QuerySelectorAll(".where").ToList();
+        Assert.Equal(ReportReader.LISTED_LOOK_TARGETS + 1, listed.Count);
+        Assert.Equal(ReportPlainWords.Sentence(ReportPlainWords.Others("links-to-redirects", most.Total - most.Targets.Count)), listed[^1].TextContent);
 
         // The technical words a client can't read are nowhere in the plain report's rows (the audit's S-11 list).
         var rows = string.Join('\n', plain.QuerySelectorAll(".examples").Select(table => table.TextContent));
