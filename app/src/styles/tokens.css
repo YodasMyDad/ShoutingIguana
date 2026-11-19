@@ -369,9 +369,15 @@
   --frame-inset: var(--space-2);
   --sidebar-width-collapsed: 56px;
   --topbar-height: 52px;
-  --inspector-width: 400px;
+  /*
+    Until the user drags it (then their size is kept): the inspector grows with the window, to where its ten tabs and
+    a link's URL and anchor text show whole (about 900 px, in a 2,560 px window), and never under 400 px. At 1,360 px
+    and under it keeps 368 px (below), so the grid beside it stays usable.
+  */
+  --inspector-width: clamp(400px, 50vw - 360px, 920px);
   --inspector-width-min: 320px;
-  --inspector-height: 320px; /* docked at the bottom; never more than the view above can spare (InspectorSlot) */
+  /* Docked at the bottom: about two fifths of the window; never more than the view above can spare (InspectorSlot). */
+  --inspector-height: clamp(320px, 40vh, 720px);
   --banner-measure-min: 14rem; /* a banner's words keep this much before its action goes under them */
   /* Simple's words beside their actions (a screen's title and its line, the recheck card's): they keep this much, and the
      actions go under them first (200% zoom), rather than squeeze the words into a narrow column. */
