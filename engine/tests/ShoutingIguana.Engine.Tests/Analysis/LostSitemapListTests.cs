@@ -65,7 +65,9 @@ public sealed class LostSitemapListTests(RecheckCrawls crawls)
         var subtree = SitemapListWords.SubtreeOf(list.Sitemaps, sitemap.Id, list.Discovery);
 
         Assert.Equal(SitemapState.ListLost, sitemap.State);
-        Assert.Equal($"Read: {lost.Entries:N0} URLs, but this crawl no longer has the list", SitemapListWords.State(sitemap, crawling: false, subtree));
+        // The screen's own words for its status cell (sitemapWords.ts), so the exported file reads as the screen does.
+        Assert.Equal($"Read, but its {lost.Entries:N0} URLs are lost", SitemapListWords.State(sitemap, crawling: false, subtree));
+        Assert.Equal("Read, but its 1 URL is lost", SitemapListWords.State(sitemap with { Entries = 1 }, crawling: false, subtree));
         Assert.Null(SitemapListWords.Counts(sitemap, subtree));
 
         // The others are as they were, and the index over it no longer knows what it lists in all.
