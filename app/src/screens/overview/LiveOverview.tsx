@@ -30,6 +30,7 @@ import {
   queuedLine,
   queuedSoFar,
   sparkOf,
+  queueLeft,
   timeLeft,
 } from './liveFigures';
 import { linkProps } from './overviewLinks';
@@ -96,6 +97,8 @@ export function LiveOverview({
   const series = useMemo(() => progressSeries(history, trail ?? []), [history, trail]);
   const spark = useMemo(() => sparkOf(rates ?? []), [rates]);
   const left = timeLeft(status, progress, live?.pace ?? []);
+  // With no limit there's no end to foretell, but what's found so far takes at least this long.
+  const queue = queueLeft(status, progress, live?.pace ?? []);
   // The time spent crawling: the engine's own (E3c's `crawlingMs`, every run's, standing still while paused), which a
   // live client takes; else the run's, on its clock, after the earlier runs' when the history says what they were,
   // and the engine's count of the run (which runs on through a pause) only for an engine whose progress doesn't say
@@ -186,7 +189,9 @@ export function LiveOverview({
         : limit
           ? 'Working out the pace'
           : limit === null
-            ? 'No URL limit, so no end time'
+            ? queue
+              ? `No URL limit. At least ${formatDuration(queue.ms)} more for the ${formatCount(queue.urls)} found so far`
+              : 'No URL limit, so no end time'
             : '';
 
   return (
@@ -259,7 +264,8 @@ export function LiveOverview({
             <Stat
               size={size}
               label="URLs a second"
-              value={<Num value={progress?.urlsPerSecond} format="rate" />}
+              // Paused, nothing is fetched: 0, as Home's card says, not the rate it had when it paused (H-22).
+              value={<Num value={status === 'paused' ? 0 : progress?.urlsPerSecond} format="rate" />}
               context={
                 <Sparkline
                   values={spark.values}

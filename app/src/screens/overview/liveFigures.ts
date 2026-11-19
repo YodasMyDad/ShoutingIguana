@@ -69,6 +69,26 @@ export function timeLeft(
   return { ms: Math.max(0, maxUrls - internalFetched) / pace, bound: internalFound >= maxUrls ? 'about' : 'within' };
 }
 
+/**
+ * For a running crawl with no URL limit, how long what it has found so far will take at its present pace: the least
+ * it has left, as it may go on finding more (the audit of 2026-11-19, H-22: "No URL limit, so no end time" beside
+ * Found, Queued and a rate, with an estimate one division away). Null with a limit (`timeLeft` says that), while it
+ * isn't running, before there's a pace, and with nothing left to fetch.
+ */
+export function queueLeft(
+  status: CrawlStatus | null,
+  progress: Pick<LiveProgress, 'maxUrls' | 'internalFound' | 'internalFetched'> | null,
+  samples: readonly PaceSample[],
+): { ms: number; urls: number } | null {
+  if (status !== 'running' || !progress) return null;
+  const { maxUrls, internalFound, internalFetched } = progress;
+  if (maxUrls !== null || internalFound === null || internalFetched === null) return null;
+  const urls = internalFound - internalFetched;
+  const pace = paceOf(samples);
+  if (pace === null || urls <= 0) return null;
+  return { ms: urls / pace, urls };
+}
+
 export interface Spark {
   /** Oldest first, at most SPARK_POINTS: the rate's history, averaged a stretch at a time when it's longer. */
   values: number[];

@@ -24,6 +24,7 @@ import { StatusPill } from '../ui/StatusPill';
 import { TextLink } from '../ui/TextLink';
 import { Tooltip } from '../ui/Tooltip';
 import { CRAWL_FACTS_HASH } from '../screens/overview/overviewLinks';
+import { siteName } from '../simple/home/sites';
 import { ModeSwitch } from './ModeSwitch';
 import { setSwitcherOpen } from './switcherOpen';
 import { useGiveWay } from './useGiveWay';
@@ -98,7 +99,9 @@ export function TopBar() {
   });
 
   const date = crawl?.startedAt ? formatExactTime(crawl.startedAt) : null;
-  const site = crawlId ? crawlName(crawl) : null;
+  // The site as Home and the switcher name it, with a port of its own: two test sites on one host are two names
+  // (H-22: both read "127.0.0.1" here).
+  const site = crawlId ? (crawl ? siteName(crawl) : crawlName(crawl)) : null;
   // The whole trail, for the tooltip, whatever has given way.
   const trail = ['Home', site, date, here ?? page].filter(Boolean).join(' › ');
   const fetched = crawledUrls(crawl, live?.progress);

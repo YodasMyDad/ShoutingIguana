@@ -30,6 +30,7 @@ import { Banner } from '../ui/Banner';
 import { Button } from '../ui/Button';
 import { Card, CardBody, CardHeader } from '../ui/Card';
 import { EmptyState } from '../ui/EmptyState';
+import { Badge } from '../ui/Badge';
 import { LiveBadge } from '../ui/LiveBadge';
 import { PageHeader } from '../ui/PageHeader';
 import { RefreshLine } from '../ui/ProgressBar';
@@ -459,7 +460,8 @@ export function OverviewScreen() {
         {refreshing ? <RefreshLine label="Refreshing the overview" /> : null}
         <PageHeader
           title="Overview"
-          badge={crawling ? <LiveBadge /> : null}
+          // Paused, its figures stand still: the badge says so, not "Live" (H-22).
+          badge={crawling ? status === 'paused' ? <Badge>Paused</Badge> : <LiveBadge /> : null}
           subtitle={subtitle}
           titleRef={control.titleRef}
           actions={

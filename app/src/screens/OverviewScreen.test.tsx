@@ -1137,6 +1137,11 @@ describe('the Overview while the crawl runs', () => {
     await open();
     await heard(message('progress', progressAt(100, { ...POLITE, status: 'paused' })));
     expect(main().getByText(/The crawl is paused\./)).toBeVisible();
+    // Paused, the title's badge says so, not "Live", and nothing is being fetched: 0 a second (H-22).
+    const title = main().getByRole('heading', { level: 1 });
+    expect(within(title).getByText('Paused')).toBeVisible();
+    expect(within(title).queryByText('Live')).toBeNull();
+    expect(cell('URLs a second')).toHaveTextContent(/^URLs a second0(\.0)?\b/);
     fireEvent.click(main().getByRole('button', { name: /Resume/ }));
     await waitFor(() => expect(resume).toHaveBeenCalledTimes(1));
   });
