@@ -15,7 +15,7 @@ const NAMES: Readonly<Record<string, string>> = {
   descriptionMaxPixels: 'Widest meta description',
   minWordCount: 'Fewest words on a page',
   duplicateMinWordCount: 'Fewest words to compare for duplicates',
-  nearDuplicateMaxBits: 'Near-duplicate distance',
+  nearDuplicateMaxBits: 'Near duplicates: how alike',
   imageAltMaxLength: 'Longest alt text',
   largeImageBytes: 'Largest image',
   responsiveImageMinWidth: 'Widest image without smaller versions',

@@ -317,7 +317,7 @@ function LimitField({
         error={error}
         end={<span className="text-12 text-text-muted">{unitWords(limit.unit)}</span>}
         onChange={(event) => onChange(event.target.value)}
-        className="w-(--limit-field-width) max-w-full min-w-0 flex-1"
+        className="w-(--limit-field-width) max-w-full"
       />
       {changed ? (
         <Button size="sm" variant="ghost" icon={RotateCcw} onClick={onReset}>
