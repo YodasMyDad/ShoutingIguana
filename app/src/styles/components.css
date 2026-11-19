@@ -2172,22 +2172,35 @@
     text-underline-offset: var(--underline-offset);
   }
 
-  /* The full URL: what screen readers, find-in-page and the layout's width read. It takes no height. */
+  /* The full URL: what screen readers and find-in-page read. It's out of the layout, which is sized by the text shown
+     (a path is narrower than its URL, and the open button follows the path). */
   .si-url__full {
+    display: block;
+    position: absolute;
+    width: 1px;
+    height: 0;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  /* Wrapped, the full URL is the text drawn. */
+  .si-url--wrap .si-url__full {
+    position: static;
+    width: auto;
+    height: auto;
+    white-space: inherit;
+  }
+
+  /* The layout's width: the text as shown, whole, at no height, so a URL cut to fit can grow back when there's room.
+     Drawn from an attribute, so the page's text holds the URL once. A file is laid out by its name and has none. */
+  .si-url__sizer {
     display: block;
     height: 0;
     overflow: hidden;
   }
 
-  .si-url--wrap .si-url__full {
-    height: auto;
-  }
-
-  /* A file is laid out by its name, not by its URL's length: the button follows the name. */
-  .si-url--file .si-url__full {
-    position: absolute;
-    width: 1px;
-    white-space: nowrap;
+  .si-url__sizer::before {
+    content: attr(data-text);
   }
 
   .si-url__shown {

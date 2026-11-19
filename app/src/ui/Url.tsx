@@ -177,6 +177,10 @@ export function Url({
   const text = (
     <>
       <span className="si-url__full">{display.full}</span>
+      {/* What the layout's width reads: the text as shown, whole, so the button follows a path and not its host's room. */}
+      {file === null && truncate !== 'wrap' ? (
+        <span className="si-url__sizer" data-text={display.shown} aria-hidden="true" />
+      ) : null}
       <span ref={shownRef} className={clsx('si-url__shown', file && 'si-url__shown--file')} aria-hidden="true">
         {file ? (
           <>

@@ -79,6 +79,18 @@ describe('Url’s open-in-browser button', () => {
     expect(opened).toEqual([PAGE, atWords]);
   });
 
+  it('is laid out by the text shown: a path’s button follows the path, not the room its host would take', () => {
+    layOut(800);
+    const { container } = render(<Url url={PAGE} siteOrigin={SITE} onGo={() => undefined} />);
+    // The width comes from a sizer that holds the text as shown, whole (a truncated URL can grow back to it), drawn by
+    // the stylesheet so the page's text has the URL once.
+    const sizer = container.querySelector('.si-url__go > .si-url__sizer');
+    expect(sizer).toHaveAttribute('data-text', '/blog/best-rattan-patio-sets/');
+    expect(sizer).toHaveAttribute('aria-hidden', 'true');
+    expect(sizer).toBeEmptyDOMElement();
+    expect(screen.getByRole('button', { name: PAGE })).toBe(container.querySelector('.si-url__go'));
+  });
+
   it('is plain text, not a control, where a click does nothing', () => {
     layOut(800);
     const { container } = render(<Url url={PAGE} copyable={false} openable={false} />);
@@ -106,8 +118,14 @@ describe('the URL styles', () => {
     expect(css).toContain('.si-open-on-row .si-grid-row:has(> [data-active]) .si-url__open');
   });
 
+  it('take the full URL out of the layout, so the text shown sets where the button sits', () => {
+    expect(rule('.si-url__full')).toMatch(/position:\s*absolute/);
+    expect(rule('.si-url__sizer::before')).toMatch(/content:\s*attr\(data-text\)/);
+    expect(rule('.si-url__sizer')).toMatch(/height:\s*0/);
+  });
+
   it('keep the copy cursor for the URL that copies on a click', () => {
     expect(rule('.si-url__copy')).not.toMatch(/cursor:\s*copy/);
-    expect(rule('button.si-url__copy')).toMatch(/cursor:\s*copy/);
+    expect(rule('button.si-url__copy:not(.si-url__go)')).toMatch(/cursor:\s*copy/);
   });
 });
