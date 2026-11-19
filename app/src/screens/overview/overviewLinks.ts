@@ -25,3 +25,6 @@ export function linkProps(crawlId: string, link: OverviewLink): LinkProps {
     },
   }) as LinkProps;
 }
+
+/** Overview's "The crawl" section in the address (`#the-crawl`): where the top bar's status pill leads. */
+export const CRAWL_FACTS_HASH = 'the-crawl';

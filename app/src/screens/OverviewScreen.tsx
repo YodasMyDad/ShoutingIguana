@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
+import { Link, useNavigate, useParams, useRouterState, useSearch } from '@tanstack/react-router';
 import { Play } from 'lucide-react';
-import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   alertsQuery,
   analysisQuery,
@@ -58,7 +58,7 @@ import { DepthCard, IndexabilityCard, ResponseCard, StatusCodesCard } from './ov
 import { emptyCrawl, isEmptyCrawl, type EmptyCrawl } from './overview/emptyCrawl';
 import { LiveOverview } from './overview/LiveOverview';
 import { ANSWERED_SITE_PAGES } from './overview/links';
-import { linkProps } from './overview/overviewLinks';
+import { CRAWL_FACTS_HASH, linkProps } from './overview/overviewLinks';
 import { OverviewHeadline } from './overview/OverviewHeadline';
 import { OverviewScore } from './overview/OverviewScore';
 import { ScoreBreakdownFromRoute } from '../simple/ScoreBreakdownDialog';
@@ -116,6 +116,15 @@ export function OverviewScreen() {
   // focus that was on something the screen took away goes to its title, never to the page. After the analysis's own
   // moves (to its Cancel), which the hook above makes.
   const screenRef = useRef<HTMLDivElement>(null);
+  // The top bar's status pill leads to "The crawl" (`#the-crawl`): scrolled to each time it's asked for, once it's drawn.
+  const crawlFactsRef = useRef<HTMLElement>(null);
+  const askedForCrawlFacts = useRouterState({
+    select: (state) => (state.location.hash === CRAWL_FACTS_HASH ? state.location.state.__TSR_key : null),
+  });
+  const crawlFactsDrawn = item !== undefined && !crawling;
+  useEffect(() => {
+    if (askedForCrawlFacts !== null && crawlFactsDrawn) crawlFactsRef.current?.scrollIntoView({ block: 'start' });
+  }, [askedForCrawlFacts, crawlFactsDrawn]);
   useFocusRescue(screenRef, () => control.titleRef.current);
   // How many URLs it crawled, as the URL grid counts them (which is where the figure leads): the library's
   // `crawledUrlCount` (E3c). From an earlier engine, the status breakdown's total; its `fetchedUrlCount` has the URLs
@@ -415,7 +424,7 @@ export function OverviewScreen() {
           />
         )}
 
-        <section aria-labelledby="overview-crawl-title" className="flex flex-col gap-4 pt-2">
+        <section ref={crawlFactsRef} aria-labelledby="overview-crawl-title" className="flex flex-col gap-4 pt-2">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <h2 id="overview-crawl-title" className="text-16 font-semibold text-text">
               The crawl

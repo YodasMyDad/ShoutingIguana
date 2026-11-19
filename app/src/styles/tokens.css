@@ -615,6 +615,13 @@
   --list-row-height: 36px;
 }
 
+/* Wide windows (the audit of 2026-11-19 was at 2560 x 1380): the top bar's search shows its whole label. */
+@media (min-width: 1700px) {
+  :root {
+    --search-width: 280px;
+  }
+}
+
 /* Smaller windows (1280 x 800): a narrower frame, the same components. */
 @media (max-width: 1360px) {
   :root {

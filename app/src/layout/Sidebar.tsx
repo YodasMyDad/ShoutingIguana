@@ -1,5 +1,4 @@
 import { useQuery } from '@tanstack/react-query';
-import { useParams } from '@tanstack/react-router';
 import clsx from 'clsx';
 import {
   Bot,
@@ -32,6 +31,7 @@ import { IconButton } from '../ui/IconButton';
 import { LiveDot } from '../ui/LiveBadge';
 import { NavItem } from '../ui/NavItem';
 import { SeverityMark } from '../ui/SeverityMark';
+import { useSidebarCrawl } from './contextCrawl';
 import { CrawlSwitcher } from './CrawlSwitcher';
 import { toggleSidebar, useSidebarCollapsed } from './sidebarState';
 import { SEVERITIES, type Severity } from '../ui/severity';
@@ -54,12 +54,13 @@ const SECTION_ICONS: Record<CrawlSection, LucideIcon> = {
  * The sidebar (docs/v2-ui-ia.md, The shell; docs/v2-ui-simple.md, The shell in Simple): Home, the open crawl's
  * sections, crawls running now, Settings. In Simple the crawl's sections are three: Summary, What to fix (counting the
  * problems that are Serious or Worth fixing) and Report; in Advanced, the seven as built, and Report after a rule. The
- * Report is listed once its screen exists (app/simpleScreens.ts).
+ * Report is listed once its screen exists (app/simpleScreens.ts). The app's Settings, opened from a crawl, keeps that
+ * crawl's switcher and sections here (layout/contextCrawl.ts): the way back is one click, on the item you came from.
  */
 export function Sidebar() {
   const collapsed = useSidebarCollapsed();
   const mode = useMode();
-  const { crawl: crawlId } = useParams({ strict: false });
+  const crawlId = useSidebarCrawl();
   const crawl = useQuery({ ...crawlQuery(crawlId ?? ''), enabled: crawlId !== undefined }).data;
   const counts = useIssueCounts(crawlId, crawl?.issues != null);
   const issues = counts

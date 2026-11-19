@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { useLocation, useNavigate } from '@tanstack/react-router';
+import { useLocation, useNavigate, useRouter } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { ChevronsUpDown, House } from 'lucide-react';
-import type { ButtonHTMLAttributes, Ref } from 'react';
+import { useEffect, type ButtonHTMLAttributes, type Ref } from 'react';
 import { libraryQuery } from '../api/queries';
 import type { CrawlListItem } from '../api/types';
 import { goToSection } from '../app/goToSection';
@@ -17,6 +17,8 @@ import { Icon } from '../ui/Icon';
 import { DropdownMenu, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuSeparator } from '../ui/Menu';
 import { Tooltip } from '../ui/Tooltip';
 import { recentCrawls } from './recentCrawls';
+import { carriedSearch } from './switchSearch';
+import { setSwitcherOpen, useSwitcherOpen } from './switcherOpen';
 
 /** The switcher's words in each mode: Simple calls a crawl a site check, and the library Your sites. */
 const WORDS: Record<Mode, { switchTo: string; recent: string; all: string }> = {
@@ -108,7 +110,9 @@ function SwitcherRow({ item, mode }: { item: CrawlListItem; mode: Mode }) {
 
 /**
  * The sidebar's open crawl, as a switcher (the framed workspace, docs/v2-ui-ia.md, The shell): a menu of the library's
- * recent crawls, the open one ticked, each opening on the section you're on; then Home, for the whole library. A
+ * recent crawls, the open one ticked, each opening on the section you're on; then Home, for the whole library.
+ * Another crawl of the same site opens on the same screen with the same filters (H-16: "the 404s then against now"
+ * is one click), less whatever names a row of this crawl's file (layout/switchSearch.ts). A
  * Radix menu as the app's others: Enter, Space or the down arrow opens it, the arrows and typing move, Esc closes it
  * and gives focus back to the button. Each crawl is a radio item, so a screen reader hears which one is open.
  */
@@ -124,8 +128,13 @@ export function CrawlSwitcher({
   mode: Mode;
 }) {
   const navigate = useNavigate();
+  const router = useRouter();
   const pathname = useLocation({ select: (location) => location.pathname });
   const library = useQuery(libraryQuery()).data;
+  // Open from its own button, and from the top bar's date crumb (layout/switcherOpen.ts).
+  const isOpen = useSwitcherOpen();
+  // Gone with its crawl (Home, another screen's frame), it's shut: the next one starts closed.
+  useEffect(() => () => setSwitcherOpen(false), []);
   const words = WORDS[mode];
   // The site as Home names it, with a port of its own ("127.0.0.1:62801"): two test sites on one host are two names.
   const name = crawl ? siteName(crawl) : 'This crawl';
@@ -135,7 +144,20 @@ export function CrawlSwitcher({
 
   const open = (id: string) => {
     if (id === crawlId) return;
-    void goToSection(navigate, sectionOf(pathname) ?? 'overview', id);
+    const section = sectionOf(pathname);
+    const target = library?.find((item) => item.id === id);
+    // The same site, crawled another time: the screen as it is, on that crawl. A sitemap or a robots.txt file is one
+    // crawl's own, so those open on their lists.
+    if (section && crawl && target && siteName(target) === siteName(crawl)) {
+      void navigate({
+        to: '.',
+        params: (current) => ({ ...current, crawl: id, sitemap: undefined, origin: undefined }),
+        // Each route checks its own search (routing/search.ts): what's carried is this route's, already checked.
+        search: carriedSearch(router.state.location.search) as never,
+      });
+      return;
+    }
+    void goToSection(navigate, section ?? 'overview', id);
   };
 
   return (
@@ -143,6 +165,8 @@ export function CrawlSwitcher({
       align="start"
       side={collapsed ? 'right' : 'bottom'}
       className="si-switcher-menu"
+      open={isOpen}
+      onOpenChange={setSwitcherOpen}
       trigger={
         <SwitcherButton
           crawl={crawl}

@@ -37,7 +37,8 @@ export const CRAWL_SECTIONS: readonly CrawlSectionEntry[] = [
   { id: 'links', title: 'Links', to: '/crawls/$crawl/links', key: 'mod+4' },
   { id: 'sitemaps', title: 'Sitemaps', to: '/crawls/$crawl/sitemaps/{-$sitemap}', key: 'mod+5' },
   { id: 'robots', title: 'robots.txt', to: '/crawls/$crawl/robots/{-$origin}', key: 'mod+6' },
-  { id: 'settings', title: 'Settings', to: '/crawls/$crawl/settings', key: 'mod+7' },
+  // Not "Settings": that is the app's, at the foot of the sidebar. This is the record of how this crawl was made.
+  { id: 'settings', title: 'This crawl’s settings', to: '/crawls/$crawl/settings', key: 'mod+7' },
 ];
 
 /** The Report: listed after the others, below a rule, only once its screen exists. */

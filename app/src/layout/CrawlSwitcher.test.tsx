@@ -173,3 +173,61 @@ describe('the crawl switcher’s rows (gallery 6: every test-site crawl read "12
     expect(states).toEqual(['Paused', 'Stopped early', 'Checking', null]);
   });
 });
+
+describe('the crawl switcher and the screen’s filters (the audit of 2026-11-19, H-16)', () => {
+  const EARLIER = testCrawlItem({
+    id: 'aaaa00000000000a',
+    fileName: 'example.com-earlier.sicrawl',
+    startedAt: '2026-10-01T09:00:00Z',
+  });
+
+  beforeEach(() => {
+    setTransport(
+      fakeSidecar([
+        ['GET', /^\/api\/crawls$/, () => json([OPEN, NEWER, EARLIER])],
+        ['GET', /^\/api\/crawls\/fedcba9876543210$/, () => json(NEWER)],
+        ['GET', /^\/api\/crawls\/aaaa00000000000a$/, () => json(EARLIER)],
+        ...standardRoutes(OPEN),
+      ]),
+    );
+  });
+
+  const FILTERED = `/crawls/${TEST_CRAWL_ID}/urls?filter=${encodeURIComponent(
+    JSON.stringify([{ column: 'statusClass', op: 'in', values: ['4xx'] }]),
+  )}&inspect=12`;
+
+  async function switchTo(name: RegExp) {
+    await userEvent.click(await within(sidebar()).findByRole('button', { name: /^Switch crawl:/ }));
+    const menu = await screen.findByRole('menu');
+    const row = within(menu)
+      .getAllByRole('menuitemradio')
+      .find((item) => name.test(item.textContent) && item.getAttribute('aria-checked') === 'false');
+    if (!row) throw new Error('no such crawl in the switcher');
+    await userEvent.click(row);
+  }
+
+  it('another crawl of the same site opens on the same screen with the same filter, less the inspected row', async () => {
+    const router = await open(FILTERED);
+    await switchTo(/example\.com/);
+    await waitFor(() => expect(router.state.location.pathname).toBe('/crawls/aaaa00000000000a/urls'));
+    expect(router.state.location.search).toEqual({
+      filter: [{ column: 'statusClass', op: 'in', values: ['4xx'] }],
+    });
+  });
+
+  it('another site’s crawl opens on the same screen, unfiltered: its filters were about this site', async () => {
+    const router = await open(FILTERED);
+    await switchTo(/oakmere\.example/);
+    await waitFor(() => expect(router.state.location.pathname).toBe('/crawls/fedcba9876543210/urls'));
+    expect(router.state.location.search).toEqual({});
+  });
+
+  it('keeps the check and its severity filter on Issues', async () => {
+    const router = await open(
+      `/crawls/${TEST_CRAWL_ID}/issues/broken-internal?severity=${encodeURIComponent('["error"]')}`,
+    );
+    await switchTo(/example\.com/);
+    await waitFor(() => expect(router.state.location.pathname).toBe('/crawls/aaaa00000000000a/issues/broken-internal'));
+    expect(router.state.location.search).toMatchObject({ severity: ['error'] });
+  });
+});
