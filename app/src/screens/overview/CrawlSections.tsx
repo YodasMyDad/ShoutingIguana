@@ -13,9 +13,11 @@ import { ListRow } from '../../ui/ListRow';
 import { ShareBar } from '../../ui/ShareBar';
 import { TextLink } from '../../ui/TextLink';
 import { depthFigures, indexabilityFigures, responseFigures, type ChartColumn } from './answer';
+import { ANSWERED_SITE_PAGES, CRAWLED_SITE_PAGES, NOT_PROBE, urlsLink } from './links';
 import { linkProps } from './overviewLinks';
 import { StatusCodes } from './StatusCodes';
 import { statusSplitFromFacets } from './statusSplit';
+import { CRAWLED } from './totals';
 import type { CrawlFacets } from './useCrawlFacets';
 
 /**
@@ -77,7 +79,16 @@ function FacetCard({
  * A finished crawl's status codes, from the URL facets, the URLs that weren't checked apart; why URLs got no response
  * joins once the stats arrive.
  */
-export function StatusCodesCard({ crawlId, facets }: { crawlId: string; facets: CrawlFacets }) {
+export function StatusCodesCard({
+  crawlId,
+  facets,
+  crawled,
+}: {
+  crawlId: string;
+  facets: CrawlFacets;
+  /** The crawl's own "Crawled": where the card counts fewer (the probes are left out), its header says of how many. */
+  crawled?: number | undefined;
+}) {
   // Slow on a big crawl (it counts every link), so nothing waits for it: it only adds the reasons to one row.
   const stats = useQuery({ ...statsQuery(crawlId), enabled: facets.status.data !== undefined }).data;
   const split = facets.status.data ? statusSplitFromFacets(facets.status.data, stats) : null;
@@ -85,7 +96,15 @@ export function StatusCodesCard({ crawlId, facets }: { crawlId: string; facets: 
     <FacetCard
       title="Status codes"
       titleId="overview-status-title"
-      meta={split ? formatCountOf(split.total, 'URL') : undefined}
+      meta={
+        split ? (
+          <TextLink {...linkProps(crawlId, urlsLink([...CRAWLED, NOT_PROBE]))} variant="subtle">
+            {crawled !== undefined && crawled > split.total
+              ? `${formatCount(split.total)} of the ${formatCountOf(crawled, 'URL')} crawled`
+              : formatCountOf(split.total, 'URL')}
+          </TextLink>
+        ) : undefined
+      }
       query={facets.status}
       rows={6}
     >
@@ -95,15 +114,36 @@ export function StatusCodesCard({ crawlId, facets }: { crawlId: string; facets: 
 }
 
 /** Indexability, and why not: the site's page URLs the crawl asked for, each count opening its URLs. */
-export function IndexabilityCard({ crawlId, facets }: { crawlId: string; facets: CrawlFacets }) {
+export function IndexabilityCard({
+  crawlId,
+  facets,
+  pagesRead,
+}: {
+  crawlId: string;
+  facets: CrawlFacets;
+  /** The crawl's own "Pages": where it differs from the page URLs counted here, the header says both. */
+  pagesRead?: number | undefined;
+}) {
   return (
     <FacetCard
       title="Indexability"
       titleId="overview-indexability-title"
       meta={
-        facets.indexability.data
-          ? `${formatCountOf(facets.indexability.data.matching, 'page URL')} on the site`
-          : undefined
+        facets.indexability.data ? (
+          <>
+            <TextLink {...linkProps(crawlId, urlsLink(CRAWLED_SITE_PAGES))} variant="subtle">
+              {formatCountOf(facets.indexability.data.matching, 'page URL')} on the site
+            </TextLink>
+            {pagesRead !== undefined && pagesRead !== facets.indexability.data.matching ? (
+              <>
+                {', '}
+                <TextLink {...linkProps(crawlId, urlsLink(ANSWERED_SITE_PAGES))} variant="subtle">
+                  {formatCount(pagesRead)} of them read as pages
+                </TextLink>
+              </>
+            ) : null}
+          </>
+        ) : undefined
       }
       query={facets.indexability}
       rows={4}
@@ -186,7 +226,13 @@ export function DepthCard({ crawlId, facets }: { crawlId: string; facets: CrawlF
     <FacetCard
       title="Pages by depth"
       titleId="overview-depth-title"
-      meta={facets.pages.data ? formatCountOf(facets.pages.data.matching, 'page') : undefined}
+      meta={
+        facets.pages.data ? (
+          <TextLink {...linkProps(crawlId, urlsLink(ANSWERED_SITE_PAGES))} variant="subtle">
+            {formatCountOf(facets.pages.data.matching, 'page')}
+          </TextLink>
+        ) : undefined
+      }
       query={facets.pages}
       rows={5}
     >
@@ -225,7 +271,13 @@ export function ResponseCard({ crawlId, facets }: { crawlId: string; facets: Cra
     <FacetCard
       title="Response times"
       titleId="overview-response-title"
-      meta={facets.pages.data ? formatCountOf(facets.pages.data.matching, 'page') : undefined}
+      meta={
+        facets.pages.data ? (
+          <TextLink {...linkProps(crawlId, urlsLink(ANSWERED_SITE_PAGES))} variant="subtle">
+            {formatCountOf(facets.pages.data.matching, 'page')}
+          </TextLink>
+        ) : undefined
+      }
       query={facets.pages}
       rows={5}
     >

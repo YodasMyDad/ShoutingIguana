@@ -204,7 +204,8 @@ describe('Overview’s rechecks (Advanced)', () => {
     );
     const card = within(await main().findByRole('region', { name: 'Rechecks' }));
     expect(await card.findByText('4 of 5 fixed · 1 still · 0 new · Score 86 → 88')).toBeVisible();
-    expect(main().getByText(/Rechecked once, on 17 Nov\./)).toBeVisible();
+    // In the crawl's line as a control that goes to the card (H-07).
+    expect(main().getByRole('button', { name: 'Rechecked once, on 17 Nov' })).toBeVisible();
   });
 
   it('has no Rechecks card for a crawl never rechecked', async () => {

@@ -35,7 +35,6 @@ import { PageHeader } from '../ui/PageHeader';
 import { RefreshLine } from '../ui/ProgressBar';
 import { TextLink } from '../ui/TextLink';
 import { AnalysisNotes, AnalysisProgress, NotAnalysed } from './issues/AnalysisState';
-import { AnswerHeadline } from './issues/AnswerHeadline';
 import {
   analysisTotals,
   checkEntries,
@@ -57,7 +56,9 @@ import { Categories, FixFirst, SeverityFigures, SkippedChecks } from './overview
 import { DepthCard, IndexabilityCard, ResponseCard, StatusCodesCard } from './overview/CrawlSections';
 import { emptyCrawl, isEmptyCrawl, type EmptyCrawl } from './overview/emptyCrawl';
 import { LiveOverview } from './overview/LiveOverview';
+import { ANSWERED_SITE_PAGES } from './overview/links';
 import { linkProps } from './overview/overviewLinks';
+import { OverviewHeadline } from './overview/OverviewHeadline';
 import { OverviewScore } from './overview/OverviewScore';
 import { ScoreBreakdownFromRoute } from '../simple/ScoreBreakdownDialog';
 import { OverviewSkeleton } from './overview/OverviewSkeleton';
@@ -71,7 +72,7 @@ import { rechecksCountWords } from '../changes/recheckWords';
 import { ComparisonCard, type ChangeLink } from './compare/ComparisonCard';
 import { CompareWithMenu } from './compare/CompareWithMenu';
 import { useComparison } from './compare/useComparison';
-import { RechecksCard } from './rechecks/RechecksCard';
+import { RECHECKS_CARD_ID, RechecksCard } from './rechecks/RechecksCard';
 import { useThingsMoved } from './compare/useThingsMoved';
 
 const ROUTE = '/crawls/$crawl/overview';
@@ -164,7 +165,9 @@ export function OverviewScreen() {
   // hidden ones came to is said after the sentence, never left to read as clean.
   const counted = useMemo(() => (entries ? countedEntries(entries) : null), [entries]);
   const totals = counted ? analysisTotals(counted) : null;
-  const skippedReasons = counted ? skippedGroups(counted).length : 0;
+  const skipped = counted ? skippedGroups(counted) : [];
+  const skippedReasons = skipped.length;
+  const firstSkipped = skipped[0]?.checks[0]?.id ?? null;
   const hiddenChecks = entries ? hiddenTotals(entries) : null;
   // The engine's order to fix them in (the analysis's `fixFirst`), the app's own for an earlier engine's analysis.
   const first = entries ? firstCheckToFix(entries, analysis.data?.fixFirst) : null;
@@ -222,13 +225,15 @@ export function OverviewScreen() {
     : empty
       ? undefined
       : totals
-        ? answer(crawlId, totals, hiddenChecks)
+        ? answer(crawlId, totals, hiddenChecks, firstSkipped)
         : analysing
           ? 'The crawl is being analysed: the answer shows here as soon as it’s done.'
           : neverAnalysed
             ? 'No issues to show yet: this crawl hasn’t been analysed.'
             : undefined;
 
+  // The answer is on screen: the sentence, the severities and Fix first.
+  const answered = !empty && !neverAnalysed && !checks.error && !analysis.error && counted !== null && totals !== null;
   let body: ReactNode;
   if (crawling) {
     body = <LiveOverview crawlId={crawlId} item={item} status={status} />;
@@ -246,8 +251,10 @@ export function OverviewScreen() {
   } else {
     body = (
       <>
-        {/* The totals before anything else (round 5, gap 16), whatever the crawl's state: they need no analysis. */}
-        <TotalsRow crawlId={crawlId} />
+        {/* The totals lead only while there's no answer to lead with (never analysed, nothing crawled): they need no
+            analysis. With an answer they're the first line of "The crawl", below it, so what to fix is on the first
+            screen of a 720 px window (the audit of 2026-11-19, H-19). */}
+        {answered ? null : <TotalsRow crawlId={crawlId} />}
         {/* Not compared, with a crawl of the site to pick (after Don't compare, or a first crawl with later ones): a line
             with Compare with…, where the card would be. A site's only crawl has nothing to pick: no line. */}
         {!empty && analysis.data && comparison.comparing.kind === 'none' && comparison.candidates.length > 0 ? (
@@ -355,12 +362,13 @@ export function OverviewScreen() {
             <CrawlFacts crawlId={crawlId} item={item} crawled={crawled} />
           </div>
           <ShopifyPrompt crawlId={crawlId} mode="advanced" />
+          {answered ? <TotalsRow crawlId={crawlId} /> : null}
           {empty ? (
-            <StatusCodesCard crawlId={crawlId} facets={facets} />
+            <StatusCodesCard crawlId={crawlId} facets={facets} crawled={crawled} />
           ) : (
             <div className="grid grid-cols-2 gap-4 @max-split:grid-cols-1">
-              <StatusCodesCard crawlId={crawlId} facets={facets} />
-              <IndexabilityCard crawlId={crawlId} facets={facets} />
+              <StatusCodesCard crawlId={crawlId} facets={facets} crawled={crawled} />
+              <IndexabilityCard crawlId={crawlId} facets={facets} pagesRead={item.pageCount} />
               <DepthCard crawlId={crawlId} facets={facets} />
               <ResponseCard crawlId={crawlId} facets={facets} />
             </div>
@@ -413,11 +421,16 @@ export function OverviewScreen() {
 }
 
 /**
- * The answer in a sentence, from the counts, then what it leaves out: the hidden checks, with what they found, the
+ * The answer in a sentence, from the counts, each count a link to what it counts, then what it leaves out: the hidden checks, with what they found, the
  * count opening Issues, where they can be shown.
  */
-function answer(crawlId: string, totals: AnalysisTotals, hidden: HiddenTotals | null): ReactNode {
-  const sentence = <AnswerHeadline totals={totals} />;
+function answer(
+  crawlId: string,
+  totals: AnalysisTotals,
+  hidden: HiddenTotals | null,
+  firstSkipped: string | null,
+): ReactNode {
+  const sentence = <OverviewHeadline totals={totals} targets={{ crawlId, firstSkipped }} />;
   if (!hidden) return sentence;
   const words = hiddenWords(hidden);
   return (
@@ -671,9 +684,30 @@ function CrawlFacts({ crawlId, item, crawled }: { crawlId: string; item: CrawlLi
       >
         {formatCountOf(crawled, 'URL')}
       </TextLink>{' '}
-      crawled, {formatCountOf(item.pageCount, 'page')} read
+      crawled,{' '}
+      <TextLink {...linkProps(crawlId, { to: 'urls', filters: [...ANSWERED_SITE_PAGES] })} variant="inline">
+        {formatCountOf(item.pageCount, 'page')}
+      </TextLink>{' '}
+      read
       {item.startedAt ? `, started ${formatExactTime(item.startedAt)}` : ''}.{crawlingWords(item.crawlingMs)}
-      {item.rechecks ? ` ${rechecksCountWords(item.rechecks.count, item.rechecks.last.endedAt)}.` : ''}
+      {item.rechecks ? (
+        <>
+          {' '}
+          {/* The Rechecks card is on this screen, just above: the count goes to it. */}
+          <button
+            type="button"
+            className="si-link si-link--inline"
+            onClick={() => {
+              const card = document.getElementById(RECHECKS_CARD_ID);
+              card?.scrollIntoView({ block: 'center' });
+              card?.focus({ preventScroll: true });
+            }}
+          >
+            {rechecksCountWords(item.rechecks.count, item.rechecks.last.endedAt)}
+          </button>
+          .
+        </>
+      ) : null}
     </p>
   );
 }

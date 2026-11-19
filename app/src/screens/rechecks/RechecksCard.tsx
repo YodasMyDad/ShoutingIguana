@@ -10,6 +10,9 @@ import { RelativeTime } from '../../ui/RelativeTime';
 import { RecheckRowsDialog } from './RecheckRowsDialog';
 import { recheckResultLine, recheckWhatWords } from './rechecks';
 
+/** The card's id: Overview's "Rechecked 3 times" goes to it. */
+export const RECHECKS_CARD_ID = 'overview-rechecks';
+
 const HEAD = 'border-b border-border py-1.5 pr-3 font-medium whitespace-nowrap last:pr-0';
 const CELL = 'border-b border-border-subtle py-1.5 pr-3 align-middle last:pr-0';
 
@@ -25,7 +28,7 @@ export function RechecksCard({ crawlId, titleOf }: { crawlId: string; titleOf: (
   const latest = rechecks[0];
   if (!latest) return null;
   return (
-    <Card as="section" aria-labelledby={titleId}>
+    <Card as="section" id={RECHECKS_CARD_ID} tabIndex={-1} aria-labelledby={titleId}>
       <CardHeader
         title="Rechecks"
         titleId={titleId}

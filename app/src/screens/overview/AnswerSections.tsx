@@ -11,7 +11,7 @@ import { ListRow } from '../../ui/ListRow';
 import { Num } from '../../ui/Num';
 import { SeverityCounts } from '../../ui/SeverityCount';
 import { SeverityMark } from '../../ui/SeverityMark';
-import { Stat, StatLink, Stats } from '../../ui/Stat';
+import { StatLink, Stats } from '../../ui/Stat';
 import { TextLink } from '../../ui/TextLink';
 import { outcomeWord } from '../../ui/severity';
 import { causeWords, type AnalysisTotals, type CheckEntry } from '../issues/checkList';
@@ -58,8 +58,8 @@ function wasWords(change: CheckChange | null | undefined): string | null {
 }
 
 /**
- * Issues by severity: the checks that found issues, and their issues, each opening Issues at that severity; then what
- * passed and what was skipped, which is never left to read as clean.
+ * Issues by severity: the checks that found issues, and what they come to, each opening Issues at that severity; then
+ * what passed, opening Issues with the passed checks listed, and what was skipped, which is never left to read as clean.
  */
 export function SeverityFigures({
   crawlId,
@@ -86,16 +86,27 @@ export function SeverityFigures({
               </>
             }
             value={<Num value={figure.checks} noun="check" />}
+            // One figure and one line each (H-19): the things to change, the unit the headline counts in; how many
+            // issues they come from is on hover.
             context={
               figure.checks === 0
                 ? 'None found an issue'
                 : figure.causes === null
                   ? `${formatCountOf(figure.issues, 'issue')} between them`
-                  : `${capitalised(causeWords(figure.causes, figure.templateCauses, figure.severity === 'notice' ? 'change' : 'fix'))}, from ${formatCountOf(figure.issues, 'issue')}`
+                  : capitalised(
+                      causeWords(figure.causes, figure.templateCauses, figure.severity === 'notice' ? 'change' : 'fix'),
+                    )
+            }
+            title={
+              figure.checks > 0 && figure.causes !== null ? `From ${formatCountOf(figure.issues, 'issue')}` : undefined
             }
           />
         ))}
-        <Stat
+        {/* What passed opens Issues with the passed checks listed (`passed=1`); what was skipped is its own card. */}
+        <StatLink
+          to="/crawls/$crawl/issues/{-$check}"
+          params={{ crawl: crawlId }}
+          search={{ passed: 1 }}
           label={
             <>
               <SeverityMark severity="passed" decorative />
@@ -105,7 +116,7 @@ export function SeverityFigures({
           value={<Num value={totals.passed} noun="check" />}
           context={
             totals.skipped > 0
-              ? `${formatCount(totals.skipped)} ${totals.skipped === 1 ? 'was' : 'were'} skipped, with why below`
+              ? `${formatCount(totals.skipped)} ${totals.skipped === 1 ? 'was' : 'were'} skipped`
               : 'Every check ran'
           }
         />
