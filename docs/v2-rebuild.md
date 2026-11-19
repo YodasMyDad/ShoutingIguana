@@ -204,6 +204,12 @@ opened to confirm.
 6. Merge into `ui/step-3`, update this section, a new gallery shot **at the owner's window size**, the installer, and
    upgrade the owner's install only while the app is closed. Never push.
 
+*Decided by the owner on 2026-11-19, after the pause:* **JavaScript rendering is imperative** ("or we won't be able to
+properly crawl or check things") and **custom extraction is needed**. So step 4 follows this UX round, JavaScript
+rendering first, and neither is "later" any more. List mode and include/exclude rules were explained to the owner the
+same day; whether they join step 4 now is the owner's to say (the orchestrator recommended both: include/exclude
+first, as it is small and keeps a crawl out of filter and parameter traps).
+
 *Left for the owner to decide (features, not UX fixes, so not in this round):* URL include and exclude patterns,
 JavaScript rendering, a URL-list crawl mode (all three are step 4 of the plan and were asked about on 2026-11-19: the
 old app's ListMode and CustomExtraction plugins and its browser rendering are the only parts not yet carried over); a
