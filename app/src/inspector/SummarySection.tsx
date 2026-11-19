@@ -255,8 +255,13 @@ function ImageHead({
                   url={source.url}
                   siteOrigin={siteOrigin}
                   copyable={false}
-                  // The page that shows it, where it shows it: its Images, this image first.
-                  onGo={() => walk(source.id, { show: { section: 'images', link: detail.id } })}
+                  // The page that shows it, where it shows it: its Images, this image first. A page that only
+                  // names it (a share image, an icon) has it among its Outlinks, not its Images.
+                  onGo={() =>
+                    walk(source.id, {
+                      show: { section: source.kind === 'image' ? 'images' : 'outlinks', link: detail.id },
+                    })
+                  }
                   className="min-w-0 text-12"
                 />
               ))}

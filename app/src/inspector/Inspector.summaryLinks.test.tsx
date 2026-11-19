@@ -52,6 +52,16 @@ const USES: Record<number, UrlFoundOn> = {
     sitemaps: { total: 0, sitemaps: [] },
     start: false,
   },
+  // A share image: the page names it in its head (og:image), and shows it nowhere.
+  10: {
+    urlId: 10,
+    links: 1,
+    pages: 1,
+    pagesExact: true,
+    sources: [testLinkRow({ id: 2, url: PAGE.url, kind: 'socialImage', text: 'og:image', position: 'head' })],
+    sitemaps: { total: 0, sitemaps: [] },
+    start: false,
+  },
 };
 
 async function open(urls: Record<number, UrlDetail>, inspect: number) {
@@ -258,6 +268,15 @@ describe('an image in the inspector', () => {
     await waitFor(() => expect((router.state.location.search as { inspect?: number }).inspect).toBe(2));
     await waitFor(() => expect(selected(inspector, /^Images/)).toBe(true));
     expect(router.state.location.state.inspectShow).toEqual({ section: 'images', link: 9 });
+  });
+
+  it('goes to the page’s Outlinks for an image the page only names (a share image): its Images don’t list it', async () => {
+    const share = { ...IMAGE, id: 10, url: 'https://example.com/media/share.png' };
+    const { router, inspector, user } = await open({ 10: share, 2: PAGE }, 10);
+    const uses = (await within(inspector).findByText(/^Used on 1 page/)).parentElement!;
+    await user.click(within(uses).getByRole('button', { name: PAGE.url }));
+    await waitFor(() => expect((router.state.location.search as { inspect?: number }).inspect).toBe(2));
+    expect(router.state.location.state.inspectShow).toEqual({ section: 'outlinks', link: 10 });
   });
 
   it('says its issue is filed on the page that shows it, with the way there, never “No issues”', async () => {
