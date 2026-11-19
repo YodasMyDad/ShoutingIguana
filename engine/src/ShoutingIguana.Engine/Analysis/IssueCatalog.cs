@@ -81,6 +81,27 @@ public static class IssueCatalog
         """A page uses this internal URL as a script, a stylesheet or an image, but the server sends it with a Content-Type that isn't one (a script not sent as JavaScript, a stylesheet not as text/css, an image not as image/*), or with none or a malformed one. A URL used two ways is judged for each. The detail says how it's used and what it's sent as.""",
         """Configure the server or CDN to send the right Content-Type for the file's type, such as text/javascript for .js and text/css for .css. If the URL answers with a page instead, such as an error or login page sent with 200, fix or replace the link to the file.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.HttpHeader,
+                Case = "script",
+                When = "The file is a script (.js)",
+                Where = "in the server's or CDN's response for the file",
+                Before = """Content-Type: text/plain""",
+                After = """Content-Type: text/javascript; charset=utf-8"""
+            },
+            new FixExample
+            {
+                Language = FixLanguage.HttpHeader,
+                Case = "stylesheet",
+                When = "The file is a stylesheet (.css)",
+                Where = "in the server's or CDN's response for the file",
+                Before = """Content-Type: text/plain""",
+                After = """Content-Type: text/css; charset=utf-8"""
+            }
+        ],
         Why = """With X-Content-Type-Options: nosniff, as most sites send, browsers refuse to run a script or apply a stylesheet sent as the wrong type, so the page can break for visitors and for Google's rendering. An "image" that answers with a web page is usually an error page in disguise.""",
         LearnMore = "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/X-Content-Type-Options",
         References = IssueReferences.Sources,
@@ -186,6 +207,17 @@ public static class IssueCatalog
         """This internal URL redirects to another URL on the site with a temporary status code (302, 303 or 307), but its response lets browsers and proxies keep the redirect for more than a day: a Cache-Control max-age or s-maxage over 86,400 seconds, or an Expires more than a day after its Date, without no-store or no-cache. The detail gives how long.""",
         """If the move is permanent, make it a 301 or 308. If it really is temporary, send the redirect with Cache-Control: no-store, or a max-age of an hour or so, so visitors' browsers ask again once it ends.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.HttpHeader,
+                When = "The redirect really is temporary",
+                Where = "in the redirect's response headers",
+                Before = """Cache-Control: max-age=604800""",
+                After = """Cache-Control: no-store"""
+            }
+        ],
         Why = """A temporary redirect is meant to be checked again each time, but a long cache lifetime lets each visitor's browser keep sending them to the old target for days or weeks after you change or remove it. Search engines treat it as temporary all the same, which is a separate signal to fix if the move is for good.""",
         LearnMore = "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control",
         References = IssueReferences.Sources,
@@ -256,6 +288,15 @@ public static class IssueCatalog
         """The page has rel="nofollow" on links to the site's own pages. Links to resources, such as images opened in a gallery lightbox, don't count.""",
         """Remove rel="nofollow" from internal links. Block URLs that shouldn't be crawled in robots.txt, or add noindex (without a robots.txt block) to pages that shouldn't appear in search.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Before = """<a href="/delivery/" rel="nofollow">Delivery</a>""",
+                After = """<a href="/delivery/">Delivery</a>"""
+            }
+        ],
         Why = """Google treats nofollow as a hint not to crawl the target through that link or use the link for ranking, so pages linked only this way may be found late or not at all. For links within your own site, Google's advice is to use robots.txt to keep URLs from being crawled, and noindex to keep pages out of search, instead of nofollow. Nofollow on login or basket links is common and mostly harmless, but achieves little.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/qualify-outbound-links#nofollow",
         References = IssueReferences.Targets,
@@ -268,8 +309,35 @@ public static class IssueCatalog
     public static readonly IssueDefinition EMPTY_ANCHOR_TEXT = new("empty-anchor-text", IssueCategory.Links, IssueSeverity.Notice,
         "Internal links without anchor text",
         """The page has internal links with nothing to read: no text, no alt text on an image inside, and no aria-label, aria-labelledby or title. A link to the page itself counts too, as a logo on the home page is; links written as a fragment (#, #top) and links in the <head>, such as rel="amphtml", don't.""",
-        """Add visible text, alt text on the image inside the link, or an aria-label on icon links. For a logo that links home, alt text with the site name is enough.""")
+        """Add visible text, alt text on the image inside the link, or an aria-label on icon links. For a logo that links home, the site name is enough: as alt text on an <img>, or for an inline SVG as an aria-label on the link or a <title> inside the SVG.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Case = "icon-link",
+                When = "The link wraps an icon or an inline SVG",
+                Before = """<a href="/"><svg viewBox="0 0 120 32">…</svg></a>""",
+                After = """<a href="/" aria-label="Example Furniture"><svg viewBox="0 0 120 32">…</svg></a>"""
+            },
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Case = "image-link",
+                When = "The link wraps an image",
+                Before = """<a href="/"><img src="/img/logo.png" alt=""></a>""",
+                After = """<a href="/"><img src="/img/logo.png" alt="Example Furniture"></a>"""
+            },
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Case = "empty-link",
+                When = "The link has nothing inside",
+                Before = """<a href="/sale/"></a>""",
+                After = """<a href="/sale/">Sale</a>"""
+            }
+        ],
         Why = """Screen readers announce these as just "link" or read out the URL, so their users can't tell where they go. Google uses anchor text to understand the page a link points to, and the alt text of a linked image as its anchor text, so an empty link tells it nothing. Icon-only links in a template, such as a logo, a basket or a search icon, usually account for most of them.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/links-crawlable#anchor-text-placement",
         References = IssueReferences.Targets,
@@ -284,6 +352,17 @@ public static class IssueCatalog
         """The page links to a #fragment, on itself or another crawled page, that matches no id or named anchor on the target page. App routes (#/, #!), app state (fragments with =, : or &) and #top aren't checked.""",
         """Correct the fragment in the link, or add the matching id to the section on the target page; ids on headings are often lost when content is edited or regenerated.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                When = "The link is right and the section has lost its id",
+                Where = "on the page a link to #delivery-times leads to",
+                Before = """<h2>Delivery times</h2>""",
+                After = """<h2 id="delivery-times">Delivery times</h2>"""
+            }
+        ],
         Why = """Visitors land at the top of the page instead of the section the link promised. Google generally ignores URL fragments, so this is about visitors only. Ids added by JavaScript after the page loads can make a working link look broken, so check it in a browser first.""",
         LearnMore = "https://developer.mozilla.org/en-US/docs/Web/URI/Reference/Fragment",
         References = IssueReferences.Targets,
@@ -312,6 +391,33 @@ public static class IssueCatalog
         """The page has links that lead to another page in a way a search engine can't follow: an <a> whose href is a javascript: URL that navigates, an <a> that navigates only through onclick or a routerLink, or another element, such as a <span> or <div>, given an href with a URL. Script that leads nowhere, such as a menu toggle or javascript:void(0), an empty href (the page itself) and a named anchor don't count. The detail gives up to three, with what makes each one uncrawlable. A crawl made before the crawler noted them isn't checked.""",
         """Make each one an <a> element with a real URL in its href, and keep any script on top of it, so search engines, and browsers without the script, can follow it. A control that only opens something on the page belongs in a <button>.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Case = "onclick",
+                When = "The link navigates only through onclick",
+                Before = """<a onclick="location.href='/sale/'">Sale</a>""",
+                After = """<a href="/sale/">Sale</a>"""
+            },
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Case = "javascript-href",
+                When = "The href is a javascript: URL",
+                Before = """<a href="javascript:window.location='/sale/'">Sale</a>""",
+                After = """<a href="/sale/">Sale</a>"""
+            },
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Case = "other-element",
+                When = "Another element has the href",
+                Before = """<span href="/sale/">Sale</span>""",
+                After = """<a href="/sale/">Sale</a>"""
+            }
+        ],
         Why = """Google follows only <a> elements with an href it can resolve, so a page reached only through such links isn't found by crawling and gets no credit from them. Menus, "load more" controls and single-page-app routers are the usual cause.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/links-crawlable",
         Subject = IssueSubject.Page,
@@ -338,6 +444,15 @@ public static class IssueCatalog
         """The page links to, or loads something from, localhost, a .localhost name, or a loopback or private network address (127.x, ::1, 10.x, 172.16 to 172.31, 192.168.x, fc00::/7). On a crawl that started at such an address, as a development copy does, that machine's own addresses aren't counted. The detail gives the count and the first.""",
         """Replace each with the live site's URL, or remove it. They usually come from content or settings copied over from a development or staging copy of the site.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Before = """<a href="http://localhost:3000/contact/">Contact</a>""",
+                After = """<a href="https://www.example.com/contact/">Contact</a>"""
+            }
+        ],
         Why = """Such an address points at the visitor's own computer or network, so a link to one is dead for everyone, and a file loaded from one is missing. Browsers may also warn about, or block, a public page reaching into a private network.""",
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
@@ -430,6 +545,15 @@ public static class IssueCatalog
         """The page has a rel="next" or rel="prev" link to another of the site's pages but no ordinary <a href> link to it. The detail names the first.""",
         """Link each page of the series to the next and previous ones with ordinary <a href> links, such as "Next" and page numbers, as well as or instead of rel="next" and rel="prev".""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Where = "in the page's <body>, under the list",
+                After = """<a href="/blog/page/3/">Next</a>"""
+            }
+        ],
         Why = """Google no longer uses rel="next" and rel="prev", and finds later pages of a series only through ordinary links, so pages reached only through these tags may never be crawled. Other search engines and browsers may still read them, so they do no harm beside real links.""",
         LearnMore = "https://developers.google.com/search/docs/specialty/ecommerce/pagination-and-incremental-page-loading",
         References = IssueReferences.Targets,
@@ -485,6 +609,16 @@ public static class IssueCatalog
         """The page has a noindex (or none) directive in a robots meta tag or an X-Robots-Tag header, which asks search engines to keep it out of their results.""",
         """Check that it's intended. If the page should appear in search, remove the noindex from the meta tag or header, and make sure robots.txt doesn't block the URL, so search engines can see the change.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                When = "The page should appear in search, and a robots meta tag holds the noindex",
+                Before = """<meta name="robots" content="noindex, follow">""",
+                After = """<meta name="robots" content="index, follow">"""
+            }
+        ],
         Why = """Google drops a noindex page from its results entirely, even if other sites link to it. That's right for thank-you pages, internal search results, account pages and staging copies. On a page that should rank, a leftover noindex from a launch or a plugin setting is a common reason it vanishes from search.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/block-indexing",
         Subject = IssueSubject.Page,
@@ -498,6 +632,16 @@ public static class IssueCatalog
         """The page has a nofollow (or none) directive in a robots meta tag or an X-Robots-Tag header, which asks search engines not to follow any of its links.""",
         """Remove nofollow from the robots meta tag or X-Robots-Tag header. To qualify individual links to other sites, use rel="nofollow", "sponsored" or "ugc" on those links instead.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                When = "A robots meta tag holds the nofollow",
+                Before = """<meta name="robots" content="index, nofollow">""",
+                After = """<meta name="robots" content="index, follow">"""
+            }
+        ],
         Why = """Search engines that honour it won't use the page's links to discover the pages they point to, so pages linked only from here may go unfound. A page-wide nofollow is rarely intended on a normal page; it's usually left over from a staging setup or set by a plugin.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag#nofollow",
         Subject = IssueSubject.Page,
@@ -511,6 +655,24 @@ public static class IssueCatalog
         """The crawler didn't fetch this internal URL, because robots.txt disallows it, or because robots.txt itself couldn't be read, which crawlers treat as disallowing everything. The detail names the rule that refused it and its line, or says robots.txt couldn't be read. Not checked on a crawl that was told to ignore robots.txt.""",
         """If the URL should be crawled, change or remove the Disallow rule that matches it. If it's meant to be blocked, avoid linking to it from crawlable pages where you can, and if it must stay out of search, allow crawling and use noindex instead.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.RobotsTxt,
+                When = "The URL should be crawled",
+                Where = "in robots.txt, at the rule the detail names",
+                Before = """
+                    User-agent: *
+                    Disallow: /blog/
+                    Disallow: /cart/
+                    """,
+                After = """
+                    User-agent: *
+                    Disallow: /cart/
+                    """
+            }
+        ],
         Why = """Search engines that obey robots.txt can't read the page, so its content, links and any noindex on it go unseen, yet Google can still index the URL without its content, with no description, if links point to it. Blocking is right for URLs with no search value, such as baskets, internal search or filter combinations. It's a problem when a broad rule catches pages you want in search, or the CSS and JavaScript that pages need to render.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/robots/intro",
         References = IssueReferences.Sources,
@@ -525,6 +687,16 @@ public static class IssueCatalog
         """This indexable page has a nosnippet or max-snippet:0 directive in a robots meta tag or X-Robots-Tag header.""",
         """Remove the directive if it isn't intended. To keep only part of the page out of snippets, use the data-nosnippet attribute on that part, or a max-snippet length instead of 0.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                When = "The directive isn't intended, and a robots meta tag holds it",
+                Before = """<meta name="robots" content="index, follow, nosnippet">""",
+                After = """<meta name="robots" content="index, follow">"""
+            }
+        ],
         Why = """Google shows the page in results without a text snippet or video preview, and doesn't use its content as direct input for AI Overviews or AI Mode. That can be intended, for example for sensitive content, but a result with no description tells searchers less about the page.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag#nosnippet",
         Subject = IssueSubject.Page,
@@ -566,6 +738,20 @@ public static class IssueCatalog
         """robots.txt returned a 4xx error other than 429 (usually 404, sometimes 401 or 403 from a firewall), or redirected too many times, on the main origin or another of the site's origins. Reported on the home page; the detail lists the origins. A crawl told to ignore robots.txt judges the start URL's origin alone, and not at all when it never read robots.txt.""",
         """Add a robots.txt at the origin's root, even if it only holds a Sitemap: line with your XML sitemap's full URL. If a firewall answers it with 401 or 403, let it through.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.RobotsTxt,
+                Where = "in a text file at the origin's root, https://www.example.com/robots.txt",
+                After = """
+                    User-agent: *
+                    Disallow:
+
+                    Sitemap: https://www.example.com/sitemap.xml
+                    """
+            }
+        ],
         Why = """Crawling isn't affected: Google treats a missing robots.txt as having no restrictions, so everything can be crawled. What's missing is a Sitemap: line, which Google, Bing and other search engines read to find your sitemaps, and a way to keep crawlers out of URLs with no search value should you need one. A 401 or 403 meant to keep crawlers out has the opposite effect.""",
         LearnMore = "https://developers.google.com/crawling/docs/robots-txt/create-robots-txt",
         Subject = IssueSubject.Url,
@@ -634,6 +820,16 @@ public static class IssueCatalog
         """This indexable page has a robots rule that keeps its images or video out of search: noimageindex, max-image-preview:none or max-video-preview:0. The detail names the rules found.""",
         """Remove the rule if the page's pictures or video should appear in search; max-image-preview:large allows the largest previews. If they're meant to stay out, leave it.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                When = "The page's pictures should appear in search",
+                Before = """<meta name="robots" content="max-image-preview:none">""",
+                After = """<meta name="robots" content="max-image-preview:large">"""
+            }
+        ],
         Why = """Google won't show the page's images in its results or image search, or a preview of its video, so the result stands out less. That's often deliberate, for photos licensed for one use or private media, but some plugins set it for a whole site without anyone noticing.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag#max-image-preview",
         Subject = IssueSubject.Page,
@@ -660,6 +856,16 @@ public static class IssueCatalog
         """The page's robots rules include indexifembedded but not noindex, so the rule does nothing.""",
         """If the page's content should be indexed only where other pages embed it in an iframe, add noindex beside indexifembedded. If not, remove indexifembedded.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                When = "The content should be indexed only where other pages embed it",
+                Before = """<meta name="robots" content="indexifembedded">""",
+                After = """<meta name="robots" content="noindex, indexifembedded">"""
+            }
+        ],
         Why = """indexifembedded lets Google index a page's content where another page embeds it, though the page itself is noindex; without noindex it has no effect. It harms nothing, but it shows the robots rules aren't doing what someone meant.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag#indexifembedded",
         Subject = IssueSubject.Page,
@@ -688,6 +894,15 @@ public static class IssueCatalog
         """This indexable page has no canonical, neither a <link rel="canonical"> in the <head> nor an HTTP Link header.""",
         """Add <link rel="canonical" href="..."> to the <head> with the page's own absolute URL; most CMSs and SEO plugins can do this for every page.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Where = "in the page's <head>, with the page's own full URL",
+                After = """<link rel="canonical" href="https://www.example.com/oak-dining-tables/">"""
+            }
+        ],
         Why = """Google doesn't require one: without it, Google picks the best URL itself when the same content is reachable at several addresses, such as with tracking parameters or with and without a trailing slash. A canonical pointing to the page itself makes your preference explicit, and Google recommends one on canonical pages. Low priority on its own, but it helps most on sites with many URL variants.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls#rel-canonical-link-method",
         Subject = IssueSubject.Page,
@@ -700,6 +915,18 @@ public static class IssueCatalog
         """The page declares two or more different canonical URLs, in the <head>, the HTTP Link header, or across both.""",
         """Keep one canonical: find which plugin, theme or server rule adds each and turn off the wrong one. A Link header usually comes from the server, CDN or CMS, not the template.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Before = """
+                    <link rel="canonical" href="https://www.example.com/oak-dining-tables/">
+                    <link rel="canonical" href="https://www.example.com/tables/">
+                    """,
+                After = """<link rel="canonical" href="https://www.example.com/oak-dining-tables/">"""
+            }
+        ],
         Why = """Google has said that when a page specifies more than one canonical, it will likely ignore all of them, so the page effectively has none and Google chooses on its own. It usually comes from two systems, such as a theme and an SEO plugin, or the HTML and a server or CDN header, each adding its own.""",
         LearnMore = "https://developers.google.com/search/blog/2013/04/5-common-mistakes-with-relcanonical",
         Subject = IssueSubject.Page,
@@ -766,6 +993,15 @@ public static class IssueCatalog
         """The canonical in the HTML is a relative URL, such as /page or //example.com/page, instead of a full URL with https:// and the host.""",
         "Write the canonical as a full URL, such as https://www.example.com/page.")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Before = """<link rel="canonical" href="/oak-dining-tables/">""",
+                After = """<link rel="canonical" href="https://www.example.com/oak-dining-tables/">"""
+            }
+        ],
         Why = """Google supports relative canonicals, but recommends absolute URLs because relative ones can cause problems later, for example when a testing copy of the site gets crawled and its canonicals point at itself. A mistyped relative path (page instead of /page) also resolves against the current folder. Low priority if the canonicals resolve to the right URLs.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls#rel-canonical-link-method",
         Subject = IssueSubject.Page,
@@ -778,6 +1014,15 @@ public static class IssueCatalog
         """A canonical in the <head> or an HTTP Link header has a value that isn't a valid http or https URL, such as an empty href, a template placeholder or a malformed address.""",
         "Fix the template so the canonical holds the page's absolute URL, or remove the broken tag.")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Before = """<link rel="canonical" href="">""",
+                After = """<link rel="canonical" href="https://www.example.com/oak-dining-tables/">"""
+            }
+        ],
         Why = """Search engines can't resolve it, so it's ignored: if it's the page's only canonical, the page has none in effect. It's usually a template variable that didn't fill in.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls#rel-canonical-link-method",
         Subject = IssueSubject.Page,
@@ -806,6 +1051,17 @@ public static class IssueCatalog
         """This later page of a paginated series, page 2 onward by its rel="prev" link or a page number in its URL (?page=2, ?p=2, /page/2/), names the series' first page as its canonical. It isn't reported as canonicalised too.""",
         """If it's deliberate and the items on the later pages are in the sitemap or linked from elsewhere, leave it. Otherwise give each page of the series a canonical to itself, and keep ordinary links between the pages.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                When = "The later pages' items aren't listed anywhere else",
+                Where = "on page 2 of the series, /blog/page/2/",
+                Before = """<link rel="canonical" href="https://www.example.com/blog/">""",
+                After = """<link rel="canonical" href="https://www.example.com/blog/page/2/">"""
+            }
+        ],
         Why = """This is a common setup, often deliberate, and a setting in many SEO plugins and shop themes. The canonical asks search engines to treat each later page as a copy of page 1, so the pages of the series don't compete as duplicates. It matters when products or posts are listed only on later pages: they're then reached only through pages that ask to be treated as copies, so make sure they're in the sitemap or linked from elsewhere. Google's pagination guidance prefers each page of a series to name itself as its canonical.""",
         LearnMore = "https://developers.google.com/search/docs/specialty/ecommerce/pagination-and-incremental-page-loading#use-urls-correctly",
         References = IssueReferences.Targets,
@@ -863,6 +1119,15 @@ public static class IssueCatalog
         """A canonical in the <head> or an HTTP Link header has a fragment, a part after # such as #reviews. The detail gives the fragment.""",
         "Remove the # part from the canonical, so it's the page's plain URL.")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Before = """<link rel="canonical" href="https://www.example.com/oak-dining-tables/#reviews">""",
+                After = """<link rel="canonical" href="https://www.example.com/oak-dining-tables/">"""
+            }
+        ],
         Why = """Google says not to use a fragment in a canonical, as it generally doesn't support them: it drops the fragment, so the canonical usually works as meant all the same. The markup is still wrong, and a fragment can be a sign the canonical is built from the browser's address rather than set on purpose.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls#rel-canonical-link-method",
         Subject = IssueSubject.Page,
@@ -875,6 +1140,15 @@ public static class IssueCatalog
         """A canonical <link> in the <head> also has an hreflang, lang, media or type attribute. The detail names them. A crawl made before the crawler noted these attributes isn't checked.""",
         """Remove those attributes from the canonical link. To point at another language or a mobile version, add a separate <link rel="alternate"> with hreflang or media instead.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Before = """<link rel="canonical" href="https://www.example.com/oak-dining-tables/" hreflang="en-GB">""",
+                After = """<link rel="canonical" href="https://www.example.com/oak-dining-tables/">"""
+            }
+        ],
         Why = """Those attributes describe an alternate version of a page, not the page's own preferred URL, so search engines may not take the link as a canonical at all. The usual cause is an alternate link written as rel="canonical" by mistake. No Google page says such a canonical is ignored, so treat this as tidying up.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls#rel-canonical-link-method",
         Subject = IssueSubject.Page,
@@ -916,6 +1190,19 @@ public static class IssueCatalog
         """This indexable page isn't in any sitemap the crawl read. It's only checked when the crawl finished and every declared sitemap could be read.""",
         """Add the page to your XML sitemap, ideally by making sure the generator includes every indexable page type.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Xml,
+                Where = "in your XML sitemap, inside <urlset>",
+                After = """
+                    <url>
+                      <loc>https://www.example.com/oak-dining-tables/</loc>
+                    </url>
+                    """
+            }
+        ],
         Why = """Search engines can still find it through links, and on a small, well-linked site that's enough: Google says sites of about 500 pages or fewer that are comprehensively linked may not need a sitemap. On large or fast-changing sites, a complete sitemap helps new and updated pages get discovered sooner. Leaving out some page types, such as filtered or paginated listings, can be deliberate. Login, account and basket pages don't belong in a sitemap: they're better kept out of search with noindex.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/sitemaps/overview#do-i-need-a-sitemap",
         Subject = IssueSubject.Page,
@@ -969,6 +1256,15 @@ public static class IssueCatalog
         """The site's robots.txt has no Sitemap: line, though the crawl found a sitemap anyway: at /sitemap.xml, where crawlers look by convention, or in the crawl settings. Reported once, on the home page, when sitemaps were read and robots.txt answered. The detail names the robots.txt and where the sitemap was found.""",
         """Add a line such as Sitemap: https://www.example.com/sitemap.xml to robots.txt, with the sitemap's full URL. It can go anywhere in the file, and there can be one for each sitemap.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.RobotsTxt,
+                Where = "anywhere in robots.txt",
+                After = """Sitemap: https://www.example.com/sitemap.xml"""
+            }
+        ],
         Why = """Search engines read robots.txt before anything else, and its Sitemap: line is how all of them learn where the sitemap is, not only the ones it was submitted to. A sitemap at /sitemap.xml is usually found without it; one anywhere else may not be.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap#addsitemap",
         Subject = IssueSubject.Url,
@@ -1034,6 +1330,15 @@ public static class IssueCatalog
         """Sitemap entries have a <lastmod> that isn't a date (sitemaps use W3C Datetime, such as 2026-11-17 or 2026-11-17T09:30:00+00:00) or a date more than a day after the crawl. Reported once, on the home page; the detail counts each kind, names the sitemaps, and gives the first wrong entry with what its lastmod says. A crawl made before the crawler read lastmod isn't checked.""",
         """Have the sitemap give each URL's real last change in W3C Datetime, as most CMS sitemap plugins do when left to themselves. Don't set every entry to today's date, or any to a date in the future.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Xml,
+                Before = """<lastmod>17/11/2026</lastmod>""",
+                After = """<lastmod>2026-11-17</lastmod>"""
+            }
+        ],
         Why = """Google uses lastmod only when it's consistently and verifiably accurate. Dates it can't read, or that haven't happened yet, show it they aren't, so it may ignore the sitemap's dates and find changed pages later.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap#additional-notes-about-xml-sitemaps",
         Subject = IssueSubject.Url,
@@ -1049,6 +1354,15 @@ public static class IssueCatalog
         "This indexable page has no <title> element, or its first one is empty.",
         """Add a unique, descriptive <title> in the <head>. If a template sets it, check the field that fills it isn't empty for this page type.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Where = "in the page's <head>",
+                After = """<title>Oak dining tables | Example Furniture</title>"""
+            }
+        ],
         Why = """Google uses the <title> as one of its main sources for the page's title link in search results, and browsers show it in tabs and bookmarks. Without one, Google builds the title link from headings, anchor text and other text on the page, which may not say what you'd choose. Google asks for every page to have one, so fix this first.""",
         LearnMore = "https://developers.google.com/search/docs/appearance/title-link#page-titles",
         Subject = IssueSubject.Page,
@@ -1061,6 +1375,18 @@ public static class IssueCatalog
         """This indexable page has more than one <title> element (titles inside SVG images don't count). The detail says how many.""",
         "Keep a single <title> in the <head> and turn off the source of the others.")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Before = """
+                    <title>Oak dining tables | Example Furniture</title>
+                    <title>Example Furniture</title>
+                    """,
+                After = """<title>Oak dining tables | Example Furniture</title>"""
+            }
+        ],
         Why = """HTML allows only one per page, and browsers use the first. Which one search engines use isn't documented, so the title you wrote may not be the one considered. A second title usually means two systems, such as a theme and an SEO plugin, are both writing the page's metadata.""",
         LearnMore = "https://html.spec.whatwg.org/multipage/semantics.html#the-title-element",
         Subject = IssueSubject.Page,
@@ -1114,6 +1440,15 @@ public static class IssueCatalog
         "This indexable page has no meta description, or its first one is empty.",
         """Write a one- or two-sentence summary specific to the page in <meta name="description" content="...">. On large sites, generate descriptions from each page's data, such as product name, price and key features.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Where = "in the page's <head>",
+                After = """<meta name="description" content="Solid oak dining tables in six sizes, made to order and delivered free.">"""
+            }
+        ],
         Why = """Google writes most snippets from the page's content, but uses the meta description when it describes the page better, and says high-quality descriptions can improve the quality and quantity of search traffic. Without one, the snippet is whatever text Google picks. Descriptions don't affect ranking, so prioritise important pages, such as the home page and key landing pages.""",
         LearnMore = "https://developers.google.com/search/docs/appearance/snippet#meta-descriptions",
         Subject = IssueSubject.Page,
@@ -1126,6 +1461,18 @@ public static class IssueCatalog
         "This indexable page has more than one meta description. The detail says how many.",
         "Keep a single meta description and turn off the other source.")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Before = """
+                    <meta name="description" content="Solid oak dining tables in six sizes, made to order and delivered free.">
+                    <meta name="description" content="Example Furniture: tables, chairs and sofas.">
+                    """,
+                After = """<meta name="description" content="Solid oak dining tables in six sizes, made to order and delivered free.">"""
+            }
+        ],
         Why = """HTML allows only one per page, and which one search engines use isn't documented, so you can't be sure the one you wrote is the one considered for the snippet. It usually comes from a theme and an SEO plugin both adding one.""",
         LearnMore = "https://html.spec.whatwg.org/multipage/semantics.html#meta-description",
         Subject = IssueSubject.Page,
@@ -1179,6 +1526,15 @@ public static class IssueCatalog
         """This indexable page has no H1 heading, or its H1s are empty (the alt text of an image inside an H1, such as a logo, counts as text).""",
         "Mark up the page's visible main heading as a single <h1> that describes the page.")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Before = """<div class="page-title">Oak dining tables</div>""",
+                After = """<h1 class="page-title">Oak dining tables</h1>"""
+            }
+        ],
         Why = """The H1 is the page's main heading, and screen reader users jump between headings to find their way, so a page without one is harder to scan. Google lists headings such as the H1 among its sources for title links, but says it can rarely rely on HTML semantics, so this matters mostly for readers. Often the visible main heading is just styled text.""",
         LearnMore = "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/Heading_Elements#navigation",
         Subject = IssueSubject.Page,
@@ -1191,6 +1547,21 @@ public static class IssueCatalog
         "This indexable page has more than one H1 element. The detail says how many.",
         """Keep one <h1> for the main heading and change the others to <h2> or lower, or to plain styled text if they aren't headings.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Before = """
+                    <h1>Oak dining tables</h1>
+                    <h1>Delivery and returns</h1>
+                    """,
+                After = """
+                    <h1>Oak dining tables</h1>
+                    <h2>Delivery and returns</h2>
+                    """
+            }
+        ],
         Why = """Google says the number and order of headings don't matter for Search, so this isn't a search problem. For readers and screen reader users, one H1 naming the page with H2s for its sections gives the clearest outline, which is why MDN advises against multiple H1s. Often a logo or a sidebar title is marked up as an H1 by the theme.""",
         LearnMore = "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/Heading_Elements#avoid_using_multiple_h1_elements_on_one_page",
         Subject = IssueSubject.Page,
@@ -1215,6 +1586,21 @@ public static class IssueCatalog
         """On this indexable page, which has an H1, a heading after the H1 is more than one level below the one before it (an H2, then an H4). Headings in menus and footers after the H1 count, as screen readers list them all; headings before the H1, such as a theme's hidden cart or a menu's column titles, aren't judged. The detail gives the first such step and quotes the heading it skips to.""",
         """Use the next level down for each subsection (H2 under the H1, H3 under an H2), and style a heading by CSS, not by picking a smaller level.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Before = """
+                    <h2>Delivery</h2>
+                    <h4>Returns</h4>
+                    """,
+                After = """
+                    <h2>Delivery</h2>
+                    <h3>Returns</h3>
+                    """
+            }
+        ],
         Why = """Screen reader users move through a page by its headings, and a skipped level suggests a missing section. HTML asks for each heading to be at most one level below the one before. Search engines cope either way, so this is about structure and accessibility.""",
         LearnMore = "https://www.w3.org/WAI/tutorials/page-structure/headings/",
         Subject = IssueSubject.Page,
@@ -1227,6 +1613,18 @@ public static class IssueCatalog
         """This indexable page's first H1 has no text of its own: its text is an image's alt, as with a logo in the H1. The detail quotes the alt. A crawl made before the crawler noted this isn't checked.""",
         """Give the page a text H1 that says what this page is about, and keep the logo as an image outside it, or in it beside the text.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Before = """<h1><img src="/img/logo.svg" alt="Example Furniture"></h1>""",
+                After = """
+                    <img src="/img/logo.svg" alt="Example Furniture">
+                    <h1>Oak dining tables</h1>
+                    """
+            }
+        ],
         Why = """An H1 that's a logo says the same on every page, the site's name, not what this page is about. Search engines read the alt, but a heading in text is clearer to them and to screen reader users.""",
         LearnMore = "https://developers.google.com/search/docs/appearance/title-link#page-titles",
         Subject = IssueSubject.Page,
@@ -1356,6 +1754,25 @@ public static class IssueCatalog
         """The page has <img> elements with no alt attribute at all. Images with an empty alt="" (marked as decorative) and 1×1 tracking pixels don't count.""",
         """Add alt text that says what each image shows or does in context. For purely decorative images, add an empty alt="" so screen readers skip them.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Case = "content-image",
+                When = "The image shows something",
+                Before = """<img src="/img/oak-table.jpg">""",
+                After = """<img src="/img/oak-table.jpg" alt="Oak dining table set for six">"""
+            },
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Case = "decorative-image",
+                When = "The image is only decoration",
+                Before = """<img src="/img/divider.svg">""",
+                After = """<img src="/img/divider.svg" alt="">"""
+            }
+        ],
         Why = """Some screen readers read out the image's file name when there's no alt, and WCAG requires a text alternative for every image that conveys something. Google uses alt text, with computer vision and the page's content, to understand images for Google Images, and as the anchor text when an image is a link.""",
         LearnMore = "https://developers.google.com/search/docs/appearance/google-images",
         References = IssueReferences.Targets,
@@ -1384,6 +1801,15 @@ public static class IssueCatalog
         """The page has <img> elements missing a width or height attribute, or both; 1×1 tracking pixels don't count. Only the HTML is read, so images sized in CSS still appear here.""",
         """Add width and height attributes with the image's intrinsic size (CSS can still scale it), or give the image box an aspect-ratio or fixed size in CSS.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Before = """<img src="/img/oak-table.jpg" alt="Oak dining table">""",
+                After = """<img src="/img/oak-table.jpg" alt="Oak dining table" width="1200" height="800">"""
+            }
+        ],
         Why = """Without both attributes, and unless CSS gives the image box a size or aspect-ratio, the browser can't reserve space before the image loads, so the content below jumps when it arrives. That layout shift annoys readers and counts towards Cumulative Layout Shift, one of Google's Core Web Vitals. If the CSS already reserves the space, nothing needs doing.""",
         LearnMore = "https://web.dev/articles/optimize-cls#images-without-dimensions",
         References = IssueReferences.Targets,
@@ -1426,6 +1852,15 @@ public static class IssueCatalog
         """The page has <img> elements with no file to show: no src, none of the lazy-loading attributes the crawler reads (data-src and the like), no srcset, and not a data: image. The detail counts them and says which is the first: its alt text, else its class, else where on the page it is. A crawl made before the crawler told data: images apart isn't checked.""",
         """Give each image its file in src. If a lazy-loading script fills it in, check that it uses a standard attribute such as data-src or loading="lazy", and that the image shows without the script.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Before = """<img alt="Oak dining table">""",
+                After = """<img src="/img/oak-table.jpg" alt="Oak dining table">"""
+            }
+        ],
         Why = """An image with no source never shows, for visitors or for Google Images. It's usually a template slot left empty, or a lazy-loading script keeping the file in an attribute only it knows, which search engines may not read either. Not an error: a script the crawler doesn't know can look the same.""",
         LearnMore = "https://developers.google.com/search/docs/appearance/google-images#use-html-image-elements",
         Subject = IssueSubject.Page,
@@ -1438,6 +1873,19 @@ public static class IssueCatalog
         """The page shows image files at least 800 pixels wide (the default, which can be changed in the analysis settings) with no srcset and not in a <picture> with other sources, so phones download the whole file. It needs the files' pixel sizes, read when the crawl fetched them, so it isn't checked when images weren't fetched. The detail counts them and gives the widest.""",
         """Offer smaller versions with srcset and sizes, such as 480, 800 and 1200 pixels wide, or a <picture> with sources; most CMSs do this for images uploaded through them.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Before = """<img src="/img/hero-1600.jpg" alt="Oak dining table">""",
+                After = """
+                    <img src="/img/hero-1600.jpg" alt="Oak dining table"
+                         srcset="/img/hero-480.jpg 480w, /img/hero-800.jpg 800w, /img/hero-1600.jpg 1600w"
+                         sizes="(max-width: 800px) 100vw, 800px">
+                    """
+            }
+        ],
         Why = """A phone shows a 2,000-pixel image at a few hundred pixels: without other sizes to choose from, it downloads all of it, which costs visitors time and data and slows the page's largest paint. Google Images reads srcset and <picture> too.""",
         LearnMore = "https://web.dev/learn/design/responsive-images",
         References = IssueReferences.Targets,
@@ -1452,6 +1900,15 @@ public static class IssueCatalog
         """The page shows JPEG, PNG, GIF or BMP files of 50 KB or more (the default, which can be changed in the analysis settings), as transferred. WebP or AVIF would usually make them smaller. It isn't checked when images weren't fetched. The detail counts them and gives the largest.""",
         """Serve these images as WebP or AVIF: most CMSs and image CDNs can convert them, keeping the old format as a fallback in a <picture> if you need it.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Before = """<img src="/img/oak-table.jpg" alt="Oak dining table">""",
+                After = """<img src="/img/oak-table.webp" alt="Oak dining table">"""
+            }
+        ],
         Why = """WebP and AVIF usually make photos a quarter to a half smaller at the same quality, and every browser in use shows them, as Google Images does. Smaller images load sooner, above all on phones. 50 KB is about where the newer formats save a noticeable amount.""",
         LearnMore = "https://developer.chrome.com/docs/lighthouse/performance/uses-webp-images",
         References = IssueReferences.Targets,
@@ -1466,6 +1923,15 @@ public static class IssueCatalog
         """The page has images whose alt text describes nothing: one or two characters (in an alphabet; in Chinese or Japanese that can be a word), no letter or digit at all, an image file name such as photo.jpg, a camera's or upload's name such as IMG_1234 or image-3, or the image file's own name. An empty alt is right for a decorative image and isn't counted. The detail counts them.""",
         """Write alt text that says what the image shows or does, in a few words, as you'd describe it to someone who can't see it. Leave alt empty for an image that's only decoration.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Before = """<img src="/img/oak-table.jpg" alt="IMG_1234.jpg">""",
+                After = """<img src="/img/oak-table.jpg" alt="Oak dining table set for six">"""
+            }
+        ],
         Why = """Screen readers read the alt text aloud, and a file name or a stray character tells their users nothing. Google Images uses alt text to understand an image, so a file name is a chance missed.""",
         LearnMore = "https://developers.google.com/search/docs/appearance/google-images#use-descriptive-alt-text",
         References = IssueReferences.Targets,
@@ -1494,6 +1960,15 @@ public static class IssueCatalog
         """The page builds images into its HTML as data: URIs larger than 10 KB once decoded (the default, which can be changed in the analysis settings). A crawl made before the crawler measured them isn't checked. The detail counts them and gives the largest, and which it is: its alt text, else its class, else where on the page it is.""",
         """Save each as an image file and show it with an ordinary src, so browsers can cache it and download it alongside the page.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Before = """<img src="data:image/png;base64,iVBORw0KGgo…" alt="Free delivery">""",
+                After = """<img src="/img/free-delivery.png" alt="Free delivery">"""
+            }
+        ],
         Why = """An inline image comes with the page every time, can't be cached on its own, and in base64 is a third bigger than the file. A small icon is fine; a photo makes every view of the page slower.""",
         LearnMore = "https://developer.mozilla.org/en-US/docs/Web/URI/Reference/Schemes/data",
         Subject = IssueSubject.Page,
@@ -1508,6 +1983,15 @@ public static class IssueCatalog
         """An hreflang value on this indexable page isn't a valid code. Valid codes are an ISO 639-1 language, optionally followed by a four-letter script and an ISO 3166-1 alpha-2 region (en, en-GB, zh-Hant-TW), or x-default. UN M.49 numeric regions such as es-419 aren't supported.""",
         "Correct the code to the language-REGION form, such as en-GB or de-AT, on every page in the set.")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Before = """<link rel="alternate" hreflang="en-UK" href="https://www.example.com/uk/">""",
+                After = """<link rel="alternate" hreflang="en-GB" href="https://www.example.com/uk/">"""
+            }
+        ],
         Why = """Google supports only ISO 639-1 languages and ISO 3166-1 alpha-2 regions, and says other codes, such as es-419, aren't supported, so the entry is ignored. An unknown language makes it useless. A reserved region such as UK, EU or UN is different: Google ignores the region and the code still works as the language alone, so en-UK only works as plain en and doesn't target the United Kingdom (whose code is GB). A country code on its own isn't valid either: hreflang="be" means Belarusian, not Belgium.""",
         LearnMore = "https://developers.google.com/search/docs/specialty/international/localized-versions#language-codes",
         Subject = IssueSubject.Page,
@@ -1520,6 +2004,15 @@ public static class IssueCatalog
         """This indexable page lists hreflang alternates, but none of them is the page's own URL exactly as crawled.""",
         """Add an hreflang entry for the page's own URL, written exactly as the page is served (scheme, host, path, trailing slash and any query string), alongside the entries for the other versions.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Where = "in this page's <head>, beside its other hreflang entries, with this page's own URL",
+                After = """<link rel="alternate" hreflang="en-GB" href="https://www.example.com/uk/oak-dining-tables/">"""
+            }
+        ],
         Why = """Google's rule is that each language version must list itself as well as all the other versions, with the same set of links on every page. Without the self-reference the set breaks that rule and may not be used as intended. Often the self-reference is there but in a different form of the URL, such as http instead of https, without the trailing slash or with a tracking parameter.""",
         LearnMore = "https://developers.google.com/search/docs/specialty/international/localized-versions#all-method-guidelines",
         Subject = IssueSubject.Page,
@@ -1532,6 +2025,15 @@ public static class IssueCatalog
         """This indexable page names alternates on the site that are indexable but don't list it in their own hreflang annotations. The detail says how many.""",
         """Give every page in the set the same complete list of hreflang entries, including one that points back to this page with exactly this URL.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Where = "in the <head> of each alternate, naming this page with exactly this URL",
+                After = """<link rel="alternate" hreflang="en-GB" href="https://www.example.com/uk/oak-dining-tables/">"""
+            }
+        ],
         Why = """Google requires hreflang to be confirmed from both sides: if page X lists page Y, Y must list X. Where it isn't, Google says the annotations may be ignored or not interpreted correctly, so searchers may be shown the wrong language version. It usually means the sets differ between pages, for example after a new version was added to some templates but not others.""",
         LearnMore = "https://developers.google.com/search/docs/specialty/international/localized-versions#common-mistakes",
         References = IssueReferences.Targets,
@@ -1586,6 +2088,15 @@ public static class IssueCatalog
         "This indexable page has hreflang annotations but no x-default entry.",
         """Add <link rel="alternate" hreflang="x-default" href="..."> pointing at your selector page or default version, on every page in the set.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Where = "in the <head> of every page in the set",
+                After = """<link rel="alternate" hreflang="x-default" href="https://www.example.com/">"""
+            }
+        ],
         Why = """x-default names the page for searchers whose language or region isn't in your list, usually a language selector or the main international version. Google suggests adding one, especially on language or country selectors and home pages that redirect by locale, but it's optional.""",
         LearnMore = "https://developers.google.com/search/docs/specialty/international/localized-versions#xdefault",
         Subject = IssueSubject.Page,
@@ -1677,6 +2188,26 @@ public static class IssueCatalog
         """A JSON-LD block (<script type="application/ld+json">) on the page isn't valid JSON. The detail shows the parser's first error: which block, counted in page order, the line and character in the block where it stopped, counted from 1, and why.""",
         """Fix the syntax where the detail points (often an unescaped quote, a trailing or missing comma, or a comment left in by a template), then test the page with Google's Rich Results Test.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Json,
+                When = "A comma follows the last property",
+                Before = """
+                    {
+                      …
+                      "name": "Oak dining table",
+                    }
+                    """,
+                After = """
+                    {
+                      …
+                      "name": "Oak dining table"
+                    }
+                    """
+            }
+        ],
         Why = """JSON-LD has to be valid JSON: a trailing comma or a comment is enough for Google to drop the whole block, and its Unparsable structured data report lists the error a trailing comma produces. Nothing in the block is used, so it can't produce a rich result. Other valid blocks on the page still work. A single template error usually breaks the same block on every page that uses it.""",
         LearnMore = "https://support.google.com/webmasters/answer/9166415",
         Subject = IssueSubject.Page,
@@ -1701,6 +2232,55 @@ public static class IssueCatalog
         """A JSON-LD block or Microdata item on the page has no @context or one that isn't schema.org, a @type schema.org doesn't have, a property schema.org doesn't define for that type or the types it descends from, a date property whose value isn't an ISO 8601 date, or a priceCurrency that isn't an ISO 4217 code. Types and properties written in another vocabulary aren't judged. The detail gives the first three faults.""",
         """Correct each fault the detail names: the type's or property's spelling as schema.org writes it (Organization, not Organisation), dates as 2026-11-17 or 2026-11-17T09:30:00+00:00, and currencies as three-letter codes such as GBP. Then test the page with the Schema Markup Validator.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Json,
+                Case = "spelling",
+                When = "A type or property is misspelt",
+                Before = """
+                    "@type": "Organisation"
+                    """,
+                After = """
+                    "@type": "Organization"
+                    """
+            },
+            new FixExample
+            {
+                Language = FixLanguage.Json,
+                Case = "date",
+                When = "A date isn't ISO 8601",
+                Before = """
+                    "datePublished": "17/11/2026"
+                    """,
+                After = """
+                    "datePublished": "2026-11-17"
+                    """
+            },
+            new FixExample
+            {
+                Language = FixLanguage.Json,
+                Case = "currency",
+                When = "A currency isn't a three-letter code",
+                Before = """
+                    "priceCurrency": "£"
+                    """,
+                After = """
+                    "priceCurrency": "GBP"
+                    """
+            },
+            new FixExample
+            {
+                Language = FixLanguage.Json,
+                Case = "context",
+                When = "The block has no @context",
+                Where = "at the top of the JSON-LD block",
+                After = """
+                    "@context": "https://schema.org",
+                    """
+            }
+        ],
         Why = """Search engines read structured data by schema.org's vocabulary: a type or property they don't know, or a date or currency they can't read, is ignored without a word, so the markup may do nothing for the page. Google's Rich Results Test only reports what its own features use, so these faults often go unnoticed.""",
         LearnMore = "https://validator.schema.org/",
         Subject = IssueSubject.Page,
@@ -1767,6 +2347,15 @@ public static class IssueCatalog
         "This HTTPS page loads images, scripts, stylesheets, iframes, audio or video from http:// URLs.",
         """Change the resource URLs to https:// or relative paths, and host copies of resources whose servers don't support HTTPS. A Content-Security-Policy with upgrade-insecure-requests is a useful safety net.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Before = """<img src="http://www.example.com/img/oak-table.jpg" alt="Oak dining table">""",
+                After = """<img src="https://www.example.com/img/oak-table.jpg" alt="Oak dining table">"""
+            }
+        ],
         Why = """Browsers block insecure scripts, stylesheets and frames on HTTPS pages, which can break layout and features, and upgrade images, audio and video to HTTPS, which then fail to load if the server doesn't offer them that way. Google also lists insecure dependencies other than images among the things that can stop it preferring a page's HTTPS version.""",
         LearnMore = "https://developer.mozilla.org/en-US/docs/Web/Security/Defenses/Mixed_content",
         References = IssueReferences.Targets,
@@ -1781,6 +2370,20 @@ public static class IssueCatalog
         """The home page's response lacks one or more of Strict-Transport-Security (checked on HTTPS only), X-Content-Type-Options, Content-Security-Policy, X-Frame-Options (or a CSP frame-ancestors rule) and Referrer-Policy. The detail lists which.""",
         """Add the missing headers in the server, CDN or framework configuration, starting with X-Content-Type-Options and Referrer-Policy, which rarely break anything. Roll out CSP in report-only mode first, and enable HSTS only once HTTPS works everywhere on the site.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.HttpHeader,
+                Where = "in the server's or CDN's response headers, for every page",
+                After = """
+                    Strict-Transport-Security: max-age=31536000
+                    X-Content-Type-Options: nosniff
+                    Referrer-Policy: strict-origin-when-cross-origin
+                    Content-Security-Policy: frame-ancestors 'self'
+                    """
+            }
+        ],
         Why = """These headers protect visitors: HSTS keeps browsers on HTTPS, CSP limits what injected scripts can do, X-Frame-Options or frame-ancestors stops clickjacking, X-Content-Type-Options stops MIME sniffing, and Referrer-Policy limits which URLs leak to other sites (browsers already default to a safe policy, so it matters least). Google doesn't document them as a ranking factor. Only the home page is checked, as they're normally set site-wide.""",
         LearnMore = "https://web.dev/articles/security-headers",
         Subject = IssueSubject.Page,
@@ -1793,6 +2396,25 @@ public static class IssueCatalog
         """The home page sends security headers set too weakly: Strict-Transport-Security (on HTTPS) whose max-age is missing, unreadable or under a year (31,536,000 seconds), or X-Content-Type-Options set to anything but nosniff. Checked once, for the whole site, as missing security headers are. The detail names each.""",
         """Send Strict-Transport-Security: max-age=31536000 (a year) or more, once the whole site works over HTTPS, and X-Content-Type-Options: nosniff. Your host or CDN usually sets them.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.HttpHeader,
+                Case = "hsts",
+                When = "Strict-Transport-Security is under a year",
+                Before = """Strict-Transport-Security: max-age=86400""",
+                After = """Strict-Transport-Security: max-age=31536000"""
+            },
+            new FixExample
+            {
+                Language = FixLanguage.HttpHeader,
+                Case = "nosniff",
+                When = "X-Content-Type-Options isn't nosniff",
+                Before = """X-Content-Type-Options: no-sniff""",
+                After = """X-Content-Type-Options: nosniff"""
+            }
+        ],
         Why = """HSTS keeps browsers on HTTPS between visits only for as long as its max-age, and the preload list browsers ship asks for a year; a short one lapses between visits. X-Content-Type-Options has one value, nosniff: anything else does nothing.""",
         LearnMore = "https://hstspreload.org/#deployment-recommendations",
         Subject = IssueSubject.Page,
@@ -1806,6 +2428,15 @@ public static class IssueCatalog
         """The page's response sets cookies without basic protection: on HTTPS, without Secure; with SameSite=None but no Secure, which browsers refuse; or a session or login cookie (its name has sess, sid, auth, token, login or jwt) without HttpOnly. Only cookies the server sets are seen, not those a script sets. The detail names each cookie and what it lacks.""",
         """Add Secure to every cookie on an HTTPS site, and HttpOnly to session and login cookies, in the server's or framework's cookie settings.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.HttpHeader,
+                Before = """Set-Cookie: sessionid=38afes7a8; Path=/""",
+                After = """Set-Cookie: sessionid=38afes7a8; Path=/; Secure; HttpOnly; SameSite=Lax"""
+            }
+        ],
         Why = """A cookie without Secure can be sent over plain HTTP, where it can be read in transit; one without HttpOnly can be read by a script injected into the page, which is how sessions are stolen. Browsers drop a SameSite=None cookie without Secure altogether.""",
         LearnMore = "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie",
         Subject = IssueSubject.Page,
@@ -1818,6 +2449,15 @@ public static class IssueCatalog
         """On an HTTPS page, a form sends what's typed to an http:// address; or on an HTTP page, a form asks for a password. The detail says where it sends. A crawl made before the crawler read forms isn't checked.""",
         """Point the form's action at the https:// address, or a relative one, and serve every page with a form over HTTPS.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Before = """<form action="http://www.example.com/subscribe" method="post">""",
+                After = """<form action="https://www.example.com/subscribe" method="post">"""
+            }
+        ],
         Why = """What people type travels unencrypted, where others on the network can read or change it, and browsers warn them before sending it, or mark the page not secure.""",
         LearnMore = "https://developer.mozilla.org/en-US/docs/Web/Security/Mixed_content",
         Subject = IssueSubject.Page,
@@ -1830,6 +2470,15 @@ public static class IssueCatalog
         """The page has href or src values written without their scheme, starting // (such as //cdn.example.com/app.js), which take the page's own: on an HTTP copy of the page they load over HTTP. An HTTPS page isn't flagged where the home page's Strict-Transport-Security (HSTS) header covers its host, as browsers that have been to the site never load an HTTP copy there. Each one a link or a file the page loads is listed with it; the detail counts them all, and names any in a tag that isn't a link or file, such as a resource hint. A crawl made before the crawler noted them isn't checked.""",
         """Write each with https:// in front, now that every browser and most hosts support it.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Before = """<script src="//cdn.example.com/app.js"></script>""",
+                After = """<script src="https://cdn.example.com/app.js"></script>"""
+            }
+        ],
         Why = """They were a way to load the same file over HTTP and HTTPS. On an HTTPS page they load securely anyway, so the risk is an HTTP copy of the page, which HSTS rules out for browsers that have visited. Without HSTS they're worth replacing, and they're an old habit some tools misread.""",
         LearnMore = "https://www.paulirish.com/2010/the-protocol-relative-url/",
         References = IssueReferences.Targets,
@@ -1883,6 +2532,16 @@ public static class IssueCatalog
         """Pages on the site link to this URL of the site's with ad or campaign tracking parameters in its query: utm_source and the other utm_ parameters, gclid, fbclid, msclkid, mc_cid or _ga. The detail names them; where it's found lists the pages linking to it.""",
         """Link to the URL without its tracking parameters: they belong on links from emails, ads and other sites, not between your own pages.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Where = "on the pages that link to it",
+                Before = """<a href="/sale/?utm_source=homepage&utm_medium=banner">Sale</a>""",
+                After = """<a href="/sale/">Sale</a>"""
+            }
+        ],
         Why = """Each tagged link is another URL for search engines to crawl and fold into the page they belong to, and analytics counts the visitor as arriving from a new campaign, which breaks up their visit.""",
         LearnMore = "https://support.google.com/analytics/answer/10917952",
         References = IssueReferences.Sources,
@@ -1922,6 +2581,17 @@ public static class IssueCatalog
         """This indexable page's URL has a query (a ? part), and it isn't the site's search, which is its own check. The detail names the parameters; where it's found lists the pages linking to it.""",
         """If the parameters only sort, filter or track, point the page's canonical at the address without them. If they make a page worth finding, give it a plain address instead.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                When = "The parameters only sort, filter or track",
+                Where = "on the address with the parameters, /sofas/?sort=price",
+                Before = """<link rel="canonical" href="https://www.example.com/sofas/?sort=price">""",
+                After = """<link rel="canonical" href="https://www.example.com/sofas/">"""
+            }
+        ],
         Why = """Every combination of parameters is another URL for search engines to crawl, and the same content under many of them divides its signals. Often fine, as for a page of a series, so it's for review.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/url-structure",
         References = IssueReferences.Sources,
@@ -1948,6 +2618,17 @@ public static class IssueCatalog
         """This URL of the site's has a path that repeats itself: one segment three times or more, or the same run of segments twice in a row (/shop/shop/, /a/b/a/b/). Where it's found lists the pages linking to it.""",
         """Find the link that builds it, usually a relative link such as href="shop/" that should be "/shop/", and fix it; redirect the URL to the right one.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                When = "A relative link builds the address",
+                Where = "on the pages that link to it",
+                Before = """<a href="shop/">Shop</a>""",
+                After = """<a href="/shop/">Shop</a>"""
+            }
+        ],
         Why = """A relative link resolved from the wrong place builds ever-longer URLs, which crawlers can follow without end, each answering with the same page.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/url-structure",
         References = IssueReferences.Sources,
@@ -1961,6 +2642,15 @@ public static class IssueCatalog
         """This indexable page is the site's own search: its path has a segment "search", or its query asks something (s, q, query, search, keyword or keywords). The detail names the parameters; where it's found lists the pages linking to it.""",
         """Keep search results out of search engines: add noindex to them, or point their canonical at a real page, and avoid linking to searches from the site's pages.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Where = "in the <head> of the search results page",
+                After = """<meta name="robots" content="noindex">"""
+            }
+        ],
         Why = """Every search is another page of results that rarely helps anyone who lands on it from a search engine, and there's no end to them for a crawler.""",
         LearnMore = "https://developers.google.com/search/docs/essentials/spam-policies#thin-affiliate-pages",
         References = IssueReferences.Sources,
@@ -2028,6 +2718,15 @@ public static class IssueCatalog
         """The page has no viewport meta tag (<meta name="viewport">) with content.""",
         """Add <meta name="viewport" content="width=device-width, initial-scale=1"> to the <head>, then check the layout really adapts to small screens.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Where = "in the page's <head>",
+                After = """<meta name="viewport" content="width=device-width, initial-scale=1">"""
+            }
+        ],
         Why = """Without it, mobile browsers lay the page out at a desktop width (about 980 pixels) and shrink it to fit, so text is tiny and visitors have to zoom and pan. Google indexes pages as its smartphone crawler sees them, and its page experience guidance asks whether content displays well on mobile devices.""",
         LearnMore = "https://web.dev/articles/responsive-web-design-basics#viewport",
         Subject = IssueSubject.Page,
@@ -2040,6 +2739,15 @@ public static class IssueCatalog
         "The page's <html> element has no lang attribute, or it's empty.",
         """Add the page's main language to the <html> element, such as <html lang="en-GB">, and mark passages in other languages with their own lang.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Before = """<html>""",
+                After = """<html lang="en-GB">"""
+            }
+        ],
         Why = """Screen readers use lang to choose the right voice and pronunciation, and WCAG requires the page's language to be set this way; browsers use it too, for example for hyphenation. Google doesn't: it detects the language from the visible content, so this is about accessibility, not search.""",
         LearnMore = "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Global_attributes/lang#accessibility_concerns",
         Subject = IssueSubject.Page,
@@ -2052,6 +2760,25 @@ public static class IssueCatalog
         """Nothing declares the page's character encoding where browsers look for it: no byte-order mark at the start of the file, no charset in the Content-Type header, and no meta tag (<meta charset> or http-equiv Content-Type) within the first 1024 bytes. The detail says where a meta tag further in ends.""",
         """Add <meta charset="utf-8"> as the first element in the <head>, within the first 1024 bytes of the file, or send Content-Type: text/html; charset=utf-8 from the server.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Case = "meta-tag",
+                When = "In the page's HTML",
+                Where = "first in the page's <head>",
+                After = """<meta charset="utf-8">"""
+            },
+            new FixExample
+            {
+                Language = FixLanguage.HttpHeader,
+                Case = "header",
+                When = "From the server",
+                Where = "in the page's response headers",
+                After = """Content-Type: text/html; charset=utf-8"""
+            }
+        ],
         Why = """Without a declaration, browsers have to guess the encoding, and a wrong guess turns accented letters, currency symbols and curly quotes into garbled characters. W3C advises always declaring it, even when a page happens to display correctly. A page that starts with a byte-order mark has declared it, and isn't reported; a crawl made before the crawler recorded the mark still reports such a page, until it's crawled again. Likewise a crawl made before the crawler recorded where the meta tag ends passes one past the first 1024 bytes.""",
         LearnMore = "https://www.w3.org/International/questions/qa-html-encoding-declarations",
         Subject = IssueSubject.Page,
@@ -2064,6 +2791,19 @@ public static class IssueCatalog
         """This indexable page lacks og:title, og:description or og:image, or has them empty. The detail says which are missing and which are empty.""",
         """Add og:title, og:description and og:image (an absolute URL to a representative image, not the site logo) to the <head>; most SEO plugins can fill them from the page's title, description and featured image.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Where = "in the page's <head>",
+                After = """
+                    <meta property="og:title" content="Oak dining tables">
+                    <meta property="og:description" content="Solid oak dining tables in six sizes, made to order.">
+                    <meta property="og:image" content="https://www.example.com/img/oak-table-1200x630.jpg">
+                    """
+            }
+        ],
         Why = """Social networks and chat apps build link previews from Open Graph tags; without them they guess the title and image or show a bare link. Google also lists og:title among its sources for title links and accepts og:image as a way to suggest a page's preferred image. Low priority for pages nobody shares.""",
         LearnMore = "https://ogp.me/",
         Subject = IssueSubject.Page,
@@ -2076,6 +2816,15 @@ public static class IssueCatalog
         """This indexable page has no twitter:card meta tag (by name or property), so X shows its link without a card.""",
         """Add <meta name="twitter:card" content="summary_large_image"> to the <head>; most SEO plugins do it with one setting. X takes the title, description and image from the Open Graph tags when there are no twitter: ones.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Where = "in the page's <head>",
+                After = """<meta name="twitter:card" content="summary_large_image">"""
+            }
+        ],
         Why = """X reads twitter:card to choose a card; without it, a shared link gets no image or a small one. It falls back to Open Graph for everything else, so the one tag is usually all a page needs.""",
         LearnMore = "https://developer.x.com/en/docs/x-for-websites/cards/overview/markup",
         Subject = IssueSubject.Page,
@@ -2088,6 +2837,16 @@ public static class IssueCatalog
         """This indexable page asks for an X card that can't be built: its type isn't summary, summary_large_image, app or player; it has no title (twitter:title, else og:title); a summary card has no image (twitter:image, else og:image); a player card has no twitter:player; or its twitter: tags are written only with property=, which X doesn't read. The detail gives each fault. A crawl made before the crawler told name= from property= isn't checked.""",
         """Fill in what the detail says is missing, or write the twitter: tags with name= rather than property=.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                When = "The twitter: tags are written with property=",
+                Before = """<meta property="twitter:card" content="summary_large_image">""",
+                After = """<meta name="twitter:card" content="summary_large_image">"""
+            }
+        ],
         Why = """X builds a card only from the tags it reads; with a part missing it shows a bare link, so the card tag does nothing.""",
         LearnMore = "https://developer.x.com/en/docs/x-for-websites/cards/overview/markup",
         Subject = IssueSubject.Page,
@@ -2100,6 +2859,15 @@ public static class IssueCatalog
         """This indexable page's og:image (og:image:url, og:image:secure_url) or twitter:image isn't a full http:// or https:// URL: a path such as /img/share.jpg, or one starting with //. The detail gives the first.""",
         """Give the image as a full URL, starting with https:// and your domain.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Before = """<meta property="og:image" content="/img/share.jpg">""",
+                After = """<meta property="og:image" content="https://www.example.com/img/share.jpg">"""
+            }
+        ],
         Why = """The Open Graph protocol gives its URLs with http:// or https://, and networks fetch the image on their own: a relative path may be read from the wrong place or not at all, and the share shows no image.""",
         LearnMore = "https://ogp.me/",
         Subject = IssueSubject.Page,
@@ -2112,6 +2880,16 @@ public static class IssueCatalog
         """This indexable page's og:url, normalised, is another URL than its own: often every page's points at the home page. An indexable page's canonical is itself, so that's what og:url should give. The detail gives it, grouped by it, so a template's is one group.""",
         """Make og:url the page's own URL (most SEO plugins use the canonical), or remove it: networks then use the URL that was shared.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Where = "on /oak-dining-tables/",
+                Before = """<meta property="og:url" content="https://www.example.com/">""",
+                After = """<meta property="og:url" content="https://www.example.com/oak-dining-tables/">"""
+            }
+        ],
         Why = """The Open Graph protocol defines og:url as the canonical URL of the object. Networks gather shares, likes and the preview under it, so one that names another page credits that page and sends clicks there.""",
         LearnMore = "https://ogp.me/",
         Subject = IssueSubject.Page,
@@ -2124,6 +2902,18 @@ public static class IssueCatalog
         """This indexable page gives og:title, og:description, og:url, og:type, twitter:card, twitter:title or twitter:description more than once, with different content. og:image and the other properties that take several values may repeat. The detail counts each and quotes its different values, as 2 og:title: "Sofas" · "Chairs".""",
         """Keep one of each: usually two plugins, or a plugin and the theme, both write them, and one can be turned off.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Before = """
+                    <meta property="og:title" content="Oak dining tables">
+                    <meta property="og:title" content="Example Furniture">
+                    """,
+                After = """<meta property="og:title" content="Oak dining tables">"""
+            }
+        ],
         Why = """Each of these says one thing about the page; given twice with different values, each network picks one its own way, and it may not be the one you meant.""",
         LearnMore = "https://ogp.me/",
         Subject = IssueSubject.Page,
@@ -2228,6 +3018,15 @@ public static class IssueCatalog
         """The page's viewport meta tag stops visitors zooming (user-scalable=no or 0, or a maximum-scale under 2), sets neither width nor initial-scale, or the page has two viewport tags that differ. The detail lists the faults.""",
         """Use <meta name="viewport" content="width=device-width, initial-scale=1"> and nothing that limits zoom; keep one viewport tag.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Before = """<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">""",
+                After = """<meta name="viewport" content="width=device-width, initial-scale=1">"""
+            }
+        ],
         Why = """Stopping zoom fails people who need larger text, which WCAG requires to work up to 200%, and some browsers ignore it anyway. A viewport with no width lays the page out at desktop width on phones, as a missing one does.""",
         LearnMore = "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/meta/name/viewport",
         Subject = IssueSubject.Page,
@@ -2252,6 +3051,15 @@ public static class IssueCatalog
         """The page's <html lang> isn't a well-formed language tag: a 2-letter ISO 639-1 language (or a 3-letter one), then optionally a 4-letter script and a 2-letter region or 3-digit area, all separated by hyphens, such as en, en-GB or zh-Hant-TW. en_GB, english and uk-en aren't. The detail gives the value.""",
         """Set lang to the page's language code, such as en or en-GB, with a hyphen, not an underscore, and the language before the region.""")
     {
+        FixExamples =
+        [
+            new FixExample
+            {
+                Language = FixLanguage.Html,
+                Before = """<html lang="en_GB">""",
+                After = """<html lang="en-GB">"""
+            }
+        ],
         Why = """Screen readers use lang to choose the voice and pronunciation, and browsers for hyphenation and spelling; a value they can't read is as good as none. Google detects a page's language from its content, so this is about accessibility, not search.""",
         LearnMore = "https://www.w3.org/International/questions/qa-choosing-language-tags",
         Subject = IssueSubject.Page,
