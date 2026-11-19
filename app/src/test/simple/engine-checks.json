@@ -624,11 +624,11 @@
     {
       "id": "broken-external-links",
       "category": "links",
-      "severity": "warning",
+      "severity": "error",
       "title": "Links to broken external URLs",
       "description": "The page links to URLs on other sites that return a 4xx or 5xx error or don't respond, directly or after redirects. Statuses many sites send only to crawlers (401, 403, 405, 429, 503 and LinkedIn's 999) don't count, and nor do links that the other site's bot protection (such as Cloudflare) refused, or that its robots.txt kept the crawler from checking.",
       "fix": "Update each link to the resource's current address or an archived copy, or remove it.",
-      "why": "Visitors who click hit a dead end, which makes the page look neglected and its references unreliable. Google doesn't document broken outbound links as a ranking factor, so this is about visitors. Some sites refuse crawlers in other ways, so open a few in a browser before editing.",
+      "why": "Visitors who click hit a dead end, as with a broken link within the site, which makes the page look neglected and its references unreliable. Google doesn't document broken outbound links as a ranking factor: the cost is to visitors. Some sites refuse crawlers in other ways, so open one in a browser before editing.",
       "learnMore": null,
       "grouping": "relatedUrl",
       "subject": "page",
@@ -1024,7 +1024,7 @@
       "severity": "notice",
       "title": "Linked only from non-indexable pages",
       "description": "Every page that links to this indexable page with a followed link is itself not indexable: noindex, canonicalised to another URL, or a redirect by an instant meta refresh. Links reaching it through a redirect count. The start and home pages aren't reported, and it's only checked when the crawl read every page that could link to it.",
-      "fix": "Don't remove the links: they're how search engines reach the page. Look at why the pages linking here aren't indexable (each one's indexability says). If one shouldn't be, such as page 2 of a list canonicalised to page 1 (each page of a series should be its own canonical, so its links count), fix that page. If they're excluded on purpose, as tag and filter pages often are, also link to this page from at least one indexable page where it belongs, such as its category or a related page.",
+      "fix": "Don't remove the links: they're how search engines reach the page. Look at why the pages linking here aren't indexable (each one's indexability says). If one shouldn't be, such as page 2 of a list canonicalised to page 1 (giving each page of a series its own canonical makes its links count), fix that page. If they're excluded on purpose, as tag and filter pages often are, also link to this page from at least one indexable page where it belongs, such as its category or a related page.",
       "why": "Search engines find and value pages largely through links from pages they index. Links only from pages they're told to drop, or to treat as copies, still let them reach this page but count for little, and if those pages go the page is left with no links. It's often a page linked only from tag, filter or paginated pages that are noindex.",
       "learnMore": "https://developers.google.com/search/docs/crawling-indexing/links-crawlable#internal-links",
       "grouping": "none",
@@ -1810,7 +1810,7 @@
       "title": "Canonicalised page",
       "description": "The page's canonical (in the <head> or an HTTP Link header) names a different URL, so the page asks to be treated as a duplicate of it. Canonicals that lead back to this page or to a broken URL don't count.",
       "fix": "Check the canonical is intended. If this page should rank, make its canonical point to itself; if it's a true duplicate, link to the canonical URL rather than this one within the site.",
-      "why": "Google treats a canonical as a strong hint, not a rule: it usually indexes the named URL and folds this page's signals into it, but can choose differently if other signals disagree. That's right for parameter, sorting and print versions of a page. It's a problem when the page has its own content and should rank, as when a template points every canonical at the home page or the first page of a series.",
+      "why": "Google treats a canonical as a strong hint, not a rule: it usually indexes the named URL and folds this page's signals into it, but can choose differently if other signals disagree. That's right for parameter, sorting and print versions of a page. It's a problem when the page has its own content and should rank, as when a template points every canonical at the home page.",
       "learnMore": "https://developers.google.com/search/docs/crawling-indexing/canonicalization",
       "grouping": "relatedUrl",
       "subject": "page",
@@ -1821,7 +1821,7 @@
       "plainWhat": [
         "These pages tell search engines that another page is the main version of them (a \"canonical\" link).",
         "Google then shows that other page instead, which is right for true copies, such as a sorted list or a print version.",
-        "It's a problem when the page has its own content, as page 2 of a list does: each page of a list should name itself."
+        "It's a problem when the page has its own content and should appear in search in its own right."
       ],
       "plainFix": [
         "Look at each page and the page it points to, and decide whether they're really the same thing.",
@@ -2164,11 +2164,11 @@
     {
       "id": "canonical-to-first-page",
       "category": "canonicals",
-      "severity": "warning",
+      "severity": "notice",
       "title": "Paginated page canonicalised to page 1",
       "description": "This later page of a paginated series, page 2 onward by its rel=\"prev\" link or a page number in its URL (?page=2, ?p=2, /page/2/), names the series' first page as its canonical. It isn't reported as canonicalised too.",
-      "fix": "Give each page of the series a canonical to itself, and keep ordinary links between the pages so every one can be reached.",
-      "why": "The canonical asks search engines to treat page 2 as a copy of page 1, which it isn't. What's listed only on later pages is then found only through pages that ask to be dropped, so it may be crawled less, or not at all. Google's pagination guidance says not to use the first page as the canonical; it's a common setting in SEO plugins and shop themes.",
+      "fix": "If it's deliberate and the items on the later pages are in the sitemap or linked from elsewhere, leave it. Otherwise give each page of the series a canonical to itself, and keep ordinary links between the pages.",
+      "why": "This is a common setup, often deliberate, and a setting in many SEO plugins and shop themes. The canonical asks search engines to treat each later page as a copy of page 1, so the pages of the series don't compete as duplicates. It matters when products or posts are listed only on later pages: they're then reached only through pages that ask to be treated as copies, so make sure they're in the sitemap or linked from elsewhere. Google's pagination guidance prefers each page of a series to name itself as its canonical.",
       "learnMore": "https://developers.google.com/search/docs/specialty/ecommerce/pagination-and-incremental-page-loading#use-urls-correctly",
       "grouping": "relatedUrl",
       "subject": "page",
@@ -2178,11 +2178,13 @@
       "plainTitle": "Later pages of a list that point Google at the first page",
       "plainWhat": [
         "These are page 2 onward of a list, such as a category, and each names the list's first page as its main version.",
-        "Google may then treat them as copies of the first page and visit them less, so what's listed only further on can go unfound.",
-        "Google's advice is for each page of a list to name itself."
+        "It's a common setup, often chosen on purpose.",
+        "Anything listed only on a later page is then reached only through pages that ask to be treated as copies.",
+        "Google's guidance prefers each page of a list to name itself."
       ],
       "plainFix": [
-        "Ask your developer to make each page of the list name its own address as its main version (its \"canonical\" link).",
+        "Leave it if it's deliberate and everything on the later pages is in your sitemap or linked from elsewhere.",
+        "Otherwise, ask your developer to make each page of the list name its own address as its main version (its \"canonical\" link).",
         "Keep the ordinary links between the pages, such as \"Next\" and the page numbers."
       ],
       "fixer": "developer",
@@ -2241,7 +2243,7 @@
       "fix": "Choose the one page of the loop that should be indexed, give it a canonical to itself, and point the others' canonicals at it.",
       "why": "Each page asks to be dropped for another that asks the same, so the canonicals cancel out and Google picks a page itself, which may not be the one you meant. It usually comes from two pages each set to the other by hand, or from one rule that rewrites canonicals undoing another.",
       "learnMore": "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls",
-      "grouping": "pageDetail",
+      "grouping": "detail",
       "subject": "page",
       "references": "targets",
       "siteWide": false,

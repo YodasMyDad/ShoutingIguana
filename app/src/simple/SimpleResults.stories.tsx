@@ -61,7 +61,7 @@ export const ProblemShopifyStore: Story = story(`${FIX}/broken-internal-links`, 
   shopifyRoute(SHOPIFY_STORE),
 ]);
 
-/** The garden crawl, as today's engine scores it: 87, Good; 2 serious, 3 worth fixing, 14 worth a look. */
+/** The garden crawl, as today's engine scores it: 87, Good; 2 serious, 3 worth fixing, 23 worth a look. */
 export const Summary: Story = story(SUMMARY, GARDEN_ANALYSIS);
 
 /** First load: the skeleton in the screen's shape (the ring's outline, three lines, five rows) after 150 ms. */
@@ -306,7 +306,7 @@ export const ProblemAlsoFixes: Story = story(`${FIX}/internal-client-error`, GAR
 /** The broken links: fixing the 404s fixes them too. */
 export const ProblemFixedByAnother: Story = story(`${FIX}/broken-internal-links`, GARDEN_ANALYSIS);
 
-/** Landed on from the Summary's "13 Things worth a look": all of them, the heading in view with focus. */
+/** Landed on from the Summary's "23 Things worth a look": all of them, the heading in view with focus. */
 export const WhatToFixLandedOnNotices: Story = story(`${FIX}#worth-a-look`, GARDEN_ANALYSIS);
 
 /** Landed on "Checks found nothing wrong": the fold is open. */

@@ -134,7 +134,7 @@ const unfoldGarden = () =>
   );
 
 /**
- * The library's Score column: "86 ▲14" against each crawl's previous crawl (the glyph neutral, the change in words for a
+ * The library's Score column: "87 ▲15" against each crawl's previous crawl (the glyph neutral, the change in words for a
  * screen reader), "so far" under a stopped crawl's, "–" with no score; the garden site's older crawls unfolded, each
  * with its own.
  */

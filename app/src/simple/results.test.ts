@@ -28,8 +28,8 @@ const ids = (entries: readonly { check: Check }[]) => entries.map((entry) => ent
 describe('Simple’s results on the garden crawl', () => {
   const results = plainResults(SIMPLE_CHECKS, GARDEN_ANALYSIS, NONE);
 
-  it('counts the garden’s problems: 2 serious, 4 worth fixing, 22 worth a look, 27 couldn’t run', () => {
-    expect(results.counts).toEqual({ error: 2, warning: 4, notice: 22 });
+  it('counts the garden’s problems: 2 serious, 3 worth fixing, 23 worth a look, 27 couldn’t run', () => {
+    expect(results.counts).toEqual({ error: 2, warning: 3, notice: 23 });
     expect(results.skippedCount).toBe(27);
     expect(results.passed.length + results.counts.error + results.counts.warning + results.counts.notice).toBe(
       results.ran,
@@ -44,21 +44,20 @@ describe('Simple’s results on the garden crawl', () => {
       'title-duplicate',
       'slow-response',
     ]);
-    expect(results.ifFixed).toBe(99);
+    expect(results.ifFixed).toBe(100);
   });
 
   it('says nothing of the five fixed when a hidden check is among the engine’s five', () => {
     const hidden = plainResults(SIMPLE_CHECKS, GARDEN_ANALYSIS, new Set(['image-too-large']));
-    // The next of the engine's order that's serious or worth fixing takes its place, so its five aren't these five.
+    // Only four of the engine's order are serious or worth fixing once it's hidden: the rest are worth a look.
     expect(ids(hidden.fixFirst)).toEqual([
       'internal-client-error',
       'broken-internal-links',
       'title-duplicate',
       'slow-response',
-      'canonical-to-first-page',
     ]);
     expect(hidden.ifFixed).toBeNull();
-    expect(hidden.counts.warning).toBe(3);
+    expect(hidden.counts.warning).toBe(2);
     expect(ids(hidden.hidden)).toEqual(['image-too-large']);
   });
 
@@ -111,7 +110,7 @@ describe('Simple’s results on the garden crawl', () => {
     const score = GARDEN_ANALYSIS.score!;
     expect(bandWord(score.band)).toBe('Good');
     expect(summarySentence({ band: score.band, partial: false, counts: results.counts, siteWideSerious: null })).toBe(
-      'Your site is in good shape. There are 2 serious problems and 4 problems worth fixing.',
+      'Your site is in good shape. There are 2 serious problems and 3 problems worth fixing.',
     );
     expect(coverageSentences(score.covers)).toEqual([
       'The score covers all 265 pages and 143 of 170 checks.',
@@ -186,7 +185,7 @@ describe('the Summary’s sentence in every state', () => {
   it('stopped early: of the pages read so far, and a partial word', () => {
     const results = plainResults(SIMPLE_CHECKS, STOPPED_ANALYSIS, NONE);
     expect(summarySentence({ band: 'good', partial: true, counts: results.counts, siteWideSerious: null })).toBe(
-      'On the pages read so far there are 2 serious problems and 4 problems worth fixing.',
+      'On the pages read so far there are 2 serious problems and 3 problems worth fixing.',
     );
     expect(bandWord('good', true)).toBe('Good so far');
     expect(coverageSentences(STOPPED_ANALYSIS.score!.covers)[0]).toBe(
@@ -224,7 +223,7 @@ describe('what the site’s platform sets', () => {
   const results = plainResults(SIMPLE_CHECKS, owned, NONE);
 
   it('leaves it out of the problems and their counts, and out of the five to fix first', () => {
-    expect(results.counts).toEqual({ error: 2, warning: 4, notice: 19 });
+    expect(results.counts).toEqual({ error: 2, warning: 3, notice: 20 });
     for (const id of SHOPIFY_SET) expect(ids(results.found.notice)).not.toContain(id);
     expect(ids(results.fixFirst)).toEqual([
       'internal-client-error',
@@ -233,7 +232,7 @@ describe('what the site’s platform sets', () => {
       'title-duplicate',
       'slow-response',
     ]);
-    expect(results.ifFixed).toBe(99);
+    expect(results.ifFixed).toBe(100);
   });
 
   it('lists it apart, each with who sets it and why, and still counts it among the checks that ran', () => {

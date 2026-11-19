@@ -47,7 +47,7 @@ const comparedSummary = (comparison: CrawlComparison) =>
 
 // ---------------------------------------------------------------------------------------------------- The Summary
 
-/** Since the last check: "score 72 → 86, 3 problems fixed, 1 new", each a link, and See what changed. */
+/** Since the last check: "score 72 → 87, 3 problems fixed, 1 new", each a link, and See what changed. */
 export const SummarySinceLastCheck: Story = comparedSummary(gardenComparison());
 
 /** A site's first check: nothing at all, no line and no zeros. */

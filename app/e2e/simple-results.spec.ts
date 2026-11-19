@@ -2,7 +2,7 @@
 // score"): the Summary, the score's breakdown, What to fix and one problem, on the seeded crawl or, with
 // SI_E2E_CRAWL=<file>, on a real one (the garden crawl, the 100k crawl). The sweep walks every figure of the three
 // screens and follows it: what it lands on must hold exactly that many, and say the same number the engine gives. On the
-// garden crawl the figures are also held to the mockups' (85, Good; 2, 4 and 13).
+// garden crawl (31 October 2026) the figures are also held to what today's engine gives it (87, Good; 2, 3 and 23).
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
@@ -102,15 +102,15 @@ test('the Summary says the engine’s score, word and counts, and passes axe in 
   await expect(tally.nth(1)).toContainText(number(found('warning')));
   await expect(tally.nth(2)).toContainText(number(found('notice')));
   if (crawl.site === 'gardenfurnituresets.co.uk') {
-    // The mockups' numbers.
-    expect(score.value).toBe(85);
+    // The crawl of 31 October 2026 as the engine scores it now (the mockups' 85 and 2, 4, 13 were the design's).
+    expect(score.value).toBe(87);
     expect(score.band).toBe('good');
-    expect([found('error'), found('warning'), found('notice')]).toEqual([2, 4, 13]);
+    expect([found('error'), found('warning'), found('notice')]).toEqual([2, 3, 23]);
     // The sentence counts the jobs: a problem another's fix clears is folded under it.
     const five = analysis.fixFirst.filter((id) => byId.get(id)?.severity !== 'notice').slice(0, 5);
     const numbered = fixFirstJobs(five, analysis, byId).filter((job) => !job.nested).length;
     const these = ['this one', 'these two', 'these three', 'these four', 'these five'][numbered - 1] ?? '';
-    await expect(main(page).getByText(`Fixing ${these} takes the score from 85 to 98.`)).toBeVisible();
+    await expect(main(page).getByText(`Fixing ${these} takes the score from 87 to 100.`)).toBeVisible();
   }
   await expectNoViolations(page);
   await shoot(page, 'summary-light');

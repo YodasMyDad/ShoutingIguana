@@ -191,9 +191,10 @@ test('in Advanced, Report is the eighth section, and the Overview’s score open
   const score = page.getByRole('link', { name: /How it’s worked out/ });
   if (analysis.score) {
     await expect(score).toContainText(String(analysis.score.value));
-    // On the garden crawl, the design's own numbers (docs/v2-ui-simple.md, Worked examples): 85, Good, 100 − 15.
+    // On the garden crawl of 31 October 2026, what the engine scores it now: 87, Good, 100 − 13 (the design's worked
+    // example, docs/v2-ui-simple.md, was 85 before two of its checks became notices).
     if (crawl.site === 'gardenfurnituresets.co.uk') {
-      expect([analysis.score.value, analysis.score.band, analysis.score.lost]).toEqual([85, 'good', 15]);
+      expect([analysis.score.value, analysis.score.band, analysis.score.lost]).toEqual([87, 'good', 13]);
       await expect(score).toContainText('Score: Good');
     }
     await score.click();

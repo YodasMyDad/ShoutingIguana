@@ -189,13 +189,13 @@ const FIX_LOOP_CHECKS = {
     { id: 'internal-server-error', severity: 'error' },
     { id: 'title-missing', severity: 'error' },
     { id: 'redirect-chain', severity: 'warning' },
-    { id: 'canonical-to-first-page', severity: 'warning' },
+    { id: 'title-duplicate', severity: 'warning' },
     { id: 'h1-multiple', severity: 'notice' },
   ],
 };
 
 /**
- * The garden crawl compared with its site's earlier check (17 Oct, 72): ▲14, three problems fixed and one new, and a
+ * The garden crawl compared with its site's earlier check (17 Oct, 72): ▲15, three problems fixed and one new, and a
  * recheck of five pages since. Its earlier check is folded under it, with nothing to compare with: no line, no zeros.
  */
 const COMPARED_SITES: CrawlListItem[] = SITES.flatMap((item) =>
@@ -203,7 +203,7 @@ const COMPARED_SITES: CrawlListItem[] = SITES.flatMap((item) =>
     ? [
         {
           ...item,
-          score: { value: 86, band: 'good', partial: false },
+          score: { value: 87, band: 'good', partial: false },
           previous: {
             id: '1717171717171717',
             startedAt: '2026-10-17T14:13:00Z',
@@ -212,10 +212,10 @@ const COMPARED_SITES: CrawlListItem[] = SITES.flatMap((item) =>
             needsAnalysis: false,
           },
           changes: {
-            score: 14,
+            score: 15,
             partial: false,
             fixed: ['internal-server-error', 'title-missing', 'redirect-chain', 'h1-multiple'],
-            new: ['canonical-to-first-page'],
+            new: ['title-duplicate'],
             fewer: [],
             more: [],
             newCheck: [],
@@ -247,7 +247,7 @@ function fixLoopRoutes(library: CrawlListItem[]): FakeRoute[] {
   return [['GET', /^\/api\/checks$/, () => json(FIX_LOOP_CHECKS)], ...routes(library)];
 }
 
-/** What changed since each site's last check: "▲14 since 17 Oct" by the ring, "3 fixed · 1 new" under To fix. */
+/** What changed since each site's last check: "▲15 since 17 Oct" by the ring, "3 fixed · 1 new" under To fix. */
 export const SinceTheLastCheck: Story = {
   loaders: [() => ownSidecar(fixLoopRoutes(COMPARED_SITES))],
   render: () => <ScreenApp path="/" mode="simple" />,
@@ -261,7 +261,7 @@ export const SinceTheLastCheckSoFar: Story = {
         fixLoopRoutes(
           COMPARED_SITES.map((item) =>
             item.id === '62cb879ef60639d5'
-              ? { ...item, status: 'stopped' as const, score: { value: 86, band: 'good' as const, partial: true } }
+              ? { ...item, status: 'stopped' as const, score: { value: 87, band: 'good' as const, partial: true } }
               : item,
           ),
         ),
