@@ -59,7 +59,7 @@ export function AddSignatureDialog({ crawlId, access, mode, open, onOpenChange, 
       for (const [host, signature] of Object.entries(signatures)) {
         await rememberShopifySignature(host, keep ? signature : null);
       }
-      const started = await startRecheck(crawlId, { urlIds: access.urlIds }, { signatures });
+      const started = await startRecheck(crawlId, { urlIds: access.urlIds }, { signatures, fromShopify: true });
       if (started) onOpenChange(false);
     } finally {
       setBusy(false);
