@@ -973,7 +973,10 @@ exact (33,156 rows compared in 24.8 s), memory flat.
   rechecked when the recheck completed.
 - **Turned away is not an answer** (2026-11-19, `RecheckTurnedAwayTests`). What the crawl read is replaced only by what
   the site says of it now. A sitemap that gets no answer, answers 429 at every try or is answered by a firewall's
-  challenge keeps its row and its entries (put aside while it's read, by negating `sitemap_id`, and put back). A
+  challenge keeps its row and its entries (put aside while it's read, by negating `sitemap_id`, and put back). So does
+  one whose body breaks off part-way (the connection broke, or the time ran out, after the status came): the part
+  that came is not the site's list. A file that ends early with the connection closed in order can't be told from one
+  whose XML is broken, and is stored as that, as a crawl stores it. A
   robots.txt that gets no answer, a 429 or a server error keeps the crawl's, unless the check is whether robots.txt can
   be read; while it can't be read the sitemaps aren't read again either, as the ones it declares can't be known. A page
   the crawler may not fetch only because robots.txt couldn't be read is "no answer", and stays as the crawl read it,

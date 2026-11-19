@@ -87,6 +87,52 @@ public sealed class RecheckTurnedAwayTests : IDisposable
         Assert.Single(IssueReader.ReadIssues(path, "sitemap-error", 10));
     }
 
+    /// <summary>
+    /// The connection breaks while the recheck reads a sitemap's body: the part that came is not what the site lists now.
+    /// The sitemap stays as the crawl read it, every entry, and the check isn't settled either way.
+    /// </summary>
+    [Fact]
+    public async Task ASitemapWhoseBodyBreaksOffKeepsWhatTheCrawlRead()
+    {
+        await using var site = await TestWebHost.StartAsync((baseUri, _) => (path, _) => path switch
+        {
+            "/pages.xml" => Xml(Urlset(baseUri, "", "a", "b")),
+            _ => IndexedSite(baseUri, path)
+        });
+
+        var path = await CrawlAsync(site);
+        Assert.Single(IssueReader.ReadIssues(path, "sitemap-error", 10));
+        var (sitemaps, entries) = (TestCrawls.Rows(path, SITEMAPS), TestCrawls.Rows(path, ENTRIES));
+        Assert.Equal(3, entries.Count);
+
+        site.CutShort("/pages.xml");
+        var (run, recheck) = await RecheckCrawls.RecheckAsync(path, new RecheckAsk("sitemap-error"));
+
+        Assert.Equal((CrawlStatus.Completed, RecheckStatus.Completed), (run.Status, recheck.Status));
+        Assert.Equal(sitemaps, TestCrawls.Rows(path, SITEMAPS));
+        Assert.Equal(entries, TestCrawls.Rows(path, ENTRIES));
+        Assert.Equal((0, 0, 1), (recheck.Result!.Fixed, recheck.Result.Still, recheck.Result.NotChecked));
+        Assert.Single(IssueReader.ReadIssues(path, "sitemap-error", 10));
+    }
+
+    /// <summary>A crawl has nothing older to keep: the part of a sitemap that came before the connection broke is listed, and the sitemap says it failed.</summary>
+    [Fact]
+    public async Task ACrawlStoresThePartOfASitemapThatCameBeforeItBrokeOff()
+    {
+        await using var site = await TestWebHost.StartAsync((baseUri, _) => (path, _) => path switch
+        {
+            "/pages.xml" => Xml(Urlset(baseUri, "", "a", "b")),
+            _ => IndexedSite(baseUri, path)
+        });
+        site.CutShort("/pages.xml");
+
+        var path = await CrawlAsync(site);
+
+        var pages = SitemapListReader.Read(path).Sitemaps.Single(sitemap => sitemap.Url.EndsWith("/pages.xml", StringComparison.Ordinal));
+        Assert.Equal((SitemapState.Failed, 200), (pages.State, pages.StatusCode));
+        Assert.InRange(TestCrawls.Rows(path, ENTRIES).Count, 0, 2);
+    }
+
     public static TheoryData<int> UnreadableStatuses() => [503, 429];
 
     /// <summary>

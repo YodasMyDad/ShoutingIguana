@@ -153,6 +153,7 @@ internal sealed class SitemapDiscoverer(
         var isIndex = false;
         var bodyRead = false;
         var turnedAway = false;
+        var brokeOff = false;
         int? statusCode = null;
         string? error = null;
 
@@ -217,10 +218,14 @@ internal sealed class SitemapDiscoverer(
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             error = "Timed out";
+            brokeOff = statusCode is not null;
         }
         catch (Exception exception) when (exception is HttpRequestException or XmlException or IOException or InvalidDataException)
         {
             error = exception.Message;
+
+            // The connection's fault after the status came, not the file's: broken XML or a bad gzip is what the file says.
+            brokeOff = statusCode is not null && exception is HttpRequestException or IOException;
             logger.LogWarning("Sitemap {Url} could not be read: {Error}", uri, exception.Message);
         }
 
@@ -234,7 +239,7 @@ internal sealed class SitemapDiscoverer(
         // or of nesting, an index still says how many it names.
         await writer.CompleteSitemapAsync(
                 new SitemapRecord(sitemapId, statusCode, isIndex, urlCount, error, isProbe, bodyRead ? children.Count : null, bodyRead ? counted?.BytesRead : null,
-                    turnedAway),
+                    turnedAway, brokeOff),
                 cancellationToken)
             .ConfigureAwait(false);
         return (children, urlCount);

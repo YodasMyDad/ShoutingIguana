@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Net;
+using System.Text;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -16,6 +17,7 @@ namespace ShoutingIguana.Engine.Tests.Support;
 internal sealed class TestWebHost : IAsyncDisposable
 {
     private readonly ConcurrentDictionary<string, TaskCompletionSource> _holds = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, bool> _cutShort = new(StringComparer.Ordinal);
     private WebApplication _app = null!;
     private Func<string, bool, SyntheticResponse> _handler = null!;
     private int _externalPort;
@@ -67,6 +69,14 @@ internal sealed class TestWebHost : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Every request for the path gets its status, its headers and the first half of its body, then the connection breaks:
+    /// a server that fell over mid-file. <see cref="SendWhole"/> ends it.
+    /// </summary>
+    public void CutShort(string path) => _cutShort[path] = true;
+
+    public void SendWhole(string path) => _cutShort.TryRemove(path, out _);
+
     public async ValueTask DisposeAsync()
     {
         foreach (var path in _holds.Keys)
@@ -108,6 +118,19 @@ internal sealed class TestWebHost : IAsyncDisposable
         foreach (var (name, value) in response.Headers ?? new Dictionary<string, string>())
         {
             context.Response.Headers[name] = value;
+        }
+
+        if (_cutShort.ContainsKey(path) && (response.Bytes ?? (response.Text is null ? null : Encoding.UTF8.GetBytes(response.Text))) is { } whole)
+        {
+            // The length promises the whole file, so the client knows the half it gets isn't all of it.
+            context.Response.ContentLength = whole.Length;
+            await context.Response.Body.WriteAsync(whole.AsMemory(0, whole.Length / 2), context.RequestAborted);
+            await context.Response.Body.FlushAsync(context.RequestAborted);
+
+            // Long enough for the half to reach the client before the reset does.
+            await Task.Delay(200, context.RequestAborted);
+            context.Abort();
+            return;
         }
 
         if (response.Bytes is not null)
