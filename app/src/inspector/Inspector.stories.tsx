@@ -13,6 +13,7 @@ import { setPaletteMode } from '../keyboard/paletteMode';
 import { liveStore } from '../live/liveStore';
 import { updateSettings } from '../settings/settingsStore';
 import { setDirectConnection } from '../shell/connection';
+import { inspectFromGrid, type InspectShow } from '../routing/inspector';
 import { TEST_CRAWL_ID, fakeSidecar, json, type FakeRoute } from '../test/fakeSidecar';
 import {
   TEST_HTML,
@@ -55,11 +56,23 @@ function fresh(section: SectionId = 'summary', dock: 'right' | 'bottom' = 'right
   setOverlay(null);
 }
 
-function InspectorApp({ path, refreshAfterMs }: { path: string; refreshAfterMs?: number }) {
+function InspectorApp({
+  path,
+  refreshAfterMs,
+  arrive,
+}: {
+  path: string;
+  refreshAfterMs?: number;
+  /** Arrives on the URL as a hop does: on a section, for one link of its list (`show` in routing/inspector.ts). */
+  arrive?: { urlId: number; show: InspectShow };
+}) {
   const [app] = useState(() => {
     const queryClient: QueryClient = createQueryClient();
     return { queryClient, router: createAppRouter(queryClient, createMemoryHistory({ initialEntries: [path] })) };
   });
+  useEffect(() => {
+    if (arrive) void inspectFromGrid(app.router, arrive.urlId, undefined, arrive.show);
+  }, [app, arrive]);
   useEffect(() => {
     if (refreshAfterMs === undefined) return undefined;
     const timer = setTimeout(
@@ -86,6 +99,10 @@ function own(
 }
 
 const inspect = (urlId: number) => <InspectorApp path={`${URLS}?inspect=${urlId}`} />;
+/** The inspector on a URL arrived at for one link: from an inlink's row, or a "Used on" page. */
+const arriveOn = (urlId: number, show: InspectShow) => (
+  <InspectorApp path={`${URLS}?inspect=${urlId}`} arrive={{ urlId, show }} />
+);
 
 const HOME = testUrlDetail({ id: 1, url: 'https://example.com/', issues: [] });
 const PAGE = testUrlDetail({
@@ -473,7 +490,9 @@ export const WideCharacters: Story = {
 
 /**
  * An image over the limit for images: its size on that scale, with the check the pages that use it were flagged
- * with (the check is theirs; its issues name this URL).
+ * with (the check is theirs; its issues name this URL): shown as an image, with the pages that use it, and its issues
+ * as "filed on the pages that show it", never "No issues". (The picture is asked of example.com: where that can't be
+ * read, the story shows what stands in for it.)
  */
 export const ImageOverItsLimit: Story = {
   loaders: [
@@ -488,6 +507,15 @@ export const ImageOverItsLimit: Story = {
               structuredData: [],
               response: testResponse({ contentType: 'image/jpeg', sizeBytes: 307_200, bodyBytes: null }),
               discovery: { ...PAGE.discovery, foundVia: 'image', fetchMode: 'check' },
+              links: {
+                inlinks: 0,
+                followedInlinks: 0,
+                nofollowInlinks: 0,
+                linkingPages: 0,
+                outlinks: null,
+                inSitemap: false,
+              },
+              linkTotals: { inlinks: 3, outlinks: 0, hyperlinkInlinks: 0 },
               issues: [],
               namedBy: { total: 3, checks: [{ checkId: 'image-too-large', count: 3 }] },
             }),
@@ -495,6 +523,18 @@ export const ImageOverItsLimit: Story = {
         },
         {
           issues: {
+            // The pages that show it: the first by name, the rest in Inlinks.
+            foundOn: {
+              2: {
+                urlId: 2,
+                links: 3,
+                pages: 3,
+                pagesExact: true,
+                sources: [testLinkRow({ id: 1, url: 'https://example.com/', kind: 'image', text: 'A garden' })],
+                sitemaps: { total: 0, sitemaps: [] },
+                start: false,
+              },
+            },
             checks: {
               ...ISSUES_CHECKS,
               checks: [
@@ -902,6 +942,45 @@ export const Hreflang: Story = {
       ),
   ],
   render: () => inspect(2),
+};
+
+/**
+ * Arrived from a broken URL's inlink: the page's outlinks with its link to that URL first, marked, and said over the
+ * list; then the other broken links, then the rest as found. The Status menu narrows them to the broken or the
+ * redirects.
+ */
+export const OutlinksForTheLinkComeFrom: Story = {
+  loaders: [
+    () =>
+      own(
+        {
+          ...SITE,
+          outlinks: {
+            2: [
+              testLinkRow({ id: 1, url: 'https://example.com/', text: 'Home', position: 'navigation' }),
+              testLinkRow({ id: 3, url: 'https://example.com/garden/', text: 'Garden furniture' }),
+              testLinkRow({
+                id: 8,
+                url: 'https://example.com/sale/',
+                text: 'Summer sale',
+                statusCode: 301,
+                outcome: 'redirect',
+              }),
+              testLinkRow({
+                id: 9,
+                url: 'https://example.com/berlin-cushion-box/',
+                text: 'store the cushions away',
+                statusCode: 404,
+                position: 'content',
+              }),
+              testLinkRow({ id: 6, url: 'https://example.com/old/', text: 'Old page', statusCode: 404 }),
+            ],
+          },
+        },
+        { section: 'outlinks' },
+      ),
+  ],
+  render: () => arriveOn(2, { section: 'outlinks', link: 9 }),
 };
 
 /**
