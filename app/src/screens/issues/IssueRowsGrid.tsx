@@ -452,6 +452,8 @@ export function IssueRowsGrid({
         id: 'detail',
         need: Math.min(MAX_WORDS_WIDTH, Math.max(header('Detail'), Math.ceil(need) + CELL_PADDING)),
         min: MIN_WORDS_WIDTH,
+        // A long sentence (a robots.txt's, with its addresses) is read whole where the frame has the room.
+        want: Math.ceil(need) + CELL_PADDING,
       });
     }
     if (showRelated) {

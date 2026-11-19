@@ -415,6 +415,17 @@ describe('the Issues screen', () => {
       for (const part of document.querySelectorAll('[data-explain-part]')) {
         expect(part).not.toHaveClass('@max-checks-beside:hidden');
       }
+      // Opened there, the explanation has the pane (the fix first under the button) and the rows wait behind
+      // "Show the rows": never two half-height scrollers.
+      const how = screen.getByRole('heading', { name: 'How to fix it', level: 3 });
+      expect(how.closest('[data-explain-part]')).toHaveClass('@max-checks-beside:order-1');
+      expect(wrong).toHaveClass('@max-checks-beside:order-2');
+      const table = document.querySelector('[data-check-table]');
+      expect(table).toHaveClass('@max-checks-beside:@min-split:hidden');
+      fireEvent.click(screen.getByRole('button', { name: 'Show the rows' }));
+      expect(button).toHaveAttribute('aria-expanded', 'false');
+      expect(table).not.toHaveClass('@max-checks-beside:@min-split:hidden');
+      expect(screen.queryByRole('button', { name: 'Show the rows' })).toBeNull();
     } finally {
       window.matchMedia = matchMedia;
     }

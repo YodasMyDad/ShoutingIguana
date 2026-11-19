@@ -34,4 +34,19 @@ describe('fitColumns', () => {
   it('stops at the least widths in a frame too narrow for them (the grid then scrolls)', () => {
     expect(fitColumns(columns, 200).widths).toEqual({ url: 160, title: 120, inlinks: 88 });
   });
+
+  it('gives the room left over to a column held under what its words take, and leaves the rest blank', () => {
+    const columns = [
+      { id: 'url', need: 200, min: 120 },
+      { id: 'detail', need: 420, min: 160, want: 900 },
+      { id: 'since', need: 90, min: 90 },
+    ];
+    // Room for all of it: the sentence is read whole, and what's over stays spare.
+    expect(fitColumns(columns, 1400)).toEqual({ widths: { url: 200, detail: 900, since: 90 }, spare: 210 });
+    // Room for some of it: the detail takes it all, and nothing is blank beside cut words.
+    expect(fitColumns(columns, 1000)).toEqual({ widths: { url: 200, detail: 710, since: 90 }, spare: 0 });
+    // No room over: as its need, and the columns still never sum past the frame.
+    const tight = fitColumns(columns, 600);
+    expect(Object.values(tight.widths).reduce((sum, width) => sum + width, 0)).toBeLessThanOrEqual(600);
+  });
 });

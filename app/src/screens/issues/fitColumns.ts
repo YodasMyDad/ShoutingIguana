@@ -9,11 +9,16 @@ export interface ColumnNeed {
   need: number;
   /** The least it's cut to. A column that never gives way has its need here. */
   min: number;
+  /**
+   * What its widest value takes where that is more than `need` (words capped so they don't crowd the rest out): it
+   * has the room left over, up to this, before any is left blank. Left out, it never grows past its need.
+   */
+  want?: number | undefined;
 }
 
 /**
  * Each column's width in a frame `room` px wide. The needs where they fit (the columns then sit together at the
- * left, and `spare` says how much is left over); else each column gives way from its need towards its least in
+ * left, a column that wants more than its need takes what is over, and `spare` says how much is left after that); else each column gives way from its need towards its least in
  * proportion to what it has to spare.
  */
 export function fitColumns(
@@ -25,8 +30,14 @@ export function fitColumns(
   const widths: Record<string, number> = {};
   if (wanted <= room) {
     for (const column of needs) widths[column.id] = Math.round(column.need);
-    const used = Object.values(widths).reduce((sum, width) => sum + width, 0);
-    return { widths, spare: Math.max(0, Math.floor(room - used)) };
+    let spare = Math.max(0, Math.floor(room - Object.values(widths).reduce((sum, width) => sum + width, 0)));
+    // Nothing is cut beside blank space: a column held under what its words take has the room left, in turn.
+    for (const column of needs) {
+      const more = Math.min(spare, Math.max(0, Math.ceil((column.want ?? 0) - column.need)));
+      widths[column.id] = (widths[column.id] ?? 0) + more;
+      spare -= more;
+    }
+    return { widths, spare };
   }
   const over = wanted - room;
   const give = needs.reduce((sum, column) => sum + (column.need - column.min), 0);

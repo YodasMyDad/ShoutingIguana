@@ -192,6 +192,9 @@ export function CheckDetail({
   // A short window (1280 × 720) keeps the rows in view: where the pane is narrow too, what's wrong folds away with
   // why and how, behind the one button that names all it opens.
   const foldsWrong = short && explains && check.description.trim() !== '';
+  // Opened there, the explanation has the pane and the rows wait behind "Show the rows": a fix with its code is taller
+  // than a 1280 × 720 pane has beside its rows, and two half-height scrollers would show neither.
+  const reading = short && explained;
   const foldWords = foldedWords([
     foldsWrong ? 'what’s wrong' : null,
     hasWhy ? 'why it matters' : null,
@@ -209,7 +212,12 @@ export function CheckDetail({
       </div>
       {/* The head gives way before the rows do (rule 7): in a pane too short for both it scrolls by itself, beside the
           list and never around it, so the card has no scroller of its own. */}
-      <header className="min-h-0 shrink overflow-y-auto px-6 pt-5 pb-4 @max-split:shrink-0 @max-split:overflow-visible">
+      <header
+        className={clsx(
+          'min-h-0 shrink overflow-y-auto px-6 pt-5 pb-4 @max-split:shrink-0 @max-split:overflow-visible',
+          reading && READING_HEAD,
+        )}
+      >
         <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
           <div className="min-w-0 grow basis-1/2">
             <div className="mb-1.5 flex flex-wrap items-center gap-3 text-13 text-text-muted">
@@ -324,10 +332,21 @@ export function CheckDetail({
             )}
             data-explain
           >
-            <div className={hasCode ? 'flex min-w-0 flex-col gap-y-2' : 'contents'}>
+            {/* Stacked (a narrow pane), its parts are the grid's own, so the fix comes before why it matters. */}
+            <div
+              className={
+                hasCode
+                  ? 'contents @min-checks-beside:flex @min-checks-beside:min-w-0 @min-checks-beside:flex-col @min-checks-beside:gap-y-2'
+                  : 'contents'
+              }
+            >
               {check.description.trim() !== '' ? (
                 <div
-                  className={clsx('max-w-(--measure-text)', foldsWrong && !explained && '@max-checks-beside:hidden')}
+                  className={clsx(
+                    'max-w-(--measure-text)',
+                    foldsWrong && '@max-checks-beside:order-2',
+                    foldsWrong && !explained && '@max-checks-beside:hidden',
+                  )}
                   data-explain-wrong
                 >
                   <h3 className="mb-0.5 text-13 font-semibold">What’s wrong</h3>
@@ -335,7 +354,7 @@ export function CheckDetail({
                 </div>
               ) : null}
               {explains ? (
-                <div className="@min-checks-beside:hidden">
+                <div className={clsx('@min-checks-beside:hidden', foldsWrong && '@max-checks-beside:order-first')}>
                   <Button
                     size="sm"
                     variant="ghost"
@@ -350,7 +369,10 @@ export function CheckDetail({
               ) : null}
               {hasWhy ? (
                 <div
-                  className={clsx('max-w-(--measure-text)', !explained && '@max-checks-beside:hidden')}
+                  className={clsx(
+                    'max-w-(--measure-text) @max-checks-beside:order-last',
+                    !explained && '@max-checks-beside:hidden',
+                  )}
                   data-explain-part
                 >
                   <h3 className="mb-0.5 text-13 font-semibold">Why it matters</h3>
@@ -364,7 +386,14 @@ export function CheckDetail({
               ) : null}
             </div>
             {hasFix ? (
-              <div className={clsx('min-w-0', !explained && '@max-checks-beside:hidden')} data-explain-part>
+              <div
+                className={clsx(
+                  'min-w-0',
+                  foldsWrong && '@max-checks-beside:order-1',
+                  !explained && '@max-checks-beside:hidden',
+                )}
+                data-explain-part
+              >
                 <HowToFix check={check} preferredCase={preferredCase} />
                 {check.learnMore ? (
                   <div className="mt-1">
@@ -433,11 +462,16 @@ export function CheckDetail({
         // The list the screen exists for gets the rest of the pane's height, with one scroller: its own (rule 7).
         <section
           aria-labelledby={`${titleId}-pages`}
-          className="grid flex-1 grid-cols-1 grid-rows-(--check-rows) border-t border-border-subtle px-6 pt-3 pb-5 has-data-template-callout:grid-rows-(--check-rows-callout) @max-split:block @max-split:flex-none"
+          className={clsx(
+            'grid flex-1 grid-cols-1 grid-rows-(--check-rows) border-t border-border-subtle px-6 pt-3 pb-5 has-data-template-callout:grid-rows-(--check-rows-callout) @max-split:block @max-split:flex-none',
+            reading && READING_ROWS,
+          )}
           data-check-rows
         >
           <div className="min-w-0">
-            <div className="mb-2 flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1">
+            <div
+              className={clsx('flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1', reading ? READING_LINE : 'mb-2')}
+            >
               <h3 id={`${titleId}-pages`} className="text-14 font-semibold">
                 {words.heading}
               </h3>
@@ -448,10 +482,17 @@ export function CheckDetail({
                     : `${affectedCount(check, count)} in ${formatCountOf(groupCount, 'group')}${groupOrder === 'size' ? ', largest file first' : ''}`
                   : `${affectedCount(check, count)}${sort.length === 0 && !files ? `, ${importanceWords(check)}` : ''}`}
               </span>
+              {reading ? (
+                <div className={READING_ONLY}>
+                  <Button size="sm" icon={ChevronRight} onClick={() => setExplained(false)}>
+                    Show the rows
+                  </Button>
+                </div>
+              ) : null}
               {groups ? (
                 <SegmentedControl<CheckView>
                   label="How the rows are shown"
-                  className="ml-auto"
+                  className={clsx('ml-auto', reading && READING_HIDDEN)}
                   value={view}
                   onValueChange={chooseView}
                   options={[
@@ -461,7 +502,7 @@ export function CheckDetail({
                 />
               ) : null}
             </div>
-            {shared && sharedWords ? (
+            {shared && sharedWords && !reading ? (
               // One line where there's room (A-09): the page, a link like any other, what it links to, and the way to those links.
               <Callout tone="insight" className="mb-2 shrink-0">
                 <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5" data-shared-source>
@@ -493,7 +534,13 @@ export function CheckDetail({
               </Callout>
             ) : null}
           </div>
-          <div className="flex min-h-0 min-w-0 flex-col contain-size @max-split:block @max-split:contain-none">
+          <div
+            className={clsx(
+              'flex min-h-0 min-w-0 flex-col contain-size @max-split:block @max-split:contain-none',
+              reading && READING_HIDDEN,
+            )}
+            data-check-table
+          >
             {(() => {
               const now =
                 view === 'groups' ? (
@@ -647,6 +694,15 @@ function RelatedLines({
     </ul>
   );
 }
+
+// A short pane, narrower than the checks list fits beside and not stacked, with the fold open: the head has the pane
+// and scrolls, the rows' table waits behind "Show the rows".
+const READING_HEAD = '@max-checks-beside:@min-split:flex-1';
+const READING_ROWS =
+  '@max-checks-beside:@min-split:block @max-checks-beside:@min-split:flex-none @max-checks-beside:@min-split:pb-3';
+const READING_LINE = 'mb-2 @max-checks-beside:@min-split:mb-0';
+const READING_HIDDEN = '@max-checks-beside:@min-split:hidden';
+const READING_ONLY = 'ml-auto hidden @max-checks-beside:@min-split:block';
 
 /** The fold's button, naming what it opens: "Why it matters and how to fix it", "How to fix it". */
 function foldedWords(parts: readonly (string | null)[]): string {
