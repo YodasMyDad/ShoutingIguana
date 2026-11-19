@@ -2147,8 +2147,9 @@
     text-align: start;
   }
 
-  /* Only the URL that copies on a click has the copy cursor: text that does nothing looks like text. */
-  button.si-url__copy {
+  /* Only the URL that copies on a click has the copy cursor: text that does nothing looks like text, and a link (which
+     is a button of this class too) keeps the pointer. */
+  button.si-url__copy:not(.si-url__go) {
     cursor: copy;
   }
 
