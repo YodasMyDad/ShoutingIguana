@@ -49,7 +49,16 @@ export function IssueUrl({
     [url, siteOrigin, label, fonts],
   );
   return (
-    <span className={clsx('si-issue-url min-w-0', className)} style={{ maxWidth: width }}>
+    <span
+      className={clsx('si-issue-url min-w-0', className)}
+      style={{ maxWidth: width }}
+      // Its link and its button leave focus where it is, so a table already in use keeps it; a first click on one
+      // gives the table the keyboard, as a click anywhere else in a row does, and the arrows then walk its rows.
+      onClick={(event) => {
+        const grid = event.currentTarget.closest<HTMLElement>('[role="grid"], [role="treegrid"]');
+        if (grid && !grid.contains(document.activeElement)) grid.focus({ preventScroll: true });
+      }}
+    >
       <Url
         url={url}
         siteOrigin={siteOrigin}
