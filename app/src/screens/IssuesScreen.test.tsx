@@ -319,6 +319,45 @@ describe('the Issues screen', () => {
     await waitFor(() => expect(path(router)).toBe(`${ISSUES}/broken-internal-links`));
   });
 
+  it('says the first two checks a fix also clears and folds the rest behind a button, so the rows keep their room', async () => {
+    const others = ['broken-images', 'broken-resources', 'canonical-broken', 'hreflang-broken'].map((id, at) => ({
+      ...ISSUES_CHECKS.checks[2]!,
+      id,
+      severity: 'error' as const,
+      title: `Other check ${at + 1}`,
+    }));
+    sidecar({
+      checks: { ...ISSUES_CHECKS, checks: [...ISSUES_CHECKS.checks, ...others] },
+      analysis: {
+        ...ISSUES_ANALYSIS,
+        counts: [
+          ...ISSUES_ANALYSIS.counts.map((count) =>
+            count.checkId === 'internal-client-error'
+              ? {
+                  ...count,
+                  causes: 2,
+                  templateCauses: 0,
+                  clears: others.map((other) => ({ checkId: other.id, pages: 1, all: true })),
+                }
+              : count,
+          ),
+          ...others.map((other) => ({ checkId: other.id, count: 1, causes: 1, templateCauses: 0, clears: [] })),
+        ],
+      },
+    });
+    await open(`${ISSUES}/internal-client-error`);
+    await screen.findByRole('heading', { name: 'Internal URL returns 4xx', level: 2 });
+    const related = screen.getByRole('list', { name: 'Related checks' });
+    expect(
+      within(related)
+        .getAllByRole('link')
+        .map((link) => link.textContent),
+    ).toEqual(['Other check 1', 'Other check 2']);
+    fireEvent.click(within(related).getByRole('button', { name: 'Show the 2 more' }));
+    expect(within(related).getAllByRole('link')).toHaveLength(4);
+    expect(within(related).queryByRole('button')).toBeNull();
+  });
+
   it('says the things to change when a check’s URLs share causes, with those in the template', async () => {
     sidecar({
       analysis: {

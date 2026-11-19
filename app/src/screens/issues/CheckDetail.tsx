@@ -650,6 +650,9 @@ function SharedSourceTitle({
   );
 }
 
+/** The related checks said before "Show the N more": a list one line longer than this is said whole. */
+const RELATED_SHOWN = 2;
+
 /** A check's pages as a phrase: "5 pages", "1 page". */
 const pagesWords = (pages: number) => formatCountOf(pages, 'page');
 
@@ -664,7 +667,14 @@ function RelatedLines({
   crawlId: string;
   related: { clears: readonly RelatedCheck[]; clearedBy: readonly RelatedCheck[] };
 }) {
+  // A fix that clears many checks (a broken page every kind of link points to) says the first of them and how many
+  // more: six lines of it pushed the check's rows out of a short window.
+  const [all, setAll] = useState(false);
   if (related.clears.length === 0 && related.clearedBy.length === 0) return null;
+  const lines = related.clears.length + related.clearedBy.length;
+  const folded = !all && lines > RELATED_SHOWN + 1;
+  const clears = folded ? related.clears.slice(0, RELATED_SHOWN) : related.clears;
+  const clearedBy = folded ? related.clearedBy.slice(0, RELATED_SHOWN - clears.length) : related.clearedBy;
   const checkLink = (other: RelatedCheck) => (
     <Link
       to="/crawls/$crawl/issues/{-$check}"
@@ -676,7 +686,7 @@ function RelatedLines({
   );
   return (
     <ul aria-label="Related checks" className="mt-4 flex flex-col gap-1 text-14 text-text-secondary">
-      {related.clears.map((other) => (
+      {clears.map((other) => (
         <li key={`clears-${other.entry.check.id}`}>
           Fixing this also clears {checkLink(other)}
           {other.all
@@ -685,12 +695,19 @@ function RelatedLines({
           {other.points ? ` (+${formatCount(other.points)} to the score)` : ''}.
         </li>
       ))}
-      {related.clearedBy.map((other) => (
+      {clearedBy.map((other) => (
         <li key={`by-${other.entry.check.id}`}>
           Fixing {checkLink(other)} clears{' '}
           {other.all ? 'every page here' : `${formatCount(other.pages)} of the pages here`}.
         </li>
       ))}
+      {folded ? (
+        <li>
+          <Button size="sm" variant="ghost" icon={ChevronRight} className="-ml-2" onClick={() => setAll(true)}>
+            {`Show the ${formatCount(lines - RELATED_SHOWN)} more`}
+          </Button>
+        </li>
+      ) : null}
     </ul>
   );
 }
