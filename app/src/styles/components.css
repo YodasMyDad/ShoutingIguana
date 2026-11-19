@@ -401,6 +401,8 @@
     align-items: center;
     gap: var(--space-2);
     max-width: var(--tooltip-max-width);
+    /* Words about a control, never a control: a click on it goes to what it covers (H-01). */
+    pointer-events: none;
     padding: var(--space-1-5) var(--space-2-5);
     border: var(--hairline) solid var(--color-border);
     border-radius: var(--radius-sm);
