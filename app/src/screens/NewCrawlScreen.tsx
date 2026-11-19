@@ -4,7 +4,7 @@ import { SlidersHorizontal } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type SyntheticEvent } from 'react';
 import { api } from '../api/client';
 import { isProblem } from '../api/errors';
-import { crawlOptionDefaultsQuery, crawlOptionsQuery, queryKeys } from '../api/queries';
+import { crawlOptionDefaultsQuery, crawlOptionsQuery, crawlQuery, queryKeys } from '../api/queries';
 import type { CrawlOptionDefaults, CrawlOptions } from '../api/types';
 import { startUrlFor } from '../crawl/actions';
 import { CrawlOptionsForm } from '../crawl/options/CrawlOptionsForm';
@@ -30,8 +30,12 @@ import { EMPTY_SIGNATURE, signaturesOf, startHostOf } from '../crawl/options/sho
 import { rememberedSecretsQuery, rememberShopifySignature, savedShopifySignatureQuery } from '../crawl/secrets';
 import { ErrorState } from '../feedback/ErrorState';
 import { notifyError, notifyResult } from '../feedback/notify';
+import { formatExactTime } from '../lib/format';
+import { siteName } from '../simple/home/sites';
 import { useCommands } from '../keyboard/registry';
+import clsx from 'clsx';
 import { useMode, type Mode } from '../mode/mode';
+import { pageWords, type Again } from './newCrawlWords';
 import { switchMode } from '../mode/switchMode';
 import { showAdvancedFor } from '../mode/useModeGuard';
 import type { SettingFocus } from '../routing/search';
@@ -58,9 +62,16 @@ export function NewCrawlScreen() {
   // Whether the secrets the form starts with are remembered: the option to remember them starts ticked if so.
   const remembered = useQuery(rememberedSecretsQuery(from ? `crawl:${from}` : 'defaults'));
   const mode = useMode();
+  // The crawl whose settings fill the form: the page says whose they are (H-21: "Crawl again…" opened the same "New
+  // crawl" with nothing saying so).
+  const sourceItem = useQuery({ ...crawlQuery(from ?? ''), enabled: from !== undefined }).data;
 
   // A crawl to copy from that isn't in the library any more: the saved defaults, with a note, not a dead end.
   const sourceGone = from !== undefined && isProblem(source.error, 'crawl-not-found');
+  const again =
+    from !== undefined && !sourceGone && sourceItem
+      ? { site: siteName(sourceItem), date: sourceItem.startedAt ? formatExactTime(sourceItem.startedAt) : null }
+      : null;
   const failed = defaults.error ?? (from && !sourceGone ? source.error : null);
   if (failed) {
     return (
@@ -75,13 +86,13 @@ export function NewCrawlScreen() {
   }
   if (!defaults.data || (from && !source.data && !sourceGone) || remembered.data === undefined) {
     return (
-      <Page mode={mode}>
+      <Page mode={mode} again={again}>
         <FormSkeleton />
       </Page>
     );
   }
   return (
-    <Page mode={mode}>
+    <Page mode={mode} again={again}>
       <NewCrawlForm
         // A new address or source is a new form.
         key={`${from ?? ''}|${url ?? ''}`}
@@ -97,17 +108,18 @@ export function NewCrawlScreen() {
   );
 }
 
-function Page({ mode, children }: { mode: Mode; children: React.ReactNode }) {
+function Page({ mode, again = null, children }: { mode: Mode; again?: Again | null; children: React.ReactNode }) {
+  const words = pageWords(mode, again);
   return (
-    <div className="mx-auto flex w-full max-w-(--form-max) flex-col gap-6 px-(--page-gutter) py-6">
-      <PageHeader
-        title={mode === 'simple' ? 'Check a website' : 'New crawl'}
-        subtitle={
-          mode === 'simple'
-            ? 'The address is all it needs. Change the rest only if you want to.'
-            : 'Every setting has a default. Change what this crawl needs, then start it.'
-        }
-      />
+    // Advanced's sections sit in two columns in a wide window (H-21: a 694 px column in a 2,310 px frame, 3,657 px
+    // long with its sections open); Simple's four questions keep the reading measure.
+    <div
+      className={clsx(
+        'mx-auto flex w-full flex-col gap-6 px-(--page-gutter) pt-6',
+        mode === 'advanced' ? 'max-w-(--form-max) wide:max-w-(--form-max-wide)' : 'max-w-(--form-max) pb-6',
+      )}
+    >
+      <PageHeader title={words.title} subtitle={words.subtitle} />
       {children}
     </div>
   );
@@ -409,6 +421,7 @@ function NewCrawlForm({
         onTouch={touch}
         autoFocusStart={!focus}
         remember={{ checked: remember, onCheckedChange: setRemember, mode }}
+        columns
         shopifyLastRefused={lastRefused}
         shopifySaved={saved?.signature ?? null}
       />
@@ -430,7 +443,14 @@ function NewCrawlForm({
         </p>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-3">
+      {/* Advanced's form is long with its sections open: Start crawl stays in view at the foot of the pane (H-21). */}
+      <div
+        data-testid="start-row"
+        className={clsx(
+          'flex flex-wrap items-center gap-3',
+          mode === 'advanced' && 'sticky bottom-0 z-1 border-t border-border-subtle bg-canvas py-4',
+        )}
+      >
         <Button
           variant="primary"
           size={mode === 'simple' ? 'xl' : 'lg'}
@@ -457,8 +477,11 @@ function NewCrawlForm({
             className="ml-auto"
           />
         ) : (
-          <span className="ml-auto text-12 text-text-muted">
-            Simple shows the start URL, the speed, a URL limit and two of these switches.
+          <span className="ml-auto max-w-(--measure-text) text-12 text-text-muted">
+            {/* What the crawl reads, said once where it's started (H-09): the engine fetches each page's HTML and runs
+                no script, so nothing here could turn rendering on. */}
+            Pages are read as the server sends them: their JavaScript isn’t run, so what a page adds with scripts isn’t
+            seen.
           </span>
         )}
       </div>
