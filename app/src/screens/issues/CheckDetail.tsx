@@ -1,8 +1,9 @@
 import { ArrowDown, Check as Tick, Copy, Eye, EyeOff, ExternalLink } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
+import clsx from 'clsx';
 import { useId, useRef, type ReactNode, type Ref } from 'react';
 import type { CheckGroupRef, GridSort, IssueGroupSort } from '../../api/grids';
-import type { Analysis } from '../../api/types';
+import type { Analysis, Check } from '../../api/types';
 import { affectedCount, affectedWords, checkReach } from '../../crawl/checkSubject';
 import { formatCount, formatCountOf } from '../../lib/format';
 import { Badge } from '../../ui/Badge';
@@ -19,6 +20,7 @@ import { SeverityMark } from '../../ui/SeverityMark';
 import { Stat, StatLink } from '../../ui/Stat';
 import type { CheckEntry, RelatedCheck } from './checkList';
 import { importanceWords } from './evidenceColumns';
+import { HowToFix } from './HowToFix';
 import { IssueGroups } from './IssueGroups';
 import { IssueRowsGrid } from './IssueRowsGrid';
 import type { CheckChange } from '../../api/fixLoop';
@@ -446,8 +448,7 @@ export function CheckDetail({
 
       <Explain
         ref={explainRef}
-        why={check.why}
-        fix={check.fix}
+        check={check}
         learnMore={check.learnMore ? <LearnMore onClick={onLearnMore} /> : null}
       />
     </article>
@@ -504,34 +505,32 @@ function RelatedLines({
  * in the head, above it. Focusable, for the head's button that brings it into view.
  */
 function Explain({
-  why,
-  fix,
+  check,
   learnMore,
   ref,
 }: {
-  why: string;
-  fix: string;
+  check: Pick<Check, 'why' | 'fix' | 'fixExamples'>;
   learnMore: ReactNode;
   ref?: Ref<HTMLDivElement> | undefined;
 }) {
-  const parts = [
-    { title: 'Why it matters', text: why },
-    { title: 'How to fix it', text: fix },
-  ].filter((part) => part.text.trim() !== '');
-  if (parts.length === 0 && !learnMore) return null;
+  const why = check.why.trim();
+  const hasFix = check.fix.trim() !== '' || (check.fixExamples?.length ?? 0) > 0;
+  if (why === '' && !hasFix && !learnMore) return null;
   return (
     <div
       ref={ref}
       tabIndex={-1}
       className="scroll-mt-4 border-t border-border-subtle bg-surface-sunken px-6 py-5 outline-none"
     >
-      <div className="grid grid-cols-(--explain-columns) gap-6">
-        {parts.map((part) => (
-          <div key={part.title}>
-            <h3 className="mb-1.5 text-13 font-semibold">{part.title}</h3>
-            <p className="max-w-(--measure-explain) text-14 leading-body text-text-secondary">{part.text}</p>
+      {/* The fix gets the wider column: its code wants up to 100 characters, the words beside it about 46. */}
+      <div className={clsx('grid gap-x-10 gap-y-6', why !== '' && hasFix && 'wide:grid-cols-(--how-to-fix-columns)')}>
+        {why !== '' ? (
+          <div>
+            <h3 className="mb-1.5 text-13 font-semibold">Why it matters</h3>
+            <p className="max-w-(--measure-explain) text-14 leading-body text-text-secondary">{why}</p>
           </div>
-        ))}
+        ) : null}
+        <HowToFix check={check} />
       </div>
       {learnMore ? <div className="mt-3">{learnMore}</div> : null}
     </div>

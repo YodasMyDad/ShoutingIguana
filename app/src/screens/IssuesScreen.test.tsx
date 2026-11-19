@@ -353,6 +353,25 @@ describe('the Issues screen', () => {
     expect(document.activeElement).toBe(why.closest('[tabindex="-1"]'));
   });
 
+  it('shows a check’s fix as code under How to fix it, a case at a time, and words alone where it has none', async () => {
+    sidecar();
+    await open(`${ISSUES}/empty-anchor-text`);
+    const how = await screen.findByRole('heading', { name: 'How to fix it', level: 3 });
+    const strip = how.closest('[tabindex="-1"]')!;
+    expect(within(strip).getByText('How to fix Internal links without anchor text.')).toBeTruthy();
+    expect(
+      within(strip).getByRole('tab', { name: 'The link wraps an icon or an inline SVG', selected: true }),
+    ).toBeTruthy();
+    expect(within(strip).getByRole('figure', { name: 'The fix as code' }).textContent).toContain(
+      'aria-label="Example Furniture"',
+    );
+    cleanup();
+    sidecar();
+    await open(`${ISSUES}/title-too-long`);
+    await screen.findByRole('heading', { name: 'How to fix it', level: 3 });
+    expect(screen.queryByRole('figure', { name: 'The fix as code' })).toBeNull();
+  });
+
   it('moves the selection with the arrow keys, replacing the address, and a click is a new place', async () => {
     // In the order the list had before it could be sorted: by category.
     updateSettings({ checkSort: { advanced: 'category', simple: 'fixFirst' } });
