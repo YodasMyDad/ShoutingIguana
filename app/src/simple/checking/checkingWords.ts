@@ -32,7 +32,8 @@ export interface SimpleAlert {
 }
 
 /** What gives a site's alert its kind: a wait and an alert of one kind say the same thing, so it's said once. */
-type Kind = 'blocked' | 'away' | 'robots' | 'down' | 'stopped' | 'sitemaps' | 'slow' | 'delay' | 'shopify' | 'note';
+type Kind =
+  'blocked' | 'away' | 'robots' | 'down' | 'stopped' | 'sitemaps' | 'slow' | 'section' | 'delay' | 'shopify' | 'note';
 
 const SLOW = 'The site asked the check to slow down, so it has. It will take longer.';
 const SECTION_SLOW =
@@ -136,6 +137,9 @@ function alertWords(
         actions: [{ kind: 'newCrawl', label: `Check ${host} instead`, url }],
       };
     }
+    // The engine's notice that a section is limited: the same thing as its wait, so it's said once, in plain words.
+    case 'section-rate-limited':
+      return { kind: 'section', level: 'info', text: SECTION_SLOW, actions: [] };
     case 'robots-unreachable':
       return { kind: 'robots', level: 'warning', text: ROBOTS, actions: [STOP] };
     case 'site-unreachable':
@@ -171,8 +175,9 @@ function waitWords(wait: CrawlWait): { kind: Kind; text: string; actions: Simple
     case 'backoff':
     case 'heldBack':
       return { kind: 'slow', text: SLOW, actions: [] };
+    // Its own kind: the site slowing the whole check down is another thing, said beside it.
     case 'sectionLimited':
-      return { kind: 'slow', text: SECTION_SLOW, actions: [] };
+      return { kind: 'section', text: SECTION_SLOW, actions: [] };
     case 'crawlDelay':
       return { kind: 'delay', text: DELAY, actions: [] };
     case 'siteDown':
@@ -255,6 +260,21 @@ export function inTheWay({
 
 // -------------------------------------------------------------------------------------------------- Time left
 
+/**
+ * The addresses waiting in the sections the site limits (the progress's `sectionLimited` waits), read one at a time:
+ * the engine counts them in flight, so they're in what's still to check. Sections beyond the waits listed hold one each
+ * at least.
+ */
+export function sectionHeld(
+  waits: readonly CrawlWait[],
+  moreWaits: Readonly<Partial<Record<CrawlWait['reason'], number>>>,
+): number {
+  const listed = waits
+    .filter((wait) => wait.reason === 'sectionLimited')
+    .reduce((sum, wait) => sum + Math.max(1, wait.urls ?? 1), 0);
+  return listed + (moreWaits.sectionLimited ?? 0);
+}
+
 /** "12 minutes", "1 hour and 5 minutes", "2 hours". */
 export function minutesInWords(totalMinutes: number): string {
   const hours = Math.floor(totalMinutes / 60);
@@ -283,6 +303,7 @@ export function timeLeftWords({
   limit = null,
   limitLeft = null,
   internalFound = null,
+  heldInSections = 0,
 }: {
   status: CrawlStatus | null;
   queued: number | null | undefined;
@@ -295,9 +316,22 @@ export function timeLeftWords({
   limitLeft?: number | null;
   /** The site's own addresses found so far (the limit counts only these); null when not known. */
   internalFound?: number | null | undefined;
+  /** The addresses waiting in the sections the site limits (sectionHeld), among `queued`. */
+  heldInSections?: number;
 }): TimeLeftWords {
   if (status === 'paused') return { lead: 'Paused.', rest: 'The time left starts again when you resume the check.' };
   if (status === 'stopping') return { lead: 'Stopping.', rest: 'The pages on their way are finishing.' };
+  // Only the sections the site limits are left: read one at a time at the site's pace, not the check's, so neither
+  // "Nearly done" nor a time over the pace so far would be true (gallery 7's views 06 and 31).
+  if (heldInSections > 0 && (atLimit || (queued ?? 0) <= heldInSections)) {
+    return {
+      lead: 'Reading the last pages slowly.',
+      rest:
+        heldInSections === 1
+          ? '1 address is left. The site only lets it be read slowly, so this can take a while.'
+          : `${formatCountOf(heldInSections, 'address', 'addresses')} are left. The site only lets them be read one at a time, so this can take a while.`,
+    };
+  }
   if (atLimit) return { lead: 'Nearly done.', rest: 'It has read as many addresses as its limit allows.' };
   const rate = urlsPerSecond ?? 0;
   if (queued === null || queued === undefined || rate <= 0) {

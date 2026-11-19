@@ -141,6 +141,58 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
     /// says another number has a report that says that number.
     /// </summary>
     /// <summary>Discovery decision 2: the checks the user hid are left out of the report's lists and counts; the score stays.</summary>
+    /// <summary>
+    /// Gallery 7's view 20: Simple's Summary and What to fix fold a problem that a fix of another clears entirely (the
+    /// analysis's clears, all) under that one, in the same severity, as one job. So does the report: "Fix these first"
+    /// lists the folded one under its job, not as a job of its own, and counts the jobs; What to fix says which problem
+    /// it's fixed along with. Its number stays its own: the workbook's sheet carries it.
+    /// </summary>
+    [Fact]
+    public void AProblemAFixOfAnotherClearsEntirelyIsOneJobWithIt()
+    {
+        // Every page linking to a broken address links only to the site's 4xx ones: restoring those clears every one.
+        var copy = crawl.Copy();
+        Change(copy, """
+            DELETE FROM issues WHERE issue = 'broken-internal-links' AND url_id IN (
+                SELECT t.url_id FROM issue_targets t WHERE t.issue = 'broken-internal-links'
+                AND NOT EXISTS (SELECT 1 FROM issues i WHERE i.issue = 'internal-client-error' AND i.url_id = t.related_url_id));
+            DELETE FROM issue_targets WHERE issue = 'broken-internal-links' AND url_id NOT IN (SELECT url_id FROM issues WHERE issue = 'broken-internal-links');
+            UPDATE issue_types SET url_count = (SELECT COUNT(*) FROM issues WHERE issue = 'broken-internal-links') WHERE id = 'broken-internal-links';
+            """);
+        StoreTheScoreOfItsCounts(copy);
+        var results = IssueReader.ReadResults(copy)!;
+        var score = results.Score!;
+        var order = results.FixFirst;
+        var errorFolded = IssueCauseReader.Read(copy)!.Checks["internal-client-error"].Clears.Where(cleared => cleared.All).Select(cleared => cleared.CheckId).ToList();
+        Assert.Contains("broken-internal-links", errorFolded);
+        Assert.Equal(["no-https", "internal-client-error", "broken-internal-links", "redirect-loop", "redirect-broken"], order.Take(5));
+        Assert.Equal(score.IfFixed.CheckIds, order.Take(5));
+
+        var document = Parse(ReportExport.Build(copy, settings: SETTINGS));
+        string Title(string id) => PlainLimits.Fill(IssueCatalog.Find(id)!.Plain!, results.Analysis.Settings!).Title;
+
+        // Fix these first: the engine's five, four jobs, the broken links under the 4xx they're fixed along with.
+        var first = document.QuerySelectorAll("ol.first > li").ToList();
+        Assert.Equal(order.Take(5).Select(Title), first.Select(item => item.QuerySelector(".first__title")!.TextContent));
+        Assert.Equal(["1", "2", "3", "4", "5"], first.Select(item => item.QuerySelector(".first__n")!.TextContent));
+        Assert.Equal([false, false, true, false, false], first.Select(item => item.ClassList.Contains("first__also")));
+        Assert.Equal("Fixed along with the problem above", first[2].QuerySelector(".first__along")!.TextContent);
+        Assert.Empty(first[2].QuerySelectorAll("svg"));
+        Assert.StartsWith(
+            score.IfFixed.Value == score.Value ? $"Fixing these four leaves the score at {score.Value} " : $"Fixing these four takes the score from {score.Value} to {score.IfFixed.Value}. ",
+            document.QuerySelector(".first__foot")!.TextContent, StringComparison.Ordinal);
+
+        // What to fix: each problem a fix of another of its severity clears entirely says which, by its number; no other does.
+        var problems = document.QuerySelectorAll("article.problem").ToList();
+        var along = problems.Select(problem => problem.QuerySelector(".problem__along")?.TextContent).ToList();
+        var foldedErrors = errorFolded.Where(id => order.Contains(id) && IssueCatalog.Find(id)!.Severity == IssueSeverity.Error).ToList();
+        Assert.True(foldedErrors.Count >= 2, string.Join(", ", foldedErrors));
+        for (var index = 0; index < order.Count; index++)
+        {
+            Assert.Equal(foldedErrors.Contains(order[index]) ? $"Fixed along with problem 2, “{Title("internal-client-error")}”." : null, along[index]);
+        }
+    }
+
     [Fact]
     public void TheReportLeavesOutTheChecksTheUserHidAndSaysSo()
     {

@@ -195,7 +195,10 @@ Simple has its own word wherever Advanced's is technical. Each maps to one gloss
   check. No rate chart and no status codes: they are Advanced's.
 - **How long.** "At least 12 minutes to go. It's still finding new pages, so this can grow." The figure is what is
   queued over the current pace, said as a floor. Why no percentage: the total isn't known until the end, and a bar
-  that ran backwards would be a lie.
+  that ran backwards would be a lie. Still to check counts what waits its turn and what is on its way, as Advanced's Queued does: the
+  addresses a section the site limits holds back are among them. While only those are left it says "Reading the last
+  pages slowly. 1,041 addresses are left. The site only lets them be read one at a time, so this can take a while.",
+  never "Nearly done".
 - **Can I close the window?** The header says so: "You can close this window: the check carries on, and a
   notification tells you when it's done."
 - **Is anything in the way?** A card that says "Nothing so far" until the engine raises an alert, then says it in
@@ -208,6 +211,7 @@ Simple has its own word wherever Advanced's is technical. Each maps to one gloss
   | robots.txt can't be read | "The site's rules file for search engines isn't answering, so the check can't tell where it may go. It's waiting, and will try again." | Stop |
   | The site stopped answering | "The site has stopped answering. The check is waiting, and will carry on by itself when it's back." | Stop |
   | A Crawl-delay is being obeyed | "The site asks visitors like this one to go slowly, so the check waits between pages." | Nothing to do |
+  | The site limits a section (its notice and its wait, said once) | "The site only lets some of its pages be read slowly, so the check reads those one at a time. The rest isn't held up." | Nothing to do |
   | The start URL leads to another site | "This address forwards to another site, example.org." | Check example.org instead |
 
 - **Pause and Stop** are in the top bar. The page says what each does: "Pause holds the check. Stop ends it and
@@ -676,7 +680,8 @@ font, light only. It prints to A4 and Letter from the system print dialog, which
 1. **Head.** "Website check", the site, the date, pages read, addresses checked, checks run.
 2. **Summary.** The score as a ring, its word, the sentence, what it covers; the five counts.
 3. **Fix these first.** Up to five: mark, plain title, count and share. "Fixing these five takes the score from 85
-   to 98."
+   to 98." Related problems are one job, as on the Summary: one a fix of another among the five clears entirely is
+   listed under it, "Fixed along with the problem above", keeping its number, and "these four" counts the jobs.
 4. **How the score is worked out.** The two sentences, the line for each check that cost points, the sum, the
    bands in one line, the version.
 5. **What to fix**, from a new page. Every check that found something, in three groups. For each: the plain title,
@@ -685,6 +690,8 @@ font, light only. It prints to A4 and Letter from the system print dialog, which
    for a template fault; then its first pages, with what was found on each, and "And 56 more: the full list is on
    sheet 3 of the spreadsheet". Problems are numbered in "Fix first" order, 1 to 19 on the garden crawl, so the list
    on page 1, the section here and the workbook's sheet all carry one number.
+   A problem a fix of another of its severity clears entirely says so under its count: "Fixed along with problem 2,
+   “Pages or files that can’t be found”."
 6. **What couldn't be checked**, with each reason and what would let the check run.
 7. **What was checked and found nothing wrong**: every passed check's good-news line, by category.
 8. **About this check.** Where it started, when, how long, what was read, how many pages can appear in search,

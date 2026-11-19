@@ -1,4 +1,5 @@
 using ShoutingIguana.Engine.Analysis.Models;
+using ShoutingIguana.Engine.Storage.Models;
 
 namespace ShoutingIguana.Engine.Reporting.Models;
 
@@ -22,4 +23,11 @@ internal sealed record ReportProblem(
     /// the report names where its row would name the home page. Null for any other check, and an analysis that stored none.
     /// </summary>
     public IReadOnlyList<string>? Files { get; init; }
+
+    /// <summary>
+    /// The other checks a fix of this one clears, each with the pages it clears there (the analysis's, <see
+    /// cref="Storage.IssueCauseReader"/>): one it clears entirely, of the same severity, is one job with it (<see
+    /// cref="ReportJobs"/>). Empty when it clears none, or for an analysis that can't tell.
+    /// </summary>
+    public IReadOnlyList<ClearedCheck> Clears { get; init; } = [];
 }

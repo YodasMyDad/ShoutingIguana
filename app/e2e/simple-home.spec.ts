@@ -183,7 +183,8 @@ test('a check started from Home with Enter goes through its three steps to the S
       { intervals: [2_000] },
     )
     .toBe(true);
-  // Addresses checked is the URL grid's crawled count; still to check, the queue; pages read, the pages read.
+  // Addresses checked is the URL grid's crawled count; still to check, the queue and the addresses on their way (taken
+  // from it, not yet answered: a pause holds them), as Advanced's Queued counts them; pages read, the pages read.
   const crawled = await read<{ matching: number }>(`/api/crawls/${id}/urls`, {
     filters: [{ column: 'fetched', op: 'is', value: true }],
     sort: [],
@@ -191,7 +192,18 @@ test('a check started from Home with Enter goes through its three steps to the S
   });
   expect(await figure('Addresses checked')).toBe(crawled.matching);
   const stats = await read<{ queuedCount: number; htmlPageCount: number }>(`/api/crawls/${id}/stats`);
-  expect(await figure('Still to check')).toBe(stats.queuedCount);
+  // Not answered, not let go and not skipped: waiting their turn (the stats' queue) or on their way.
+  const unanswered = await read<{ matching: number }>(`/api/crawls/${id}/urls`, {
+    filters: [
+      { column: 'fetched', op: 'is', value: false },
+      { column: 'outcome', op: 'isEmpty' },
+      { column: 'skipReason', op: 'isEmpty' },
+    ],
+    sort: [],
+    limit: 1,
+  });
+  expect(unanswered.matching).toBeGreaterThanOrEqual(stats.queuedCount);
+  expect(await figure('Still to check')).toBe(unanswered.matching);
   expect(await figure('Pages read')).toBe(stats.htmlPageCount);
   // The top bar's count is the same figure.
   await expect(

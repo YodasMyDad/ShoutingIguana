@@ -80,7 +80,8 @@ describe.skipIf(TABLE_STUBBED)('checking a site, in Simple', () => {
     // Addresses checked is what the URL grid counts as crawled: the URLs that weren't checked aren't in it.
     expect(figure('Addresses checked')).toHaveTextContent(String(event.fetched - (event.noResponse?.notChecked ?? 0)));
     expect(figure('Pages read')).toHaveTextContent(String(event.htmlPages));
-    expect(figure('Still to check')).toHaveTextContent(String(event.queued));
+    // Waiting their turn and on their way, as Advanced's Queued counts them (liveFigures.queuedSoFar).
+    expect(figure('Still to check')).toHaveTextContent(String(event.queued + event.inFlight));
     expect(main().getByText(/^At least \d+ minutes to go\.$/)).toBeVisible();
     expect(main().getByText(/Nothing so far\./)).toBeVisible();
     // No rate chart and no status codes: they're Advanced's.
@@ -159,6 +160,36 @@ describe.skipIf(TABLE_STUBBED)('checking a site, in Simple', () => {
     expect(
       await main().findByText('The site asked the check to slow down, so it has. It will take longer.'),
     ).toBeVisible();
+  });
+
+  // Views 06 and 31 of gallery 7: Still to check 0 and "Nearly done" while Advanced said 1,041 /p/ URLs were left.
+  it('counts what a section the site limits still holds, and never says "Nearly done" while it does', async () => {
+    await open();
+    await heard(
+      progress(100, {
+        queued: 0,
+        inFlight: 1041,
+        urlsPerSecond: 0.2,
+        waits: [{ reason: 'sectionLimited', host: 'example.com', urls: 1041, durationMs: 4000, section: '/p/' }],
+      }),
+      message(
+        'alert',
+        alert({
+          id: 1,
+          code: 'section-rate-limited',
+          level: 'info',
+          at: '2026-11-01T10:17:00.000Z',
+          message: 'example.com limits its /p/ pages (429 Too Many Requests), not the rest of the site.',
+          data: { host: 'example.com', url: '/p/' },
+        }),
+      ),
+    );
+    expect(figure('Still to check')).toHaveTextContent('1,041');
+    expect(main().queryByText('Nearly done.')).toBeNull();
+    expect(main().getByText('Reading the last pages slowly.')).toBeVisible();
+    // Said once, though the engine's notice and the wait both say it.
+    expect(await main().findAllByText(/The site only lets some of its pages be read slowly/)).toHaveLength(1);
+    expect(main().queryByText(/429/)).toBeNull();
   });
 
   it('says Paused on its first step, with a banner and Resume', async () => {

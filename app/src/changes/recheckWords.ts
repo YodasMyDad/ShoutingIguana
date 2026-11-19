@@ -196,6 +196,16 @@ export function recheckResultKind(result: RecheckResult, judged: number): Rechec
   return 'someFixed';
 }
 
+/**
+ * What becomes of those that couldn't be rechecked: "They stay on the list until they can be checked again." A page the
+ * site refused or didn't answer is never taken as fixed: its problem stays, as the check found it.
+ */
+function staysWords(notChecked: number): string {
+  return notChecked === 1
+    ? 'It stays on the list until it can be checked again.'
+    : 'They stay on the list until they can be checked again.';
+}
+
 /** "1 still has it", "2 still have it". */
 function stillWords(still: number): string {
   return `${formatCount(still)} still ${still === 1 ? 'has' : 'have'} it`;
@@ -226,6 +236,7 @@ export function simpleResultWords(args: {
     result.notChecked > 0
       ? `${formatCount(result.notChecked)} couldn’t be rechecked${notCheckedWhy ? `: ${notCheckedWhy}` : ''}.`
       : '';
+  const stays = result.notChecked > 0 ? staysWords(result.notChecked) : '';
   if (status === 'stopped' || status === 'interrupted' || (status === 'failed' && result.notRechecked > 0)) {
     const lead = status === 'stopped' ? 'Stopped' : status === 'failed' ? 'It couldn’t finish' : 'Cut short';
     const parts = [`${formatCount(result.fixed)} fixed`];
@@ -233,7 +244,7 @@ export function simpleResultWords(args: {
     lines.push(
       `${lead}: ${formatCount(rechecked)} of ${formatCount(judged)} rechecked. ${parts.join(', ')}${listed && result.still > 0 ? ':' : '.'}`,
     );
-    if (couldnt) lines.push(couldnt);
+    if (couldnt) lines.push(couldnt, stays);
   } else {
     switch (recheckResultKind(result, judged)) {
       case 'allFixed':
@@ -250,17 +261,19 @@ export function simpleResultWords(args: {
             : `${judged === 1 ? 'It isn’t' : `None of the ${formatCount(judged)} is`} fixed yet. If you changed it in the last few minutes, your site may be showing a saved copy (a cache): try again in a few minutes.`,
         );
         if (result.notChecked > 0 && result.still > 0) lines.push(couldnt);
+        if (result.notChecked > 0) lines.push(stays);
         break;
       case 'noneChecked':
         lines.push(
           `${judged === 1 ? 'It couldn’t' : `None of the ${formatCount(judged)} could`} be rechecked${notCheckedWhy ? `: ${notCheckedWhy}` : ''}.`,
+          stays,
         );
         break;
       case 'someFixed': {
         const head = `${formatCount(result.fixed)} of ${formatCount(judged)} fixed.`;
         if (result.still > 0) lines.push(`${head} ${stillWords(result.still)}${listed ? ':' : '.'}`);
         else lines.push(head);
-        if (couldnt) lines.push(couldnt);
+        if (couldnt) lines.push(couldnt, stays);
         if (result.notRechecked > 0) {
           lines.push(`${formatCount(result.notRechecked)} weren’t rechecked: they stay as the check found them.`);
         }
@@ -278,21 +291,22 @@ export function simpleResultWords(args: {
 }
 
 /**
- * Why the site's pages couldn't be rechecked, when it turned them away again, in Simple's words: "the site turned them
- * away again: it asked us to slow down"; "…: its security stopped us"; "…: its robots.txt doesn't allow it"; "the site
- * didn't answer"; or, for more than one reason, "the site turned them away again, or didn't answer". Null when none were
- * (or the recheck is from before answers were kept).
+ * Why the site's pages couldn't be rechecked, when it turned them away again, in Simple's words: "the site asked us to
+ * slow down and turned them away again"; "the site's security turned them away again"; "the site's robots.txt doesn't
+ * allow them"; "the site didn't answer"; or, for more than one reason, "the site turned them away again, or didn't
+ * answer". It follows a colon ("2 couldn't be rechecked: …"), so it never holds one. Null when none were (or the
+ * recheck is from before answers were kept).
  */
 export function refusedAgainWords(answers: RecheckAnswers | null): string | null {
   if (!answers || answers.refused === 0) return null;
   const them = answers.refused === 1 ? 'it' : 'them';
   const reasons = [
-    answers.rateLimited > 0 ? 'it asked us to slow down' : null,
-    answers.blocked > 0 ? 'its security stopped us' : null,
-    answers.robotsTxt > 0 ? 'its robots.txt doesn’t allow it' : null,
+    answers.rateLimited > 0 ? `the site asked us to slow down and turned ${them} away again` : null,
+    answers.blocked > 0 ? `the site’s security turned ${them} away again` : null,
+    answers.robotsTxt > 0 ? `the site’s robots.txt doesn’t allow ${them}` : null,
   ].filter((reason): reason is string => reason !== null);
   if (answers.noAnswer === answers.refused) return 'the site didn’t answer';
-  if (reasons.length === 1 && answers.noAnswer === 0) return `the site turned ${them} away again: ${reasons[0]}`;
+  if (reasons.length === 1 && answers.noAnswer === 0) return reasons[0] ?? null;
   return answers.noAnswer > 0
     ? `the site turned ${them} away again, or didn’t answer`
     : `the site turned ${them} away again`;
