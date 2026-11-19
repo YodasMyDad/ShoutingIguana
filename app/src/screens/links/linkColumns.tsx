@@ -633,12 +633,13 @@ export type LinkFace = 'url' | 'text';
 
 /**
  * How wide a value draws in the Links grid: a URL in the cells' monospace (13 px at the URL face's 0.93), anything else
- * in the cells' own font. The fonts are read once, for one view's measuring.
+ * in the cells' own font. The fonts are read once, for one view's measuring. `textWeight` is the weight the text is set
+ * in where it isn't the cells' own (a tree's group rows are heavier, and so wider).
  */
-export function linkTextMeasure(): (text: string, face: LinkFace) => number {
+export function linkTextMeasure(textWeight?: string): (text: string, face: LinkFace) => number {
   const size = Number.parseFloat(tokenValue('--grid-font-size', '13px')) || 13;
   const urlFont = `${(size * 0.93).toFixed(2)}px ${tokenValue('--font-mono', 'monospace')}`;
-  const textFont = `${size}px ${tokenValue('--font-sans', 'sans-serif')}`;
+  const textFont = `${textWeight ? `${textWeight} ` : ''}${size}px ${tokenValue('--font-sans', 'sans-serif')}`;
   return (text, face) => textWidth(text, face === 'url' ? urlFont : textFont);
 }
 

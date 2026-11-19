@@ -14,6 +14,7 @@ import { usePagedRows } from '../../grid/usePagedRows';
 import { useElementWidth } from '../../grid/useElementWidth';
 import { OUTCOME_WORDS, POSITION_WORDS } from '../../inspector/words';
 import { formatBytes, formatCount, formatCountOf } from '../../lib/format';
+import { tokenValue } from '../../lib/textWidth';
 import { useFontsLoaded } from '../../lib/useFontsLoaded';
 import type { InspectShow } from '../../routing/inspector';
 import { openInBrowser } from '../../shell/os';
@@ -418,7 +419,9 @@ export function LinkGroupsGrid({
         measured,
         images,
         siteOrigin,
-        linkTextMeasure(),
+        // A group's row is set a little heavier than a row in it (`.si-grid-row[aria-expanded]`): measured as drawn,
+        // or the widest text in view is cut by its last few px beside room to spare.
+        linkTextMeasure(tokenValue('--font-weight-medium', '500')),
         pageOf ? (target) => pageOf.get(target.id) : undefined,
       );
     },
