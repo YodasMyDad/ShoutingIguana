@@ -8,7 +8,8 @@ import type { CrawlSection } from './sections';
 export function goToSection(navigate: ReturnType<typeof useNavigate>, section: CrawlSection, crawl: string) {
   switch (section) {
     case 'issues':
-      return navigate({ to: '/crawls/$crawl/issues/{-$check}', params: { crawl } });
+      // The list, from one check's page too: left out, the router keeps the check the page is on.
+      return navigate({ to: '/crawls/$crawl/issues/{-$check}', params: { crawl, check: undefined } });
     case 'urls':
       return navigate({ to: '/crawls/$crawl/urls', params: { crawl } });
     case 'links':

@@ -63,7 +63,7 @@ function pageTitle(pathname: string, mode: Mode): string | null {
 export function TopBar() {
   const router = useRouter();
   const mode = useMode();
-  const { crawl: crawlId } = useParams({ strict: false });
+  const { crawl: crawlId, check: checkId } = useParams({ strict: false });
   const pathname = useLocation({ select: (location) => location.pathname });
   const crawl = useQuery({ ...crawlQuery(crawlId ?? ''), enabled: crawlId !== undefined }).data;
   const live = useLiveCrawl(crawlId);
@@ -170,7 +170,11 @@ export function TopBar() {
               {here ? (
                 <>
                   <Separator className="group-data-give-8/topbar:hidden" />
-                  <Here name={here} />
+                  {/* Simple's problem is a page under What to fix: the crumb is the way back to the list. */}
+                  <Here
+                    name={here}
+                    listOf={mode === 'simple' && sectionId === 'issues' && checkId !== undefined ? crawlId : null}
+                  />
                 </>
               ) : null}
             </>
@@ -324,13 +328,31 @@ function SearchButton({ iconOnly }: { iconOnly: boolean }) {
  * Where you are: the section, or the page. Short of room it's shortened (step 12), never to a letter, its whole name
  * in its tooltip and read in full; then it goes (step 13), still read.
  */
-function Here({ name }: { name: string }) {
+function Here({
+  name,
+  listOf = null,
+}: {
+  name: string;
+  /** The crawl whose list of problems it leads to. */ listOf?: string | null;
+}) {
+  const className =
+    'flex px-1.5 font-medium text-text group-data-give-12/topbar:min-w-(--topbar-section-min) group-data-give-12/topbar:shrink group-data-give-13/topbar:sr-only';
+  if (listOf) {
+    return (
+      <li title={name} className={className}>
+        <TextLink
+          variant="subtle"
+          to="/crawls/$crawl/issues/{-$check}"
+          params={{ crawl: listOf, check: undefined }}
+          className="min-w-0 truncate rounded-sm font-medium text-text hover:bg-surface-hover"
+        >
+          {name}
+        </TextLink>
+      </li>
+    );
+  }
   return (
-    <li
-      aria-current="page"
-      title={name}
-      className="flex px-1.5 font-medium text-text group-data-give-12/topbar:min-w-(--topbar-section-min) group-data-give-12/topbar:shrink group-data-give-13/topbar:sr-only"
-    >
+    <li aria-current="page" title={name} className={className}>
       <span className="min-w-0 truncate">{name}</span>
     </li>
   );
