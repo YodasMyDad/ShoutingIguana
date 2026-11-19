@@ -34,6 +34,26 @@ export const PIXELS_COLUMN = 'to.pixels';
 /** The engine's columns the pixel size column is drawn from. */
 export const PIXELS_PARTS = ['to.pixelWidth', 'to.pixelHeight'] as const;
 
+/**
+ * The "Ends at" column (the UX round's D-20): where a target that redirects ends, and how that answered, as a link,
+ * drawn from the target's redirect chain. It's what tells a reader of "Links to redirects" why a target that answered
+ * 200 is there (a meta refresh). The screen's own, as the pixel size column is.
+ */
+export const ENDS_AT_COLUMN = 'to.endsAt';
+
+/** The engine's column the "Ends at" column is drawn from. */
+export const ENDS_AT_PARTS = ['to.redirectChain'] as const;
+
+/**
+ * A link's kind, position and follow in one column ("Hyperlink · Content · Followed"): what the grid draws in place
+ * of the three where it's narrow (D-17), so the URLs keep the room. Only ever drawn: the route, the chooser and an
+ * export have the three columns it stands for.
+ */
+export const LINK_FACTS_COLUMN = 'linkFacts';
+
+/** The columns the folded column stands for, in the order it says them. */
+export const LINK_FACTS_PARTS = ['kind', 'position', FOLLOW_COLUMN] as const;
+
 const OWN_COLUMNS: Record<string, string> = {
   id: 'Crawl order',
   kind: 'Kind',
@@ -47,6 +67,7 @@ const OWN_COLUMNS: Record<string, string> = {
   followed: 'Followed',
   fragment: 'Fragment',
   [FOLLOW_COLUMN]: 'Follow',
+  [LINK_FACTS_COLUMN]: 'Kind · Position · Follow',
 };
 
 /** A column's end and its URL grid column: `to.statusCode` is the target's `statusCode`. Null for a link's own. */
@@ -75,6 +96,7 @@ export function linkColumnName(id: string): string {
   const own = OWN_COLUMNS[id];
   if (own) return own;
   if (id === PIXELS_COLUMN) return 'Target pixel size';
+  if (id === ENDS_AT_COLUMN) return 'Target ends at';
   const end = endColumn(id);
   if (!end) return wordsFromId(id);
   if (end.column === 'id' || end.column === 'url') return `${END_WORDS[end.end]} URL`;
@@ -84,6 +106,7 @@ export function linkColumnName(id: string): string {
 /** A column's name within its group, where the group's heading says whose it is: "Status" under "Its target". */
 export function linkColumnShortName(id: string): string {
   if (id === PIXELS_COLUMN) return 'Pixel size';
+  if (id === ENDS_AT_COLUMN) return 'Ends at';
   const end = endColumn(id);
   if (!end) return linkColumnName(id);
   if (end.column === 'id' || end.column === 'url') return 'URL';
@@ -168,7 +191,9 @@ export function linkFilterWords(
     },
     boolean: (column, value): FilterSentence | null => {
       if (column === 'selfLink') {
-        return { field: 'Link', op: value ? 'leads to' : 'doesn’t lead to', value: 'its own page' };
+        // In the words of who reads a link audit: a page's link to itself (its canonical, a "back to top") isn't
+        // one of its inlinks. The bar still says so: what's filtered is always what it says.
+        return { field: value ? 'Only' : 'Not counting', op: 'a page’s links to', value: 'itself' };
       }
       const end = endColumn(column);
       if (end?.column !== 'isInternal') return null;

@@ -56,17 +56,22 @@ describe('the Links row menu with the Target URL column hidden', () => {
     return screen.findByRole('menu');
   }
 
-  it('control: with the Target URL shown, Open in the browser is enabled', async () => {
+  // The menu names each end (the UX round's D-16): the target's item is "Open the target in your browser".
+  it('control: with the Target URL shown, Open the target in your browser is enabled', async () => {
     const menu = await menuOn('from.url,to.url,text');
-    expect(within(menu).getByRole('menuitem', { name: 'Open in the browser' })).not.toHaveAttribute(
+    expect(within(menu).getByRole('menuitem', { name: /^Open the target in your browser/ })).not.toHaveAttribute(
       'aria-disabled',
       'true',
     );
   });
 
-  it('with the Target URL hidden, Open in the browser is still enabled', async () => {
+  it('with the Target URL hidden, Open the target in your browser is still enabled', async () => {
     const menu = await menuOn('from.url,kind,text');
-    expect(within(menu).getByRole('menuitem', { name: 'Open in the browser' })).not.toHaveAttribute(
+    expect(within(menu).getByRole('menuitem', { name: /^Open the target in your browser/ })).not.toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    expect(within(menu).getByRole('menuitem', { name: 'Copy the target URL' })).not.toHaveAttribute(
       'aria-disabled',
       'true',
     );

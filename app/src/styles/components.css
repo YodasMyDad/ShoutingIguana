@@ -2314,6 +2314,12 @@
     }
   }
 
+  /* ------------------------------------------------- Links, grouped by target */
+  /* A press anywhere on a target's row opens or closes it (the chevron shows which): the row says it can be pressed. */
+  .si-link-groups .si-grid-row[data-level='1'] {
+    cursor: pointer;
+  }
+
   /* ------------------------------------------------- Where an issue's URL is found */
   /* A page that opens to show where it's found reads as a page, not as a group: the tree's heavier group title is for groups. */
   .si-issue-tree .si-grid-row[data-level='2'][aria-expanded] {

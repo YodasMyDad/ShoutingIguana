@@ -10,6 +10,8 @@ import {
   imageFileLine,
   isImageView,
   nextGroupSort,
+  linkedFromLine,
+  morePagesWords,
   otherTextsWords,
   positionsWords,
   showAllLinksWords,
@@ -79,10 +81,19 @@ describe('a grouped row in words', () => {
     expect(groupedTotalsWords(1, 1)).toBe('1 link on 1 page');
     expect(imageFileLine({ target: FACTS })).toBe('1.8 MB · 4000×3000 px');
     expect(imageFileLine({ target: { ...FACTS, sizeBytes: null, pixelHeight: null } })).toBe('');
-    expect(showAllLinksWords(265, false)).toBe('Show all 265 links to this target, one a row');
-    expect(showAllLinksWords(3, true)).toBe('Show all 3 uses of this image, one a row');
-    expect(showAllLinksWords(1, false)).toBe('Show the one link to this target, as a row');
-    expect(showAllLinksWords(1, true)).toBe('Show the one use of this image, as a row');
+    // The UX round's D-03: "Show the one link to this target, as a row" needed decoding.
+    expect(showAllLinksWords(265, false)).toBe('Show all 265 links in the flat list');
+    expect(showAllLinksWords(3, true)).toBe('Show all 3 uses in the flat list');
+    expect(showAllLinksWords(1, false)).toBe('Show in the flat list');
+    expect(showAllLinksWords(1, true)).toBe('Show in the flat list');
+    // The pages a target is linked from, after the first: what opens the group in place.
+    expect(morePagesWords(1)).toBeNull();
+    expect(morePagesWords(4)).toBe('+3 more');
+    expect(morePagesWords(1_266)).toBe('+1,265 more');
+    expect(linkedFromLine('https://example.com/blog/', 1)).toBe('https://example.com/blog/');
+    expect(linkedFromLine('https://example.com/blog/', 4)).toBe('https://example.com/blog/ +3 more');
+    expect(linkedFromLine(null, 4)).toBe('4 pages');
+    expect(linkedFromLine(null, 1)).toBe('1 page');
     expect(groupedReadWords(5_053_909)).toBe(
       'Reading all 5,053,909 links to group them by target: each one is read once.',
     );

@@ -2,6 +2,7 @@
 // for to draw them, and how each cell reads. A column the engine adds appears in the chooser with no work here: its
 // type says how it's drawn, and its name is worded from its id until this file has better words for it.
 import type { GridSort, LinkColumn, LinkRow, StatusClass, UrlColumnType, UrlOutcome } from '../../api/grids';
+import type { RedirectChain } from '../../api/inspector';
 import type { ChooserGroup } from '../../grid/ColumnChooser';
 import type { FilterColumn, FilterGroup } from '../../grid/filterEditing';
 import type { GridColumn } from '../../grid/types';
@@ -9,15 +10,20 @@ import { midPhrase } from '../../grid/urlFilterWords';
 import { objectCellWords, pixelsWords } from '../../crawl/evidence';
 import { FLAG_WORDS } from '../../inspector/words';
 import { urlStatusWords } from '../urls/urlColumns';
-import { formatBytes, formatCount, formatMilliseconds } from '../../lib/format';
+import { formatBytes, formatCount, formatCountOf, formatMilliseconds } from '../../lib/format';
+import { urlAtText } from '../../lib/textFragment';
 import { textWidth, tokenValue } from '../../lib/textWidth';
 import { ImageThumb } from '../../ui/ImageThumb';
 import { isBrokenImage } from '../../ui/imageFacts';
 import { StatusCode } from '../../ui/StatusCode';
 import { Url } from '../../ui/Url';
-import { RESOURCE_LINK_KINDS, urlDisplay } from '../../ui/urlText';
+import { RESOURCE_LINK_KINDS, fileLabelOf, urlDisplay } from '../../ui/urlText';
 import {
+  ENDS_AT_COLUMN,
+  ENDS_AT_PARTS,
   FOLLOW_COLUMN,
+  LINK_FACTS_COLUMN,
+  LINK_FACTS_PARTS,
   LINK_GROUP_TITLES,
   PIXELS_COLUMN,
   PIXELS_PARTS,
@@ -58,6 +64,7 @@ const OWN_ORDER = [FOLLOW_COLUMN, 'text', 'kind', 'position', 'imageLink', 'self
 export function isLinkColumn(id: string, catalogue: readonly LinkColumn[]): boolean {
   if (id === FOLLOW_COLUMN) return FOLLOW_PARTS.every((part) => catalogue.some((column) => column.id === part));
   if (id === PIXELS_COLUMN) return PIXELS_PARTS.every((part) => catalogue.some((column) => column.id === part));
+  if (id === ENDS_AT_COLUMN) return ENDS_AT_PARTS.every((part) => catalogue.some((column) => column.id === part));
   return !NOT_CHOSEN.has(id) && catalogue.some((column) => column.id === id);
 }
 
@@ -74,22 +81,29 @@ export function shownLinkColumns(
   return known.length > 0 ? known : DEFAULT_LINK_COLUMNS;
 }
 
+/** An end's columns that name another URL of the crawl its redirect chain knows by id: drawn as links to it. */
+const CHAIN_URLS: ReadonlySet<string> = new Set(['redirectTarget', 'finalUrl']);
+
 /**
  * What the query asks for, to draw these columns: each end's id and URL always (a URL opens the inspector by its id,
- * and a row's menu opens and copies it), the four
+ * and a row's menu opens and copies it), the link's kind and words always (the page it's on opens in the browser at
+ * the link: `sourceAtLink`), the four
  * columns the follow column is made of, and, with an end's status, how it answered, so no status reads as what
  * happened ("Blocked by robots.txt") and never as a guess.
  */
 export function linkQueryColumns(shown: readonly string[], images = false): string[] {
   // Each end's URL too, shown or not: a row's menu opens and copies the URL of the end it was opened in.
-  const asked = new Set<string>(['from.id', 'to.id', 'from.url', 'to.url']);
+  const asked = new Set<string>(['from.id', 'to.id', 'from.url', 'to.url', 'kind', 'text', 'imageLink']);
   // An image view draws each image's thumbnail, broken only where the image is known to be: how it answered.
   if (images) ['to.statusCode', 'to.outcome'].forEach((column) => asked.add(column));
-  for (const id of shown) {
+  for (const id of unfoldedLinkColumns(shown)) {
     if (id === FOLLOW_COLUMN) FOLLOW_PARTS.forEach((part) => asked.add(part));
     else if (id === PIXELS_COLUMN) PIXELS_PARTS.forEach((part) => asked.add(part));
+    else if (id === ENDS_AT_COLUMN) ENDS_AT_PARTS.forEach((part) => asked.add(part));
     else asked.add(id);
     const end = endColumn(id);
+    // Where a redirect goes and where it ends are URLs of the crawl: the chain has their ids, to open them by.
+    if (end && CHAIN_URLS.has(end.column)) asked.add(`${end.end}.redirectChain`);
     if (end?.column === 'statusCode') {
       asked.add(`${end.end}.outcome`);
       asked.add(`${end.end}.fetched`);
@@ -136,6 +150,85 @@ export function linkFollowWords(row: LinkRow): string {
   return [lead, ...flags].join(', ');
 }
 
+/**
+ * The page a link is on, as a browser opens it at the link: its URL at the link's own words (`urlAtText`, the fix
+ * round's rule 4). Undefined where there's nothing a browser could find: a link that isn't a hyperlink, one with no
+ * words, and one whose words are an image's alt text.
+ */
+export function sourceAtLink(row: LinkRow): string | undefined {
+  const page = row['from.url'];
+  if (typeof page !== 'string' || !/^https?:\/\//i.test(page)) return undefined;
+  if (row.kind !== 'hyperlink' || row.imageLink === true || !row.text?.trim()) return undefined;
+  return urlAtText(page, row.text);
+}
+
+/** What the open-in-browser button of the page a link is on says when it opens the page at the link. */
+export const OPEN_AT_LINK_HINT = 'Open the page at this link';
+
+/**
+ * The columns as drawn: where the grid is narrow (D-17), a view that shows a link's kind, position and follow shows
+ * them as one column, where the first of them was, so the URLs keep the room. A view without all three keeps its own.
+ */
+export function foldedLinkColumns(shown: readonly string[], narrow: boolean): readonly string[] {
+  if (!narrow || !LINK_FACTS_PARTS.every((part) => shown.includes(part))) return shown;
+  const parts: readonly string[] = LINK_FACTS_PARTS;
+  const first = shown.findIndex((id) => parts.includes(id));
+  return shown.flatMap((id, index) => (index === first ? [LINK_FACTS_COLUMN] : parts.includes(id) ? [] : [id]));
+}
+
+/** Drawn columns as the route, the chooser and an export have them: the folded column as the three it stands for. */
+export function unfoldedLinkColumns(ids: readonly string[]): string[] {
+  return ids.flatMap((id) => (id === LINK_FACTS_COLUMN ? [...LINK_FACTS_PARTS] : [id]));
+}
+
+/** A link's kind, where it sits and whether it's followed, in one line: "Hyperlink · Content · Followed". */
+export function linkFactsWords(row: LinkRow): string {
+  return [
+    row.kind ? (linkValueName('kind', row.kind) ?? row.kind) : null,
+    row.position ? (linkValueName('position', row.position) ?? row.position) : null,
+    linkFollowWords(row) || null,
+  ]
+    .filter((part): part is string => part !== null)
+    .join(' · ');
+}
+
+/** Where a target that redirects ends: the URL (of the crawl, by its id), how it answered, and how it got there. */
+export interface LinkEnd {
+  id: number;
+  url: string;
+  statusCode: number | null;
+  outcome?: UrlOutcome | null | undefined;
+  /** "meta refresh", "3 hops", "a loop": what a status alone doesn't say. Null for one HTTP redirect. */
+  note: string | null;
+}
+
+const chainOf = (row: LinkRow, end: 'from' | 'to'): RedirectChain | null => {
+  const chain = (row as unknown as Record<string, unknown>)[`${end}.redirectChain`];
+  return typeof chain === 'object' && chain !== null && Array.isArray((chain as RedirectChain).hops)
+    ? (chain as RedirectChain)
+    : null;
+};
+
+/** Where a link's target ends, from its redirect chain. Null for a target that doesn't redirect, or isn't known to. */
+export function endsAtOf(row: LinkRow): LinkEnd | null {
+  const chain = chainOf(row, 'to');
+  if (!chain || chain.hops.length === 0) return null;
+  const note = [
+    chain.hops.some((hop) => hop.via === 'metaRefresh') ? 'meta refresh' : null,
+    chain.hops.length > 1 ? formatCountOf(chain.hops.length, 'hop') : null,
+    chain.loop ? 'a loop' : chain.tooLong ? 'more than 20 hops' : null,
+  ].filter((part): part is string => part !== null);
+  return { ...chain.final, note: note.length > 0 ? note.join(', ') : null };
+}
+
+/** The same as text, for a copy: "https://example.com/thin 200 · meta refresh". */
+export function endsAtWords(row: LinkRow): string {
+  const end = endsAtOf(row);
+  if (!end) return '';
+  const status = typeof end.statusCode === 'number' ? ` ${end.statusCode}` : '';
+  return `${end.url}${status}${end.note ? ` · ${end.note}` : ''}`;
+}
+
 /** The distinct URLs of one end of some links, in the order the links have them, one per line: what a copy takes. */
 export function endUrls(rows: readonly LinkRow[], end: 'from' | 'to'): { text: string; count: number } {
   const urls = [
@@ -154,6 +247,7 @@ const OWN_WIDTHS: Record<string, number> = {
   text: 176,
   position: 104,
   [FOLLOW_COLUMN]: 116,
+  [LINK_FACTS_COLUMN]: 232,
   fragment: 160,
   selfLink: 168,
   imageLink: 112,
@@ -163,6 +257,7 @@ const URL_WIDTH = 300;
 const URL_MIN_WIDTH = 160;
 const END_WIDTHS: Record<string, number> = {
   url: URL_WIDTH,
+  endsAt: 320,
   pixels: 120,
   sizeBytes: 104,
   statusCode: 128,
@@ -191,8 +286,11 @@ function numberWords(column: string, value: number): string {
 export interface LinkColumnContext {
   /** URLs on the crawl's own origin show their path. */
   siteOrigin: string | null;
-  /** Opens the inspector on one of a link's ends. */
-  onOpen: (urlId: number, end: 'from' | 'to') => void;
+  /**
+   * Opens the inspector on one of a link's ends. `other` is the URL at the link's other end, so the inspector can
+   * arrive on that link (the page's outlinks with the target marked, the target's inlinks with the page marked).
+   */
+  onOpen: (urlId: number, end: 'from' | 'to', other?: number) => void;
   sort: readonly GridSort[];
   /** The crawl is running: an end not crawled yet may still be. */
   crawling?: boolean | undefined;
@@ -227,9 +325,27 @@ export function pixelsCellWords(row: LinkRow): string {
   return pixelsWords(typeof width === 'number' ? width : null, typeof height === 'number' ? height : null) ?? '';
 }
 
+/** What an export writes for where a target ends: the engine's own columns for it. */
+const ENDS_AT_EXPORT = ['to.finalUrl', 'to.finalStatusCode'] as const;
+
 /** A view's columns as an export writes them: each composed column as the engine's columns it's made of. */
 export function linkExportShown(shown: readonly string[]): string[] {
-  return shown.flatMap((id) => (id === PIXELS_COLUMN ? [...PIXELS_PARTS] : [id]));
+  return unfoldedLinkColumns(shown).flatMap((id) =>
+    id === PIXELS_COLUMN ? [...PIXELS_PARTS] : id === ENDS_AT_COLUMN ? [...ENDS_AT_EXPORT] : [id],
+  );
+}
+
+/** The room a URL's cell keeps beside its text: the open-in-browser button, and an image's thumbnail before it. */
+const OPEN_BUTTON_ROOM = 24;
+const THUMB_ROOM = 40;
+/** Beside where a target ends: its status and how it got there. */
+const ENDS_AT_ROOM = 136;
+
+/** A URL as its cell shows it, for measuring: its path on the crawl's own site, a file by its name. */
+function shownUrl(url: string, siteOrigin: string | null, file: boolean): string {
+  if (!file) return urlDisplay(url, siteOrigin).shown;
+  const label = fileLabelOf(url, siteOrigin);
+  return label.rest ? `${label.name} ${label.rest}` : label.name;
 }
 
 /** Why a column can't be sorted by: its header's tooltip, and what Enter on it says. */
@@ -262,6 +378,45 @@ function linkGridColumn(id: string, column: LinkColumn | undefined, context: Lin
       text: pixelsCellWords,
     };
   }
+  if (id === LINK_FACTS_COLUMN) {
+    return {
+      ...base,
+      headerHint: 'What the link is, where on its page it sits, and whether search engines follow it',
+      cell: (row) =>
+        linkFactsWords(row) ? <span title={linkFactsWords(row)}>{linkFactsWords(row)}</span> : muted('–'),
+      text: linkFactsWords,
+    };
+  }
+  if (id === ENDS_AT_COLUMN) {
+    return {
+      ...base,
+      fit: 'url',
+      fitText: (row) => {
+        const ends = endsAtOf(row);
+        return ends ? urlDisplay(ends.url, context.siteOrigin).shown : '';
+      },
+      fitExtra: OPEN_BUTTON_ROOM + ENDS_AT_ROOM,
+      headerHint: 'Where a target that redirects ends, how that answered, and how it got there',
+      cell: (row) => {
+        const ends = endsAtOf(row);
+        if (!ends) return muted('–');
+        return (
+          <span className="flex min-w-0 items-center gap-2">
+            <Url
+              url={ends.url}
+              siteOrigin={context.siteOrigin}
+              tabbable={false}
+              copyable={false}
+              onGo={() => context.onOpen(ends.id, 'to')}
+            />
+            <StatusCode code={ends.statusCode} className="shrink-0" />
+            {ends.note ? <span className="shrink-0 text-text-muted">{ends.note}</span> : null}
+          </span>
+        );
+      },
+      text: endsAtWords,
+    };
+  }
   if (id === FOLLOW_COLUMN) {
     return {
       ...base,
@@ -272,23 +427,40 @@ function linkGridColumn(id: string, column: LinkColumn | undefined, context: Lin
     };
   }
   if (end?.column === 'url') {
+    const other = end.end === 'from' ? 'to' : 'from';
+    // A target that's a file a page loads (an image, a stylesheet) is named by its file, never cut in its name.
+    const isFile = (row: LinkRow) =>
+      end.end === 'to' &&
+      (context.images === true || (typeof row.kind === 'string' && RESOURCE_LINK_KINDS.has(row.kind)));
     return {
       ...base,
       ...(context.widths?.[id] === undefined && context.urlWidth ? { width: context.urlWidth } : {}),
+      // As wide as the longest URL among the rows read first, as it shows (grid/columnFit.ts).
+      fit: 'url',
+      fitText: (row) => {
+        const url = row[`${end.end}.url`];
+        return typeof url === 'string' ? shownUrl(url, context.siteOrigin, isFile(row)) : '';
+      },
+      fitExtra: OPEN_BUTTON_ROOM + (context.images && end.end === 'to' ? THUMB_ROOM : 0),
       cell: (row) => {
         const url = row[`${end.end}.url`];
         const urlId = row[`${end.end}.id`];
         if (typeof url !== 'string') return '';
-        // A target that's a file a page loads (an image, a stylesheet) is named by its file, never cut in its name.
-        const resource = typeof row.kind === 'string' && RESOURCE_LINK_KINDS.has(row.kind);
-        const file = end.end === 'to' && (context.images === true || resource);
+        const file = isFile(row);
+        const otherId = row[`${other}.id`];
+        // The page a link is on opens in the browser at the link itself, where its words can be found there.
+        const atLink = end.end === 'from' ? sourceAtLink(row) : undefined;
         const link = (
           <Url
             url={url}
             siteOrigin={context.siteOrigin}
             tabbable={false}
+            copyable={false}
             label={file ? 'file' : 'address'}
-            {...(typeof urlId === 'number' ? { onGo: () => context.onOpen(urlId, end.end) } : {})}
+            {...(atLink ? { openUrl: atLink, openHint: OPEN_AT_LINK_HINT } : {})}
+            {...(typeof urlId === 'number'
+              ? { onGo: () => context.onOpen(urlId, end.end, typeof otherId === 'number' ? otherId : undefined) }
+              : {})}
           />
         );
         if (!context.images || end.end !== 'to') return link;
@@ -369,8 +541,39 @@ function linkGridColumn(id: string, column: LinkColumn | undefined, context: Lin
         const raw = value(row);
         return raw === null || raw === undefined ? '' : String(raw);
       };
+      if (end !== null && URL_TEXT.has(end.column)) {
+        // Another URL an end names (where it redirects, where that ends, its canonical): a URL like any other, and
+        // a link to it where the crawl knows which of its URLs it is (the redirect chain's).
+        const idOf = (row: LinkRow): number | undefined => {
+          const chain = CHAIN_URLS.has(end.column) ? chainOf(row, end.end) : null;
+          const address = words(row);
+          return [...(chain?.hops ?? []), ...(chain ? [chain.final] : [])].find((hop) => hop.url === address)?.id;
+        };
+        return {
+          ...base,
+          fit: 'url',
+          fitText: (row) => (words(row) ? urlDisplay(words(row), context.siteOrigin).shown : ''),
+          fitExtra: OPEN_BUTTON_ROOM,
+          cell: (row) => {
+            const address = words(row);
+            if (!address) return muted('–');
+            const urlId = idOf(row);
+            return (
+              <Url
+                url={address}
+                siteOrigin={context.siteOrigin}
+                tabbable={false}
+                copyable={false}
+                {...(urlId === undefined ? {} : { onGo: () => context.onOpen(urlId, end.end) })}
+              />
+            );
+          },
+          text: words,
+        };
+      }
       return {
         ...base,
+        ...(id === 'text' ? { fit: 'text' as const } : {}),
         mono: end !== null && URL_TEXT.has(end.column),
         // The whole text is the cell's tooltip: an anchor text can be a paragraph, and the cell shows its start.
         cell: (row) =>
@@ -405,13 +608,16 @@ export function sharedUrlWidth(
 ): number | undefined {
   if (available === null) return undefined;
   const byId = new Map((catalogue ?? []).map((column) => [column.id, column]));
-  const urls = shown.filter((id) => endColumn(id)?.column === 'url' && widths[id] === undefined);
+  const urls = shown.filter((id) => sharesAsUrl(id) && widths[id] === undefined);
   if (urls.length === 0) return undefined;
   const others = shown
     .filter((id) => !urls.includes(id))
     .reduce((sum, id) => sum + (widths[id] ?? widthOf(id, byId.get(id)?.type ?? 'text')), 0);
   return Math.max(URL_MIN_WIDTH, Math.floor((available - others) / urls.length));
 }
+
+/** The columns that share the grid's room as URLs do: each end's URL, and where a target ends. */
+const sharesAsUrl = (id: string): boolean => endColumn(id)?.column === 'url' || id === ENDS_AT_COLUMN;
 
 /** The least the anchor or alt text is given where the room is shared by what the view's values take: its header whole. */
 const TEXT_MIN_WIDTH = 140;
@@ -449,16 +655,19 @@ export function linkColumnNeeds(
 ): Record<string, number> {
   const needs: Record<string, number> = {};
   for (const id of shown) {
-    const end = endColumn(id);
-    const url = end?.column === 'url';
+    const url = sharesAsUrl(id);
     if (!url && id !== 'text') continue;
     let widest = 0;
     for (const row of rows) {
-      const value = row[id as keyof LinkRow];
+      const value = id === ENDS_AT_COLUMN ? endsAtOf(row)?.url : row[id as keyof LinkRow];
       if (typeof value !== 'string' || value === '') continue;
       widest = Math.max(widest, measure(url ? urlDisplay(value, siteOrigin).shown : value, url ? 'url' : 'text'));
     }
-    if (widest > 0) needs[id] = Math.ceil(widest + CELL_PADDING + (url ? URL_BUTTON_ROOM : 0));
+    if (widest > 0) {
+      needs[id] = Math.ceil(
+        widest + CELL_PADDING + (url ? URL_BUTTON_ROOM : 0) + (id === ENDS_AT_COLUMN ? ENDS_AT_ROOM : 0),
+      );
+    }
   }
   return needs;
 }
@@ -481,7 +690,7 @@ export function fittedLinkWidths(
 ): Record<string, number> | undefined {
   if (available === null) return undefined;
   const byId = new Map((catalogue ?? []).map((column) => [column.id, column]));
-  const isUrl = (id: string) => endColumn(id)?.column === 'url';
+  const isUrl = sharesAsUrl;
   const flexible = shown.filter(
     (id) => widths[id] === undefined && (isUrl(id) || (id === 'text' && needs[id] !== undefined)),
   );
@@ -518,7 +727,14 @@ export function linkChooserGroups(catalogue: readonly LinkColumn[], summaryAvail
   // The pixel size column stands where the target's width would.
   const ids = [
     FOLLOW_COLUMN,
-    ...catalogue.map((column) => (column.id === PIXELS_PARTS[0] ? PIXELS_COLUMN : column.id)),
+    // Where a target ends stands before the chain it's read from.
+    ...catalogue.flatMap((column) =>
+      column.id === PIXELS_PARTS[0]
+        ? [PIXELS_COLUMN]
+        : column.id === ENDS_AT_PARTS[0]
+          ? [ENDS_AT_COLUMN, column.id]
+          : [column.id],
+    ),
   ].filter((id) => isLinkColumn(id, catalogue));
   const byId = new Map(catalogue.map((column) => [column.id, column]));
   const rank = (id: string) => (OWN_ORDER.includes(id) ? OWN_ORDER.indexOf(id) : OWN_ORDER.length);

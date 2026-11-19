@@ -72,13 +72,115 @@ describe('the Links grid grouped by target', () => {
     expect(gone).toHaveTextContent('Gone');
     expect(gone).toHaveTextContent('+1 other text');
     expect(gone).toHaveTextContent('Content, Footer');
-    expect(within(grid).getByRole('columnheader', { name: /Linking pages/ })).toHaveAttribute(
-      'aria-sort',
-      'descending',
-    );
+    // The pages that link to it are in its row (the UX round's D-03): the first, a link, and how many more.
+    expect(within(grid).getByRole('columnheader', { name: /Linked from/ })).toHaveAttribute('aria-sort', 'descending');
+    expect(within(grid).queryByRole('columnheader', { name: /Linking pages/ })).toBeNull();
+    expect(await within(gone).findByRole('button', { name: 'https://example.com/' })).toBeVisible();
+    expect(gone).toHaveTextContent('+1 more');
     // One read for the targets: the engine groups, never the screen over the links.
     expect(groupReads(transport)[0]?.body).toMatchObject({ filters: [], sort: [{ column: 'pages', desc: true }] });
-    expect(transport.requests.filter((request) => request.path.endsWith('/links'))).toHaveLength(0);
+    // And one link a drawn target, named by the target, for the page it's first linked from: never a pass over them.
+    const reads = transport.requests.filter((request) => request.path.endsWith('/links'));
+    expect(reads.length).toBeGreaterThan(0);
+    for (const read of reads) {
+      const body = read.body as { limit?: number; filters?: GridFilter[] };
+      expect(body.limit).toBe(1);
+      expect(body.filters?.some((filter) => filter.column === 'to.id' && filter.op === 'eq')).toBe(true);
+    }
+  });
+
+  it('shows the page that links to a target in its row: a link that inspects it at the link, and opens it there', async () => {
+    sidecar();
+    const { router, user } = await open(`${LINKS}?by=target`);
+    const grid = await groupsGrid();
+    expect(grid.closest('.si-open-on-row')).not.toBeNull();
+    // /old has one link, on the home page, that says "Old page".
+    const old = await within(grid).findByRole('row', { name: /\/old/ });
+    const page = await within(old).findByRole('button', { name: 'https://example.com/' });
+    expect(old).not.toHaveTextContent('more');
+    // Its open-in-browser button opens the page at the link's words.
+    expect(page.closest('.si-url')?.querySelector('[data-open-url]')).toHaveAttribute(
+      'data-open-url',
+      'https://example.com/#:~:text=Old%20page',
+    );
+    await user.click(page);
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ inspect: 1, end: 'from' }));
+    // The inspector arrives on the page's outlinks, with the link to /old marked.
+    expect(router.state.location.state.inspectShow).toEqual({ section: 'outlinks', link: 3 });
+    // The target itself arrives on its inlinks, with its one page marked.
+    await user.click(within(old).getByRole('button', { name: 'https://example.com/old' }));
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ inspect: 3 }));
+    expect(router.state.location.state.inspectShow).toEqual({ section: 'inlinks', link: 1 });
+  });
+
+  it('opens a target on a click anywhere on its row, and on “+1 more”; its lines’ pages are links', async () => {
+    sidecar();
+    const { router, user } = await open(`${LINKS}?by=target`);
+    const grid = await groupsGrid();
+    const gone = await within(grid).findByRole('row', { name: /\/gone/ });
+    // A click on the row, away from its links: it opens. Again: it closes.
+    const status = within(gone).getByText('404').closest<HTMLElement>('[role="gridcell"]')!;
+    await user.click(status);
+    await waitFor(() => expect(level2(grid)[0]).toHaveTextContent('“Gone”'));
+    expect(gone).toHaveAttribute('aria-expanded', 'true');
+    await user.click(status);
+    await waitFor(() => expect(level2(grid)).toHaveLength(0));
+    // A double-click opens it too, as it always did: it doesn't open and close again.
+    await user.dblClick(status);
+    await waitFor(() => expect(level2(grid)[0]).toHaveTextContent('“Gone”'));
+    await user.dblClick(status);
+    await waitFor(() => expect(level2(grid)).toHaveLength(0));
+    // "+1 more" opens the rest in place.
+    fireEvent.pointerDown(within(gone).getByText('+1 more'), { button: 0 });
+    await waitFor(() => expect(level2(grid)).toHaveLength(3));
+    // A click on a link in the row goes where the link goes, and leaves the row as it is.
+    await user.click(within(gone).getByRole('button', { name: 'https://example.com/gone' }));
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ inspect: 4 }));
+    expect(gone).toHaveAttribute('aria-expanded', 'true');
+    // Each line's page is a link: it inspects the page, on its outlinks, with this link marked.
+    const [, second] = level2(grid);
+    await user.click(within(second!).getByRole('button', { name: 'https://example.com/about' }));
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ inspect: 2, end: 'from' }));
+    expect(router.state.location.state.inspectShow).toEqual({ section: 'outlinks', link: 4 });
+    expect(second!.querySelector('[data-open-url]')).toHaveAttribute(
+      'data-open-url',
+      'https://example.com/about#:~:text=Gone%20again',
+    );
+  });
+
+  it('names both ends in a line’s menu, and the target alone in a target’s', async () => {
+    sidecar();
+    const { router, user } = await open(`${LINKS}?by=target`);
+    const grid = await groupsGrid();
+    const gone = await within(grid).findByRole('row', { name: /\/gone/ });
+    const names = async () =>
+      within(await screen.findByRole('menu'))
+        .getAllByRole('menuitem')
+        .map((item) => item.textContent.replace(/(Shift)?Enter$|CtrlC$/, ''));
+    fireEvent.contextMenu(cellOf(gone));
+    expect(await names()).toEqual([
+      'Inspect the target',
+      'Open the target in your browser',
+      'Copy the target URL',
+      'Copy the target',
+      'Show all 2 links in the flat list',
+    ]);
+    await user.keyboard('{Escape}');
+    await user.click(within(gone).getByText('404'));
+    await waitFor(() => expect(level2(grid)).toHaveLength(3));
+    fireEvent.contextMenu(cellOf(level2(grid)[1]!));
+    expect(await names()).toEqual([
+      'Inspect the source page',
+      'Open the source page in your browser',
+      'Copy the source URL',
+      'Inspect the target',
+      'Open the target in your browser',
+      'Copy the target URL',
+      'Show all 2 links in the flat list',
+    ]);
+    await user.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: /^Inspect the source page/ }));
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ inspect: 2, end: 'from' }));
+    expect(router.state.location.state.inspectShow).toEqual({ section: 'outlinks', link: 4 });
   });
 
   it('switches between one row a link and one a target, keeping the filters and a sort by the target', async () => {
@@ -115,7 +217,7 @@ describe('the Links grid grouped by target', () => {
     expect(second).toHaveTextContent('https://example.com/about');
     expect(second).toHaveTextContent('“Gone again”');
     expect(second).toHaveTextContent('Footer');
-    expect(more).toHaveTextContent('Show all 2 links to this target, one a row');
+    expect(more).toHaveTextContent('Show all 2 links in the flat list');
     fireEvent.pointerDown(cellOf(more!), { button: 0 });
     act(() => grid.focus());
     fireEvent.keyDown(grid, { key: 'Enter' });

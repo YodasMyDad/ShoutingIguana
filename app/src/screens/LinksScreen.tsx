@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { Copy, ExternalLink, Layers, Link2Off, List, PanelRight, RefreshCw } from 'lucide-react';
+import { ClipboardList, Copy, ExternalLink, Layers, Link2Off, List, PanelRight, RefreshCw } from 'lucide-react';
 import { openInBrowser } from '../shell/os';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
@@ -28,9 +28,9 @@ import { useGridMetrics } from '../grid/metrics';
 import { NeedsAnalysis } from '../grid/NeedsAnalysis';
 import { RefusedFilter } from '../grid/RefusedFilter';
 import { searchCommand } from '../grid/searchCommand';
-import { RowMenu, UrlRowItems, ValueFilterItems } from '../grid/RowMenu';
+import { RowMenu, ValueFilterItems } from '../grid/RowMenu';
 import { cellValueFilters, withValueFilter } from '../grid/valueFilter';
-import { copyRowUrls, rowMenuLabel, useRowMenu } from '../grid/rowMenuState';
+import { copyRowUrls, rowMenuLabel, rowsWords, useRowMenu } from '../grid/rowMenuState';
 import { nextSort, useHeaderHandoff } from '../grid/sort';
 import { MAX_COPY_ROWS, toTsv } from '../grid/tsv';
 import { useElementWidth } from '../grid/useElementWidth';
@@ -49,11 +49,12 @@ import { linkExportColumns, linkGroupsOffer, linksOffer } from '../export/offers
 import { useCommands, type Command } from '../keyboard/registry';
 import { formatCount, formatCountOf, formatShownOf } from '../lib/format';
 import { useLiveCrawl } from '../live/liveStore';
-import { useInspector } from '../routing/inspector';
+import { useInspector, type InspectShow } from '../routing/inspector';
 import { MAX_FILTERS } from '../routing/search';
 import { Banner } from '../ui/Banner';
 import { Button } from '../ui/Button';
 import { EmptyState, FilteredEmptyState } from '../ui/EmptyState';
+import { IconButton } from '../ui/IconButton';
 import { LiveBadge } from '../ui/LiveBadge';
 import { DropdownMenu, MenuItem, MenuSeparator } from '../ui/Menu';
 import { GridHeader, ResultCount } from '../ui/PageHeader';
@@ -75,9 +76,13 @@ import {
   isLinkColumn,
   linkExportShown,
   fittedLinkWidths,
+  foldedLinkColumns,
   linkColumnNeeds,
   linkTextMeasure,
+  sourceAtLink,
+  unfoldedLinkColumns,
 } from './links/linkColumns';
+import { linkArrival } from './links/linkPlaces';
 import { LinkGroupsGrid } from './links/LinkGroupsGrid';
 import {
   GROUP_KEY_HINTS,
@@ -89,6 +94,7 @@ import {
 } from './links/linkGroups';
 import {
   FOLLOW_COLUMN,
+  LINK_FACTS_COLUMN,
   PIXELS_COLUMN,
   endColumn,
   linkColumnName,
@@ -106,6 +112,13 @@ const ROUTE = '/crawls/$crawl/links';
 /** The room the grid's frame takes beside its columns: its border and the scrollbar over its right edge. */
 const FRAME_SLACK = 24;
 
+/**
+ * The screen is narrow under this many px of its own (a 1280 px window beside the sidebar has about 1,000): a link's
+ * kind, position and follow are then one column, and the toolbar's tools their icons, so the URLs keep the room and
+ * the toolbar stays one row (the UX round's D-17).
+ */
+const NARROW_BELOW = 1_280;
+
 /** What the last read of a view said of it, kept while the same view is read again for other columns. */
 interface Counted {
   view: string;
@@ -119,7 +132,8 @@ interface Counted {
  * Links (docs/v2-ui-ia.md, Links): every link the crawl stored, in the one grid, over the links' own columns and each
  * end's. The view (filters, search, sort, columns, the URL inspected) is the route's, so back, forward and a link from
  * another screen restore it. Presets and facets only ever put filters in the route: what's filtered is always what
- * the filter bar says. Either end of a link opens the inspector on that URL, as a row of the URL grid does.
+ * the filter bar says. Either end of a link opens the inspector on that URL, as a row of the URL grid does, arriving
+ * on the link itself: the page's outlinks with the target marked, the target's inlinks with the page marked.
  */
 export function LinksScreen() {
   const { crawl: crawlId } = useParams({ from: ROUTE });
@@ -224,13 +238,23 @@ export function LinksScreen() {
   // it's on (the page a link is on is `end=from`; its target needs no word), so a reload, back, forward and a link to
   // the view keep following the end they were on.
   const inspectedEnd: 'from' | 'to' = search.end ?? 'to';
-  const openEnd = useCallback(
-    (urlId: number, end: 'from' | 'to') => inspector.open(urlId, { end: end === 'from' ? 'from' : undefined }),
+  const inspectEnd = useCallback(
+    (urlId: number, end: 'from' | 'to', show?: InspectShow) =>
+      inspector.open(urlId, { end: end === 'from' ? 'from' : undefined }, show),
     [inspector],
   );
-  const openRow = (row: LinkRow | undefined, end: 'from' | 'to') => {
+  // One end of a link, with the URL at its other end: the inspector arrives on that link (`linkArrival`).
+  const openEnd = useCallback(
+    (urlId: number, end: 'from' | 'to', other?: number) => inspectEnd(urlId, end, linkArrival(end, other)),
+    [inspectEnd],
+  );
+  /** `following`: the cursor moved while the inspector is open. The row's link is marked, the tab stays. */
+  const openRow = (row: LinkRow | undefined, end: 'from' | 'to', following = false) => {
     const urlId = row?.[`${end}.id`];
-    if (typeof urlId === 'number') openEnd(urlId, end);
+    const other = row?.[`${end === 'from' ? 'to' : 'from'}.id`];
+    if (typeof urlId === 'number') {
+      inspectEnd(urlId, end, linkArrival(end, typeof other === 'number' ? other : undefined, following));
+    }
   };
 
   const setFilters = useCallback(
@@ -301,25 +325,37 @@ export function LinksScreen() {
   // so once, rather than a column of dashes.
   const unmeasured = !grouped && first?.pixelSizes === false && shown.includes(PIXELS_COLUMN);
   const drawn = useMemo(() => (unmeasured ? shown.filter((id) => id !== PIXELS_COLUMN) : shown), [shown, unmeasured]);
-  const urlWidth = sharedUrlWidth(drawn, catalogue.data, width === null ? null : width - FRAME_SLACK, layoutWidths);
+  // Narrow, a link's kind, position and follow are drawn as one column: the route, the chooser and an export keep
+  // the three.
+  const narrow = width !== null && width > 0 && width < NARROW_BELOW;
+  const folded = useMemo(() => foldedLinkColumns(drawn, narrow), [drawn, narrow]);
+  const urlWidth = sharedUrlWidth(folded, catalogue.data, width === null ? null : width - FRAME_SLACK, layoutWidths);
   // The room shared by what the first page's URLs and anchors take: read once a view, so scrolling never moves a column.
   const needs = useMemo(
-    () => linkColumnNeeds(first?.rows ?? [], drawn, siteOrigin, linkTextMeasure()),
-    [first, drawn, siteOrigin],
+    () => linkColumnNeeds(first?.rows ?? [], folded, siteOrigin, linkTextMeasure()),
+    [first, folded, siteOrigin],
   );
   const widths = useMemo(
-    () => fittedLinkWidths(drawn, catalogue.data, width === null ? null : width - FRAME_SLACK, layoutWidths, needs),
-    [drawn, catalogue.data, width, layoutWidths, needs],
+    () => fittedLinkWidths(folded, catalogue.data, width === null ? null : width - FRAME_SLACK, layoutWidths, needs),
+    [folded, catalogue.data, width, layoutWidths, needs],
   );
   const columns = useMemo(
     () =>
-      linkGridColumns(drawn, catalogue.data, { siteOrigin, onOpen: openEnd, sort, urlWidth, widths, crawling, images }),
-    [drawn, catalogue.data, siteOrigin, openEnd, sort, urlWidth, widths, crawling, images],
+      linkGridColumns(folded, catalogue.data, {
+        siteOrigin,
+        onOpen: openEnd,
+        sort,
+        urlWidth,
+        widths,
+        crawling,
+        images,
+      }),
+    [folded, catalogue.data, siteOrigin, openEnd, sort, urlWidth, widths, crawling, images],
   );
   // The columns as the user laid them out: widths and pins kept with the preferences, the order the route's. Put
   // back, a set that's the default's in another order takes the default's order again.
   const laid = useColumnLayout('links', columns, {
-    order: { ids: drawn, onChange: setColumns },
+    order: { ids: folded, onChange: (next) => setColumns(unfoldedLinkColumns(next)) },
     onReset: () => {
       const set = new Set(shown);
       if (set.size === DEFAULT_LINK_COLUMNS.length && DEFAULT_LINK_COLUMNS.every((id) => set.has(id))) {
@@ -686,9 +722,11 @@ export function LinksScreen() {
     rowMenu.state && endColumn(laid.columns[rowMenu.state.column]?.id ?? '')?.end === 'from' ? 'from' : 'to';
   const menuUrl = menuRow?.[`${menuEnd}.url`];
   const menuCount = rowMenu.state?.menu.indices.length ?? 1;
-  // The cell the menu was opened on: its value's filters ("Filter by this value", "Exclude this value").
+  const menuColumn = rowMenu.state ? laid.columns[rowMenu.state.column]?.id : undefined;
+  // The cell the menu was opened on: its value's filters ("Filter by this value", "Exclude this value"). The folded
+  // column's value is first the link's kind.
   const menuCell = cellValueFilters(
-    rowMenu.state ? laid.columns[rowMenu.state.column]?.id : undefined,
+    menuColumn === LINK_FACTS_COLUMN ? 'kind' : menuColumn,
     menuRow as Readonly<Record<string, unknown>> | undefined,
     catalogue.data,
     summaryAvailable,
@@ -776,25 +814,42 @@ export function LinksScreen() {
               ))}
             </div>
             <div className="ml-auto flex items-center gap-1">
-              <Tooltip
-                content={
-                  grouped
-                    ? 'Showing one row a target. Press for one row a link.'
-                    : 'One row a target: how many pages link to it, what they say and where'
-                }
-                triggerName="Group by target"
-              >
-                <Button
-                  variant="ghost"
-                  size="sm"
+              {/* Narrow, the tools are their icons, each named in its tooltip, so the views and they share one row. */}
+              {narrow ? (
+                <IconButton
+                  label="Group by target"
+                  tooltip={
+                    grouped
+                      ? 'Group by target: showing one row a target. Press for one row a link.'
+                      : 'Group by target: one row a target, with the pages that link to it'
+                  }
                   icon={Layers}
+                  size="sm"
                   pressed={grouped}
                   command="links.groupByTarget"
                   onClick={() => setGrouped(!grouped)}
+                />
+              ) : (
+                <Tooltip
+                  content={
+                    grouped
+                      ? 'Showing one row a target. Press for one row a link.'
+                      : 'One row a target: the pages that link to it, what they say and where'
+                  }
+                  triggerName="Group by target"
                 >
-                  Group by target
-                </Button>
-              </Tooltip>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={Layers}
+                    pressed={grouped}
+                    command="links.groupByTarget"
+                    onClick={() => setGrouped(!grouped)}
+                  >
+                    Group by target
+                  </Button>
+                </Tooltip>
+              )}
               <ColumnChooser
                 groups={chooserGroups}
                 shown={shown}
@@ -809,9 +864,13 @@ export function LinksScreen() {
               <DropdownMenu
                 align="end"
                 trigger={
-                  <Button variant="ghost" size="sm" icon={Copy}>
-                    Copy
-                  </Button>
+                  narrow ? (
+                    <IconButton label="Copy" icon={Copy} size="sm" />
+                  ) : (
+                    <Button variant="ghost" size="sm" icon={Copy}>
+                      Copy
+                    </Button>
+                  )
                 }
               >
                 <MenuItem command="links.copyTargets">{copyTargetsTitle}</MenuItem>
@@ -823,9 +882,13 @@ export function LinksScreen() {
                 open={endsOpen}
                 onOpenChange={setEndsOpen}
                 trigger={
-                  <Button variant="ghost" size="sm" icon={List} disabled={!hasRows}>
-                    Show in URLs
-                  </Button>
+                  narrow ? (
+                    <IconButton label="Show in URLs" icon={List} size="sm" disabled={!hasRows} />
+                  ) : (
+                    <Button variant="ghost" size="sm" icon={List} disabled={!hasRows}>
+                      Show in URLs
+                    </Button>
+                  )
                 }
               >
                 <MenuItem
@@ -841,7 +904,7 @@ export function LinksScreen() {
                   The pages they’re on
                 </MenuItem>
               </DropdownMenu>
-              <ExportButton />
+              <ExportButton compact={narrow} />
             </div>
           </div>
           <FilterBar
@@ -937,7 +1000,7 @@ export function LinksScreen() {
           <ErrorState error={rows.error} onRetry={rows.refetch} />
         )
       ) : grouped ? (
-        <GridScreenBody className="mx-6 pb-4">
+        <GridScreenBody ref={measure} className="mx-6 pb-4">
           <LinkGroupsGrid
             crawlId={crawlId}
             filters={filters}
@@ -952,7 +1015,7 @@ export function LinksScreen() {
             siteOrigin={siteOrigin}
             images={images}
             crawling={crawling}
-            onInspect={openEnd}
+            onInspect={inspectEnd}
             following={inspecting ? inspectedEnd : undefined}
             onShowLinks={(next) =>
               void navigate({ search: (previous) => ({ ...previous, by: undefined, filter: next, sort: undefined }) })
@@ -1027,7 +1090,7 @@ export function LinksScreen() {
             }
             // While it's open, the inspector follows the cursor, in place, down the end it's on.
             onActiveRowChange={(index) => {
-              if (inspecting && index !== null) openRow(rows.getRow(index), inspectedEnd);
+              if (inspecting && index !== null) openRow(rows.getRow(index), inspectedEnd, true);
             }}
             onActiveColumnChange={setCursorColumn}
             onContextMenu={rowMenu.onContextMenu}
@@ -1054,7 +1117,8 @@ export function LinksScreen() {
                 />
               )
             }
-            className="flex-1 rounded-lg border border-border-card"
+            // A big grid: a URL's open-in-browser button shows on the row under the pointer and the cursor's.
+            className="si-open-on-row flex-1 rounded-lg border border-border-card"
           />
         </GridScreenBody>
       )}
@@ -1069,37 +1133,35 @@ export function LinksScreen() {
           ['link', 'links'],
         )}
       >
-        <UrlRowItems
-          count={menuCount}
-          url={typeof menuUrl === 'string' ? menuUrl : undefined}
-          onCopyUrls={() => {
-            if (rowMenu.state) void copyRowUrls(rowMenu.state.menu, (row) => row[`${menuEnd}.url`]);
-          }}
-          onCopyRows={() => void rowMenu.state?.menu.copy()}
-          rowNoun={['link', 'links']}
-        />
-        <MenuSeparator />
-        <MenuItem icon={PanelRight} disabled={!menuRow} onSelect={() => openRow(menuRow, 'from')}>
-          Inspect the source page
-        </MenuItem>
-        <MenuItem icon={PanelRight} disabled={!menuRow} onSelect={() => openRow(menuRow, 'to')}>
-          Inspect the target
-        </MenuItem>
+        {/*
+          Every item names the end it's for (the UX round's D-16): the page the link is on, then its target. The keys
+          are shown on the end the menu was opened in, which is the end Enter and Shift+Enter act on.
+        */}
         {(['from', 'to'] as const).map((end) => {
           const url = menuRow ? endUrl(menuRow, end) : null;
+          const keys = end === menuEnd;
           return (
-            <MenuItem
+            <LinkEndItems
               key={end}
-              icon={ExternalLink}
-              disabled={url === null}
-              onSelect={() => {
-                if (url !== null) void openInBrowser(url);
+              end={end}
+              count={menuCount}
+              keys={keys}
+              canInspect={typeof menuRow?.[`${end}.id`] === 'number'}
+              canOpen={url !== null}
+              onInspect={() => openRow(menuRow, end)}
+              onOpen={() => {
+                // The page a link is on opens at the link itself, where its words can be found there.
+                if (url !== null) void openInBrowser((end === 'from' && menuRow ? sourceAtLink(menuRow) : null) ?? url);
               }}
-            >
-              {end === 'from' ? 'Open the source page in your browser' : 'Open the target in your browser'}
-            </MenuItem>
+              onCopy={() => {
+                if (rowMenu.state) void copyRowUrls(rowMenu.state.menu, (row) => row[`${end}.url`]);
+              }}
+            />
           );
         })}
+        <MenuItem icon={ClipboardList} shortcut="mod+c" onSelect={() => void rowMenu.state?.menu.copy()}>
+          {`Copy ${rowsWords(menuCount, ['link', 'links'])}`}
+        </MenuItem>
         <MenuSeparator />
         <ValueFilterItems
           cell={menuCell}
@@ -1108,6 +1170,54 @@ export function LinksScreen() {
         />
       </RowMenu>
     </GridScreen>
+  );
+}
+
+/**
+ * A link's row menu, for one of its ends: inspect it, open it in the browser, copy its URL, each named by the end
+ * ("the source page", "the target"), so nothing in the menu has to be guessed at.
+ */
+function LinkEndItems({
+  end,
+  count,
+  keys,
+  canInspect,
+  canOpen,
+  onInspect,
+  onOpen,
+  onCopy,
+}: {
+  end: 'from' | 'to';
+  /** How many rows the menu acts on: a copy takes each one's URL. */
+  count: number;
+  /** This is the end the menu was opened in: Enter and Shift+Enter act on it, and its items say so. */
+  keys: boolean;
+  canInspect: boolean;
+  canOpen: boolean;
+  onInspect: () => void;
+  onOpen: () => void;
+  onCopy: () => void;
+}) {
+  const name = end === 'from' ? 'the source page' : 'the target';
+  const noun: [string, string] = end === 'from' ? ['source URL', 'source URLs'] : ['target URL', 'target URLs'];
+  return (
+    <>
+      <MenuItem icon={PanelRight} {...(keys ? { shortcut: 'enter' } : {})} disabled={!canInspect} onSelect={onInspect}>
+        {`Inspect ${name}`}
+      </MenuItem>
+      <MenuItem
+        icon={ExternalLink}
+        {...(keys ? { shortcut: 'shift+enter' } : {})}
+        disabled={!canOpen}
+        onSelect={onOpen}
+      >
+        {`Open ${name} in your browser`}
+      </MenuItem>
+      <MenuItem icon={Copy} onSelect={onCopy}>
+        {`Copy ${rowsWords(count, noun)}`}
+      </MenuItem>
+      <MenuSeparator />
+    </>
   );
 }
 

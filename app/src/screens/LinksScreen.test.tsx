@@ -142,6 +142,10 @@ describe('the Links grid', () => {
       const landed = expected[preset.id]!;
       await counted(`${landed} of 13 links`);
       expect(filtersOf(router)).toEqual(preset.filters);
+      // Links to redirects says where each target ends (the UX round's D-20).
+      if (preset.id === 'redirects') {
+        expect(await within(await grid()).findByRole('columnheader', { name: /Target ends at/ })).toBeVisible();
+      }
       expect(within(views).getByRole('button', { name: preset.title })).toHaveAttribute('aria-pressed', 'true');
       expect(within(views).getByRole('button', { name: 'All links' })).toHaveAttribute('aria-pressed', 'false');
       if (preset.id === 'external') expect(within(bar).getByText('another site')).toBeVisible();
@@ -546,6 +550,44 @@ describe('a link’s two ends', () => {
     await waitFor(() => expect(router.state.location.search).toMatchObject({ inspect: 3 }));
   });
 
+  it('arrives on the link the row is: the page’s outlinks with the target marked, the target’s inlinks with the page', async () => {
+    sidecar({}, inspectorRoutes({ urls: () => testUrlDetail() }));
+    const { router, user } = await open(LINKS);
+    await counted('13 links');
+    const table = await grid();
+    const row = (await within(table).findByText('About us')).closest<HTMLElement>('[role="row"]')!;
+    const arrival = () => router.state.location.state.inspectShow;
+    await user.click(within(row).getByRole('button', { name: 'https://example.com/' }));
+    await waitFor(() => expect(router.state.location.search).toEqual({ inspect: 1, end: 'from' }));
+    expect(arrival()).toEqual({ section: 'outlinks', link: 2 });
+    await user.click(within(row).getByRole('button', { name: 'https://example.com/about' }));
+    await waitFor(() => expect(router.state.location.search).toEqual({ inspect: 2 }));
+    expect(arrival()).toEqual({ section: 'inlinks', link: 1 });
+    // The cursor moving the open inspector marks the next row's link, on the tab the reader is on.
+    act(() => table.focus());
+    fireEvent.keyDown(table, { key: 'ArrowDown' });
+    await waitFor(() => expect(router.state.location.search).toEqual({ inspect: 3 }));
+    expect(arrival()).toEqual({ link: 1 });
+  });
+
+  it('opens the page a link is on in the browser at the link, from the button after its URL', async () => {
+    sidecar();
+    await open(LINKS);
+    await counted('13 links');
+    const table = await grid();
+    expect(table.closest('.si-open-on-row')).not.toBeNull();
+    const cells = (words: string) => [
+      ...within(table).getByText(words).closest<HTMLElement>('[role="row"]')!.querySelectorAll('[role="gridcell"]'),
+    ];
+    const [source, target] = cells('About us');
+    const opens = (cell: Element | undefined) => cell?.querySelector('[data-open-url]')?.getAttribute('data-open-url');
+    // The source page opens at the link's own words; the target is the target.
+    expect(opens(source)).toBe('https://example.com/#:~:text=About%20us');
+    expect(opens(target)).toBe('https://example.com/about');
+    // An image's alt text isn't on the page for a browser to find: the page itself.
+    expect(opens(cells('Logo')[0])).toBe('https://example.com/');
+  });
+
   it('lists a URL’s inlinks in Links from the inspector, the same links by the same count', async () => {
     const inlinks = [
       testLinkRow({ id: 1, url: 'https://example.com/' }),
@@ -566,7 +608,9 @@ describe('a link’s two ends', () => {
     });
     const bar = screen.getByRole('group', { name: 'Filters' });
     expect(await within(bar).findByText('/about')).toBeVisible();
-    expect(within(bar).getByText('doesn’t lead to')).toBeVisible();
+    // In a link audit's words (the UX round's D-16), never "Link doesn't lead to its own page".
+    expect(within(bar).getByText('Not counting')).toBeVisible();
+    expect(within(bar).getByText('a page’s links to')).toBeVisible();
   });
 
   it('says “Show it in Links” of a URL’s one link, never “All 1”, and lands on that link', async () => {
@@ -1182,9 +1226,44 @@ describe('the links grid’s row menu', () => {
     // The cursor in the first column: the page the link is on.
     await user.keyboard('{Shift>}{F10}{/Shift}');
     const menu = await screen.findByRole('menu', { name: /^Menu for the link on / });
-    expect(within(menu).getByRole('menuitem', { name: 'Copy the URL' })).toBeVisible();
+    // Every item says which end it's for (the UX round's D-16): no "Open in the browser" or "Copy the URL" to guess at.
+    const names = within(menu)
+      .getAllByRole('menuitem')
+      .map((item) => item.textContent);
+    expect(names.slice(0, 7).map((name) => name.replace(/(Shift)?Enter$|CtrlC$/, ''))).toEqual([
+      'Inspect the source page',
+      'Open the source page in your browser',
+      'Copy the source URL',
+      'Inspect the target',
+      'Open the target in your browser',
+      'Copy the target URL',
+      'Copy the link',
+    ]);
+    expect(within(menu).queryByRole('menuitem', { name: 'Open in the browser' })).toBeNull();
+    expect(within(menu).queryByRole('menuitem', { name: 'Copy the URL' })).toBeNull();
     await user.click(within(menu).getByRole('menuitem', { name: 'Inspect the target' }));
-    const target = [...state.links].sort((a, b) => a.id - b.id)[0]?.['to.id'];
-    await waitFor(() => expect(router.state.location.search).toMatchObject({ inspect: target }));
+    const first = [...state.links].sort((a, b) => a.id - b.id)[0];
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ inspect: first?.['to.id'] }));
+    // It arrives on the target's inlinks, with the page the link is on marked.
+    expect(router.state.location.state.inspectShow).toEqual({ section: 'inlinks', link: first?.['from.id'] });
+  });
+
+  it('copies either end’s URL by name', async () => {
+    sidecar();
+    const { user } = await open(LINKS);
+    const table = await grid();
+    await counted('13 links');
+    const written: string[] = [];
+    vi.spyOn(navigator.clipboard, 'writeText').mockImplementation((text) => {
+      written.push(text);
+      return Promise.resolve();
+    });
+    const cell = (await within(table).findByText('About us')).closest<HTMLElement>('[role="gridcell"]')!;
+    fireEvent.contextMenu(cell);
+    await user.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: 'Copy the source URL' }));
+    await waitFor(() => expect(written).toEqual(['https://example.com/']));
+    fireEvent.contextMenu(cell);
+    await user.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: 'Copy the target URL' }));
+    await waitFor(() => expect(written).toEqual(['https://example.com/', 'https://example.com/about']));
   });
 });

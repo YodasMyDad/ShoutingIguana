@@ -109,13 +109,31 @@ export function imageFileLine(group: Pick<LinkGroup, 'target'>): string {
     .join(' · ');
 }
 
-/** "Show all 265 links to this target": the row under an open target that lists its links one a row. */
+/**
+ * "Show all 265 links in the flat list": the row under an open target that lists its links one a row, and the same in
+ * its menu. One link is "Show in the flat list".
+ */
 export function showAllLinksWords(links: number, images: boolean): string {
-  if (links === 1)
-    return images ? 'Show the one use of this image, as a row' : 'Show the one link to this target, as a row';
-  return images
-    ? `Show all ${formatCount(links)} uses of this image, one a row`
-    : `Show all ${formatCount(links)} links to this target, one a row`;
+  if (links === 1) return 'Show in the flat list';
+  return `Show all ${formatCount(links)} ${images ? 'uses' : 'links'} in the flat list`;
+}
+
+/**
+ * The pages a target is linked from, after the first, which its row shows: "+3 more", which opens the target to them
+ * in place. Null with one page.
+ */
+export function morePagesWords(pages: number): string | null {
+  return pages > 1 ? `+${formatCount(pages - 1)} more` : null;
+}
+
+/**
+ * A target's "Linked from" cell as text, for a copy and a screen reader: the first page its links are on and how many
+ * more, or the count alone while that page isn't read.
+ */
+export function linkedFromLine(firstPage: string | null | undefined, pages: number): string {
+  if (!firstPage) return formatCountOf(pages, 'page');
+  const more = morePagesWords(pages);
+  return more ? `${firstPage} ${more}` : firstPage;
 }
 
 /** The flat view of one target's links: the view's own filters, and the target named by its id. */
@@ -159,7 +177,10 @@ export function groupsAsGridPage(page: LinkGroupsPage): LinkGroupsGridPage {
   };
 }
 
-/** The grouped grid's footer: Enter and Right open a target to its links, Left closes it; Enter on a link inspects its page. */
+/**
+ * The grouped grid's footer: a click, Enter and Right open a target to its links, Left closes it; Enter on a link
+ * inspects its page.
+ */
 export const GROUP_KEY_HINTS: readonly GridKeyHint[] = [
   { chord: 'arrowup arrowdown', words: 'Move' },
   { chord: 'arrowright arrowleft', words: 'Open or close' },
