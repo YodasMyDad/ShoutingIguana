@@ -48,8 +48,11 @@ export function severityFigures(entries: readonly CheckEntry[]): SeverityFigure[
 
 // ----------------------------------------------------------------------------------------------------------- Fix first
 
-/** How many checks "Fix first" lists before it points to Issues for the rest. */
-export const FIX_FIRST_LIMIT = 8;
+/**
+ * How many checks "Fix first" lists before it points to Issues for the rest. Twelve: eight left the card a third
+ * blank beside its neighbours at 2560 x 1380 (the audit of 2026-11-19, H-18).
+ */
+export const FIX_FIRST_LIMIT = 12;
 
 /** A check another's fix clears entirely, listed with it: its pages, every one it flagged. */
 export interface ClearedWith {

@@ -1,4 +1,5 @@
-import { Link } from '@tanstack/react-router';
+import { useQueries } from '@tanstack/react-query';
+import { Link, useNavigate } from '@tanstack/react-router';
 import { RotateCcw } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { CheckChange } from '../../api/fixLoop';
@@ -13,6 +14,7 @@ import { SeverityCounts } from '../../ui/SeverityCount';
 import { SeverityMark } from '../../ui/SeverityMark';
 import { StatLink, Stats } from '../../ui/Stat';
 import { TextLink } from '../../ui/TextLink';
+import { Url } from '../../ui/Url';
 import { outcomeWord } from '../../ui/severity';
 import { causeWords, type AnalysisTotals, type CheckEntry } from '../issues/checkList';
 import { CountWithReach } from '../issues/CountWithReach';
@@ -25,6 +27,7 @@ import {
   skippedGroups,
   skippedReasonWords,
 } from './answer';
+import { fixFirstExampleQuery } from './fixFirstExample';
 import { linkProps } from './overviewLinks';
 
 const SEVERITY_LABELS = { error: 'Errors', warning: 'Warnings', notice: 'Notices' } as const;
@@ -146,6 +149,10 @@ const affected = (entry: CheckEntry, totals: CrawlCounts | null) => {
 /**
  * Fix first (docs/v2-ui-ia.md, flow 3): the checks that found issues, the most severe first, then the most pages or
  * URLs affected, each opening its check in Issues, where it says what's wrong, why it matters and how to fix it.
+ *
+ * Under each check's name is the first URL it flags and what's wrong with it (the audit of 2026-11-19, H-18): the URL
+ * is a link like any other (it opens the check with that URL inspected) with its open-in-browser directly after it.
+ * The catalogue's description shows only until the URL is read, and for a check whose first row can't be.
  */
 export function FixFirst({
   crawlId,
@@ -154,9 +161,12 @@ export function FixFirst({
   order,
   totals,
   changeOf,
+  siteOrigin,
 }: {
   crawlId: string;
   entries: readonly CheckEntry[];
+  /** The crawl's own scheme and host: the example URLs on it show their path. */
+  siteOrigin?: string | null | undefined;
   /** Hidden checks that found issues: with nothing else to fix, the card says they're why it's empty. */
   hiddenFound?: number;
   /** The analysis's `fixFirst`: the engine's order. Absent from an earlier engine's analysis: then the app's. */
@@ -167,6 +177,10 @@ export function FixFirst({
   changeOf?: ((checkId: string) => CheckChange | null) | undefined;
 }) {
   const list = fixFirst(entries, undefined, order);
+  const navigate = useNavigate();
+  const examples = useQueries({
+    queries: list.checks.map(({ entry }) => fixFirstExampleQuery(crawlId, entry.check.id)),
+  });
   return (
     <Card as="section" aria-labelledby="overview-fix-title">
       <CardHeader
@@ -187,32 +201,54 @@ export function FixFirst({
           </p>
         ) : (
           <ol className="-mx-2.5 flex flex-col">
-            {list.checks.map(({ entry, link, cleared }) => (
-              <li key={entry.check.id}>
-                <ListRow
-                  asChild
-                  icon={<SeverityMark severity={entry.check.severity} decorative />}
-                  title={
-                    <>
-                      <span className="sr-only">{outcomeWord(entry.check.severity)}: </span>
-                      {entry.check.title}
-                    </>
-                  }
-                  meta={withWas(affected(entry, totals ?? null), wasWords(changeOf?.(entry.check.id)))}
-                  description={
-                    <>
-                      <span className="line-clamp-1">{entry.check.description}</span>
-                      {cleared.length > 0 ? (
-                        // One job: what its fix also clears, named here rather than listed as another thing to do.
-                        <span className="block text-text-secondary">{clearedWords(cleared)}</span>
-                      ) : null}
-                    </>
-                  }
-                >
-                  <Link {...linkProps(crawlId, link)} />
-                </ListRow>
-              </li>
-            ))}
+            {list.checks.map(({ entry, link, cleared }, index) => {
+              const example = examples[index]?.data ?? null;
+              return (
+                <li key={entry.check.id} className="flex flex-col">
+                  <ListRow
+                    asChild
+                    icon={<SeverityMark severity={entry.check.severity} decorative />}
+                    title={
+                      <>
+                        <span className="sr-only">{outcomeWord(entry.check.severity)}: </span>
+                        {entry.check.title}
+                      </>
+                    }
+                    meta={withWas(affected(entry, totals ?? null), wasWords(changeOf?.(entry.check.id)))}
+                    description={
+                      example || cleared.length > 0 ? (
+                        cleared.length > 0 ? (
+                          // One job: what its fix also clears, named here rather than listed as another thing to do.
+                          <span className="block text-text-secondary">{clearedWords(cleared)}</span>
+                        ) : undefined
+                      ) : (
+                        <span className="line-clamp-1">{entry.check.description}</span>
+                      )
+                    }
+                  >
+                    <Link {...linkProps(crawlId, link)} />
+                  </ListRow>
+                  {example ? (
+                    // Outside the row's own link: a link of its own, and a button after it.
+                    <div className="si-fix-example">
+                      <Url
+                        url={example.url}
+                        siteOrigin={siteOrigin}
+                        onGo={() =>
+                          void navigate({
+                            to: '/crawls/$crawl/issues/{-$check}',
+                            params: { crawl: crawlId, check: entry.check.id },
+                            search: { inspect: example.id },
+                          })
+                        }
+                        goHint="Inspect it in this check"
+                      />
+                      {example.detail ? <span className="si-fix-example__detail">{example.detail}</span> : null}
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
           </ol>
         )}
         {list.more > 0 ? (

@@ -2926,6 +2926,40 @@
   }
 
   /* -------------------------------------------------------------- List rows */
+  /*
+    Fix first's example under a check's row (H-18): the first URL the check flags and what's wrong with it, set in from
+    the edge by the row's own padding, icon and gap so it starts under the check's name.
+  */
+  .si-fix-example {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-width: 0;
+    padding: 0 var(--space-2-5) var(--space-1-5) calc(var(--space-2-5) + var(--icon-md) + var(--space-2-5));
+    font-size: var(--text-12);
+    line-height: var(--leading-12);
+  }
+
+  .si-fix-example > .si-url {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+
+  /* The URL's box is as wide as what it shows (its path), not as its full address, so the fault sits right after it. */
+  .si-fix-example > .si-url > * > .si-url__full {
+    position: absolute;
+    width: 1px;
+  }
+
+  .si-fix-example__detail {
+    flex: none;
+    overflow: hidden;
+    max-width: 50%;
+    color: var(--color-text-muted);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   /* A long list of short names (Overview's skipped checks), in as many columns as fit: read down, then across. */
   .si-name-columns {
     columns: 3 var(--name-column-min);

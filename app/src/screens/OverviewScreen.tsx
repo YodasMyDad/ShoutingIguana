@@ -34,6 +34,7 @@ import { LiveBadge } from '../ui/LiveBadge';
 import { PageHeader } from '../ui/PageHeader';
 import { RefreshLine } from '../ui/ProgressBar';
 import { TextLink } from '../ui/TextLink';
+import { siteOriginOf } from '../ui/urlText';
 import { AnalysisNotes, AnalysisProgress, NotAnalysed } from './issues/AnalysisState';
 import {
   analysisTotals,
@@ -392,6 +393,7 @@ export function OverviewScreen() {
             order={analysis.data?.fixFirst}
             counts={analysis.data ?? null}
             changeOf={shownComparison ? changeOf : undefined}
+            siteOrigin={siteOriginOf(item.startUrl)}
           />
         )}
         {empty ? null : <RechecksCard crawlId={crawlId} titleOf={titleOf} />}
@@ -496,8 +498,11 @@ function Answer({
   order,
   counts,
   changeOf,
+  siteOrigin,
 }: {
   crawlId: string;
+  /** The crawl's own scheme and host: Fix first's example URLs on it show their path. */
+  siteOrigin: string | null;
   checks: Checks;
   /** The checks that aren't hidden: what every figure here counts. */
   entries: readonly CheckEntry[];
@@ -527,6 +532,7 @@ function Answer({
           order={order}
           totals={counts}
           changeOf={changeOf}
+          siteOrigin={siteOrigin}
         />
         <div className="flex min-w-0 flex-col gap-4">
           <SkippedChecks crawlId={crawlId} entries={entries} />
