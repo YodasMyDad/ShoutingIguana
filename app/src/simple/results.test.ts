@@ -112,10 +112,9 @@ describe('Simple’s results on the garden crawl', () => {
     expect(summarySentence({ band: score.band, partial: false, counts: results.counts, siteWideSerious: null })).toBe(
       'Your site is in good shape. There are 2 serious problems and 3 problems worth fixing.',
     );
-    expect(coverageSentences(score.covers)).toEqual([
-      'The score covers all 265 pages and 143 of 170 checks.',
-      '27 checks couldn’t run.',
-    ]);
+    // "27 checks couldn’t run." followed it (the UX audit of 2026-11-19, S-17: said four times on the Summary; "143 of
+    // 170" and the count beside the score say it).
+    expect(coverageSentences(score.covers)).toEqual(['The score covers all 265 pages and 143 of 170 checks.']);
     expect(ifFixedLead(5)).toBe('Fixing these five takes the score from');
   });
 

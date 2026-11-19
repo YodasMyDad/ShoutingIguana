@@ -255,14 +255,9 @@ export function coverageSentences(covers: Score['covers']): string[] {
     covers.complete || covers.reason === null
       ? `The score covers ${covers.pages === 1 ? 'the 1 page' : `all ${formatCount(covers.pages)} pages`} and ${checks}.`
       : `The score covers the ${formatCount(covers.pages)} ${pages} read ${PARTIAL_REASONS[covers.reason]}, and ${checks}.`;
+  // "147 of 170 checks" says how many couldn't run, and the counts beside the score name them: "23 checks couldn’t
+  // run." a third and fourth time on one screen said nothing (the UX audit of 2026-11-19, S-17).
   const sentences = [first];
-  if (covers.checksSkipped > 0) {
-    sentences.push(
-      covers.checksSkipped === 1
-        ? '1 check couldn’t run.'
-        : `${formatCount(covers.checksSkipped)} checks couldn’t run.`,
-    );
-  }
   if (covers.blockedByRobots > 0) {
     sentences.push(
       `The site’s rules file for search engines (its “robots.txt”) keeps them out of ${formatCount(covers.blockedByRobots)} ${covers.blockedByRobots === 1 ? 'address, which wasn’t' : 'addresses, which weren’t'} read.`,

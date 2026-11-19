@@ -44,6 +44,7 @@ import {
   skippedListWords,
 } from './plainWords';
 import { ProblemScreen } from './ProblemScreen';
+import { PageFinder } from './PageFinder';
 import { useKeepsPlace, useKeptOpen } from './scrollPlace';
 import { plainResults, type PlainResults, type PlatformEntry, type SkippedGroup } from './results';
 import { ProblemRow } from './SummaryParts';
@@ -212,18 +213,22 @@ function WhatToFix({ crawlId }: { crawlId: string }) {
       </>
     );
     body = (
-      <FixLists
-        crawlId={crawlId}
-        results={results}
-        analysis={analysis.data}
-        sort={sort}
-        hiddenCount={hiddenCount}
-        showHidden={showHidden}
-        onShowHidden={setShowHidden}
-        onUnhide={() => showAllHidden(crawlId)}
-        changes={changes}
-        fixed={fixed}
-      />
+      <>
+        {/* S-06: what's wrong with one page, asked by its address or title. */}
+        <PageFinder crawlId={crawlId} item={item} />
+        <FixLists
+          crawlId={crawlId}
+          results={results}
+          analysis={analysis.data}
+          sort={sort}
+          hiddenCount={hiddenCount}
+          showHidden={showHidden}
+          onShowHidden={setShowHidden}
+          onUnhide={() => showAllHidden(crawlId)}
+          changes={changes}
+          fixed={fixed}
+        />
+      </>
     );
   }
 

@@ -90,9 +90,8 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
     expect(
       main().getByText('Your site is in good shape. There are 2 serious problems and 3 problems worth fixing.'),
     ).toBeVisible();
-    expect(
-      main().getByText(/The score covers all 265 pages and 143 of 170 checks\. 27 checks couldn’t run\./),
-    ).toBeVisible();
+    // S-17: "27 checks couldn’t run." followed it here, a third time on the screen.
+    expect(main().getByText('The score covers all 265 pages and 143 of 170 checks.')).toBeVisible();
     expect(main().getByText(/Checked on 31 October 2026\. 265 pages read in 37 min/)).toBeVisible();
     expect(main().getByText(/Shouting Iguana read 265 pages and checked 4,521 addresses in all/)).toBeVisible();
   });
@@ -141,7 +140,7 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
     // The UX audit of 2026-11-19 (S-04, S-19): this pinned "… 9 addresses 6 points back", then a second, unnumbered
     // row "Serious Links that lead to broken pages Fixed along with the problem above. 5 pages" in a nested item.
     expect(rows[0]).toHaveAccessibleName(
-      /^1 Serious Pages or files that can't be found .* Also covers “Links that lead to broken pages”: one list of links fixes both\. 9 addresses on 5 pages \+6 to your score$/,
+      /^1 Serious Pages or files that can't be found with “Links that lead to broken pages”: one list fixes both .* 9 addresses on 5 pages \+6 to your score$/,
     );
     expect(list.queryByRole('link', { name: /^Serious Links that lead to broken pages/ })).toBeNull();
     expect(main().getByRole('region', { name: 'Fix these first' }).querySelector('.si-plain-list__nested')).toBeNull();

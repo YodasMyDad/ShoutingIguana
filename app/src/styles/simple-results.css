@@ -356,6 +356,25 @@
     border-bottom: 0;
   }
 
+  /* A page found by What to fix's search, or one of its problems: a row that takes a press. */
+  .si-page-pick {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-0-5);
+    width: 100%;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    color: inherit;
+    text-align: left;
+    text-decoration: none;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+  }
+
+  .si-page-pick:hover {
+    background: var(--color-surface-hover);
+  }
+
   /* The end of a title or description that search results cut off: greyed, never struck through (it reads poorly). */
   .si-cut-text {
     color: var(--color-text-muted);

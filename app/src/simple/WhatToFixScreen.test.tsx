@@ -393,7 +393,7 @@ describe.skipIf(TABLE_STUBBED)('What to fix, related and ordered', () => {
     // The UX audit of 2026-11-19 (S-04, S-19): this pinned "… 9 addresses 6 points back", and a second row named
     // "Serious Links that lead to broken pages Fixed along with the problem above. 5 pages" in a nested item.
     expect(rows[0]).toHaveAccessibleName(
-      /Pages or files that can't be found .* Also covers “Links that lead to broken pages”: one list of links fixes both\. 9 addresses on 5 pages \+6 to your score$/,
+      /Pages or files that can't be found with “Links that lead to broken pages”: one list fixes both .* 9 addresses on 5 pages \+6 to your score$/,
     );
     expect(
       main()

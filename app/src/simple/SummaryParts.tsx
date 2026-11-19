@@ -217,18 +217,20 @@ export function ProblemRow({
               )}
             </span>
           </>
+        ) : merged && merged.length > 0 ? (
+          // Two problems, one row: the other is named beside the title, where the row's one-line summary would cut it.
+          <>
+            {plainTitle(entry.check)}{' '}
+            <span className="text-13 font-regular text-text-secondary">
+              with “{merged.map((other) => plainTitle(other.check)).join('”, “')}”: one list fixes both
+            </span>
+          </>
         ) : (
           plainTitle(entry.check)
         )
       }
       summary={
-        platform
-          ? platform.reason
-          : nested
-            ? 'Fixing the problem above clears this too.'
-            : merged && merged.length > 0
-              ? `${plainSummary(entry.check)} Also covers “${merged.map((other) => plainTitle(other.check)).join('”, “')}”: one list of links fixes both.`
-              : plainSummary(entry.check)
+        platform ? platform.reason : nested ? 'Fixing the problem above clears this too.' : plainSummary(entry.check)
       }
       count={
         <>
@@ -400,7 +402,13 @@ function fixFirstJobs(results: PlainResults, score: Score | null): FixRow[] {
  * checks couldn’t run."), the reason said once, and their names on demand (after the Shopify merge, never two dozen
  * names run together).
  */
-function SkippedReason({ group }: { group: SkippedGroup }) {
+function SkippedReason({
+  group,
+  only = false,
+}: {
+  group: SkippedGroup;
+  /** The one reason: its count is the card's own. */ only?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const listId = useId();
   const reason = [
@@ -419,7 +427,8 @@ function SkippedReason({ group }: { group: SkippedGroup }) {
   }
   return (
     <div>
-      <b className="font-medium text-text">{skippedGroupWords(titles.length)}.</b> {reason}{' '}
+      {only ? null : <b className="font-medium text-text">{skippedGroupWords(titles.length)}. </b>}
+      {reason}{' '}
       <Button
         variant="ghost"
         size="sm"
@@ -505,7 +514,7 @@ export function SummaryCards({ crawlId, results }: { crawlId: string; results: P
             {results.skipped.map((group) => (
               <li key={group.code ?? 'unknown'} className="grid grid-cols-(--check-row-columns) gap-2">
                 <SeverityWord severity="skipped" variant="mark" size="sm" className="mt-0.5" />
-                <SkippedReason group={group} />
+                <SkippedReason group={group} only={results.skipped.length === 1 && group.entries.length > 1} />
               </li>
             ))}
           </ul>
