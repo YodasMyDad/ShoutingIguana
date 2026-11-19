@@ -81,6 +81,8 @@ import { useNavigate } from '@tanstack/react-router';
 const FIND = parseChord('mod+f');
 
 const COPIED_MS = 1_500;
+/** After the inspector's own back, how many draws of the sheet may pass before the section shown has the keyboard. */
+const BACK_FOCUS_TRIES = 4;
 /** The link counts are read once the inspector has stayed on a URL this long: a grid's cursor passing by reads none. */
 export const LINK_COUNT_DELAY_MS = 200;
 /** A URL longer than this is folded in the head, so it never pushes the sections off the sheet. */
@@ -266,18 +268,24 @@ export function Inspector({ crawlId, urlId, onClose }: InspectorProps) {
   const cameFrom = trail.at(-1);
   // The back control goes with the hop it retraces: the keyboard it had moves to the section shown, never to the page,
   // from where an arrow key would move the view behind.
-  const wentBack = useRef(false);
+  const wentBack = useRef(0);
   const back = useCallback(() => {
-    wentBack.current = true;
+    wentBack.current = BACK_FOCUS_TRIES;
     inspector.back();
   }, [inspector]);
   useEffect(() => {
-    if (!wentBack.current) return;
-    wentBack.current = false;
+    if (wentBack.current === 0) return;
+    wentBack.current -= 1;
     const focused = document.activeElement;
-    if (focused !== null && focused !== document.body && sheet.current?.contains(focused)) return;
-    sheet.current?.querySelector<HTMLElement>('[role="tabpanel"][data-state="active"]')?.focus({ preventScroll: true });
-  }, [urlId, trail]);
+    if (focused === null || focused === document.body || !sheet.current?.contains(focused)) {
+      sheet.current
+        ?.querySelector<HTMLElement>('[role="tabpanel"][data-state="active"]')
+        ?.focus({ preventScroll: true });
+    }
+    // The hop may have been left on another section: its panel can't take focus until the tabs show it, a render
+    // after the one that chose it. So the panel is asked again, the next few times the sheet is drawn, until it has it.
+    if (sheet.current?.contains(document.activeElement)) wentBack.current = 0;
+  });
   const context = useMemo<InspectorContextValue>(
     () => ({ crawlId, urlId, siteOrigin, walk, crawling, marked: show?.link }),
     [crawlId, urlId, siteOrigin, walk, crawling, show],

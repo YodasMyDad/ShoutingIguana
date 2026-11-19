@@ -2436,6 +2436,17 @@
     color: var(--color-text);
   }
 
+  /* The link the reader came for, first in the inspector's list: what's current has the neutral fill and bold text,
+     never a coloured stripe. Its row says so in words to a screen reader, and the list's own line says it's first. */
+  .si-grid-row:not([data-selected]):has(.si-came-for) {
+    background: var(--color-surface-active);
+  }
+
+  .si-grid-row:has(.si-came-for) > .si-grid-cell,
+  .si-grid-row:has(.si-came-for) .si-url__path {
+    font-weight: var(--font-weight-semibold);
+  }
+
   .si-link {
     border-radius: var(--radius-xs);
     color: var(--color-accent-text);

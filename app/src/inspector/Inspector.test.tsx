@@ -1074,11 +1074,10 @@ describe('walking the site', () => {
     // A hop is no new place in history: back still leaves for the view the inspector opened from.
     expect(history.length).toBe(before);
     await within(inspector).findByRole('heading', { level: 2, name: HOME.url });
-    // Still on Inlinks, in the new URL's grid, with the keyboard still in it.
-    expect(within(inspector).getByRole('tab', { name: /^Inlinks/ })).toHaveAttribute('aria-selected', 'true');
-    await waitFor(() => expect(within(inspector).getByRole('grid', { name: 'Inlinks' })).toHaveFocus());
+    // The page that holds the link opens on its Outlinks, where the link is, with the keyboard in that grid.
+    expect(within(inspector).getByRole('tab', { name: /^Outlinks/ })).toHaveAttribute('aria-selected', 'true');
+    await waitFor(() => expect(within(inspector).getByRole('grid', { name: 'Outlinks' })).toHaveFocus());
 
-    await user.click(within(inspector).getByRole('tab', { name: /^Outlinks/ }));
     const outlinks = await within(inspector).findByRole('grid', { name: 'Outlinks' });
     await user.dblClick(await within(outlinks).findByText('Patio set'));
     await waitFor(() => expect(inspected(router)).toBe(2));
@@ -1124,15 +1123,15 @@ describe('walking the site', () => {
     await within(inspector).findByRole('heading', { level: 2, name: HOME.url });
     expect(walkedSteps(router.state.location.state)).toBe(1);
 
-    // The second click landing on the grid that came, on a row beside its URL: one press there, then the
-    // double-click, which isn't this grid's.
-    const next = within(inspector).getByRole('grid', { name: 'Inlinks' });
-    const cell = await within(next).findByText('Home');
+    // The second click landing on the grid that came (the page's outlinks, where the link is), on a row beside its
+    // URL: one press there, then the double-click, which isn't this grid's.
+    const next = await within(inspector).findByRole('grid', { name: 'Outlinks' });
+    const cell = await within(next).findByText(/Patio set/);
     fireEvent.pointerDown(cell);
     fireEvent.click(cell, { detail: 2 });
     fireEvent.doubleClick(cell);
     // Or on its URL: a double-click's second click is no go of its own.
-    const link = within(next).getByRole('button', { name: OTHER.url });
+    const link = within(next).getByRole('button', { name: PAGE.url });
     fireEvent.pointerDown(link);
     fireEvent.click(link, { detail: 2 });
     fireEvent.doubleClick(link);
@@ -1141,8 +1140,8 @@ describe('walking the site', () => {
     expect(walkedSteps(router.state.location.state)).toBe(1);
 
     // A double-click of its own on a row still walks.
-    await user.dblClick(within(next).getByText('Home'));
-    await waitFor(() => expect(inspected(router)).toBe(3));
+    await user.dblClick(within(next).getByText(/Patio set/));
+    await waitFor(() => expect(inspected(router)).toBe(2));
     expect(walkedSteps(router.state.location.state)).toBe(2);
     expect(history.length).toBe(1);
   });
@@ -1316,6 +1315,105 @@ describe('walking the site', () => {
     await user.click(await within(inspector).findByRole('tab', { name: /^Inlinks/ }));
     expect(await within(inspector).findByText('No inlinks')).toBeVisible();
     expect(within(inspector).getByText('Nothing the crawl read links to this URL.')).toBeVisible();
+  });
+
+  it('arrives from an inlink on the page’s Outlinks, with the link it came for first, marked, and says so', async () => {
+    const site: InspectorSidecarOptions = {
+      ...SITE,
+      outlinks: {
+        1: [
+          testLinkRow({ id: 3, url: 'https://example.com/b', text: 'Garden sets', position: 'content' }),
+          testLinkRow({ id: 2, url: PAGE.url, text: 'Patio set', position: 'content' }),
+        ],
+      },
+    };
+    const { router, inspector, user } = await open(`${URLS}?inspect=2`, site);
+    await user.click(await within(inspector).findByRole('tab', { name: /^Inlinks/ }));
+    const inlinks = await within(inspector).findByRole('grid', { name: 'Inlinks' });
+    // The page that holds the link: a click on it goes to where the link is on that page.
+    await user.click(await within(inlinks).findByRole('button', { name: HOME.url }));
+    await waitFor(() => expect(inspected(router)).toBe(1));
+    await within(inspector).findByRole('heading', { level: 2, name: HOME.url });
+    expect(within(inspector).getByRole('tab', { name: /^Outlinks/ })).toHaveAttribute('aria-selected', 'true');
+    const outlinks = await within(inspector).findByRole('grid', { name: 'Outlinks' });
+    await within(outlinks).findByText('Garden sets');
+    // The link to the URL just left is first, though the page links to /b before it, and it alone is marked.
+    const rows = within(outlinks).getAllByRole('row').slice(1);
+    expect(rows[0]).toHaveTextContent(/Patio set/);
+    expect(rows[0]!.querySelector('.si-came-for')).not.toBeNull();
+    expect(rows[0]).toHaveTextContent(/The link you came from/);
+    expect(rows[1]).toHaveTextContent(/Garden sets/);
+    expect(rows[1]!.querySelector('.si-came-for')).toBeNull();
+    expect(within(inspector).getByText('The link you came from is first')).toBeVisible();
+    // Back, by the inspector's own control: the URL left, on the section it was left on, and nothing marked there.
+    await user.click(within(inspector).getByRole('button', { name: /^Back to/ }));
+    await waitFor(() => expect(inspected(router)).toBe(2));
+    expect(within(inspector).getByRole('tab', { name: /^Inlinks/ })).toHaveAttribute('aria-selected', 'true');
+    await within(inspector).findByRole('grid', { name: 'Inlinks' });
+    expect(within(inspector).queryByText('The link you came from is first')).toBeNull();
+  });
+
+  it('lists a page’s broken links first, and narrows them to the broken or the redirects', async () => {
+    const site: InspectorSidecarOptions = {
+      ...SITE,
+      outlinks: {
+        2: [
+          testLinkRow({ id: 1, url: 'https://example.com/', text: 'Home' }),
+          testLinkRow({ id: 3, url: 'https://example.com/b', text: 'Old sofa', statusCode: 301, outcome: 'redirect' }),
+          testLinkRow({ id: 4, url: 'https://example.com/gone', text: 'Cushion box', statusCode: 404 }),
+        ],
+      },
+    };
+    const { inspector, user } = await open(`${URLS}?inspect=2`, site);
+    await user.click(await within(inspector).findByRole('tab', { name: /^Outlinks/ }));
+    const grid = await within(inspector).findByRole('grid', { name: 'Outlinks' });
+    await within(grid).findByText('Cushion box');
+    const texts = () =>
+      within(within(inspector).getByRole('grid', { name: 'Outlinks' }))
+        .getAllByRole('row')
+        .slice(1)
+        .map((row) => row.textContent);
+    // The broken link first, the others as the crawl found them.
+    expect(texts()[0]).toMatch(/Cushion box/);
+    expect(texts()[1]).toMatch(/Home/);
+    expect(within(inspector).getByText('3 outlinks')).toBeVisible();
+
+    await user.click(within(inspector).getByRole('button', { name: /Status/ }));
+    await user.click(await screen.findByRole('menuitemradio', { name: 'Broken' }));
+    expect(await within(inspector).findByText('1 broken of 3 outlinks')).toBeVisible();
+    await waitFor(() => expect(texts()).toHaveLength(1));
+    expect(texts()[0]).toMatch(/Cushion box/);
+
+    await user.click(within(inspector).getByRole('button', { name: /Status/ }));
+    await user.click(await screen.findByRole('menuitemradio', { name: 'Redirects' }));
+    expect(await within(inspector).findByText('1 redirect of 3 outlinks')).toBeVisible();
+    await waitFor(() => expect(texts()[0]).toMatch(/Old sofa/));
+  });
+
+  it('says when no link is broken, and offers every status again', async () => {
+    const { inspector, user } = await open(`${URLS}?inspect=2`);
+    await user.click(await within(inspector).findByRole('tab', { name: /^Inlinks/ }));
+    await within(await within(inspector).findByRole('grid', { name: 'Inlinks' })).findByText('Patio set');
+    await user.click(within(inspector).getByRole('button', { name: /Status/ }));
+    await user.click(await screen.findByRole('menuitemradio', { name: 'Broken' }));
+    expect(await within(inspector).findByText('No broken inlinks')).toBeVisible();
+    await user.click(within(inspector).getByRole('button', { name: 'Show every status' }));
+    expect(await within(inspector).findByText('2 inlinks')).toBeVisible();
+    await within(within(inspector).getByRole('grid', { name: 'Inlinks' })).findByText('Patio set');
+  });
+
+  it('opens an inlink’s page in the browser at the link’s own words', async () => {
+    const { inspector, user } = await open(`${URLS}?inspect=2`);
+    await user.click(await within(inspector).findByRole('tab', { name: /^Inlinks/ }));
+    const grid = await within(inspector).findByRole('grid', { name: 'Inlinks' });
+    await within(grid).findByText('Patio set');
+    const [hyperlink, image] = within(grid).getAllByRole('row').slice(1);
+    // A hyperlink with anchor text: the page opens scrolled to it. An image link has no words to find.
+    expect(hyperlink!.querySelector('.si-url__open')).toHaveAttribute(
+      'data-open-url',
+      'https://example.com/#:~:text=Patio%20set',
+    );
+    expect(image!.querySelector('.si-url__open')).toHaveAttribute('data-open-url', 'https://example.com/b');
   });
 });
 
