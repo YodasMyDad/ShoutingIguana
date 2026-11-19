@@ -445,6 +445,11 @@ on 3 of 48 pages ("some", 2 points), and 6 things worth a look.
 | `broken-external-links` (Worth fixing) | 44 of 1,240 pages | Some | 2 |
 | | | 100 − 64 | **36** |
 
+Since 2026-11-19 `broken-external-links` is Serious (the owner's decision: a broken link is an error), so on 44 of
+1,240 pages it takes 4 points, not 2, and the same site now scores 34. The engine's test keeps the example above with
+another warning on 44 pages in its place. The same day `canonical-to-first-page` became a Notice, so the garden crawl
+as analysed today (which has it on one page) still scores 87.
+
 **What each mix gives.**
 
 | The site has | Score |
@@ -603,7 +608,7 @@ here as the file has it, as its token: `{limit:largeImageBytes}` reads "200 KB" 
 - Title: Pages that name another page as the main version
 - What: These pages tell search engines that another page is the main version of them (a "canonical" link). Google
   then shows that other page instead, which is right for true copies, such as a sorted list or a print version. It's
-  a problem when the page has its own content, as page 2 of a list does: each page of a list should name itself.
+  a problem when the page has its own content and should appear in search in its own right.
 - Fix: (1) Look at each page and the page it points to, and decide whether they're really the same thing. (2) If
   they are, there's nothing to do. (3) If this page should appear in search on its own, ask your developer to
   point its canonical link at its own address.

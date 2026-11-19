@@ -83,7 +83,7 @@ Re-crawl jitsunami and audit its product pages once that merges.
 | `redirect-downgrade` | Redirects, Error | 0/0/0 | – | 0 | right, not seen | – | – |
 | `meta-refresh` | Redirects, Warning | 0/0/0 | – | 0 | right, not seen | – | – |
 | `broken-internal-links` | Links, Error | 0/1/4 | 0 | 0 | right | – | – |
-| `broken-external-links` | Links, Warning | 8/0/1 | 0 (bot walls rightly left out; who sent a's two 409s is unverified) | 0 | reworded | What says refused and robots-disallowed links aren't counted, in both modes | `b84ee69` |
+| `broken-external-links` | Links, Error (Warning at the audit; the owner's decision of 2026-11-19: a broken link is an error) | 8/0/1 | 0 (bot walls rightly left out; who sent a's two 409s is unverified) | 0 | reworded | What says refused and robots-disallowed links aren't counted, in both modes | `b84ee69` |
 | `links-to-redirects` | Links, Notice | 0/10/0 | 10: j's "Sign In" link to a 302 hosted login | 0 | fixed | Links to 302, 303 and 307 aren't counted; words in both modes | `6921d66` |
 | `internal-nofollow-links` | Links, Warning | 0/0/0 | – | 0 | right, not seen | – | – |
 | `empty-anchor-text` | Links, Notice | 0/9/260 | 0 | 1 kind: a home page's own empty logo link | fixed | A page's empty links to itself count; `#` and `#top` don't | `a3b83c1` |
@@ -228,7 +228,8 @@ From what the sites showed, not built here:
 - **"robots.txt doesn't name your sitemap"** (Notice). Garden's robots.txt is an empty 200, and its only sitemap was
   found by guessing `/sitemap.xml`. Fires when no robots.txt on a main origin has a `Sitemap:` line and a sitemap was
   found only by the probe or from the settings.
-- **"Paginated pages canonicalised to page 1"** (Warning). Garden's `/garden-sheds/?p=2`, `/greenhouses/?p=2` and
-  `/blog/?p=2` name page 1 as canonical though each lists its own products or posts, which are then reached only
-  through pages asking to be dropped. `canonicalised-page` reports them today, as a Notice beside textbook parameter
-  variants.
+- **"Paginated pages canonicalised to page 1"** (Warning as proposed; built as `canonical-to-first-page`, and a Notice
+  since 2026-11-19 at the owner's word: it's a common and often deliberate setup). Garden's `/garden-sheds/?p=2`,
+  `/greenhouses/?p=2` and `/blog/?p=2` name page 1 as canonical though each lists its own products or posts, which are
+  then reached only through pages asking to be dropped. `canonicalised-page` reports them today, as a Notice beside
+  textbook parameter variants.

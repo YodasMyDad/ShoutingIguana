@@ -223,12 +223,12 @@ public static class IssueCatalog
         TargetFacts = ["statusCode", "final", "text", "position", "fragment", "flags", "links"]
     };
 
-    public static readonly IssueDefinition BROKEN_EXTERNAL_LINKS = new("broken-external-links", IssueCategory.Links, IssueSeverity.Warning,
+    public static readonly IssueDefinition BROKEN_EXTERNAL_LINKS = new("broken-external-links", IssueCategory.Links, IssueSeverity.Error,
         "Links to broken external URLs",
         """The page links to URLs on other sites that return a 4xx or 5xx error or don't respond, directly or after redirects. Statuses many sites send only to crawlers (401, 403, 405, 429, 503 and LinkedIn's 999) don't count, and nor do links that the other site's bot protection (such as Cloudflare) refused, or that its robots.txt kept the crawler from checking.""",
         "Update each link to the resource's current address or an archived copy, or remove it.")
     {
-        Why = """Visitors who click hit a dead end, which makes the page look neglected and its references unreliable. Google doesn't document broken outbound links as a ranking factor, so this is about visitors. Some sites refuse crawlers in other ways, so open a few in a browser before editing.""",
+        Why = """Visitors who click hit a dead end, as with a broken link within the site, which makes the page look neglected and its references unreliable. Google doesn't document broken outbound links as a ranking factor: the cost is to visitors. Some sites refuse crawlers in other ways, so open one in a browser before editing.""",
         LearnMore = null,
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
@@ -376,7 +376,7 @@ public static class IssueCatalog
     public static readonly IssueDefinition NON_INDEXABLE_INLINKS_ONLY = new("non-indexable-inlinks-only", IssueCategory.Links, IssueSeverity.Notice,
         "Linked only from non-indexable pages",
         """Every page that links to this indexable page with a followed link is itself not indexable: noindex, canonicalised to another URL, or a redirect by an instant meta refresh. Links reaching it through a redirect count. The start and home pages aren't reported, and it's only checked when the crawl read every page that could link to it.""",
-        """Don't remove the links: they're how search engines reach the page. Look at why the pages linking here aren't indexable (each one's indexability says). If one shouldn't be, such as page 2 of a list canonicalised to page 1 (each page of a series should be its own canonical, so its links count), fix that page. If they're excluded on purpose, as tag and filter pages often are, also link to this page from at least one indexable page where it belongs, such as its category or a related page.""")
+        """Don't remove the links: they're how search engines reach the page. Look at why the pages linking here aren't indexable (each one's indexability says). If one shouldn't be, such as page 2 of a list canonicalised to page 1 (giving each page of a series its own canonical makes its links count), fix that page. If they're excluded on purpose, as tag and filter pages often are, also link to this page from at least one indexable page where it belongs, such as its category or a related page.""")
     {
         Why = """Search engines find and value pages largely through links from pages they index. Links only from pages they're told to drop, or to treat as copies, still let them reach this page but count for little, and if those pages go the page is left with no links. It's often a page linked only from tag, filter or paginated pages that are noindex.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/links-crawlable#internal-links",
@@ -674,7 +674,7 @@ public static class IssueCatalog
         """The page's canonical (in the <head> or an HTTP Link header) names a different URL, so the page asks to be treated as a duplicate of it. Canonicals that lead back to this page or to a broken URL don't count.""",
         """Check the canonical is intended. If this page should rank, make its canonical point to itself; if it's a true duplicate, link to the canonical URL rather than this one within the site.""")
     {
-        Why = """Google treats a canonical as a strong hint, not a rule: it usually indexes the named URL and folds this page's signals into it, but can choose differently if other signals disagree. That's right for parameter, sorting and print versions of a page. It's a problem when the page has its own content and should rank, as when a template points every canonical at the home page or the first page of a series.""",
+        Why = """Google treats a canonical as a strong hint, not a rule: it usually indexes the named URL and folds this page's signals into it, but can choose differently if other signals disagree. That's right for parameter, sorting and print versions of a page. It's a problem when the page has its own content and should rank, as when a template points every canonical at the home page.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/canonicalization",
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
@@ -801,12 +801,12 @@ public static class IssueCatalog
     };
 
 
-    public static readonly IssueDefinition CANONICAL_TO_FIRST_PAGE = new("canonical-to-first-page", IssueCategory.Canonicals, IssueSeverity.Warning,
+    public static readonly IssueDefinition CANONICAL_TO_FIRST_PAGE = new("canonical-to-first-page", IssueCategory.Canonicals, IssueSeverity.Notice,
         "Paginated page canonicalised to page 1",
         """This later page of a paginated series, page 2 onward by its rel="prev" link or a page number in its URL (?page=2, ?p=2, /page/2/), names the series' first page as its canonical. It isn't reported as canonicalised too.""",
-        """Give each page of the series a canonical to itself, and keep ordinary links between the pages so every one can be reached.""")
+        """If it's deliberate and the items on the later pages are in the sitemap or linked from elsewhere, leave it. Otherwise give each page of the series a canonical to itself, and keep ordinary links between the pages.""")
     {
-        Why = """The canonical asks search engines to treat page 2 as a copy of page 1, which it isn't. What's listed only on later pages is then found only through pages that ask to be dropped, so it may be crawled less, or not at all. Google's pagination guidance says not to use the first page as the canonical; it's a common setting in SEO plugins and shop themes.""",
+        Why = """This is a common setup, often deliberate, and a setting in many SEO plugins and shop themes. The canonical asks search engines to treat each later page as a copy of page 1, so the pages of the series don't compete as duplicates. It matters when products or posts are listed only on later pages: they're then reached only through pages that ask to be treated as copies, so make sure they're in the sitemap or linked from elsewhere. Google's pagination guidance prefers each page of a series to name itself as its canonical.""",
         LearnMore = "https://developers.google.com/search/docs/specialty/ecommerce/pagination-and-incremental-page-loading#use-urls-correctly",
         References = IssueReferences.Targets,
         Subject = IssueSubject.Page,
