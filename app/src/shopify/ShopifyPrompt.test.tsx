@@ -1,12 +1,15 @@
 import { QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import type { Recheck, RecheckAnswers } from '../api/fixLoop';
 import { setTransport } from '../api/transport';
 import type { ShopifyAccess } from '../api/types';
 import { resetPendingRechecks } from '../crawl/recheck';
 import { keptSecrets, resetSessionSecretsForTests, setSecretsStore, type SecretsStore } from '../crawl/secrets';
+import { liveStore } from '../live/liveStore';
 import { TEST_CRAWL_ID, fakeSidecar, json } from '../test/fakeSidecar';
+import { recheckRecord, recheckResult } from '../test/fixLoopSidecar';
 import { createQueryClientWithoutBackoff } from '../test/queryClient';
 import { ShopifyPrompt } from './ShopifyPrompt';
 
@@ -24,9 +27,14 @@ const STORE: ShopifyAccess = {
   reasons: [],
 };
 
-function renderPrompt(access: ShopifyAccess | null, mode: 'simple' | 'advanced') {
+function renderPrompt(
+  access: ShopifyAccess | null,
+  mode: 'simple' | 'advanced',
+  reads: { access?: () => ShopifyAccess | null; rechecks?: () => Recheck[] } = {},
+) {
   const sidecar = fakeSidecar([
-    ['GET', /^\/api\/crawls\/[0-9a-f]{16}\/shopify$/, () => json(access)],
+    ['GET', /^\/api\/crawls\/[0-9a-f]{16}\/shopify$/, () => json(reads.access ? reads.access() : access)],
+    ['GET', /^\/api\/crawls\/[0-9a-f]{16}\/rechecks$/, () => json({ rechecks: reads.rechecks?.() ?? [] })],
     ['POST', /^\/api\/crawls\/[0-9a-f]{16}\/rechecks$/, () => json({ recheckId: 1 }, 202)],
   ]);
   setTransport(sidecar);
@@ -38,12 +46,125 @@ function renderPrompt(access: ShopifyAccess | null, mode: 'simple' | 'advanced')
   return { sidecar, ...view };
 }
 
+/** The recheck the form started on the 8 refused pages, settled with how Shopify answered each. */
+function shopifyRecheck(answers: Partial<RecheckAnswers>): Recheck {
+  return recheckRecord({
+    checkId: null,
+    urlList: true,
+    judged: 8,
+    countBefore: null,
+    result: recheckResult({ fixed: 0, still: 0, scoreBefore: 70, scoreAfter: 74 }),
+    answers: { read: 0, rateLimited: 0, blocked: 0, robotsTxt: 0, noAnswer: 0, notAsked: 0, refused: 0, ...answers },
+  });
+}
+
+const ingest = (event: string, data: object) =>
+  act(() => liveStore.ingest({ event, id: '', data: JSON.stringify(data) }));
+
+/** Adds the signature in the form, rechecks the 8 pages, and settles the recheck as the stream says it. */
+async function recheckWithSignature(mode: 'simple' | 'advanced', settle: () => void) {
+  await userEvent.click(await screen.findByRole('button', { name: 'Add a Shopify signature' }));
+  const dialog = await screen.findByRole('dialog', { name: 'Add a Shopify signature' });
+  await userEvent.type(within(dialog).getByLabelText('Signature-Input'), INPUT);
+  await userEvent.type(within(dialog).getByLabelText('Signature'), SIGNATURE);
+  await userEvent.click(
+    within(dialog).getByRole('button', { name: mode === 'simple' ? 'Recheck these 8 pages' : 'Recheck these 8 URLs' }),
+  );
+  ingest('crawl', { crawlId: TEST_CRAWL_ID, status: 'rechecking' });
+  ingest('recheck', {
+    crawlId: TEST_CRAWL_ID,
+    recheckId: 1,
+    status: 'running',
+    phase: 1,
+    done: 2,
+    total: 8,
+    result: null,
+  });
+  expect(
+    await screen.findByText(mode === 'simple' ? 'Checking these pages again…' : 'Rechecking these URLs…'),
+  ).toBeVisible();
+  settle();
+  ingest('recheck', {
+    crawlId: TEST_CRAWL_ID,
+    recheckId: 1,
+    status: 'completed',
+    phase: 1,
+    done: 8,
+    total: 8,
+    result: recheckResult({ fixed: 0, still: 0, scoreBefore: 70, scoreAfter: 74 }),
+  });
+  ingest('crawl', { crawlId: TEST_CRAWL_ID, status: 'completed' });
+}
+
 describe('the Shopify prompt in the results', () => {
-  beforeEach(() => setSecretsStore(null));
+  beforeEach(() => {
+    setSecretsStore(null);
+    liveStore.reset();
+  });
   afterEach(() => {
     resetSessionSecretsForTests();
     resetPendingRechecks();
+    liveStore.reset();
     setTransport(fakeSidecar([]));
+  });
+
+  it('says, where the prompt was, that the pages Shopify turned away were read and the results include them', async () => {
+    let settled = false;
+    renderPrompt(STORE, 'simple', {
+      access: () => (settled ? null : STORE),
+      rechecks: () => (settled ? [shopifyRecheck({ read: 8 })] : []),
+    });
+    await recheckWithSignature('simple', () => (settled = true));
+
+    const done = await screen.findByRole('region', { name: 'All 8 pages Shopify turned away were read' });
+    expect(within(done).getByText('The results include them now.')).toBeVisible();
+    expect(screen.queryByText(/couldn’t be read/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add a Shopify signature' })).toBeNull();
+  });
+
+  it('says how many were read when Shopify still turned some away, beside the prompt to try again', async () => {
+    let settled = false;
+    const left: ShopifyAccess = { ...STORE, notCheckedUnsigned: 0, notCheckedSigned: 3, urlIds: [16, 17, 18] };
+    renderPrompt(STORE, 'simple', {
+      access: () => (settled ? left : STORE),
+      rechecks: () => (settled ? [shopifyRecheck({ read: 5, rateLimited: 3, refused: 3 })] : []),
+    });
+    await recheckWithSignature('simple', () => (settled = true));
+
+    expect(
+      await screen.findByText(
+        '5 of the 8 pages Shopify turned away were read. The results include them now. Shopify turned 3 away again.',
+      ),
+    ).toBeVisible();
+    expect(screen.getByText('3 pages were turned away even with the signature')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Change the signature' })).toBeVisible();
+  });
+
+  it('says none could be read when Shopify turned them all away again, and which were never asked', async () => {
+    let settled = false;
+    renderPrompt(STORE, 'simple', {
+      rechecks: () => (settled ? [shopifyRecheck({ rateLimited: 5, notAsked: 3, refused: 5 })] : []),
+    });
+    await recheckWithSignature('simple', () => (settled = true));
+
+    expect(
+      await screen.findByText(
+        'None of the 8 pages Shopify turned away could be read. Shopify turned 5 away again, and the check stopped before asking for the other 3.',
+      ),
+    ).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Add a Shopify signature' })).toBeVisible();
+  });
+
+  it('says it in Advanced’s words too', async () => {
+    let settled = false;
+    renderPrompt(STORE, 'advanced', {
+      access: () => (settled ? null : STORE),
+      rechecks: () => (settled ? [shopifyRecheck({ read: 8 })] : []),
+    });
+    await recheckWithSignature('advanced', () => (settled = true));
+
+    const done = await screen.findByRole('region', { name: 'Recheck: 8 of 8 refused URLs read' });
+    expect(within(done).getByText('They’re in the results now.')).toBeVisible();
   });
 
   it('says how many pages Shopify refused and why, in each mode’s words, with Shopify’s own buttons', async () => {

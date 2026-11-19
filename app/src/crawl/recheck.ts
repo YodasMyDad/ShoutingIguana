@@ -25,6 +25,8 @@ export interface PendingRecheck {
   ended: boolean;
   /** Why, when the crawl's event said. */
   error: string | null;
+  /** Started from the Shopify prompt's form, for the pages the store refused: the prompt says what it read. */
+  fromShopify?: boolean | undefined;
 }
 
 const pending = new Map<string, PendingRecheck>();
@@ -76,7 +78,7 @@ watchPendingRechecks();
 export async function startRecheck(
   crawlId: string,
   ask: RecheckAsk,
-  options: { skipMissingHeaders?: boolean; signatures?: Record<string, CrawlSignature> } = {},
+  options: { skipMissingHeaders?: boolean; signatures?: Record<string, CrawlSignature>; fromShopify?: boolean } = {},
 ): Promise<StartedRecheck | null> {
   try {
     const signatures = options.signatures ?? (await keptSecrets(`crawl:${crawlId}`))?.signatures;
@@ -85,7 +87,13 @@ export async function startRecheck(
       ...(options.skipMissingHeaders ? { skipMissingHeaders: true } : {}),
       ...(signatures && Object.keys(signatures).length > 0 ? { signatures } : {}),
     });
-    setPending(crawlId, { recheckId: started.recheckId, ask, ended: false, error: null });
+    setPending(crawlId, {
+      recheckId: started.recheckId,
+      ask,
+      ended: false,
+      error: null,
+      ...(options.fromShopify ? { fromShopify: true } : {}),
+    });
     return started;
   } catch (error) {
     if (isProblem(error, 'needs-secrets')) {
