@@ -207,8 +207,9 @@ opened to confirm.
 *Decided by the owner on 2026-11-19, after the pause:* **JavaScript rendering is imperative** ("or we won't be able to
 properly crawl or check things") and **custom extraction is needed**. So step 4 follows this UX round, JavaScript
 rendering first, and neither is "later" any more. List mode and include/exclude rules were explained to the owner the
-same day; whether they join step 4 now is the owner's to say (the orchestrator recommended both: include/exclude
-first, as it is small and keeps a crawl out of filter and parameter traps).
+same day, and the owner's answer was "yes all those are needed". **Step 4, in the order agreed: JavaScript rendering
+with include/exclude rules alongside it (small, and it keeps a crawl out of filter and parameter traps), then custom
+extraction, then list mode.** It starts when this UX round is merged and gated, not before.
 
 *Left for the owner to decide (features, not UX fixes, so not in this round):* URL include and exclude patterns,
 JavaScript rendering, a URL-list crawl mode (all three are step 4 of the plan and were asked about on 2026-11-19: the
