@@ -52,14 +52,18 @@ export interface FixedUrlColumnsContext {
   onGo?: ((row: UrlRow) => void) | undefined;
 }
 
-/** Columns use E3a's ids (docs/v2-sidecar-api.md, URLs), so the query asks for exactly these. */
+/**
+ * Columns use E3a's ids (docs/v2-sidecar-api.md, URLs), so the query asks for exactly these. Their widths are the URL
+ * grid's own for the same columns (`urlColumns.tsx`), but the Title's, which keeps more room here; the URL's and
+ * the Title's are what they have before the grid has measured what they hold (`fit`).
+ */
 export function fixedUrlColumns({ siteOrigin = null, onGo }: FixedUrlColumnsContext = {}): GridColumn<UrlRow>[] {
   const host = hostOf(siteOrigin);
   return [
     {
       id: 'url',
       header: 'URL',
-      width: 420,
+      width: 360,
       minWidth: 240,
       mono: true,
       // As wide as the longest URL among the rows read first, never wider: the next column starts where they end.
@@ -86,7 +90,7 @@ export function fixedUrlColumns({ siteOrigin = null, onGo }: FixedUrlColumnsCont
     {
       id: 'statusCode',
       header: 'Status',
-      width: 104,
+      width: 88,
       // The code with its class's mark, as the URL grid shows it; what happened instead of one is the Outcome's to say.
       cell: (row) =>
         typeof row.statusCode === 'number' ? createElement(StatusCode, { code: row.statusCode }) : status(row) || '–',
@@ -95,7 +99,7 @@ export function fixedUrlColumns({ siteOrigin = null, onGo }: FixedUrlColumnsCont
     {
       id: 'indexability',
       header: 'Indexability',
-      width: 168,
+      width: 136,
       cell: (row) => words(indexability(row)),
       text: indexability,
     },
@@ -111,7 +115,7 @@ export function fixedUrlColumns({ siteOrigin = null, onGo }: FixedUrlColumnsCont
     {
       id: 'depth',
       header: 'Depth',
-      width: 72,
+      width: 64,
       numeric: true,
       cell: (row) => formatCount(row.depth),
       text: (row) => plain(row.depth),
@@ -119,7 +123,7 @@ export function fixedUrlColumns({ siteOrigin = null, onGo }: FixedUrlColumnsCont
     {
       id: 'responseMs',
       header: 'Response',
-      width: 104,
+      width: 88,
       numeric: true,
       cell: (row) => formatMilliseconds(row.responseMs),
       text: (row) => plain(row.responseMs),
@@ -127,7 +131,7 @@ export function fixedUrlColumns({ siteOrigin = null, onGo }: FixedUrlColumnsCont
     {
       id: 'sizeBytes',
       header: 'Size',
-      width: 96,
+      width: 80,
       numeric: true,
       cell: (row) => formatBytes(row.sizeBytes),
       text: (row) => plain(row.sizeBytes),
@@ -135,7 +139,7 @@ export function fixedUrlColumns({ siteOrigin = null, onGo }: FixedUrlColumnsCont
     {
       id: 'inlinks',
       header: 'Inlinks',
-      width: 88,
+      width: 80,
       numeric: true,
       cell: (row) => formatCount(row.inlinks),
       text: (row) => plain(row.inlinks),
@@ -143,7 +147,7 @@ export function fixedUrlColumns({ siteOrigin = null, onGo }: FixedUrlColumnsCont
     {
       id: 'issues',
       header: 'Issues',
-      width: 80,
+      width: 72,
       numeric: true,
       cell: (row) => formatCount(row.issues),
       text: (row) => plain(row.issues),

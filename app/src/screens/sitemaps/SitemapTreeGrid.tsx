@@ -38,12 +38,14 @@ const FOUND_WIDTH = 112;
 /** The most it grows to for the name of the index that lists a sitemap ("In /sitemap.xml"): a longer one is cut. */
 const FOUND_MAX_WIDTH = 220;
 /**
- * What became of a sitemap: at least this wide, and wider for the longest words in the list ("Couldn’t be read: 404 Not
- * Found" whole, gallery 6's re-shoot), up to `STATE_MAX_WIDTH`, past which its words are a hover away. It grows only
- * into room the address doesn't need: the address keeps `URL_ROOM_FIRST` first, as names are what tell the rows
+ * What became of a sitemap: as wide as the longest words in the list need ("Couldn’t be read: 404 Not Found" whole,
+ * gallery 6's re-shoot; a list that only says "Read" keeps no more than that, so the names beside it aren't cut
+ * beside blank room), up to `STATE_MAX_WIDTH`, past which its words are a hover away. Past `STATE_WIDTH` it grows
+ * only into room the address doesn't need: the address keeps `URL_ROOM_FIRST` first, as names are what tell the rows
  * apart, so a 1280 px window shows every name whole and a failure's reason cut, a wider one both whole.
  */
 const STATE_WIDTH = 198;
+const STATE_MIN_WIDTH = 96;
 const STATE_MAX_WIDTH = 300;
 const URL_ROOM_FIRST = 300;
 /**
@@ -104,7 +106,7 @@ function stateWidth(rows: readonly SitemapRow[], crawling: boolean): number {
     0,
     ...rows.map((row) => textWidth(stateWords(row.sitemap, crawling, row.subtree).short, font)),
   );
-  return Math.min(STATE_MAX_WIDTH, Math.max(STATE_WIDTH, Math.ceil(widest + padding + COUNT_SLACK)));
+  return Math.min(STATE_MAX_WIDTH, Math.max(STATE_MIN_WIDTH, Math.ceil(widest + padding + COUNT_SLACK)));
 }
 
 /** The index that lists a sitemap, when the crawl has it: what its Found via cell names. */
@@ -121,15 +123,17 @@ function indexOf(sitemaps: readonly Sitemap[], sitemap: Sitemap): Sitemap | unde
  * one pays for it: the extra room comes out of what Status would have grown into before the address gives any.
  */
 function foundWidth(sitemaps: readonly Sitemap[], siteOrigin: string | null): number {
-  const face = `${tokenValue('--font-weight-semibold', '600')} ${tokenValue('--grid-font-size', '13px')}`;
-  const font = `${face} ${tokenValue('--font-sans', 'sans-serif')}`;
-  // An index's name is set in the monospace face, which is the wider: the whole of "In /sitemap.xml" is measured in it.
-  const mono = `${face} ${tokenValue('--font-mono', 'monospace')}`;
+  const weight = tokenValue('--font-weight-semibold', '600');
+  const size = Number.parseFloat(tokenValue('--grid-font-size', '13px')) || 13;
+  const font = `${weight} ${size}px ${tokenValue('--font-sans', 'sans-serif')}`;
+  // An index's name is set in the monospace face, at its own scale beside the words.
+  const scale = Number.parseFloat(tokenValue('--mono-scale', '0.93em')) || 0.93;
+  const mono = `${weight} ${size * scale}px ${tokenValue('--font-mono', 'monospace')}`;
   const padding = 2 * (Number.parseFloat(tokenValue('--grid-cell-x', '12px')) || 12);
   const width = (sitemap: Sitemap) => {
     const index = indexOf(sitemaps, sitemap);
     return index
-      ? textWidth(foundInWords(index.url, siteOrigin).short, mono)
+      ? textWidth('In ', font) + textWidth(foundInWords(index.url, siteOrigin).name, mono)
       : textWidth(foundViaWords(sitemap.foundVia).short, font);
   };
   const widest = Math.max(0, ...sitemaps.map(width));
@@ -245,7 +249,7 @@ export function SitemapTree({
   const others = foundViaWidth + LIST_COUNTS.reduce((sum, count) => sum + counted[count], 0);
   // The room the address and the Status share; Status takes what the address leaves past `URL_ROOM_FIRST`.
   const shared = (width ?? 960) - others - FRAME_SLACK;
-  const stated = Math.max(STATE_WIDTH, Math.min(stateNeeds, shared - URL_ROOM_FIRST));
+  const stated = Math.max(Math.min(stateNeeds, STATE_WIDTH), Math.min(stateNeeds, shared - URL_ROOM_FIRST));
   const fixed = others + stated;
   const urlWidth = Math.max(MIN_URL_WIDTH, shared - stated);
   // A frame too narrow for every column (200% zoom) scrolls sideways: the counts, which the list is for, then come
