@@ -57,14 +57,10 @@ function NavAnchor({
       )}
     </a>
   );
-  // Collapsed, the tooltip is the label; open, only the keys add anything, and they're worth a tooltip too.
+  // Collapsed, the tooltip is the label; open, only the keys add anything, and they're worth a tooltip too. Always
+  // beside the item: below, it sat on the next item and took its click (the audit of 2026-11-19, H-01).
   return (
-    <Tooltip
-      content={collapsed || command ? label : undefined}
-      command={command}
-      side={collapsed ? 'right' : 'bottom'}
-      triggerName={label}
-    >
+    <Tooltip content={collapsed || command ? label : undefined} command={command} side="right" triggerName={label}>
       {anchor}
     </Tooltip>
   );

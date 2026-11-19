@@ -132,6 +132,17 @@ describe('the sidebar, collapsed', () => {
   });
 });
 
+describe('the sidebar, open', () => {
+  // H-01: the tooltip with an item's keys opened below it, over the next item, and took that item's click.
+  it('shows an item’s keys beside it, never over the item below', async () => {
+    await open(`${CRAWL}/overview`);
+    const urls = await within(screen.getByRole('navigation', { name: 'Main' })).findByRole('link', { name: 'URLs' });
+    act(() => urls.focus());
+    const tooltip = await screen.findByRole('tooltip');
+    expect(tooltip.closest('.si-tooltip')).toHaveAttribute('data-side', 'right');
+  });
+});
+
 describe('the sidebar, on a running crawl’s Overview', () => {
   afterEach(() => liveStore.reset());
 
