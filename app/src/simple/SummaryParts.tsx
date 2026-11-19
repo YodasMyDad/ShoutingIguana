@@ -361,7 +361,7 @@ export function FixFirstCard({
  * The five to fix first as jobs, the model What to fix has (docs/v2-ui-simple.md, "Related problems are one job"): a
  * problem a fix of another among them clears entirely (the analysis's `clears[].all`) folded under that one, within its
  * severity, the row above carrying the points of both. The engine's five stay the five, so "Fixing these four takes the
- * score from 86 to 99" is still its figure: it counts the jobs.
+ * score from 87 to 100" is still its figure: it counts the jobs.
  */
 function fixFirstJobs(results: PlainResults, score: Score | null): FixRow[] {
   const points = new Map((score?.lines ?? []).map((line) => [line.checkId, line.points]));

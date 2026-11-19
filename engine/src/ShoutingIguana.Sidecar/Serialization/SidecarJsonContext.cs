@@ -57,6 +57,7 @@ namespace ShoutingIguana.Sidecar.Serialization;
         typeof(CamelCaseEnumConverter<IssueReferences>),
         typeof(CamelCaseEnumConverter<IssueAbout>),
         typeof(CamelCaseEnumConverter<IssueRowOrder>),
+        typeof(CamelCaseEnumConverter<FixLanguage>),
         typeof(CamelCaseEnumConverter<SitemapDiscovery>),
         typeof(CamelCaseEnumConverter<SitemapSource>),
         typeof(CamelCaseEnumConverter<SitemapState>),

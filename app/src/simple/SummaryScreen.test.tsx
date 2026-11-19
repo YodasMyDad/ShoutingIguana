@@ -85,10 +85,10 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
   it('says the score, its word, its sentence and what it covers, as the design’s garden crawl', async () => {
     await open(GARDEN_ANALYSIS);
     await site();
-    expect(main().getByRole('img', { name: 'Score 86 out of 100, Good' })).toBeVisible();
+    expect(main().getByRole('img', { name: 'Score 87 out of 100, Good' })).toBeVisible();
     expect(main().getByRole('heading', { level: 2, name: 'Good' })).toBeVisible();
     expect(
-      main().getByText('Your site is in good shape. There are 2 serious problems and 4 problems worth fixing.'),
+      main().getByText('Your site is in good shape. There are 2 serious problems and 3 problems worth fixing.'),
     ).toBeVisible();
     expect(
       main().getByText(/The score covers all 265 pages and 143 of 170 checks\. 27 checks couldn’t run\./),
@@ -146,9 +146,9 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
     expect(rows[2]).toHaveAccessibleName(/^2 Worth fixing /);
     expect(rows[4]).toHaveAccessibleName(/^4 Worth fixing /);
     expect(list.getByText(/Fixing these four takes the score from/)).toHaveTextContent(
-      'Fixing these four takes the score from 86 to 99.',
+      'Fixing these four takes the score from 87 to 100.',
     );
-    expect(list.getByRole('link', { name: 'See all 6 problems and 22 things worth a look' })).toHaveAttribute(
+    expect(list.getByRole('link', { name: 'See all 5 problems and 23 things worth a look' })).toHaveAttribute(
       'href',
       FIX,
     );
@@ -227,8 +227,8 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
     expect(
       dialog.getByRole('row', { name: /Pages or files that can't be found 9 of 4,521 addresses: a few −2/ }),
     ).toBeVisible();
-    expect(dialog.getByRole('row', { name: '22 things worth a look They don’t change the score 0' })).toBeVisible();
-    expect(dialog.getByRole('row', { name: 'Score 100 − 14 86' })).toBeVisible();
+    expect(dialog.getByRole('row', { name: '23 things worth a look They don’t change the score 0' })).toBeVisible();
+    expect(dialog.getByRole('row', { name: 'Score 100 − 13 87' })).toBeVisible();
     expect(dialog.getByText('Score version 1')).toBeVisible();
     fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
@@ -288,7 +288,6 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
         'title-duplicate',
         'image-too-large',
         'slow-response',
-        'canonical-to-first-page',
       ],
     });
     const queryClient = createQueryClientWithoutBackoff();
@@ -298,12 +297,12 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
     await site();
     expect(
       main().getByText(
-        'Nothing needs fixing among the checks you show. 22 things are worth a look when you have a moment. 6 checks are hidden.',
+        'Nothing needs fixing among the checks you show. 23 things are worth a look when you have a moment. 5 checks are hidden.',
       ),
     ).toBeVisible();
     const list = within(main().getByRole('region', { name: 'Fix these first' }));
     expect(list.getByText(/Nothing to fix among the checks you show\./)).toBeVisible();
-    expect(list.getByText(/6 checks are hidden\./)).toBeVisible();
+    expect(list.getByText(/5 checks are hidden\./)).toBeVisible();
   });
 
   // The Shopify lane, phase B: what only Shopify can change keeps its count, but isn't among the things to fix.
@@ -311,10 +310,10 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
     await open(platformOwned(GARDEN_ANALYSIS));
     await site();
     const tally = within(main().getByRole('list', { name: 'What the checks found' }));
-    expect(tally.getByRole('link', { name: '19 Things worth a look' })).toBeVisible();
+    expect(tally.getByRole('link', { name: '20 Things worth a look' })).toBeVisible();
     expect(main().getByText('3 set by Shopify: nothing for you to change.')).toBeVisible();
     expect(
-      main().getByText(/Your site is in good shape\. There are 2 serious problems and 4 problems worth fixing\./),
+      main().getByText(/Your site is in good shape\. There are 2 serious problems and 3 problems worth fixing\./),
     ).toBeVisible();
     // Never a thing to fix: not among the five, and not listed for a fix.
     const list = within(main().getByRole('region', { name: 'Fix these first' }));
@@ -337,7 +336,7 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
     render(<App router={router} queryClient={queryClient} />);
     await act(() => router.load());
     await site();
-    expect(main().getByRole('link', { name: '3 Problems worth fixing' })).toBeVisible();
+    expect(main().getByRole('link', { name: '2 Problems worth fixing' })).toBeVisible();
     expect(main().queryByText(/takes the score from/)).toBeNull();
   });
 });
@@ -373,7 +372,7 @@ describe.skipIf(TABLE_STUBBED)('the Summary in every other state', () => {
       ),
     ).toBeVisible();
     expect(main().getByRole('button', { name: /Continue checking/ })).toBeVisible();
-    expect(main().getByRole('img', { name: 'Score 86 out of 100 so far, Good so far' })).toBeVisible();
+    expect(main().getByRole('img', { name: 'Score 87 out of 100 so far, Good so far' })).toBeVisible();
     expect(main().getByText(/On the pages read so far there are 2 serious problems/)).toBeVisible();
   });
 
@@ -462,7 +461,7 @@ describe.skipIf(TABLE_STUBBED)('the Summary in every other state', () => {
     await site();
     expect(main().getByText(/Shouting Iguana’s checks have been updated since these results\./)).toBeVisible();
     expect(main().getByRole('button', { name: 'Update the results' })).toBeVisible();
-    expect(main().getByRole('img', { name: 'Score 86 out of 100, Good' })).toBeVisible();
+    expect(main().getByRole('img', { name: 'Score 87 out of 100, Good' })).toBeVisible();
   });
 
   // The closing audit's gaps 2 and 14: no report to open without results; Save as PDF beside Open the report.

@@ -28,6 +28,28 @@ const check = (
     grouping,
     subject,
     references,
+    ...(id === 'empty-anchor-text'
+      ? {
+          fixExamples: [
+            {
+              before: '<a href="/"><svg>…</svg></a>',
+              after: '<a href="/" aria-label="Example Furniture"><svg>…</svg></a>',
+              when: 'The link wraps an icon or an inline SVG',
+              where: null,
+              language: 'html',
+              case: 'icon-link',
+            },
+            {
+              before: '<a href="/"><img src="/logo.png"></a>',
+              after: '<a href="/"><img src="/logo.png" alt="Example Furniture"></a>',
+              when: 'The link wraps an image',
+              where: null,
+              language: 'html',
+              case: 'image-link',
+            },
+          ],
+        }
+      : {}),
   }) satisfies Check;
 
 export const ISSUES_CHECKS: Checks = {

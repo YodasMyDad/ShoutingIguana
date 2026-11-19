@@ -413,7 +413,7 @@ export const GARDEN_THEN: Readonly<Record<string, number | null>> = {
   'internal-server-error': 2,
   'title-missing': 3,
   'redirect-chain': 4,
-  'canonical-to-first-page': 0,
+  'title-duplicate': 0,
   'image-too-large': 58,
   'title-too-long': 86,
   'h1-multiple': 2,
@@ -427,7 +427,7 @@ export const GARDEN_THEN_POINTS: Readonly<Record<string, number>> = {
   'internal-server-error': 6,
   'title-missing': 5,
   'redirect-chain': 3,
-  'canonical-to-first-page': 0,
+  'title-duplicate': 0,
   'slow-response': 0,
 };
 

@@ -80,7 +80,7 @@ describe.skipIf(TABLE_STUBBED)('the Summary since the last check', () => {
     await open(comparedGardenItem(), [changesRoute()]);
     const line = await within(card()).findByText(/^Since your last check on 17 Oct:/);
     expect(line).toHaveTextContent(
-      'Since your last check on 17 Oct: score 72 → 86, 3 problems fixed, 1 new. See what changed',
+      'Since your last check on 17 Oct: score 72 → 87, 3 problems fixed, 1 new. See what changed',
     );
     expect(within(line).getByRole('link', { name: '3 problems fixed' })).toHaveAttribute('href', `${FIX}#fixed-since`);
     expect(within(line).getByRole('link', { name: '1 new' })).toHaveAttribute('href', `${FIX}#new-since`);

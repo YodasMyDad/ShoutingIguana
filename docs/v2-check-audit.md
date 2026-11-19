@@ -83,7 +83,7 @@ Re-crawl jitsunami and audit its product pages once that merges.
 | `redirect-downgrade` | Redirects, Error | 0/0/0 | – | 0 | right, not seen | – | – |
 | `meta-refresh` | Redirects, Warning | 0/0/0 | – | 0 | right, not seen | – | – |
 | `broken-internal-links` | Links, Error | 0/1/4 | 0 | 0 | right | – | – |
-| `broken-external-links` | Links, Warning | 8/0/1 | 0 (bot walls rightly left out; who sent a's two 409s is unverified) | 0 | reworded | What says refused and robots-disallowed links aren't counted, in both modes | `b84ee69` |
+| `broken-external-links` | Links, Error (Warning at the audit; the owner's decision of 2026-11-19: a broken link is an error) | 8/0/1 | 0 (bot walls rightly left out; who sent a's two 409s is unverified) | 0 | reworded | What says refused and robots-disallowed links aren't counted, in both modes | `b84ee69` |
 | `links-to-redirects` | Links, Notice | 0/10/0 | 10: j's "Sign In" link to a 302 hosted login | 0 | fixed | Links to 302, 303 and 307 aren't counted; words in both modes | `6921d66` |
 | `internal-nofollow-links` | Links, Warning | 0/0/0 | – | 0 | right, not seen | – | – |
 | `empty-anchor-text` | Links, Notice | 0/9/260 | 0 | 1 kind: a home page's own empty logo link | fixed | A page's empty links to itself count; `#` and `#top` don't | `a3b83c1` |
@@ -181,6 +181,7 @@ passes with it; the whole synthetic site is compared issue by issue, so nothing 
 | `b84ee69` | Words, both modes: `canonicalised-page` (page 2 of a list isn't a copy and should name itself), `not-in-sitemap` (login, basket and account pages belong out of search), `sitemap-missing` (what checking again adds), `title-too-long` and `description-too-long` ("may be cut off"), `title-too-short` (skip login and basket pages), `near-duplicate-content` (no "24 of the 256 bits"), `broken-external-links` (refused and robots-disallowed links aren't counted), `security-headers-missing` (browsers already default Referrer-Policy) | `IssueCatalogTests`, the plain-words template and data tests, `docs/v2-ui-simple.md`'s ten checks |
 | `97e3352` | `AnalysisFreshness.VERSION` 9: analyses by 8 are out of date, so the app offers to run them again | – |
 | `7047d4b` | After the audit, at the owner's word: `title-too-long`, `title-too-short`, `description-too-long` and `description-too-short` measure the width in Google's desktop results in pixels, not characters: over 580 px or under 200 px for titles, over 985 px or under 400 px for descriptions. Details read `612 px, over 580 (64 characters)`; Simple and the report's plain words say where Google will likely cut. Limits saved in characters are converted. `AnalysisFreshness.VERSION` 12. The design as built: [pixel widths](v2-pixel-widths.md) | Six plants where characters and pixels disagree, each judged the other way by characters (`4268406`: `/plants/title-caps`, `title-narrow`, `title-narrow-short`, `title-caps-short`, `description-caps`, `description-narrow`); `SearchResultWidthTests`, `PageRuleTests` |
+| `e02b185` | After the audit, at the owner's word (2026-11-19): `broken-external-links` Warning to Error (a broken link is an error, on the site or off it) and `canonical-to-first-page` Warning to Notice (canonicalising the later pages of a series to the first is a common and often deliberate setup), its words rewritten in both modes: what it does, when it matters (what's listed only on later pages belongs in the sitemap or linked from elsewhere), and a fix that is a choice. `non-indexable-inlinks-only` and `canonicalised-page` no longer say each page of a list should name itself. No rule changed | The score tests: the design's badly broken site keeps 36 with another warning in place of the broken external links, and scores 34 as it is now; the report's first five on the synthetic site; `ScoreReference/cases.json` regenerated. The garden crawl (2026-10-31) scores 87: 2 errors, 3 warnings and 23 notices |
 
 **Why 1 in 20 for orphans.** The audit asked for the check to be skipped whenever the site's pages couldn't all be
 read. Taken literally, one URL that times out, or a "Log in" link to a `/wp-login.php` that answers bots with 403,
@@ -228,7 +229,8 @@ From what the sites showed, not built here:
 - **"robots.txt doesn't name your sitemap"** (Notice). Garden's robots.txt is an empty 200, and its only sitemap was
   found by guessing `/sitemap.xml`. Fires when no robots.txt on a main origin has a `Sitemap:` line and a sitemap was
   found only by the probe or from the settings.
-- **"Paginated pages canonicalised to page 1"** (Warning). Garden's `/garden-sheds/?p=2`, `/greenhouses/?p=2` and
-  `/blog/?p=2` name page 1 as canonical though each lists its own products or posts, which are then reached only
-  through pages asking to be dropped. `canonicalised-page` reports them today, as a Notice beside textbook parameter
-  variants.
+- **"Paginated pages canonicalised to page 1"** (Warning as proposed; built as `canonical-to-first-page`, and a Notice
+  since 2026-11-19 at the owner's word: it's a common and often deliberate setup). Garden's `/garden-sheds/?p=2`,
+  `/greenhouses/?p=2` and `/blog/?p=2` name page 1 as canonical though each lists its own products or posts, which are
+  then reached only through pages asking to be dropped. `canonicalised-page` reports them today, as a Notice beside
+  textbook parameter variants.

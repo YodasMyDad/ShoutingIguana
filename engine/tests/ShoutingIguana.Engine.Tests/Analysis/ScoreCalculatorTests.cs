@@ -79,14 +79,18 @@ public sealed class ScoreCalculatorTests
         Assert.Equal((ScoreExtent.Some, 2), (score.Lines[0].Extent, score.Lines[0].Points));
     }
 
-    /// <summary>"A badly broken site (invented): 36, Poor", line for line.</summary>
+    /// <summary>
+    /// "A badly broken site (invented): 36, Poor", line for line. The design worked it out when broken external links were
+    /// worth fixing; the owner made them serious (2026-11-19), so another warning of the same count stands in for them here
+    /// (<see cref="TheBadlyBrokenSiteScores34NowThatBrokenExternalLinksAreSerious"/> scores the site as it is now).
+    /// </summary>
     [Fact]
     public void ABadlyBrokenSiteScores36()
     {
         var score = Score(1_240, 3_870,
             ("broken-internal-links", 1_240), ("mixed-content", 620), ("internal-server-error", 420), ("title-missing", 187), ("internal-client-error", 212),
             ("image-broken", 96), ("redirect-loop", 14), ("image-missing-alt", 1_022), ("viewport-missing", 1_240), ("duplicate-site-version", 1),
-            ("title-duplicate", 540), ("slow-response", 310), ("broken-external-links", 44));
+            ("title-duplicate", 540), ("slow-response", 310), ("internal-nofollow-links", 44));
 
         Assert.Equal((36, ScoreBand.Poor, 64, 36, false), (score.Value, score.Band, score.Lost, score.BeforeCeiling, score.HeldBySerious));
         Dictionary<string, (ScoreExtent Extent, int Points)> expected = new()
@@ -103,9 +107,28 @@ public sealed class ScoreCalculatorTests
             ["duplicate-site-version"] = (ScoreExtent.Site, 4),
             ["title-duplicate"] = (ScoreExtent.Many, 3),
             ["slow-response"] = (ScoreExtent.Many, 3),
-            ["broken-external-links"] = (ScoreExtent.Some, 2)
+            ["internal-nofollow-links"] = (ScoreExtent.Some, 2)
         };
         Assert.Equal(expected, score.Lines.ToDictionary(line => line.CheckId, line => (line.Extent, line.Points)));
+    }
+
+    /// <summary>
+    /// The same site now that broken external links are serious: on 44 of 1,240 pages they are "some", 4 points where a
+    /// warning took 2, so it scores 34, and they stand among the serious checks in the order to fix, by their count.
+    /// </summary>
+    [Fact]
+    public void TheBadlyBrokenSiteScores34NowThatBrokenExternalLinksAreSerious()
+    {
+        var score = Score(1_240, 3_870,
+            ("broken-internal-links", 1_240), ("mixed-content", 620), ("internal-server-error", 420), ("title-missing", 187), ("internal-client-error", 212),
+            ("image-broken", 96), ("redirect-loop", 14), ("image-missing-alt", 1_022), ("viewport-missing", 1_240), ("duplicate-site-version", 1),
+            ("title-duplicate", 540), ("slow-response", 310), ("broken-external-links", 44));
+
+        Assert.Equal((34, ScoreBand.Poor, 66, 34, false), (score.Value, score.Band, score.Lost, score.BeforeCeiling, score.HeldBySerious));
+        Assert.Contains(new ScoreLine("broken-external-links", IssueSeverity.Error, 44, 1_240, ScoreUnit.Pages, ScoreExtent.Some, 4), score.Lines);
+        Assert.Equal(
+            ["broken-internal-links", "mixed-content", "internal-server-error", "internal-client-error", "title-missing", "image-broken", "broken-external-links", "redirect-loop"],
+            score.Lines.TakeWhile(line => line.Severity == IssueSeverity.Error).Select(line => line.CheckId));
     }
 
     /// <summary>"What each mix gives", a row a line.</summary>

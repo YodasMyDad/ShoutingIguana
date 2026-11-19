@@ -88,7 +88,6 @@ const PROBLEM_IDS = [
   'broken-internal-links',
   'title-duplicate',
   'image-too-large',
-  'canonical-to-first-page',
   'slow-response',
 ];
 
@@ -131,13 +130,13 @@ describe.skipIf(TABLE_STUBBED)('What to fix', () => {
     await whatToFix();
     expect(
       main().getByText(
-        /6 problems to fix and 22 more worth a look on gardenfurnituresets\.co\.uk, from 143 checks on 265 pages\./,
+        /5 problems to fix and 23 more worth a look on gardenfurnituresets\.co\.uk, from 143 checks on 265 pages\./,
       ),
     ).toBeVisible();
     for (const [name, count] of [
       ['Serious', '2'],
-      ['Worth fixing', '4'],
-      ['Worth a look', '22'],
+      ['Worth fixing', '3'],
+      ['Worth a look', '23'],
       ['Couldn’t check', '27'],
       ['Nothing wrong', '115'],
     ]) {
@@ -159,22 +158,22 @@ describe.skipIf(TABLE_STUBBED)('What to fix', () => {
     ];
     await open(FIX, GARDEN_ANALYSIS, [], [everyPage]);
     await whatToFix();
-    const looks = () => within(main().getByRole('region', { name: 'Worth a look 22' }));
+    const looks = () => within(main().getByRole('region', { name: 'Worth a look 23' }));
     expect(looks().getAllByRole('link')).toHaveLength(3);
     expect(await looks().findByText('One fix')).toBeVisible();
-    fireEvent.click(looks().getByRole('button', { name: 'Show all 22 things worth a look' }));
-    expect(looks().getAllByRole('link')).toHaveLength(22);
+    fireEvent.click(looks().getByRole('button', { name: 'Show all 23 things worth a look' }));
+    expect(looks().getAllByRole('link')).toHaveLength(23);
     const passed = within(main().getByRole('region', { name: 'Nothing wrong 115' }));
     expect(passed.queryAllByRole('link')).toHaveLength(0);
     fireEvent.click(passed.getByRole('button', { name: 'Show the 115 checks that found nothing wrong' }));
     expect(passed.getAllByRole('link')).toHaveLength(115);
   });
 
-  it('opens the part a count lands on: all 22 worth a look, and the 115 that found nothing wrong', async () => {
+  it('opens the part a count lands on: all 23 worth a look, and the 115 that found nothing wrong', async () => {
     await open(`${FIX}#worth-a-look`);
     await whatToFix();
-    expect(within(main().getByRole('region', { name: 'Worth a look 22' })).getAllByRole('link')).toHaveLength(22);
-    await waitFor(() => expect(main().getByRole('heading', { name: 'Worth a look 22' })).toHaveFocus());
+    expect(within(main().getByRole('region', { name: 'Worth a look 23' })).getAllByRole('link')).toHaveLength(23);
+    await waitFor(() => expect(main().getByRole('heading', { name: 'Worth a look 23' })).toHaveFocus());
   });
 
   // The fixit page's item: the problem page says how much a shared cause covers when it isn't every page; its row too.
@@ -182,7 +181,7 @@ describe.skipIf(TABLE_STUBBED)('What to fix', () => {
     // The logo's link on 264 of empty-anchor-text's 265 pages.
     await open(FIX);
     await whatToFix();
-    const looks = within(main().getByRole('region', { name: 'Worth a look 22' }));
+    const looks = within(main().getByRole('region', { name: 'Worth a look 23' }));
     expect(await looks.findByText('One fix covers 264 of 265 pages')).toBeVisible();
     expect(looks.queryByText('One fix')).toBeNull();
     expect(
@@ -211,10 +210,10 @@ describe.skipIf(TABLE_STUBBED)('What to fix', () => {
     expect(skipped.getAllByText('Not checked')).toHaveLength(27);
     expect(skipped.getAllByText(/made with an older version of Shouting Iguana/)).toHaveLength(1);
     expect(skipped.getByRole('button', { name: 'Hide the 24 checks' })).toHaveAttribute('aria-expanded', 'true');
-    expect(main().getByRole('heading', { name: 'Worth fixing 3' })).toBeVisible();
+    expect(main().getByRole('heading', { name: 'Worth fixing 2' })).toBeVisible();
     expect(main().getByText(/1 check is hidden\./)).toBeVisible();
     fireEvent.click(main().getByRole('button', { name: 'Show' }));
-    expect(main().getByRole('heading', { name: 'Worth fixing 4' })).toBeVisible();
+    expect(main().getByRole('heading', { name: 'Worth fixing 3' })).toBeVisible();
   });
 
   it('counts only the hidden checks the catalog has, as hidden', async () => {
@@ -229,7 +228,7 @@ describe.skipIf(TABLE_STUBBED)('What to fix', () => {
     await main().findByRole('heading', { level: 2, name: /^Worth a look/ });
     expect(main().getByText(/Nothing to fix among the checks you show\./)).toBeVisible();
     expect(main().queryByText(/Every serious problem and every problem worth fixing is clear/)).toBeNull();
-    expect(main().getByText(/^6 checks are hidden\./)).toBeVisible();
+    expect(main().getByText(/^5 checks are hidden\./)).toBeVisible();
   });
 
   it('moves through the problems with J and K, which Enter then opens', async () => {
@@ -281,9 +280,9 @@ describe.skipIf(TABLE_STUBBED)('What to fix, with what the site’s platform set
     await open(FIX, platformOwned(GARDEN_ANALYSIS));
     await whatToFix();
     expect(
-      main().getByText(/^6 problems to fix and 19 more worth a look on gardenfurnituresets\.co\.uk/),
+      main().getByText(/^5 problems to fix and 20 more worth a look on gardenfurnituresets\.co\.uk/),
     ).toBeVisible();
-    expect(main().getByRole('heading', { level: 2, name: 'Worth a look 19' })).toBeVisible();
+    expect(main().getByRole('heading', { level: 2, name: 'Worth a look 20' })).toBeVisible();
     const shopify = within(main().getByRole('region', { name: 'Set by Shopify 3' }));
     expect(shopify.getAllByRole('link').map((row) => row.getAttribute('href'))).toEqual(
       ['cookies-insecure', 'security-headers-missing', 'security-headers-weak'].map((id) => `${FIX}/${id}`),
@@ -291,9 +290,9 @@ describe.skipIf(TABLE_STUBBED)('What to fix, with what the site’s platform set
     expect(shopify.getAllByText(SHOPIFY_OWNER.reason)).toHaveLength(3);
     expect(shopify.getByText(/^Nothing for you to change/)).toBeVisible();
     expect(shopify.queryByText(/points? back/)).toBeNull();
-    fireEvent.click(main().getByRole('button', { name: 'Show all 19 things worth a look' }));
-    const looks = within(main().getByRole('region', { name: 'Worth a look 19' }));
-    expect(looks.getAllByRole('link')).toHaveLength(19);
+    fireEvent.click(main().getByRole('button', { name: 'Show all 20 things worth a look' }));
+    const looks = within(main().getByRole('region', { name: 'Worth a look 20' }));
+    expect(looks.getAllByRole('link')).toHaveLength(20);
     expect(looks.queryByRole('link', { name: /security settings|Cookies your site/ })).toBeNull();
   });
 
@@ -331,7 +330,7 @@ describe.skipIf(TABLE_STUBBED)('What to fix, with what the site’s platform set
     await whatToFix();
     fireEvent.click(main().getByRole('button', { name: 'Copy this list' }));
     await waitFor(() => expect(writes).toHaveLength(1));
-    expect(writes[0]).toContain('Worth a look (19)');
+    expect(writes[0]).toContain('Worth a look (20)');
     expect(writes[0]).toContain(
       `Set by Shopify (3)\n- Cookies your site sets without basic protection: 2 pages. ${SHOPIFY_OWNER.reason}\n`,
     );

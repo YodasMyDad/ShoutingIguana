@@ -21,6 +21,7 @@ import {
   ISSUES_CHECKS,
   ISSUES_CHECKS_WITHOUT_SUBJECTS,
   ISSUE_GROUPS,
+  ISSUE_TARGETS,
   issuesRoutes,
   type IssuesSidecarOptions,
 } from '../test/issuesSidecar';
@@ -387,6 +388,112 @@ describe('the Issues screen', () => {
     for (const part of parts) expect(part).toHaveClass('@max-checks-beside:hidden');
     expect(scrolled).not.toHaveBeenCalled();
     scrolled.mockRestore();
+  });
+
+  it('folds what’s wrong away too in a short window, behind one button that names all it opens', async () => {
+    // 1280 × 720: the rows keep the room. Where the pane is wide the three still show (the classes are the narrow pane's).
+    const matchMedia = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      ...matchMedia(query),
+      matches: query === '(max-height: 800px)',
+    })) as typeof window.matchMedia;
+    try {
+      sidecar();
+      await open(`${ISSUES}/title-too-long`);
+      const button = await screen.findByRole('button', { name: 'What’s wrong, why it matters and how to fix it' });
+      const wrong = document.querySelector<HTMLElement>('[data-explain-wrong]');
+      expect(wrong).toHaveClass('@max-checks-beside:hidden');
+      fireEvent.click(button);
+      expect(wrong).not.toHaveClass('@max-checks-beside:hidden');
+      for (const part of document.querySelectorAll('[data-explain-part]')) {
+        expect(part).not.toHaveClass('@max-checks-beside:hidden');
+      }
+    } finally {
+      window.matchMedia = matchMedia;
+    }
+  });
+
+  it('gives the check’s head and its rows one scroller each, never the card around them', async () => {
+    sidecar();
+    await open(`${ISSUES}/title-too-long`);
+    const affected = await screen.findByRole('heading', { name: 'Affected pages', level: 3 });
+    // The head gives way and scrolls by itself; the rows keep a least height (the token's) and take the rest.
+    const head = document.querySelector('[data-explain]')?.closest('header');
+    expect(head).toHaveClass('min-h-0', 'shrink', 'overflow-y-auto');
+    const rows = affected.closest('[data-check-rows]');
+    expect(rows).toHaveClass('grid-rows-(--check-rows)', 'flex-1');
+    expect(
+      within(rows as HTMLElement)
+        .getByRole('grid')
+        .closest('.contain-size'),
+    ).not.toBeNull();
+  });
+
+  it('shows a check’s fix as code in its head, beside what’s wrong, a case at a time, and words alone where it has none', async () => {
+    sidecar();
+    await open(`${ISSUES}/empty-anchor-text`);
+    const how = await screen.findByRole('heading', { name: 'How to fix it', level: 3 });
+    // In the head with what's wrong and why it matters, ahead of the rows: never under them, a button away.
+    const explain = how.closest<HTMLElement>('[data-explain]');
+    if (!explain) throw new Error('The fix isn’t in the check’s head');
+    expect(explain.closest('header')).not.toBeNull();
+    const affected = screen.getByRole('heading', { name: 'Affected pages', level: 3 });
+    expect(explain.compareDocumentPosition(affected) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The code takes the wider column where the pane is wide; what's wrong and why it matters share the other.
+    expect(explain).toHaveClass('@min-checks-beside:grid-cols-(--how-to-fix-columns)');
+    expect(within(explain).getByText('How to fix Internal links without anchor text.')).toBeTruthy();
+    expect(
+      within(explain).getByRole('tab', { name: 'The link wraps an icon or an inline SVG', selected: true }),
+    ).toBeTruthy();
+    expect(within(explain).getByRole('figure', { name: 'The fix as code' }).textContent).toContain(
+      'aria-label="Example Furniture"',
+    );
+    // Where the pane is narrow the fix is behind the head's own button, whole: its words, its cases and its code.
+    const fix = how.closest<HTMLElement>('[data-explain-part]');
+    expect(fix).toHaveClass('@max-checks-beside:hidden');
+    expect(fix).toContainElement(within(explain).getByRole('figure', { name: 'The fix as code' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Why it matters and how to fix it' }));
+    expect(fix).not.toHaveClass('@max-checks-beside:hidden');
+    cleanup();
+    sidecar();
+    await open(`${ISSUES}/title-too-long`);
+    await screen.findByRole('heading', { name: 'How to fix it', level: 3 });
+    expect(screen.queryByRole('figure', { name: 'The fix as code' })).toBeNull();
+    // Words alone go three across, as they did.
+    expect(document.querySelector('[data-explain]')).toHaveClass('@min-checks-beside:grid-cols-(--explain-columns)');
+  });
+
+  it('shows the case of the fix the site’s own links point to first, marked “On this site”', async () => {
+    // Every link the check named wraps an image: the fix is the image's alt text, not an aria-label on the link.
+    const targets = Object.fromEntries(
+      Object.entries(ISSUE_TARGETS['empty-anchor-text'] ?? {}).map(([id, of]) => [
+        id,
+        { ...of, targets: of.targets.map((target) => ({ ...target, flags: ['imageLink' as const] })) },
+      ]),
+    );
+    const { requests } = sidecar({ targets: { 'empty-anchor-text': targets } });
+    await open(`${ISSUES}/empty-anchor-text`);
+    const image = await screen.findByRole('tab', { name: /^The link wraps an image/, selected: true });
+    expect(image).toHaveTextContent('On this site');
+    expect(screen.getByRole('figure', { name: 'The fix as code' }).textContent).toContain('alt="Example Furniture"');
+    const icon = screen.getByRole('tab', { name: /^The link wraps an icon/ });
+    expect(icon).not.toHaveTextContent('On this site');
+    // From the links the rows had read: the targets were asked for once, by the rows.
+    expect(requests.filter((request) => request.path.includes('/issues/empty-anchor-text/targets'))).toHaveLength(1);
+  });
+
+  it('marks no case “On this site” until some of the check’s links are read, and the icon case when they aren’t images', async () => {
+    sidecar();
+    await open(`${ISSUES}/empty-anchor-text`);
+    const icon = await screen.findByRole('tab', { name: /^The link wraps an icon/, selected: true });
+    await waitFor(() => expect(icon).toHaveTextContent('On this site'));
+    cleanup();
+    // Nothing read of what the pages name: the first case shows, unmarked.
+    sidecar({ targets: {} });
+    await open(`${ISSUES}/empty-anchor-text`);
+    await screen.findByRole('tab', { name: /^The link wraps an icon/, selected: true });
+    await screen.findByRole('treegrid');
+    expect(screen.queryByText('On this site')).toBeNull();
   });
 
   it('moves the selection with the arrow keys, replacing the address, and a click is a new place', async () => {

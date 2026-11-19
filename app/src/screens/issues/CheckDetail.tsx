@@ -23,11 +23,13 @@ import { linksOfUrl } from '../links/linkPlaces';
 import { BROKEN_LINKS, LINKS_TO_REDIRECTS } from '../links/presets';
 import type { CheckEntry, RelatedCheck } from './checkList';
 import { importanceWords } from './evidenceColumns';
+import { HowToFix } from './HowToFix';
 import { IssueGroups } from './IssueGroups';
 import { IssueRowsGrid } from './IssueRowsGrid';
 import { IssueUrl } from './IssueUrl';
 import { defaultView, groupedLabel } from './checkView';
 import { checkPlace, keepCheckPlace, type CheckView } from './issuesPlace';
+import { usePreferredFixCase } from './usePreferredFixCase';
 import { useShortWindow } from './useShortWindow';
 import type { CheckChange } from '../../api/fixLoop';
 import { Tabs } from '../../ui/Tabs';
@@ -181,7 +183,20 @@ export function CheckDetail({
   };
   const [explained, setExplained] = useState(false);
   const short = useShortWindow();
-  const explains = check.why.trim() !== '' || check.fix.trim() !== '';
+  const hasWhy = check.why.trim() !== '';
+  const hasCode = (check.fixExamples?.length ?? 0) > 0;
+  const hasFix = check.fix.trim() !== '' || hasCode;
+  const explains = hasWhy || hasFix;
+  // A short window (1280 × 720) keeps the rows in view: where the pane is narrow too, what's wrong folds away with
+  // why and how, behind the one button that names all it opens.
+  const foldsWrong = short && explains && check.description.trim() !== '';
+  const foldWords = foldedWords([
+    foldsWrong ? 'what’s wrong' : null,
+    hasWhy ? 'why it matters' : null,
+    hasFix ? 'how to fix it' : null,
+  ]);
+  // The case of its fix the crawl points to, from the links its rows have read: "On this site".
+  const preferredCase = usePreferredFixCase(crawlId, check);
   const marked = compare?.marksRows ? { compareWith: compare.compareWith, period: compare.period } : null;
 
   return (
@@ -190,7 +205,9 @@ export function CheckDetail({
       <div className="shrink-0 px-6 pt-4 empty:hidden">
         <RecheckBanner crawlId={crawlId} checkId={check.id} titleOf={titleOf} />
       </div>
-      <header className="shrink-0 px-6 pt-5 pb-4">
+      {/* The head gives way before the rows do (rule 7): in a pane too short for both it scrolls by itself, beside the
+          list and never around it, so the card has no scroller of its own. */}
+      <header className="min-h-0 shrink overflow-y-auto px-6 pt-5 pb-4 @max-split:shrink-0 @max-split:overflow-visible">
         <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
           <div className="min-w-0 grow basis-1/2">
             <div className="mb-1.5 flex flex-wrap items-center gap-3 text-13 text-text-muted">
@@ -284,51 +301,67 @@ export function CheckDetail({
         {found && related ? <RelatedLines crawlId={crawlId} related={related} /> : null}
         {check.description.trim() !== '' || explains ? (
           // What's wrong in a readable measure; why it matters and how to fix it beside it where the pane is wide, and
-          // folded behind their own button where it isn't (rule 7): never a jump link to a block further down.
+          // folded behind their own button where it isn't (rule 7): never a jump link to a block further down. A fix
+          // with code takes the wider column, what's wrong and why it matters one over the other beside it: the code
+          // wants up to 100 characters, the words about 46.
           <div
-            className="mt-3 grid grid-cols-1 gap-x-10 gap-y-2 @min-checks-beside:grid-cols-(--explain-columns)"
+            className={clsx(
+              'mt-3 grid grid-cols-1 gap-x-10 gap-y-2',
+              hasCode
+                ? '@min-checks-beside:grid-cols-(--how-to-fix-columns)'
+                : '@min-checks-beside:grid-cols-(--explain-columns)',
+            )}
             data-explain
           >
-            {check.description.trim() !== '' ? (
-              <div className="max-w-(--measure-text)">
-                <h3 className="mb-0.5 text-13 font-semibold">What’s wrong</h3>
-                <p className="text-13 leading-body text-text-secondary">{check.description}</p>
-              </div>
-            ) : null}
-            {explains ? (
-              <div className="@min-checks-beside:hidden">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  icon={explained ? ChevronDown : ChevronRight}
-                  className="-ml-2"
-                  aria-expanded={explained}
-                  onClick={() => setExplained((open) => !open)}
-                >
-                  Why it matters and how to fix it
-                </Button>
-              </div>
-            ) : null}
-            {[
-              { title: 'Why it matters', text: check.why },
-              { title: 'How to fix it', text: check.fix },
-            ]
-              .filter((part) => part.text.trim() !== '')
-              .map((part, at, parts) => (
+            <div className={hasCode ? 'flex min-w-0 flex-col gap-y-2' : 'contents'}>
+              {check.description.trim() !== '' ? (
                 <div
-                  key={part.title}
+                  className={clsx('max-w-(--measure-text)', foldsWrong && !explained && '@max-checks-beside:hidden')}
+                  data-explain-wrong
+                >
+                  <h3 className="mb-0.5 text-13 font-semibold">What’s wrong</h3>
+                  <p className="text-13 leading-body text-text-secondary">{check.description}</p>
+                </div>
+              ) : null}
+              {explains ? (
+                <div className="@min-checks-beside:hidden">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    icon={explained ? ChevronDown : ChevronRight}
+                    className="-ml-2"
+                    aria-expanded={explained}
+                    onClick={() => setExplained((open) => !open)}
+                  >
+                    {foldWords}
+                  </Button>
+                </div>
+              ) : null}
+              {hasWhy ? (
+                <div
                   className={clsx('max-w-(--measure-text)', !explained && '@max-checks-beside:hidden')}
                   data-explain-part
                 >
-                  <h3 className="mb-0.5 text-13 font-semibold">{part.title}</h3>
-                  <p className="text-13 leading-body text-text-secondary">{part.text}</p>
-                  {at === parts.length - 1 && check.learnMore ? (
+                  <h3 className="mb-0.5 text-13 font-semibold">Why it matters</h3>
+                  <p className="text-13 leading-body text-text-secondary">{check.why}</p>
+                  {!hasFix && check.learnMore ? (
                     <div className="mt-1">
                       <LearnMore onClick={onLearnMore} />
                     </div>
                   ) : null}
                 </div>
-              ))}
+              ) : null}
+            </div>
+            {hasFix ? (
+              <div className={clsx('min-w-0', !explained && '@max-checks-beside:hidden')} data-explain-part>
+                <HowToFix check={check} preferredCase={preferredCase} />
+                {check.learnMore ? (
+                  <div className="mt-1">
+                    <LearnMore onClick={onLearnMore} />
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         ) : null}
       </header>
@@ -389,130 +422,137 @@ export function CheckDetail({
         // The list the screen exists for gets the rest of the pane's height, with one scroller: its own (rule 7).
         <section
           aria-labelledby={`${titleId}-pages`}
-          className="flex min-h-0 flex-1 flex-col border-t border-border-subtle px-6 pt-3 pb-5 @max-split:flex-none"
+          className="grid flex-1 grid-cols-1 grid-rows-(--check-rows) border-t border-border-subtle px-6 pt-3 pb-5 has-data-template-callout:grid-rows-(--check-rows-callout) @max-split:block @max-split:flex-none"
+          data-check-rows
         >
-          <div className="mb-2 flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1">
-            <h3 id={`${titleId}-pages`} className="text-14 font-semibold">
-              {words.heading}
-            </h3>
-            <span className="text-13 text-text-muted">
-              {view === 'groups'
-                ? groupCount === null
-                  ? affectedCount(check, count)
-                  : `${affectedCount(check, count)} in ${formatCountOf(groupCount, 'group')}${groupOrder === 'size' ? ', largest file first' : ''}`
-                : `${affectedCount(check, count)}${sort.length === 0 && !files ? `, ${importanceWords(check)}` : ''}`}
-            </span>
-            {groups ? (
-              <SegmentedControl<CheckView>
-                label="How the rows are shown"
-                className="ml-auto"
-                value={view}
-                onValueChange={chooseView}
-                options={[
-                  { value: 'list', label: 'List' },
-                  { value: 'groups', label: groupedLabel(check) },
-                ]}
-              />
+          <div className="min-w-0">
+            <div className="mb-2 flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1">
+              <h3 id={`${titleId}-pages`} className="text-14 font-semibold">
+                {words.heading}
+              </h3>
+              <span className="text-13 text-text-muted">
+                {view === 'groups'
+                  ? groupCount === null
+                    ? affectedCount(check, count)
+                    : `${affectedCount(check, count)} in ${formatCountOf(groupCount, 'group')}${groupOrder === 'size' ? ', largest file first' : ''}`
+                  : `${affectedCount(check, count)}${sort.length === 0 && !files ? `, ${importanceWords(check)}` : ''}`}
+              </span>
+              {groups ? (
+                <SegmentedControl<CheckView>
+                  label="How the rows are shown"
+                  className="ml-auto"
+                  value={view}
+                  onValueChange={chooseView}
+                  options={[
+                    { value: 'list', label: 'List' },
+                    { value: 'groups', label: groupedLabel(check) },
+                  ]}
+                />
+              ) : null}
+            </div>
+            {shared && sharedWords ? (
+              // One line where there's room (A-09): the page, a link like any other, what it links to, and the way to those links.
+              <Callout tone="insight" className="mb-2 shrink-0">
+                <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5" data-shared-source>
+                  <SharedSourceTitle
+                    shared={shared}
+                    words={sharedWords.title}
+                    siteOrigin={siteOrigin}
+                    onInspect={onInspect}
+                  />
+                  {/* The advice where there's room for it on the line; the fact and the way on always. */}
+                  <span className="@max-checks-beside:hidden">{sharedWords.body}</span>
+                  <TextLink
+                    to="/crawls/$crawl/links"
+                    params={{ crawl: crawlId }}
+                    search={{ filter: sharedLinksFilter(check, shared.id) }}
+                    variant="inline"
+                  >
+                    {shared.urls === 1
+                      ? 'Show its link in Links'
+                      : `Show its ${formatCount(shared.urls)} links in Links`}
+                  </TextLink>
+                </span>
+              </Callout>
+            ) : null}
+            {likelyTemplate ? (
+              <Callout tone="insight" title="Likely in the site’s template" className="mb-2 shrink-0">
+                On {formatCount(count)} of the {formatCountOf(analysis.pagesAnalyzed, 'page')} analysed, so it’s likely
+                1 cause in the site’s template: one fix clears them all.
+              </Callout>
             ) : null}
           </div>
-          {shared && sharedWords ? (
-            // One line where there's room (A-09): the page, a link like any other, what it links to, and the way to those links.
-            <Callout tone="insight" className="mb-2 shrink-0">
-              <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5" data-shared-source>
-                <SharedSourceTitle
-                  shared={shared}
-                  words={sharedWords.title}
-                  siteOrigin={siteOrigin}
-                  onInspect={onInspect}
-                />
-                {/* The advice where there's room for it on the line; the fact and the way on always. */}
-                <span className="@max-checks-beside:hidden">{sharedWords.body}</span>
-                <TextLink
-                  to="/crawls/$crawl/links"
-                  params={{ crawl: crawlId }}
-                  search={{ filter: sharedLinksFilter(check, shared.id) }}
-                  variant="inline"
-                >
-                  {shared.urls === 1 ? 'Show its link in Links' : `Show its ${formatCount(shared.urls)} links in Links`}
-                </TextLink>
-              </span>
-            </Callout>
-          ) : null}
-          {likelyTemplate ? (
-            <Callout tone="insight" title="Likely in the site’s template" className="mb-2 shrink-0">
-              The same issue on {formatCount(count)} of the {formatCountOf(analysis.pagesAnalyzed, 'page')} analysed, so
-              it’s likely in the site’s template: one fix clears them all.
-            </Callout>
-          ) : null}
-          {(() => {
-            const now =
-              view === 'groups' ? (
-                <IssueGroups
-                  crawlId={crawlId}
-                  check={check}
-                  total={count}
-                  siteOrigin={siteOrigin}
-                  open={group}
-                  onOpenChange={onGroupChange}
-                  onInspect={onInspect}
-                  onFollow={onFollow}
-                  compare={marked}
-                  legend={!short}
-                />
-              ) : (
-                <IssueRowsGrid
-                  crawlId={crawlId}
-                  check={check}
-                  files={files}
-                  total={count}
-                  siteOrigin={siteOrigin}
-                  sort={sort}
-                  onSortChange={onSortChange}
-                  onInspect={onInspect}
-                  onFollow={onFollow}
-                  compare={marked}
-                  legend={!short}
+          <div className="flex min-h-0 min-w-0 flex-col contain-size @max-split:block @max-split:contain-none">
+            {(() => {
+              const now =
+                view === 'groups' ? (
+                  <IssueGroups
+                    crawlId={crawlId}
+                    check={check}
+                    total={count}
+                    siteOrigin={siteOrigin}
+                    open={group}
+                    onOpenChange={onGroupChange}
+                    onInspect={onInspect}
+                    onFollow={onFollow}
+                    compare={marked}
+                    legend={!short}
+                  />
+                ) : (
+                  <IssueRowsGrid
+                    crawlId={crawlId}
+                    check={check}
+                    files={files}
+                    total={count}
+                    siteOrigin={siteOrigin}
+                    sort={sort}
+                    onSortChange={onSortChange}
+                    onInspect={onInspect}
+                    onFollow={onFollow}
+                    compare={marked}
+                    legend={!short}
+                  />
+                );
+              if (!fixedTab) return now;
+              // Now, and what it no longer flags since the crawl compared with: fixed or gone (counted), and not
+              // checked this time (listed, never counted as fixed).
+              return (
+                <Tabs
+                  label="What it flags now, and what it no longer flags"
+                  flush
+                  className="flex min-h-0 flex-1 flex-col"
+                  panelClassName="flex min-h-0 flex-1 flex-col"
+                  tabs={[
+                    { value: 'now', label: 'Now', count, content: now },
+                    {
+                      value: 'fixed',
+                      label: `Fixed ${periodLabel(compare.period)
+                        .replace(/^Since/, 'since')
+                        .replace(/^Until/, 'by')}`,
+                      count: cleared,
+                      content: (
+                        <div className="flex min-h-0 flex-col gap-2 overflow-auto pt-3">
+                          {notChecked > 0 ? (
+                            <p className="text-13 text-text-secondary">
+                              {`${formatCount(notChecked)} more ${notChecked === 1 ? 'was' : 'were'} not checked this time: listed with why, never counted as fixed.`}
+                            </p>
+                          ) : null}
+                          <FixedList
+                            crawlId={crawlId}
+                            check={check}
+                            compareWith={compare.compareWith}
+                            period={compare.period}
+                            siteOrigin={siteOrigin}
+                            onInspect={onInspect}
+                          />
+                        </div>
+                      ),
+                    },
+                  ]}
                 />
               );
-            if (!fixedTab) return now;
-            // Now, and what it no longer flags since the crawl compared with: fixed or gone (counted), and not
-            // checked this time (listed, never counted as fixed).
-            return (
-              <Tabs
-                label="What it flags now, and what it no longer flags"
-                flush
-                className="flex min-h-0 flex-1 flex-col"
-                panelClassName="flex min-h-0 flex-1 flex-col"
-                tabs={[
-                  { value: 'now', label: 'Now', count, content: now },
-                  {
-                    value: 'fixed',
-                    label: `Fixed ${periodLabel(compare.period)
-                      .replace(/^Since/, 'since')
-                      .replace(/^Until/, 'by')}`,
-                    count: cleared,
-                    content: (
-                      <div className="flex min-h-0 flex-col gap-2 overflow-auto pt-3">
-                        {notChecked > 0 ? (
-                          <p className="text-13 text-text-secondary">
-                            {`${formatCount(notChecked)} more ${notChecked === 1 ? 'was' : 'were'} not checked this time: listed with why, never counted as fixed.`}
-                          </p>
-                        ) : null}
-                        <FixedList
-                          crawlId={crawlId}
-                          check={check}
-                          compareWith={compare.compareWith}
-                          period={compare.period}
-                          siteOrigin={siteOrigin}
-                          onInspect={onInspect}
-                        />
-                      </div>
-                    ),
-                  },
-                ]}
-              />
-            );
-          })()}
+            })()}
+          </div>
         </section>
       ) : null}
     </article>
@@ -595,6 +635,14 @@ function RelatedLines({
       ))}
     </ul>
   );
+}
+
+/** The fold's button, naming what it opens: "Why it matters and how to fix it", "How to fix it". */
+function foldedWords(parts: readonly (string | null)[]): string {
+  const named = parts.filter((part) => part !== null);
+  const words =
+    named.length > 2 ? `${named.slice(0, -1).join(', ')} and ${named[named.length - 1] ?? ''}` : named.join(' and ');
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 function LearnMore({ onClick }: { onClick: () => void }) {

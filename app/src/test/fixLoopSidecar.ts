@@ -38,7 +38,7 @@ export const EARLIER_ID = 'a1b2c3d4e5f60718';
 export const EARLIER_STARTED = '2026-10-17T14:13:30Z';
 const SITE = 'https://www.gardenfurnituresets.co.uk';
 
-/** Its score then: 72, Good; the garden crawl's now is 86, so "▲14 since 17 Oct". */
+/** Its score then: 72, Good; the garden crawl's now is 87, so "▲15 since 17 Oct". */
 export const EARLIER_SCORE = { value: 72, band: 'good', partial: false } as const;
 
 export const GARDEN_PREVIOUS: PreviousCrawl = {
@@ -92,7 +92,7 @@ export function earlierGardenItem(overrides: Partial<CrawlListItem> = {}): Crawl
     finishedAt: '2026-10-17T14:51:00Z',
     analyzedAt: '2026-10-17T14:52:00Z',
     score: EARLIER_SCORE,
-    issues: { error: 4, warning: 4, notice: 14 },
+    issues: { error: 4, warning: 2, notice: 24 },
     previous: null,
     changes: null,
     ...overrides,

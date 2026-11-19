@@ -173,7 +173,7 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
             .Where(cleared => cleared.All && order.Contains(cleared.CheckId) && IssueCatalog.Find(cleared.CheckId)!.Severity == IssueSeverity.Error)
             .Select(cleared => cleared.CheckId).ToList();
         Assert.Equal(["broken-internal-links", "canonical-broken", "hreflang-broken-target"], folded);
-        Assert.Equal(["no-https", "internal-client-error", "broken-internal-links", "redirect-loop", "redirect-broken"], order.Take(5));
+        Assert.Equal(["no-https", "internal-client-error", "broken-internal-links", "broken-external-links", "redirect-loop"], order.Take(5));
         Assert.Equal(score.IfFixed.CheckIds, order.Take(5));
         Assert.DoesNotContain(order, id => id != "internal-client-error" && IssueCatalog.Find(id)!.Clears.Count > 0
             && IssueCauseReader.Read(copy)!.Checks[id].Clears.Any(cleared => cleared.All && order.Contains(cleared.CheckId) && IssueCatalog.Find(cleared.CheckId)!.Severity == IssueCatalog.Find(id)!.Severity));

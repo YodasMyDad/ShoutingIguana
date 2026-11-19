@@ -63,6 +63,36 @@ public sealed class AppTests : IAsyncLifetime
         Assert.Null((string?)listed.Single(check => (string?)check!["id"] == IssueCatalog.IMAGE_BROKEN.Id)!["learnMore"]);
     }
 
+    /// <summary>
+    /// A check's fix as code (fix examples): the catalog's, in its order, the language as a camelCase word and what an
+    /// example lacks as null. A check whose fix is prose alone sends an empty list, never nothing.
+    /// </summary>
+    [Fact]
+    public async Task ChecksCarryTheirFixAsCode()
+    {
+        var listed = (await _sidecar.GetJsonAsync("api/checks"))["checks"]!.AsArray();
+        Assert.Equal(IssueCatalog.All.Select(check => check.FixExamples.Count), listed.Select(check => check!["fixExamples"]!.AsArray().Count));
+
+        var emptyLink = listed.Single(check => (string?)check!["id"] == "empty-anchor-text")!["fixExamples"]!.AsArray();
+        Assert.Equal(["icon-link", "image-link", "empty-link"], emptyLink.Select(example => (string?)example!["case"]));
+        var icon = IssueCatalog.EMPTY_ANCHOR_TEXT.FixExamples[0];
+        Assert.Equal("html", (string?)emptyLink[0]!["language"]);
+        Assert.Equal(icon.Before, (string?)emptyLink[0]!["before"]);
+        Assert.Equal(icon.After, (string?)emptyLink[0]!["after"]);
+        Assert.Equal(icon.When, (string?)emptyLink[0]!["when"]);
+        Assert.Null(emptyLink[0]!["where"]);
+
+        // A fix that adds something has no "before", and says where it goes.
+        var description = Assert.Single(listed.Single(check => (string?)check!["id"] == "description-missing")!["fixExamples"]!.AsArray())!;
+        Assert.Null(description["before"]);
+        Assert.Null(description["case"]);
+        Assert.Equal("in the page's <head>", (string?)description["where"]);
+
+        Assert.Equal("httpHeader", (string?)listed.Single(check => (string?)check!["id"] == "cookies-insecure")!["fixExamples"]![0]!["language"]);
+        Assert.Equal("robotsTxt", (string?)listed.Single(check => (string?)check!["id"] == "robots-txt-no-sitemap")!["fixExamples"]![0]!["language"]);
+        Assert.Empty(listed.Single(check => (string?)check!["id"] == "title-too-long")!["fixExamples"]!.AsArray());
+    }
+
     /// <summary>What a recheck of each check reads again (the fix loop): the catalog's, and nothing for a check only a full crawl can settle.</summary>
     [Fact]
     public async Task ChecksSayWhatARecheckReadsAgain()

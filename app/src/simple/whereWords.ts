@@ -26,7 +26,7 @@ const CAUSE_WORDS: Record<string, Partial<CauseWords>> = {
     heading: 'Version that doesn’t link back',
     pagesHeading: 'Pages it should link back to',
   },
-  // Each later page's canonical names the list's first page: the fix is on the later pages.
+  // Each later page's canonical names the list's first page: a change, where one is wanted, is made on the later pages.
   'canonical-to-first-page': {
     one: 'list',
     many: 'lists',

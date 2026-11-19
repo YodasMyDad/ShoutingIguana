@@ -47,9 +47,9 @@ describe.skipIf(TABLE_STUBBED)('What to fix since the last check', () => {
   it('gives each row its change in its count’s second line', async () => {
     await open(comparedGardenItem(), [changesRoute()]);
     await waitFor(() => expect(row('Links that lead to broken pages')).toHaveTextContent('9 on 17 Oct'));
-    expect(row('Later pages of a list')).toHaveTextContent('New since 17 Oct');
+    expect(row('Pages that share the same title')).toHaveTextContent('New since 17 Oct');
     expect(row('Pages that are slow to answer')).toHaveTextContent('Not looked for last time');
-    expect(row('Pages that share the same title')).toHaveTextContent('same as 17 Oct');
+    expect(row('Links with nothing to read')).toHaveTextContent('same as 17 Oct');
     expect(row('Large images that slow pages down')).toHaveTextContent('58 on 17 Oct');
   });
 
@@ -83,8 +83,8 @@ describe.skipIf(TABLE_STUBBED)('What to fix since the last check', () => {
 
   it('puts the keys on the new problem when the Summary’s "1 new" lands', async () => {
     await open(comparedGardenItem(), [changesRoute()], `${FIX}#new-since`);
-    await waitFor(() => expect(row('Later pages of a list')).toHaveAttribute('aria-current', 'true'));
-    expect(document.activeElement).toBe(row('Later pages of a list'));
+    await waitFor(() => expect(row('Pages that share the same title')).toHaveAttribute('aria-current', 'true'));
+    expect(document.activeElement).toBe(row('Pages that share the same title'));
   });
 
   it('says what moved when the list is copied', async () => {
@@ -96,7 +96,7 @@ describe.skipIf(TABLE_STUBBED)('What to fix since the last check', () => {
     const text = String(copy.mock.calls[0]?.[0]);
     expect(text).toMatch(/Pages or files that can't be found: 9 addresses \(was 12\)/);
     expect(text).toMatch(/Fixed along with it: Links that lead to broken pages, 5 pages \(was 9\)\./);
-    expect(text).toMatch(/Later pages of a list that point Google at the first page: 1 page \(new since 17 Oct\)/);
+    expect(text).toMatch(/Pages that share the same title: 6 pages \(new since 17 Oct\)/);
   });
 
   it('says nothing of changes for a first check', async () => {

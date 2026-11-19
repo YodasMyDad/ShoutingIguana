@@ -29,8 +29,9 @@ below uses.
   images); we keep one check per cause, as the catalog does, and the [mapping](#where-each-source-item-went) says
   where each of theirs went.
 - **Severity.** An Error costs the score most and holds it under 90, so we add only **1** (`sitemap-over-limit`, the
-  same failure as `sitemap-error`). **18** are Warnings, things that break search or visitors. **65** are Notices,
-  which cost the score nothing.
+  same failure as `sitemap-error`). **17** are Warnings, things that break search or visitors. **66** are Notices,
+  which cost the score nothing. (18 and 65 as designed: `canonical-to-first-page` became a Notice on 2026-11-19, the
+  owner's decision.)
 - **What the parse must add.** 17 small `PageFacts` additions, from the one parse
   ([What the parse adds](#what-the-parse-adds)). Two new crawl-file columns, no schema version. One crawl change: Open
   Graph and X images become links the crawler checks (a new link kind).
@@ -239,8 +240,14 @@ Indexability · **Notice**: it does nothing, and harms nothing · Low · P/N/–
 
 #### 7. `canonical-to-first-page`: Paginated page canonicalised to page 1
 
-Canonicals · **Warning**: what's listed only on page 2 onward is found only through pages that ask to be dropped, and
-Google says not to do it · High · P/RU/T
+Canonicals · **Notice**: a common setup, often deliberate, so the pages of a list don't compete as duplicates; it
+matters when what's listed only on page 2 onward is in no sitemap and linked from nowhere else, and Google's guidance
+prefers each page to name itself · High · P/RU/T
+
+Designed and built as a Warning; a Notice since 2026-11-19, the owner's decision: canonicalising the pages of a series
+to the first is a legitimate way to keep duplicate content out of search, not a fault. Its fix is now a choice: leave it
+if it's deliberate and the later pages' items are in the sitemap or linked from elsewhere, otherwise give each page
+its own canonical.
 
 - **Simple:** "Later pages of a list point Google at page 1"
 - **Rule:** a page whose first honoured canonical names another URL (the `canonicalised-page` condition) and which is a
@@ -261,7 +268,8 @@ Google says not to do it · High · P/RU/T
 - **Plant:** `list/` (page 1: `rel="next"` and an `<a>` to page 2) and `list/page/2/` (`rel="prev"` and an `<a>` back,
   canonical `/plants/list/`, not in the sitemap). Expected **1** (page 2). On a real site: gardenfurnituresets.co.uk's
   `/garden-sheds/?p=2`, `/greenhouses/?p=2` and `/blog/?p=2`.
-- **From:** backlog ("paginated pages canonicalised to page 1"); the real-site audit (proposed at Warning).
+- **From:** backlog ("paginated pages canonicalised to page 1"); the real-site audit (proposed at Warning; a Notice
+  since 2026-11-19).
 
 #### 8. `canonical-other-domain`: Canonical points to another site
 
@@ -1630,7 +1638,8 @@ and nothing else. These change what they expect.
 4. **Our own thresholds**, each a setting: depth over 4 clicks; 1,000 internal and 100 external links; 3 s for an external
    link; fewer than 3 internal links; 50 KB for an older image format; 800 px for srcset; 10 KB for an inline image;
    Flesch 30; 25% of a page's own words; 500 words without an H2; the private-page paths of `noindex-near-home`.
-5. **One Error** (`sitemap-over-limit`) and 18 Warnings, of which these are a judgement more than a rule:
+5. **One Error** (`sitemap-over-limit`) and 17 Warnings (18 until `canonical-to-first-page` became a Notice), of which
+   these are a judgement more than a rule:
    `noindex-near-home`, `placeholder-text`, `image-missing-src`, `head-tags-in-body`.
 
 ## Least sure

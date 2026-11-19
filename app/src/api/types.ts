@@ -184,6 +184,36 @@ export interface Check {
    * from before it, which reads as empty.
    */
   clears?: string[];
+  /**
+   * The fix as code (the UX round of 2026-11-19): one example, or one for each case the check has, the likeliest
+   * first. Empty for a check whose fix is editorial or structural, which `fix` says alone. Left out by a sidecar from
+   * before it, which reads as empty.
+   */
+  fixExamples?: FixExample[];
+}
+
+/** What a fix example's code is written in. A word this version doesn't know is shown without colours. */
+export type FixLanguage = 'html' | 'httpHeader' | 'robotsTxt' | 'xml' | 'json';
+
+/**
+ * A check's fix as code: the offending tag, attribute, header or file line as it is now and as it should be, one to
+ * four lines, elided content written `…`.
+ */
+export interface FixExample {
+  language: FixLanguage;
+  /** The corrected code. */
+  after: string;
+  /** The code as it is now; null when the fix adds something that isn't there at all (a missing meta description). */
+  before: string | null;
+  /**
+   * Which case this is, as a sentence without its full stop ("The link wraps an icon or an inline SVG"): on every
+   * example of a check with several, and on a lone example whose fix is conditional. Null otherwise.
+   */
+  when: string | null;
+  /** Where the code goes when that isn't obvious, written to follow a label ("in the page's <head>"); null when it is. */
+  where: string | null;
+  /** A stable key for the case (`icon-link`), to show first the case a crawl's evidence points to. Null with one example. */
+  case: string | null;
 }
 
 /**

@@ -33,17 +33,17 @@ describe('the mock sidecar’s fix loop', () => {
     const comparison = gardenComparison();
     const state = (id: string) => comparison.checks.find((check) => check.checkId === id)?.state;
     expect(state('internal-server-error')).toBe('fixed');
-    expect(state('canonical-to-first-page')).toBe('new');
+    expect(state('title-duplicate')).toBe('new');
     expect(state('broken-internal-links')).toBe('fewer');
     expect(state('image-too-large')).toBe('more');
-    expect(state('title-duplicate')).toBe('same');
+    expect(state('canonical-to-first-page')).toBe('same');
     expect(state('slow-response')).toBe('newCheck');
     // Skipped in both: not listed.
     expect(state('orphan-page')).toBeUndefined();
     expect(comparison.score).toMatchObject({
       then: { value: 72 },
       now: { value: GARDEN_ANALYSIS.score!.value },
-      change: 14,
+      change: 15,
     });
     expect(comparison.score!.lines).toContainEqual({ checkId: 'broken-internal-links', then: 7, now: 4 });
     expect(comparison.score!.lines).toContainEqual({ checkId: 'internal-server-error', then: 6, now: 0 });
@@ -56,10 +56,10 @@ describe('the mock sidecar’s fix loop', () => {
 
   it('lists the item’s changes by state, as cached summaries do, and none of the row split when counts only', () => {
     expect(itemChangesOf(gardenComparison())).toEqual({
-      score: 14,
+      score: 15,
       partial: false,
       fixed: ['internal-server-error', 'redirect-chain', 'title-missing', 'h1-multiple'],
-      new: ['canonical-to-first-page'],
+      new: ['title-duplicate'],
       fewer: ['internal-client-error', 'broken-internal-links', 'title-too-long'],
       more: ['image-too-large'],
       newCheck: ['slow-response'],
