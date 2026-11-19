@@ -80,6 +80,9 @@ internal static class ReportDocument
           .first__title { font-weight: 600; }
           .first__count { color: var(--secondary); white-space: nowrap; font-variant-numeric: tabular-nums; }
           .first__foot { margin-top: 6px; font-size: 9pt; color: var(--secondary); }
+          .first li.first__also { border-top: 0; padding-top: 0; }
+          .first__also .first__title { font-weight: 400; }
+          .first__along { grid-column: 3 / -1; margin-top: -6px; font-size: 9pt; color: var(--muted); }
 
           table { width: 100%; border-collapse: collapse; font-size: 9.5pt; line-height: 1.4; }
           th { padding: 6px 10px; text-align: left; font-size: 8.5pt; font-weight: 600; color: var(--muted); border-bottom: 1px solid var(--rule); }
@@ -96,6 +99,7 @@ internal static class ReportDocument
           .problem__tech { margin-left: auto; padding-left: 12px; font-size: 8.5pt; font-weight: 400; letter-spacing: 0; color: var(--muted); white-space: nowrap; }
           .problem__meta { margin-top: 2px; font-size: 9pt; color: var(--muted); }
           .problem__meta b { color: var(--text); font-weight: 600; }
+          .problem__along { margin-top: 2px; font-size: 9pt; color: var(--secondary); }
           .problem h4 { margin: 8px 0 1px; font-size: 9pt; font-weight: 600; }
           .problem p, .problem .steps { font-size: 9.5pt; line-height: 1.42; }
           .problem p + p { margin-top: 4px; }
@@ -526,17 +530,30 @@ internal static class ReportDocument
             return;
         }
 
+        // The five are the analysis's (the score's "if fixed" is of them), as jobs: one a fix of another among them clears
+        // entirely is under that one, as Simple's Summary has it, keeping its number (its section's and its sheet's).
+        var foldedUnder = ReportJobs.FoldedUnder(first);
         html.Append("  <h2>Fix these first</h2>\n  <ol class=\"first\">\n");
-        foreach (var problem in first)
+        foreach (var (problem, folded) in ReportJobs.InJobs(first, foldedUnder))
         {
-            html.Append("    <li><span class=\"first__n\">").Append(problem.Number).Append("</span>");
-            Mark(html, MarkOf(problem.Check.Severity), 14);
+            html.Append(folded ? "    <li class=\"first__also\">" : "    <li>").Append("<span class=\"first__n\">").Append(problem.Number).Append("</span>");
+            if (folded)
+            {
+                html.Append("<span></span>");
+            }
+            else
+            {
+                Mark(html, MarkOf(problem.Check.Severity), 14);
+            }
+
             html.Append("<span class=\"first__title\">").AppendText(problem.Words.Title).Append("</span><span class=\"first__count\">")
-                .Append(problem.Line is { } line ? CountOf(line, problem.Check) : CountOf(problem.Count, problem.Check)).Append("</span></li>\n");
+                .Append(problem.Line is { } line ? CountOf(line, problem.Check) : CountOf(problem.Count, problem.Check)).Append("</span>")
+                .Append(folded ? "<span class=\"first__along\">Fixed along with the problem above</span>" : string.Empty).Append("</li>\n");
         }
 
         html.Append("  </ol>\n  <p class=\"first__foot\">");
-        var these = first.Count == 1 ? "this one" : $"these {COUNT_WORDS[first.Count]}";
+        var jobs = first.Count - foldedUnder.Count;
+        var these = jobs == 1 ? "this one" : $"these {COUNT_WORDS[jobs]}";
         if (score is { IfFixed.CheckIds.Count: > 0 } && score.IfFixed.Value != score.Value)
         {
             html.Append("Fixing ").Append(these).Append(" takes the score from ").Append(score.Value).Append(" to ").Append(score.IfFixed.Value).Append(". ");
@@ -645,13 +662,16 @@ internal static class ReportDocument
 
         html.Append("  <div class=\"new-page\">\n  <h2>What to fix</h2>\n  <p class=\"lead\">Every check that found something: what’s wrong, why it matters, how to fix it, and the first pages ")
             .Append("it’s on. The full lists are in the spreadsheet that goes with this report, on the sheet with the same number.</p>\n");
-        Group(html, model, options, IssueSeverity.Error, "These stop pages working or being found. Fix them first.");
-        Group(html, model, options, IssueSeverity.Warning, "These hold pages back. Fix them when the serious ones are done.");
-        Group(html, model, options, IssueSeverity.Notice, "Often fine as they are. They don’t change the score: read each one and decide.");
+        // As Simple's What to fix: a problem a fix of another of its severity clears entirely says which.
+        var foldedUnder = ReportJobs.FoldedUnder(model.Problems);
+        Group(html, model, options, foldedUnder, IssueSeverity.Error, "These stop pages working or being found. Fix them first.");
+        Group(html, model, options, foldedUnder, IssueSeverity.Warning, "These hold pages back. Fix them when the serious ones are done.");
+        Group(html, model, options, foldedUnder, IssueSeverity.Notice, "Often fine as they are. They don’t change the score: read each one and decide.");
         html.Append("  </div>\n\n");
     }
 
-    private static void Group(StringBuilder html, ReportModel model, ReportOptions options, IssueSeverity severity, string lead)
+    private static void Group(StringBuilder html, ReportModel model, ReportOptions options, IReadOnlyDictionary<string, ReportProblem> foldedUnder,
+        IssueSeverity severity, string lead)
     {
         var problems = model.Problems.Where(problem => problem.Check.Severity == severity).ToList();
         if (problems.Count == 0)
@@ -664,11 +684,12 @@ internal static class ReportDocument
         html.Append(Severity(severity)).Append(" <span>").Append(problems.Count).Append("</span></h3>\n    <p class=\"lead lead--group muted\">").Append(lead).Append("</p>\n");
         foreach (var problem in problems)
         {
-            Problem(html, model, problem, severity == IssueSeverity.Notice ? options.LookExamples : options.Examples);
+            Problem(html, model, problem, severity == IssueSeverity.Notice ? options.LookExamples : options.Examples, foldedUnder.GetValueOrDefault(problem.Check.Id));
         }
     }
 
-    private static void Problem(StringBuilder html, ReportModel model, ReportProblem problem, int listed)
+    /// <param name="along">The problem a fix of which clears this one entirely, which it's one job with; null when none.</param>
+    private static void Problem(StringBuilder html, ReportModel model, ReportProblem problem, int listed, ReportProblem? along)
     {
         // Things worth a look set their text beside their examples, to save paper.
         var compact = problem.Check.Severity == IssueSeverity.Notice;
@@ -691,6 +712,11 @@ internal static class ReportDocument
         }
 
         html.Append("</p>\n");
+        if (along is not null)
+        {
+            html.Append("      <p class=\"problem__along\">Fixed along with problem ").Append(along.Number).Append(", “").AppendText(along.Words.Title).Append("”.</p>\n");
+        }
+
         if (compact)
         {
             html.Append("      <div class=\"problem__split\"><div>");

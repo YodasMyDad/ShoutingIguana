@@ -680,7 +680,8 @@ font, light only. It prints to A4 and Letter from the system print dialog, which
 1. **Head.** "Website check", the site, the date, pages read, addresses checked, checks run.
 2. **Summary.** The score as a ring, its word, the sentence, what it covers; the five counts.
 3. **Fix these first.** Up to five: mark, plain title, count and share. "Fixing these five takes the score from 85
-   to 98."
+   to 98." Related problems are one job, as on the Summary: one a fix of another among the five clears entirely is
+   listed under it, "Fixed along with the problem above", keeping its number, and "these four" counts the jobs.
 4. **How the score is worked out.** The two sentences, the line for each check that cost points, the sum, the
    bands in one line, the version.
 5. **What to fix**, from a new page. Every check that found something, in three groups. For each: the plain title,
@@ -689,6 +690,8 @@ font, light only. It prints to A4 and Letter from the system print dialog, which
    for a template fault; then its first pages, with what was found on each, and "And 56 more: the full list is on
    sheet 3 of the spreadsheet". Problems are numbered in "Fix first" order, 1 to 19 on the garden crawl, so the list
    on page 1, the section here and the workbook's sheet all carry one number.
+   A problem a fix of another of its severity clears entirely says so under its count: "Fixed along with problem 2,
+   “Pages or files that can’t be found”."
 6. **What couldn't be checked**, with each reason and what would let the check run.
 7. **What was checked and found nothing wrong**: every passed check's good-news line, by category.
 8. **About this check.** Where it started, when, how long, what was read, how many pages can appear in search,
