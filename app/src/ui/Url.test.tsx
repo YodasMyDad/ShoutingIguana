@@ -2,6 +2,7 @@ import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { onAnnounce } from '../feedback/announce';
+import { openInBrowser } from '../shell/os';
 import { Url } from './Url';
 import { ELLIPSIS } from './urlText';
 
@@ -25,6 +26,8 @@ function layOut(width: number) {
 }
 
 const shownText = (container: HTMLElement) => container.querySelector('.si-url__shown')?.textContent ?? '';
+
+vi.mock('../shell/os', () => ({ openInBrowser: vi.fn(() => Promise.resolve()) }));
 
 const writeText = vi.fn(() => Promise.resolve());
 
@@ -152,5 +155,25 @@ describe('Url', () => {
     layOut(30 * CHAR);
     act(() => resize?.());
     expect(shownText(container)).toHaveLength(30);
+  });
+
+  it('opens another URL than the one shown when given one, and says what that does', async () => {
+    // The page that holds a broken link, opened at the link's words (rule 4 of the 2026-11-19 UX round).
+    const at = `${SITE}/blog/#:~:text=Buy%20now`;
+    render(
+      <Url
+        url={`${SITE}/blog/`}
+        siteOrigin={SITE}
+        copyable={false}
+        openUrl={at}
+        openHint="Open the page at this link"
+      />,
+    );
+    const open = screen.getByRole('button', { name: /^Open / });
+    expect(open).toHaveAttribute('data-open-url', at);
+    act(() => open.focus());
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Open the page at this link');
+    await userEvent.click(open);
+    expect(openInBrowser).toHaveBeenLastCalledWith(at);
   });
 });

@@ -43,6 +43,12 @@ export interface UrlProps {
    * Enter does what the click does.
    */
   tabbable?: boolean | undefined;
+  /**
+   * The URL the open-in-browser button opens, where that isn't the one shown: the page at some of its words
+   * (`urlAtText`), so the browser lands on the faulty link. `openHint` is its tooltip ("Open the page at this link").
+   */
+  openUrl?: string | undefined;
+  openHint?: string | undefined;
   className?: string | undefined;
 }
 
@@ -142,6 +148,8 @@ export function Url({
   onGo,
   goHint = 'Inspect',
   tabbable = true,
+  openUrl,
+  openHint,
   className,
 }: UrlProps) {
   const display = urlDisplay(url, siteOrigin);
@@ -244,17 +252,17 @@ export function Url({
       {openable && web ? (
         <IconButton
           label={openLabel(url)}
-          tooltip="Open in your browser"
+          tooltip={openHint ?? 'Open in your browser'}
           icon={ExternalLink}
           size="xs"
           className="si-url__open"
-          data-open-url={url}
+          data-open-url={openUrl ?? url}
           // In a grid's cell it's no Tab stop (the grid is one, and Shift+Enter opens the row's URL), a press leaves
           // focus on the grid, and a quick second press is no double-click on the row (which would inspect it).
           tabIndex={tabbable ? undefined : -1}
           onMouseDown={tabbable ? undefined : (event) => event.preventDefault()}
           onDoubleClick={(event) => event.stopPropagation()}
-          onClick={() => void openInBrowser(url)}
+          onClick={() => void openInBrowser(openUrl ?? url)}
         />
       ) : null}
     </span>
