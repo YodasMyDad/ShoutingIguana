@@ -62,7 +62,7 @@ describe('the main pane’s scroll', () => {
     await screen.findByRole('heading', { level: 1, name: 'Overview' });
     scrollTo(900);
     await act(() =>
-      router.navigate({ to: '/crawls/$crawl/overview', params: { crawl: TEST_CRAWL_ID }, search: { score: true } }),
+      router.navigate({ to: '/crawls/$crawl/overview', params: { crawl: TEST_CRAWL_ID }, search: { score: 1 } }),
     );
     await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
     expect(main().scrollTop).toBe(900);

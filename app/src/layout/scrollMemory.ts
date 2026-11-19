@@ -10,9 +10,10 @@
 //   again is where Advanced was left.
 //
 // A screen's own scrollers (a grid, a list beside a detail) keep their place themselves.
-import { useRouter, type AnyRouter, type ParsedLocation } from '@tanstack/react-router';
+import { useRouter } from '@tanstack/react-router';
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useSimpleScreenShown } from '../app/modeScreen';
+import type { AppRouter } from '../app/router';
 
 const STORAGE_KEY = 'si.scroll';
 /** How many places are remembered: the oldest go first. */
@@ -60,7 +61,7 @@ function remember(key: string, top: number): void {
 }
 
 /** A history entry's own key, and which of the route's screens it shows. */
-function placeKey(location: ParsedLocation, variant: Variant): string {
+function placeKey(location: { href: string; state: object }, variant: Variant): string {
   const state = location.state as { __TSR_key?: string; key?: string };
   return `${state.__TSR_key ?? state.key ?? location.href}|${variant}`;
 }
@@ -106,7 +107,7 @@ interface ScrollMemory {
   stop: () => void;
 }
 
-function watchScroll(router: AnyRouter, main: HTMLElement, firstVariant: Variant): ScrollMemory {
+function watchScroll(router: AppRouter, main: HTMLElement, firstVariant: Variant): ScrollMemory {
   readPlaces();
   let variant = firstVariant;
   let key = placeKey(router.state.location, variant);
