@@ -2320,10 +2320,18 @@
     opacity: 1;
   }
 
+  /* Forced colours have no "muted": where the button shows, it shows whole, in the link colour. */
   @media (forced-colors: active) {
     .si-url__open,
     .si-open-url {
       color: LinkText;
+      opacity: 1;
+    }
+
+    .si-open-on-row .si-grid-row:hover .si-url__open,
+    .si-open-on-row .si-grid-row[data-selected] .si-url__open,
+    .si-open-on-row .si-grid-row:has(> [data-active]) .si-url__open {
+      opacity: 1;
     }
   }
 
