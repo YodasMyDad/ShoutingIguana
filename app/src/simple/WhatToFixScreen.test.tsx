@@ -91,6 +91,32 @@ const PROBLEM_IDS = [
   'slow-response',
 ];
 
+// How each page links to what it names: the logo's link home, in the header, with no words.
+const ANCHOR_TARGETS: FakeRoute = [
+  'POST',
+  /\/issues\/empty-anchor-text\/targets$/,
+  (request) =>
+    json({
+      checkId: 'empty-anchor-text',
+      urls: (request.body as { urlIds: number[] }).urlIds.map((urlId) => ({
+        urlId,
+        total: 1,
+        targets: [
+          {
+            id: urlId === 1 ? 28 : 1,
+            url: urlId === 1 ? `${SITE}/greenhouses/` : `${SITE}/`,
+            statusCode: 200,
+            fetched: true,
+            outcome: 'success',
+            kind: 'hyperlink',
+            text: null,
+            position: urlId === 1 ? 'content' : 'header',
+          },
+        ],
+      })),
+    }),
+];
+
 async function open(
   path: string,
   analysis: Analysis = GARDEN_ANALYSIS,
@@ -440,8 +466,8 @@ describe.skipIf(TABLE_STUBBED)('one problem', () => {
       ],
     );
     await problem("Pages or files that can't be found");
-    const where = main().getByRole('region', { name: 'Where it is' });
-    // Each address listed (a page without a title is named by its address, which may show twice in its line).
+    // A check of dead addresses lists them page first (Where to fix it); one whose links aren't known is still listed.
+    const where = main().getByRole('region', { name: 'Where to fix it' });
     expect((await within(where).findAllByText('/edale-4-seater-sofa-set/', { exact: false }))[0]).toBeVisible();
     expect(
       within(where).getAllByText('/outdoor-pe-rattan-dining-set-with-fire-pit-table/', { exact: false })[0],
@@ -449,23 +475,25 @@ describe.skipIf(TABLE_STUBBED)('one problem', () => {
     expect(within(where).queryByText(/\b0 kinds of problem\b/)).toBeNull();
   });
 
-  it('lists where it is: each cause, its first pages by title then address, and Show them for the rest', async () => {
-    await open(`${FIX}/empty-anchor-text`);
+  it('lists where to fix a link: the page to edit first, and a link many pages share once, with its pages when asked', async () => {
+    await open(`${FIX}/empty-anchor-text`, GARDEN_ANALYSIS, [], [ANCHOR_TARGETS]);
     await problem('Links with nothing to read');
-    const where = within(main().getByRole('region', { name: 'Where it is' }));
-    expect(await where.findByText('2 addresses on 265 pages')).toBeVisible();
-    expect(await where.findByText('Your home page')).toBeVisible();
-    // A check that names what its pages link to lists its first pages one by one, each with its own line (where its
-    // link is: ProblemScreen.evidence.test.tsx), then how many more.
-    expect(await where.findByText('Page 0')).toBeVisible();
-    expect(where.getByText('Page 2')).toBeVisible();
-    expect(where.getByText(/And 261 more\./)).toBeVisible();
-    fireEvent.click(where.getByRole('button', { name: 'Show them' }));
+    // The UX audit of 2026-11-19 (S-02 to S-04): this pinned "2 addresses on 265 pages" with the address leading and
+    // the pages behind "Show them"; a link fault now leads with the page to edit.
+    const where = within(main().getByRole('region', { name: 'Where to fix it' }));
+    expect(await where.findByText('1 link to change on 1 page · 1 link many pages share')).toBeVisible();
+    // The page that alone links to /greenhouses/ with no words, by its title, as a link that opens it.
+    const pages = within(where.getByRole('list', { name: 'Pages to edit' }));
+    expect(pages.getByRole('link', { name: /Home/ })).toHaveAttribute('href', 'https://www.gardenfurnituresets.co.uk/');
+    expect(pages.getByRole('button', { name: 'Open page: Home' })).toBeVisible();
+    // The logo's link, in every page's header: one row, fixed once, never 264 pages each with the same line.
+    expect(where.getByText('In the header of 264 pages')).toBeVisible();
+    expect(where.getByText(/fix it there once/)).toBeVisible();
+    expect(where.queryByText('Page 0')).toBeNull();
+    fireEvent.click(where.getByRole('button', { name: 'Show the pages' }));
     expect(await where.findByText('Page 199')).toBeVisible();
-    expect(where.getByRole('button', { name: 'See all 264 in Advanced' })).toBeVisible();
-    expect(
-      where.getByText('All 2 addresses are shown. Addresses starting with “/” are on www.gardenfurnituresets.co.uk.'),
-    ).toBeVisible();
+    expect(where.getByText(/The first 200 of 264 pages\./)).toBeVisible();
+    expect(where.getByText('Addresses starting with “/” are on www.gardenfurnituresets.co.uk.')).toBeVisible();
   });
 
   it('lists a check that doesn’t group flat, with what was measured', async () => {
@@ -489,13 +517,26 @@ describe.skipIf(TABLE_STUBBED)('one problem', () => {
         },
       },
     });
-    await open(`${FIX}/empty-anchor-text`);
+    await open(`${FIX}/empty-anchor-text`, GARDEN_ANALYSIS, [], [ANCHOR_TARGETS]);
     await problem('Links with nothing to read');
     fireEvent.keyDown(document.body, { key: 'C', ctrlKey: true, shiftKey: true });
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0]).toMatch(/^Links with nothing to read \(Internal links without anchor text\)/);
     expect(writes[0]).toContain('gardenfurnituresets.co.uk, checked on 31 October 2026');
-    expect(writes[0]).toContain(`  ${SITE}/page-0/`);
+    // A link fault is handed on as the card shows it (the UX audit of 2026-11-19, S-05): the page to edit first, then
+    // the link, its place and where it leads. It pinned each address with its pages indented under it, unlabelled.
+    expect(writes[0]).toContain(
+      [
+        'Where to fix it:',
+        `Page: ${SITE}/ (Home)`,
+        '  Link: A link with no words (main content)',
+        `    leads to: ${SITE}/greenhouses/`,
+        '',
+        'Links many pages share:',
+        '  In the header of 264 pages: A link with no words',
+        `    leads to: ${SITE}/`,
+      ].join('\n'),
+    );
   });
 
   it('a skipped check says why it couldn’t run and what would let it; See it in Advanced switches mode', async () => {
@@ -516,7 +557,7 @@ describe.skipIf(TABLE_STUBBED)('one problem', () => {
     ];
     await open(`${FIX}/broken-internal-links`, GARDEN_ANALYSIS, [], [failing]);
     await problem('Links that lead to broken pages');
-    const where = within(main().getByRole('region', { name: 'Where it is' }));
+    const where = within(main().getByRole('region', { name: 'Where to fix it' }));
     expect(await where.findByText(/The list couldn’t be read/, undefined, { timeout: 5_000 })).toBeVisible();
     expect(where.queryByText(/are shown|is shown|Showing/)).toBeNull();
   });

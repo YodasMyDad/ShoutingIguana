@@ -39,6 +39,8 @@ import { flatOneFixSentences, oneFixSentences, oneFixTitle } from './oneFixWords
 import { plainImageInsight, plainRelated } from './plainEvidence';
 import { saysShownAt, useGroupShownAt } from '../screens/issues/useShownAt';
 import { WhereItIs } from './WhereItIs';
+import { WhereToFix } from './WhereToFix';
+import { fixShape } from './fixPages';
 import { RecheckCard } from './RecheckCard';
 import { ChangeFact, FixedSinceNote } from './ProblemSince';
 import { useSimpleChanges, type SimpleChanges } from './useSimpleChanges';
@@ -157,7 +159,7 @@ export function ProblemScreen({ crawlId, checkId }: { crawlId: string; checkId: 
 
   return (
     <div ref={screenRef} className="@container">
-      <div className="si-simple-page flex flex-col">
+      <div className="si-simple-page si-simple-page--wide flex flex-col">
         <p className="mb-4">
           <Link
             to={FIX}
@@ -345,6 +347,8 @@ function FoundProblem({
   const files = filesOf(check, counted);
   // What only the site's platform can change (the Shopify lane, phase B): its reason, as given, in place of a fix.
   const owner = counted?.platform ?? null;
+  // A fault that is a link is listed by the page to edit (Where to fix it); every other by its cause (Where it is).
+  const shape = files ? null : fixShape(check);
   const context = {
     crawlId,
     check,
@@ -353,6 +357,7 @@ function FoundProblem({
     share: share.text,
     files,
     platform: owner,
+    item,
   };
   const copyList = () => void copyProblemList(context);
   const saveSheet = () => saveCheckSheet(item, check);
@@ -463,7 +468,7 @@ function FoundProblem({
           {check.plainOneFix ?? 'That’s almost certainly in the part of the site every page shares.'}{' '}
           {flatOneFixSentences(count, analysis.pagesAnalyzed).fix}
         </Callout>
-      ) : shared ? (
+      ) : shared && !shape ? (
         <Callout
           className="mt-4"
           title={`One page links to ${shared.urls.toLocaleString('en-GB')} of ${shared.of >= count ? 'these' : 'the first'} ${shared.of.toLocaleString('en-GB')} ${noun}`}
@@ -472,16 +477,29 @@ function FoundProblem({
         </Callout>
       ) : null}
       {shopifyHere ? <ShopifyPrompt crawlId={crawlId} mode="simple" className="mt-4" /> : null}
-      <WhereItIs
-        crawlId={crawlId}
-        item={item}
-        check={check}
-        total={count}
-        onCopy={copyList}
-        onSave={saveSheet}
-        changes={changes}
-        files={files}
-      />
+      {shape ? (
+        <WhereToFix
+          crawlId={crawlId}
+          item={item}
+          check={check}
+          shape={shape}
+          total={count}
+          onCopy={copyList}
+          onSave={saveSheet}
+          changes={changes}
+        />
+      ) : (
+        <WhereItIs
+          crawlId={crawlId}
+          item={item}
+          check={check}
+          total={count}
+          onCopy={copyList}
+          onSave={saveSheet}
+          changes={changes}
+          files={files}
+        />
+      )}
       {/* The fix loop: Fixed it? is a recheck of these pages (./RecheckCard); none for what the owner can't change. */}
       {owner ? null : <RecheckCard crawlId={crawlId} item={item} check={check} />}
     </>

@@ -223,9 +223,6 @@ export function plainTargetLine(
         parts.push(plainAlt(target.img, check.id === 'image-alt-too-long'));
       } else {
         parts.push(plainShownAt(target.img));
-        if (check.id === 'image-too-large' && target.img.loading?.toLowerCase() === 'lazy') {
-          parts.push('loads when scrolled to');
-        }
       }
     }
     if (where) parts.push(where);
@@ -309,37 +306,76 @@ const REFERENCE_PLACE: Partial<Record<Reference, string>> = {
  * "/ext-moved forwards here", "Shown on /garden/". Null when nothing crawled refers to it.
  */
 export function plainLinkedFrom(found: UrlFoundOn, origin: string | null, few = 3): string | null {
+  const parts = linkedFromParts(found, origin, few);
+  if (parts === null) return null;
+  if (parts.pages.length === 0) return parts.lead;
+  const named = parts.pages.map((page) => (page.place ? `${page.path} (${page.place})` : page.path));
+  const list =
+    parts.more !== null
+      ? `${named.join(', ')} and ${parts.more} more`
+      : named.length > 1
+        ? `${named.slice(0, -1).join(', ')} and ${named[named.length - 1]}`
+        : (named[0] ?? '');
+  return [parts.lead, list, parts.tail].filter((part) => part !== '').join(' ');
+}
+
+/** One page of a "Linked from" line: its address, its path as shown, and where on it the link is and what it says. */
+export interface LinkedFromPage {
+  id: number;
+  url: string;
+  path: string;
+  /** "in the footer: “Old range”", "names it as its main address"; null where there's nothing to say. */
+  place: string | null;
+  /** The link's own words, where a browser could find them on the page: a hyperlink's text. */
+  words: string | null;
+}
+
+/**
+ * `plainLinkedFrom`'s line in its parts, so a screen can make each page a link (the UX fix round's rule 3: the page
+ * that holds a fault is the first-class thing): what's said before the pages ("Linked from"), the pages, how many
+ * more there are ("3", "5,000+"; null for none), and what's said after them ("forwards here"). With no page, `lead`
+ * is the whole line ("Listed in your sitemap"). Null when nothing crawled refers to the address.
+ */
+export function linkedFromParts(
+  found: UrlFoundOn,
+  origin: string | null,
+  few = 3,
+): { lead: string; pages: LinkedFromPage[]; more: string | null; tail: string } | null {
   const pages = sourcePages(found).slice(0, few);
   if (found.pages > 0 && pages.length > 0) {
     const references = new Set(pages.map((page) => referenceOf(page.kind)));
     const one = references.size === 1 ? (references.values().next().value ?? 'link') : null;
-    const named = pages.map((page, index) => {
+    const named = pages.map((page, index): LinkedFromPage => {
       const path = plainAddress(page.url, origin);
-      if (index > 0) return path;
       const reference = referenceOf(page.kind);
+      const text = page.text?.trim();
+      const words = reference === 'link' && text ? text : null;
+      if (index > 0) return { id: page.id, url: page.url, path, place: null, words };
       // A page's code holds no place to say: "in the page's code" says nothing of a canonical or a redirect.
       if (reference !== 'link' && reference !== 'shown') {
         const how = one === null ? REFERENCE_PLACE[reference] : undefined;
-        return how ? `${path} (${how})` : path;
+        return { id: page.id, url: page.url, path, place: how ?? null, words };
       }
       const where = plainPosition(page.position);
-      const text = page.text?.trim();
       const place = where && text ? `${where}: ${quote(text, 40)}` : (where ?? (text ? quote(text, 40) : null));
-      return place ? `${path} (${place})` : path;
+      return { id: page.id, url: page.url, path, place, words };
     });
-    const more = found.pages - pages.length;
-    const list =
-      more > 0
-        ? `${named.join(', ')} and ${formatCount(more)}${found.pagesExact ? '' : '+'} more`
-        : named.length > 1
-          ? `${named.slice(0, -1).join(', ')} and ${named[named.length - 1]}`
-          : named[0];
-    if (one === 'forward') return `${list} ${found.pages === 1 ? 'forwards' : 'forward'} here`;
-    return `${REFERENCED_BY[one ?? 'link']} ${list}`;
+    const rest = found.pages - pages.length;
+    const more = rest > 0 ? `${formatCount(rest)}${found.pagesExact ? '' : '+'}` : null;
+    if (one === 'forward') {
+      return { lead: '', pages: named, more, tail: found.pages === 1 ? 'forwards here' : 'forward here' };
+    }
+    return { lead: REFERENCED_BY[one ?? 'link'], pages: named, more, tail: '' };
   }
-  if (found.sitemaps.total > 0)
-    return found.sitemaps.total === 1 ? 'Listed in your sitemap' : 'Listed in your sitemaps';
-  if (found.start) return 'It’s the address the check started from';
+  if (found.sitemaps.total > 0) {
+    return {
+      lead: found.sitemaps.total === 1 ? 'Listed in your sitemap' : 'Listed in your sitemaps',
+      pages: [],
+      more: null,
+      tail: '',
+    };
+  }
+  if (found.start) return { lead: 'It’s the address the check started from', pages: [], more: null, tail: '' };
   return null;
 }
 

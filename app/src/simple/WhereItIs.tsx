@@ -5,9 +5,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link, useRouter } from '@tanstack/react-router';
 import { ArrowUpRight, ChevronDown, Copy, FileSpreadsheet } from 'lucide-react';
 import { useState } from 'react';
-import { api } from '../api/client';
-import type { CheckGroupRef, GridPage, IssueGroup, IssueGroupPage, IssueRow } from '../api/grids';
-import { queryKeys } from '../api/queries';
+import type { CheckGroupRef, IssueGroup, IssueRow } from '../api/grids';
 import type { Check, CrawlListItem } from '../api/types';
 import { reasonPhrase } from '../inspector/words';
 import { formatCount } from '../lib/format';
@@ -19,12 +17,14 @@ import { OpenUrlButton } from '../ui/OpenUrlButton';
 import { OneFixTag } from '../ui/PlainCheckRow';
 import { evidenceOf } from '../screens/issues/evidenceColumns';
 import { FoundOnWords } from './FoundOnWords';
+import { OpenLink } from './OpenLink';
 import { saysShownAt, useShownAt } from '../screens/issues/useShownAt';
 import { ImageThumb } from '../ui/ImageThumb';
 import { fileLabelOf } from '../ui/urlText';
 import { isBrokenImage } from '../ui/imageFacts';
-import { plainDetail, plainEvidence, plainImageInsight, plainRelated } from './plainEvidence';
+import { plainAddress, plainDetail, plainEvidence, plainImageInsight, plainRelated } from './plainEvidence';
 import { TargetWords } from './TargetWords';
+import { groupsQuery, rowsQuery, type Compare } from './whereQueries';
 import { oneFixTitle } from './oneFixWords';
 import {
   causeName,
@@ -45,58 +45,20 @@ export const WHERE_MAX = 200;
 /** A cause on many pages names this many first. */
 const FIRST_PAGES = 3;
 
-const ROW_COLUMNS = ['url', 'title', 'detail', 'relatedUrl', 'relatedStatusCode'];
-
-/** What a check's rows carry here: the page's name and address, the detail, the other URL, and the check's evidence. */
-function rowColumns(check: Pick<Check, 'evidence'>): string[] {
-  return [...ROW_COLUMNS, ...evidenceOf(check).filter((id) => !ROW_COLUMNS.includes(id))];
+/**
+ * Whether one of a page's evidence columns earns its line (the UX audit of 2026-11-19, S-07 and S-17: "It’s a page",
+ * "Checking it took 0.5 seconds" under a broken address, "Can appear in search results" and a count said twice help
+ * nobody find or fix it). A file that isn't a page still says what it is ("It’s an image").
+ */
+function saysSomething(check: Pick<Check, 'category'>, column: string, value: unknown, columns: readonly string[]) {
+  if (column === 'type') return value !== 'page';
+  // How long a broken address took to fail isn't about the fault.
+  if (column === 'responseMs') return check.category !== 'responseCodes';
+  if (column === 'indexability') return value !== 'none';
+  // "1 link to it" beside "1 page links here": the pages are what an owner counts.
+  if (column === 'inlinks') return !columns.includes('linkingPages');
+  return true;
 }
-
-/** The fix loop: compared with the site's last check (each cause and page then gains its `change`), or not. */
-type Compare = 'previous' | null;
-
-const groupsQuery = (crawlId: string, checkId: string, limit: number, compare: Compare = null) => ({
-  queryKey: [...queryKeys.crawl(crawlId), 'issues', checkId, 'simple-groups', limit, compare] as const,
-  queryFn: ({ signal }: { signal: AbortSignal }): Promise<IssueGroupPage> =>
-    api.issueGroups(crawlId, checkId, { offset: 0, limit, ...(compare ? { compareWith: compare } : {}) }, signal),
-  staleTime: Infinity,
-});
-
-const rowsQuery = (
-  crawlId: string,
-  check: Check,
-  group: CheckGroupRef | null,
-  limit: number,
-  compare: Compare = null,
-) => ({
-  // The check's evidence decides the columns: its id and its evidence are the key.
-  queryKey: [
-    ...queryKeys.crawl(crawlId),
-    'issues',
-    check.id,
-    'simple-rows',
-    group,
-    limit,
-    rowColumns(check),
-    compare,
-  ] as const,
-  queryFn: ({ signal }: { signal: AbortSignal }): Promise<GridPage<IssueRow>> =>
-    api.issueRows(
-      crawlId,
-      check.id,
-      {
-        columns: rowColumns(check),
-        filters: [],
-        sort: [],
-        offset: 0,
-        limit,
-        ...(group ? { group } : {}),
-        ...(compare ? { compareWith: compare } : {}),
-      },
-      signal,
-    ),
-  staleTime: Infinity,
-});
 
 /**
  * A page's evidence in plain words, a line each, muted under what it's about: "The rules file says “Disallow:
@@ -106,7 +68,9 @@ function EvidenceLines({ row, check, origin }: { row: IssueRow; check: Check; or
   const values = row as unknown as Record<string, unknown>;
   // The row's own address, so it's never said to forward to itself or be its own main address (X1); a line two columns
   // say alike ("No pages link here") once.
-  const lines = evidenceOf(check)
+  const columns = evidenceOf(check);
+  const lines = columns
+    .filter((column) => saysSomething(check, column, values[column], columns))
     .map((column) => plainEvidence(column, values[column], origin, row.url ?? null))
     .filter((line, index, all): line is string => line !== null && all.indexOf(line) === index);
   if (lines.length === 0) return null;
@@ -132,26 +96,34 @@ function Address({
   origin,
   small = false,
   file = false,
+  at,
+  hint,
 }: {
   url: string;
   origin: string | null;
   small?: boolean;
+  /** The address its link opens, where that's the page at some of its words (lib/textFragment). */
+  at?: string | undefined;
+  hint?: string | undefined;
   /** A file a page loads (an image): named by its file, its folder or query after it, muted. */
   file?: boolean;
 }) {
   const shown = origin && url.startsWith(origin) ? url.slice(origin.length) || '/' : url;
   const label = file ? fileLabelOf(url, origin) : null;
   return (
-    <span className={small ? 'block font-mono text-12 text-text-muted' : 'font-mono text-13'} title={url}>
-      {label ? (
-        <span aria-hidden="true">
-          <span className="si-file-name">{label.name}</span>
-          {label.rest ? <span className="block text-12 text-text-muted">{label.rest}</span> : null}
-        </span>
-      ) : (
-        <span aria-hidden="true">{shown}</span>
-      )}
-      <span className="sr-only">{url}</span>
+    <span className={small ? 'block font-mono text-12 text-text-muted' : 'font-mono text-13'}>
+      {/* The address is the link (the UX fix round's rules 1 and 2); its open button sits straight after it. */}
+      <OpenLink url={at ?? url} hint={hint ?? `Open ${file ? 'it' : 'this address'} in your browser`}>
+        {label ? (
+          <span aria-hidden="true">
+            <span className="si-file-name">{label.name}</span>
+            {label.rest ? <span className="block text-12 text-text-muted">{label.rest}</span> : null}
+          </span>
+        ) : (
+          <span aria-hidden="true">{shown}</span>
+        )}
+        <span className="sr-only">{url}</span>
+      </OpenLink>
       <OpenUrlButton url={url} className="ml-1" />
     </span>
   );
@@ -162,7 +134,10 @@ function PageLine({ row, origin }: { row: IssueRow; origin: string | null }) {
   if (!row.url) return null;
   return row.title ? (
     <span className="block">
-      <span className="block font-medium">{row.title}</span>
+      {/* The page's title opens it too: the name is what an owner knows the page by. */}
+      <OpenLink url={row.url} hint="Open the page in your browser" className="block font-medium">
+        {row.title}
+      </OpenLink>
       <Address url={row.url} origin={origin} small />
     </span>
   ) : (
@@ -263,7 +238,7 @@ export function WhereItIs({
     rows.data.rows.some((row) => Boolean(plainDetail(check, row as unknown as Record<string, unknown>) ?? row.detail));
 
   return (
-    <Card as="section" aria-labelledby="where-it-is" className="mt-4 overflow-hidden">
+    <Card as="section" aria-labelledby="where-it-is" id="the-list" className="mt-4 overflow-hidden">
       <div className="flex flex-wrap items-center gap-3 border-b border-border py-4 pr-4 pl-6">
         <h2 id="where-it-is" className="text-16 font-semibold">
           Where it is
@@ -317,7 +292,10 @@ export function WhereItIs({
                 <tr key={row.id}>
                   <td>
                     <PageLine row={row} origin={origin} />
-                    {row.change ? <ChangeLine words={rowChangeWords(row.change.state, since, 'simple')} /> : null}
+                    {/* Only what's new says so (S-17): "Still there since 17 Nov" on every row said nothing. */}
+                    {row.change && (row.change.state === 'new' || row.change.state === 'newUrl') ? (
+                      <ChangeLine words={rowChangeWords(row.change.state, since, 'simple')} />
+                    ) : null}
                     <FoundOnWords crawlId={crawlId} check={check} urlId={row.id} origin={origin} />
                   </td>
                   {saysFound ? (
@@ -578,7 +556,7 @@ function GroupRow({
           // Its detail, said plainly; one the engine leaves empty is named by the check ("No main heading").
           <span>{causeName(check, group.detail)}</span>
         )}
-        {group.change ? (
+        {group.change?.state === 'new' ? (
           <ChangeLine words={groupChangeWords(group.change, group.urls ?? group.pages, since, 'simple')} />
         ) : null}
       </td>
@@ -611,10 +589,19 @@ function GroupRow({
           </>
         ) : many && !open ? (
           <span className="text-text-secondary">
-            {rows
-              .slice(0, FIRST_PAGES)
-              .map((row) => row.title ?? row.url ?? '')
-              .join(', ')}{' '}
+            {/* Each page named is a link that opens it (S-21: the names were words). */}
+            {rows.slice(0, FIRST_PAGES).map((row, index) => (
+              <span key={row.id}>
+                {index > 0 ? ', ' : null}
+                {row.url ? (
+                  <OpenLink url={row.url} hint="Open the page in your browser">
+                    {row.title ?? plainAddress(row.url, origin)}
+                  </OpenLink>
+                ) : (
+                  (row.title ?? '')
+                )}
+              </span>
+            ))}{' '}
             and {formatCount(count - Math.min(rows.length, FIRST_PAGES))} more.{' '}
             <Button variant="ghost" size="sm" onClick={() => setOpen(true)}>
               Show them

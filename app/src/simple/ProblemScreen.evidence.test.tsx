@@ -11,7 +11,7 @@ import { createAppRouter } from '../app/router';
 import { installKeyboard } from '../keyboard/registry';
 import { liveStore } from '../live/liveStore';
 import { replaceSettings } from '../settings/settingsStore';
-import { evidenceRoutes } from '../test/evidenceSidecar';
+import { SITE, evidenceRoutes } from '../test/evidenceSidecar';
 import { TEST_CRAWL_ID, fakeSidecar } from '../test/fakeSidecar';
 import { createQueryClientWithoutBackoff } from '../test/queryClient';
 import { TABLE_STUBBED } from './tableStubbed';
@@ -28,7 +28,7 @@ async function open(checkId: string) {
   await screen.findByRole('heading', { level: 1 }, { timeout: 10_000 });
 }
 
-const where = () => within(screen.getByRole('region', { name: 'Where it is' }));
+const where = () => within(screen.getByRole('region', { name: /^Where (it is|to fix it)$/ }));
 /** Advanced's words, which Simple never says (simpleWords.test.tsx has the whole list). */
 const ADVANCED = /\b(urls?|crawl\w*|inlinks?|indexab\w+|issues?)\b/i;
 
@@ -53,9 +53,7 @@ describe.skipIf(TABLE_STUBBED)('what a problem found, in Simple', () => {
         'The image file is 1.8 MB, 4000×3000 pixels, but the pages show it at 400×300, so it’s about 10 times bigger than it needs to be.',
       ),
     ).toBeVisible();
-    expect(
-      (await list.findAllByText(/^Shown at 400×300 pixels, loads when scrolled to, in the main content/)).length,
-    ).toBeGreaterThan(0);
+    expect((await list.findAllByText(/^Shown at 400×300 pixels, in the main content/)).length).toBeGreaterThan(0);
     expect((await list.findAllByText('· and 1 other large image on this page'))[0]).toBeVisible();
     // The image itself, small, beside its address: offline (as here) its icon stays in its box.
     const thumb = list.getByRole('img', { name: 'hero.jpg' });
@@ -78,10 +76,17 @@ describe.skipIf(TABLE_STUBBED)('what a problem found, in Simple', () => {
 
   it('says where a forwarding address ends, and where on each page its link is and what it says', async () => {
     await open('links-to-redirects');
+    // A link fault is listed by the page to edit (the UX audit of 2026-11-19, S-02 to S-04): each page once, its link's
+    // words, its place, then where it leads and what's wrong there. It pinned the address leading, with "The link is
+    // in the footer: “Old range” · 2 links" under each page.
+    await screen.findByRole('region', { name: 'Where to fix it' });
     const list = where();
-    expect(await list.findByText('Forwards to /new/, which works.')).toBeVisible();
-    expect(await list.findByText('The link is in the footer: “Old range” · 2 links')).toBeVisible();
-    expect(list.getAllByText('The link is in the main content: “Shop the range”')).toHaveLength(2);
+    const pages = within(await list.findByRole('list', { name: 'Pages to edit' })).getAllByRole('listitem');
+    expect(pages).toHaveLength(3);
+    const home = within(pages.find((page) => within(page).queryByRole('link', { name: /Home/ }))!);
+    expect(home.getByRole('link', { name: '“Old range”' })).toHaveAttribute('href', `${SITE}/#:~:text=Old%20range`);
+    expect(home.getByRole('row', { name: /“Old range”· 2 times footer .*\/old forwards to \/new\// })).toBeVisible();
+    expect(list.getAllByRole('link', { name: '“Shop the range”' })).toHaveLength(2);
   });
 
   it('names a shared title’s cause by the title, and a forwarding address’s steps', async () => {

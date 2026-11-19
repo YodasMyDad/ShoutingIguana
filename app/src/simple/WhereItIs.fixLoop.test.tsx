@@ -40,7 +40,7 @@ async function open(extra: FakeRoute[], item = comparedGardenItem(), path = PROB
   const router = createAppRouter(queryClient, createMemoryHistory({ initialEntries: [path] }));
   render(<App router={router} queryClient={queryClient} />);
   await act(() => router.load());
-  return within(await screen.findByRole('region', { name: 'Where it is' }, { timeout: 10_000 }));
+  return within(await screen.findByRole('region', { name: /^Where (it is|to fix it)$/ }, { timeout: 10_000 }));
 }
 
 afterEach(() => {
@@ -50,11 +50,14 @@ afterEach(() => {
 });
 
 describe.skipIf(TABLE_STUBBED)('Where it is since the last check', () => {
-  it('says under each cause whether it’s still there or new', async () => {
+  // The UX audit of 2026-11-19 (S-17): it pinned "Still there since 17 Oct" under every cause, which said nothing when
+  // every row said it. Only what's new since then says so.
+  it('says nothing under a cause that was there before: only what’s new says so', async () => {
     const where = await open([changesRoute(), fixedRoute()]);
-    expect((await where.findAllByText('Still there since 17 Oct')).length).toBeGreaterThan(0);
+    await where.findByRole('list', { name: 'Pages to edit' });
+    expect(where.queryByText(/Still there since/)).toBeNull();
     // The check had one new row, so its causes match as the sidecar's do: none is new here, as none is absent then.
-    expect(where.queryByText('New since 17 Oct')).toBeNull();
+    expect(where.queryByText(/^New since/)).toBeNull();
   });
 
   it('folds the causes fixed since, each with a tick and how, and those not checked this time apart', async () => {
