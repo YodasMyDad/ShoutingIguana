@@ -1,8 +1,8 @@
 // The URL inspector against the real sidecar and its synthetic crawl, whose planted pages have known redirects,
-// hreflang, broken JSON-LD and stored HTML: flow 4 of docs/v2-ui-ia.md (inspect a URL, walk its inlinks and outlinks,
-// back and forward retrace the walk, Esc closes it to the view as it was) with flow 3 (from a check's pages), the
-// redirect chain, the source's search, "Go to URL…", and axe at zero violations in both themes and under forced
-// colours.
+// hreflang, broken JSON-LD and stored HTML: flow 4 of docs/v2-ui-ia.md (inspect a URL, walk its inlinks and outlinks
+// in place, the inspector's own back retraces the walk, the browser's Back closes it to the view as it was, as Esc
+// does) with flow 3 (from a check's pages), the redirect chain, the source's search, "Go to URL…", and axe at zero
+// violations in both themes and under forced colours.
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { chooseTab, showChecks, siteRow } from './support';
@@ -53,18 +53,27 @@ async function inspectPlant(page: Page, plant: string): Promise<Locator> {
 // From the strip, or from its "N more" menu when the tab isn't in the strip.
 const showTab = (inspector: Locator, name: RegExp) => chooseTab(inspector, name);
 
-test('inspect a URL: walk an inlink, then an outlink; back and forward retrace it; Esc closes to the grid', async ({
+const entries = (page: Page) => page.evaluate(() => history.length);
+const backStrip = (inspector: Locator) => inspector.getByRole('button', { name: /^Back to/ });
+const CAME_FIRST = 'The link you came from is first';
+
+test('inspect a URL: walk an inlink, then an outlink, in place; its own back retraces them; Back closes it', async ({
   page,
 }) => {
   const inspector = await inspectPlant(page, 'hreflang-en');
   await expect(page).toHaveURL(/inspect=\d+/);
   const opened = inspected(page);
+  // Opening it was one new place in history: every hop after it is in place.
+  const places = await entries(page);
   // The summary: how it answered, and whether it can be indexed, with the four tests.
   await expect(inspector.getByRole('heading', { name: 'Indexable', exact: true })).toBeVisible();
   await expect(inspector.getByRole('list', { name: 'Indexability tests' }).getByRole('listitem')).toHaveCount(4);
   await expect(inspector.getByRole('meter', { name: 'Title width' })).toBeVisible();
+  // Nothing walked yet: no way back to offer.
+  await expect(backStrip(inspector)).toHaveCount(0);
 
-  // Its inlinks are links themselves: Enter on a row walks to it, a new place in history.
+  // Its inlinks are links themselves: Enter on a row hops to the page that holds the link, on that page's Outlinks,
+  // with its link back to the URL left first in the list, marked, and the keyboard in that list.
   await showTab(inspector, /^Inlinks/);
   const inlinks = inspector.getByRole('grid', { name: 'Inlinks' });
   await expect(inlinks.getByRole('row').nth(1)).toBeVisible();
@@ -72,30 +81,46 @@ test('inspect a URL: walk an inlink, then an outlink; back and forward retrace i
   await page.keyboard.press('Enter');
   await expect.poll(() => inspected(page)).not.toBe(opened);
   const first = inspected(page);
-  // Still on Inlinks, with the keyboard in the new URL's grid.
-  await expect(inspector.getByRole('tab', { name: /^Inlinks/ })).toHaveAttribute('aria-selected', 'true');
-  await expect(inspector.getByRole('grid', { name: 'Inlinks' })).toBeFocused();
-
-  // Then an outlink, with the pointer.
-  await showTab(inspector, /^Outlinks/);
+  await expect(inspector.getByRole('tab', { name: /^Outlinks/ })).toHaveAttribute('aria-selected', 'true');
   const outlinks = inspector.getByRole('grid', { name: 'Outlinks' });
-  const target = outlinks.getByRole('row').nth(1).getByRole('button').first();
+  await expect(inspector.getByText(CAME_FIRST)).toBeVisible();
+  await expect(outlinks).toBeFocused();
+  const cameFor = outlinks.getByRole('row').nth(1);
+  await expect(cameFor).toContainText('/plants/hreflang-en');
+  await expect(cameFor.locator('.si-came-for')).toHaveCount(1);
+  expect(await entries(page)).toBe(places);
+  await expect(backStrip(inspector)).toContainText('/plants/hreflang-en');
+
+  // Then an outlink, with the pointer: the first that isn't the link back.
+  const target = outlinks.locator('[role="row"]:not(:has(.si-came-for))').nth(1).getByRole('button').first();
   await expect(target).toBeVisible();
   await target.click();
   await expect.poll(() => inspected(page)).not.toBe(first);
   const second = inspected(page);
+  expect(second).not.toBe(opened);
+  expect(await entries(page)).toBe(places);
 
-  // Back and forward retrace the walk.
-  await page.keyboard.press('Alt+ArrowLeft');
+  // The inspector's own back retraces the walk, a hop a press, each on the section it was left on.
+  await backStrip(inspector).click();
   await expect.poll(() => inspected(page)).toBe(first);
-  await page.keyboard.press('Alt+ArrowLeft');
+  await expect(inspector.getByRole('tab', { name: /^Outlinks/ })).toHaveAttribute('aria-selected', 'true');
+  await backStrip(inspector).click();
   await expect.poll(() => inspected(page)).toBe(opened);
   await expect(inspector.getByRole('heading', { level: 2 })).toContainText('/plants/hreflang-en');
-  await page.keyboard.press('Alt+ArrowRight');
-  await page.keyboard.press('Alt+ArrowRight');
-  await expect.poll(() => inspected(page)).toBe(second);
+  await expect(inspector.getByRole('tab', { name: /^Inlinks/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(backStrip(inspector)).toHaveCount(0);
+  expect(await entries(page)).toBe(places);
 
-  // Esc closes it to the grid as it was, however far the walk went; Alt+Left then leaves that view.
+  // The browser's Back closes the inspector: the grid as it was, search and all. Forward opens it again.
+  await page.keyboard.press('Alt+ArrowLeft');
+  await expect(inspector).toBeHidden();
+  await expect(page).toHaveURL(/\/urls\?q=/);
+  expect(inspected(page)).toBeNull();
+  await page.keyboard.press('Alt+ArrowRight');
+  await expect(inspector).toBeVisible();
+  await expect.poll(() => inspected(page)).toBe(opened);
+
+  // Esc closes it to the grid as it was too; Alt+Left then leaves that view.
   await page.keyboard.press('Escape');
   await expect(inspector).toBeHidden();
   await expect(page).toHaveURL(/\/urls\?q=/);
@@ -105,7 +130,7 @@ test('inspect a URL: walk an inlink, then an outlink; back and forward retrace i
   await expect(inspector).toBeHidden();
 });
 
-test('back along a walk keeps the keyboard in the link grid, on the row the walk left from', async ({ page }) => {
+test('the inspector’s back keeps the keyboard in the link grid, on the row the walk left from', async ({ page }) => {
   const inspector = await inspectPlant(page, 'hreflang-en');
   const opened = inspected(page);
   await showTab(inspector, /^Inlinks/);
@@ -122,21 +147,24 @@ test('back along a walk keeps the keyboard in the link grid, on the row the walk
   expect(await cursorRow()).toBe('5');
   await page.keyboard.press('Enter');
   await expect.poll(() => inspected(page)).not.toBe(opened);
-  await expect(inspector.getByRole('grid', { name: 'Inlinks' })).toBeFocused();
+  // The page that holds that link, on its Outlinks: the keyboard is in the list the hop arrived on.
+  await expect(inspector.getByText(CAME_FIRST)).toBeVisible();
+  await expect(inspector.getByRole('grid', { name: 'Outlinks' })).toBeFocused();
 
-  // Back: the URL walked from, its inlinks where they were left, the keyboard still in them.
-  await page.keyboard.press('Alt+ArrowLeft');
+  // The inspector's back: the URL walked from, its inlinks where they were left, the keyboard in them again.
+  await backStrip(inspector).click();
   await expect.poll(() => inspected(page)).toBe(opened);
+  await expect(inspector.getByRole('tab', { name: /^Inlinks/ })).toHaveAttribute('aria-selected', 'true');
   await expect(inspector.getByRole('grid', { name: 'Inlinks' })).toBeFocused();
   await expect.poll(cursorRow).toBe('5');
   // So an arrow key moves on in the inlinks, never the view behind (which would change the URL inspected).
   await page.keyboard.press('ArrowDown');
   await expect.poll(cursorRow).toBe('6');
   expect(inspected(page)).toBe(opened);
-  // Forward again: the keyboard is still in the inspector.
-  await page.keyboard.press('Alt+ArrowRight');
-  await expect.poll(() => inspected(page)).not.toBe(opened);
-  await expect(inspector.getByRole('grid', { name: 'Inlinks' })).toBeFocused();
+  // The browser's Back, with the keyboard still in the inspector, closes it: the walk was never in history.
+  await page.keyboard.press('Alt+ArrowLeft');
+  await expect(inspector).toBeHidden();
+  expect(inspected(page)).toBeNull();
 });
 
 /** The steps the inspector has walked to this history entry, as the history model counts them. */
@@ -144,29 +172,30 @@ const walkedSteps = (page: Page) =>
   page.evaluate(() => (history.state as { inspectTrail?: unknown[] } | null)?.inspectTrail?.length ?? 0);
 
 /**
- * Walks `steps` inlinks with Enter on the Inlinks grid's first row: every page has a page linking to it, and the
- * keyboard stays in the grid. Each URL's links are a grid of their own, so a step is done when a new grid has rows.
+ * Walks `steps` inlinks with Enter on the Inlinks grid's first row: every page has a page linking to it. Each hop
+ * arrives on that page's Outlinks, with the link back first, which is how a step is known to have landed; the next
+ * starts from that page's own Inlinks.
  */
 async function walkInlinks(page: Page, inspector: Locator, steps: number) {
-  await showTab(inspector, /^Inlinks/);
   const from = await walkedSteps(page);
   for (let step = 1; step <= steps; step++) {
-    const grid = inspector.locator('[role="grid"]:not([data-walked-from])');
+    await showTab(inspector, /^Inlinks/);
+    const grid = inspector.getByRole('grid', { name: 'Inlinks' });
     await expect(grid.getByRole('row').nth(1)).toBeVisible();
     await grid.focus();
-    await grid.evaluate((element) => element.setAttribute('data-walked-from', ''));
     await page.keyboard.press('Enter');
     await expect.poll(() => walkedSteps(page)).toBe(from + step);
+    await expect(inspector.getByText(CAME_FIRST)).toBeVisible();
   }
-  await expect(inspector.locator('[role="grid"]:not([data-walked-from])').getByRole('row').nth(1)).toBeVisible();
 }
 
-test('a walk longer than the browser keeps history for still closes with Esc', async ({ page }) => {
-  test.setTimeout(120_000);
+test('a walk of many hops is still one place in history: Esc closes it to the view', async ({ page }) => {
   const inspector = await inspectPlant(page, 'hreflang-en');
-  await walkInlinks(page, inspector, 60);
-  // Chromium keeps 50 entries: the one the inspector opened on is gone, and going back 60 would do nothing.
-  expect(await page.evaluate(() => history.length)).toBeLessThan(60);
+  const places = await entries(page);
+  await walkInlinks(page, inspector, 6);
+  // Six hops, and history no longer than when the inspector opened: nothing for the browser to run out of.
+  expect(await entries(page)).toBe(places);
+  expect(await walkedSteps(page)).toBe(6);
   await page.keyboard.press('Escape');
   await expect(inspector).toBeHidden();
   await expect(page).toHaveURL(/\/urls\?q=/);
@@ -357,20 +386,23 @@ test('the app’s keys work with focus in the source: back and forward, the shor
   page,
 }) => {
   const inspector = await inspectPlant(page, 'hreflang-en');
-  const opened = inspected(page);
   await walkInlinks(page, inspector, 1);
   const walked = inspected(page);
   await showTab(inspector, /^Source/);
   const source = inspector.getByRole('textbox', { name: 'HTML source' });
   // The viewer has a caret, so to the keyboard it's a text field: these are the keys a text field would keep.
+  // Back is the app's there too: it leaves the inspector's place in history, which closes it (the hop was in place);
+  // forward returns to the URL walked to.
   await source.click();
   await expect(source).toBeFocused();
   await page.keyboard.press('Alt+ArrowLeft');
-  await expect.poll(() => inspected(page)).toBe(opened);
-  await expect(source).toContainText('hreflang');
-  await source.click();
+  await expect(inspector).toBeHidden();
+  expect(inspected(page)).toBeNull();
   await page.keyboard.press('Alt+ArrowRight');
+  await expect(inspector).toBeVisible();
   await expect.poll(() => inspected(page)).toBe(walked);
+  await showTab(inspector, /^Source/);
+  await expect(source).toBeVisible();
 
   await source.click();
   await page.keyboard.press('?');
