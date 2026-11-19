@@ -104,7 +104,7 @@ export function OneFixTag({ className }: { className?: string | undefined }) {
   return (
     <span className={clsx('si-onefix-tag', className)}>
       <Icon icon={Layers} size="xs" />
-      One fix
+      Fix once
     </span>
   );
 }

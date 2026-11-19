@@ -2,7 +2,7 @@
 // sidebar's item, the breadcrumb and Ctrl+2 all pointed at the page they were on, because the route's optional check
 // was inherited from where they were shown.
 import { createMemoryHistory } from '@tanstack/react-router';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { setTransport } from '../api/transport';
 import { App } from '../app/App';
@@ -16,7 +16,7 @@ import { analysisWith, gardenItem, problemRoutes, simpleRoutes } from '../test/s
 import { TABLE_STUBBED } from './tableStubbed';
 
 const FIX = `/crawls/${TEST_CRAWL_ID}/issues`;
-const ANALYSIS = analysisWith({ 'internal-client-error': 4, 'empty-anchor-text': 265 }, {});
+const ANALYSIS = analysisWith({ 'internal-client-error': 4, 'empty-anchor-text': 265, 'slow-response': 3 }, {});
 
 async function open(path: string, extra: FakeRoute[] = []) {
   replaceSettings({ mode: 'simple', hiddenChecks: [] });
@@ -84,5 +84,26 @@ describe.skipIf(TABLE_STUBBED)('the way back from a problem to What to fix', () 
     const crumbs = within(screen.getByRole('navigation', { name: 'Breadcrumb' }));
     expect(crumbs.queryByRole('link', { name: 'What to fix' })).toBeNull();
     expect(crumbs.getByText('What to fix').closest('li')).toHaveAttribute('aria-current', 'page');
+  });
+});
+
+// S-14: at 1280 × 720 the list a problem's page exists for started below the fold, and "Fixed it?" was under the list.
+describe.skipIf(TABLE_STUBBED)('the ways down a problem’s page, from its head', () => {
+  it('jumps to where to fix it and to Fixed it?, putting the keys there', async () => {
+    Element.prototype.scrollIntoView = () => undefined;
+    await open(`${FIX}/internal-client-error`);
+    const head = within(screen.getByRole('main').querySelector('header')!);
+    fireEvent.click(head.getByRole('button', { name: 'Jump to where to fix it' }));
+    expect(screen.getByRole('heading', { level: 2, name: 'Where to fix it' })).toHaveFocus();
+    fireEvent.click(head.getByRole('button', { name: 'Fixed it? Check it again' }));
+    expect(screen.getByRole('heading', { level: 2, name: 'Fixed it?' })).toHaveFocus();
+  });
+
+  it('names the list by what it is on a problem that isn’t a link', async () => {
+    await open(`${FIX}/empty-anchor-text`);
+    expect(screen.getByRole('button', { name: 'Jump to where to fix it' })).toBeVisible();
+    cleanup();
+    await open(`${FIX}/slow-response`);
+    expect(screen.getByRole('button', { name: 'Jump to the list' })).toBeVisible();
   });
 });

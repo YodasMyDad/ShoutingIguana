@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useRouter } from '@tanstack/react-router';
-import { ArrowLeft, ArrowUpRight, FileText, Gauge, UserRound } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUpRight, FileText, Gauge, UserRound } from 'lucide-react';
 import { useMemo, useRef, type ReactNode } from 'react';
 import { analysisQuery, checksQuery, crawlQuery } from '../api/queries';
 import type { IssueGroup } from '../api/grids';
@@ -36,7 +36,7 @@ import {
   wholesOf,
   type ShareWords,
 } from './plainWords';
-import { flatOneFixSentences, oneFixSentences, oneFixTitle } from './oneFixWords';
+import { SITEMAP_ITSELF, flatOneFixSentences, oneFixHolds, oneFixSentences, oneFixTitle } from './oneFixWords';
 import { plainImageInsight, plainRelated } from './plainEvidence';
 import { saysShownAt, useGroupShownAt } from '../screens/issues/useShownAt';
 import { WhereItIs } from './WhereItIs';
@@ -207,12 +207,25 @@ function SeeInAdvanced() {
   );
 }
 
+/** Brings a part of the page into view and puts the keys on it, so Tab goes on from there. */
+function jumpTo(id: string): void {
+  const part = document.getElementById(id);
+  if (!part) return;
+  part.scrollIntoView({ block: 'start', behavior: 'auto' });
+  const heading = part.querySelector<HTMLElement>('h2');
+  if (heading) {
+    heading.tabIndex = -1;
+    heading.focus({ preventScroll: true });
+  }
+}
+
 function ProblemHead({
   titleRef,
   outcome,
   title,
   facts,
   after,
+  jumps,
 }: {
   titleRef: React.RefObject<HTMLHeadingElement | null>;
   outcome: CheckEntry['outcome'];
@@ -220,6 +233,11 @@ function ProblemHead({
   facts?: ReactNode;
   /** Under the facts: what a fix of it also fixes. */
   after?: ReactNode;
+  /**
+   * The ways down the page from its head (the UX audit of 2026-11-19, S-14): at 1280 × 720 the list a problem's page
+   * exists for started below the fold, and "Fixed it?" was thousands of pixels under a long list.
+   */
+  jumps?: readonly { to: string; words: string }[] | undefined;
 }) {
   return (
     <header className="mb-5">
@@ -232,6 +250,21 @@ function ProblemHead({
       </h1>
       {facts ? <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-14 text-text-secondary">{facts}</ul> : null}
       {after}
+      {jumps && jumps.length > 0 ? (
+        <p className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-14">
+          {jumps.map((jump) => (
+            <button
+              key={jump.to}
+              type="button"
+              className="si-link inline-flex items-center gap-1"
+              onClick={() => jumpTo(jump.to)}
+            >
+              {jump.words}
+              <Icon icon={ArrowDown} size="sm" />
+            </button>
+          ))}
+        </p>
+      ) : null}
     </header>
   );
 }
@@ -336,11 +369,16 @@ function FoundProblem({
   );
   const fixer = fixerWords(check.fixer);
   const first = useQuery({ ...firstGroupQuery(crawlId, check.id), enabled: check.grouping !== 'none' });
-  const template = first.data?.groups[0]?.likelyTemplate ? first.data.groups[0] : null;
+  // One fix only where the pages share one thing (oneFixWords' oneFixHolds): never for a kind of fault that is a
+  // different element on every page.
+  const template = first.data?.groups[0]?.likelyTemplate && oneFixHolds(check) ? first.data.groups[0] : null;
   // A check that doesn't group, on nearly every page checked: the engine says it's probably the template's.
-  const flatTemplate =
+  const onNearlyAll =
     check.grouping === 'none' &&
     analysis.counts.find((candidate) => candidate.checkId === check.id)?.likelyTemplate === true;
+  const flatTemplate = onNearlyAll && oneFixHolds(check);
+  // Pages missing from the sitemap, nearly all of them: the sitemap is what's wrong, not a part the pages share.
+  const sitemapItself = onNearlyAll && !flatTemplate && check.category === 'sitemaps';
   // Where the one fix is: the link every page shares (a check of pages holding it), or the one page linking to most
   // of the broken addresses (a check of the addresses).
   const templateTarget = useTemplateLink(crawlId, check, template);
@@ -423,6 +461,10 @@ function FoundProblem({
             <AlsoFixes crawlId={crawlId} related={related} />
           ) : null
         }
+        jumps={[
+          { to: 'the-list', words: shape ? 'Jump to where to fix it' : 'Jump to the list' },
+          ...(owner ? [] : [{ to: 'fixed-it', words: 'Fixed it? Check it again' }]),
+        ]}
       />
       {owner ? (
         // Nothing to fix: what was found, in its first sentence alone (the others say why it matters, and who'd fix it).
@@ -470,9 +512,12 @@ function FoundProblem({
         </Callout>
       ) : flatTemplate ? (
         <Callout className="mt-4" title={oneFixTitle(count, count, noun)}>
-          {flatOneFixSentences(count, analysis.pagesAnalyzed).lead}{' '}
-          {check.plainOneFix ?? 'That’s almost certainly in the part of the site every page shares.'}{' '}
+          {flatOneFixSentences(count, analysis.pagesAnalyzed).lead} {check.plainOneFix}{' '}
           {flatOneFixSentences(count, analysis.pagesAnalyzed).fix}
+        </Callout>
+      ) : sitemapItself ? (
+        <Callout className="mt-4" title={SITEMAP_ITSELF.title}>
+          {SITEMAP_ITSELF.words}
         </Callout>
       ) : shared && !shape ? (
         <Callout

@@ -187,7 +187,7 @@ describe.skipIf(TABLE_STUBBED)('What to fix', () => {
     await whatToFix();
     const looks = () => within(main().getByRole('region', { name: 'Worth a look 23' }));
     expect(looks().getAllByRole('link')).toHaveLength(3);
-    expect(await looks().findByText('One fix')).toBeVisible();
+    expect(await looks().findByText('Fix once')).toBeVisible();
     fireEvent.click(looks().getByRole('button', { name: 'Show all 23 things worth a look' }));
     expect(looks().getAllByRole('link')).toHaveLength(23);
     const passed = within(main().getByRole('region', { name: 'Nothing wrong 115' }));
@@ -210,7 +210,7 @@ describe.skipIf(TABLE_STUBBED)('What to fix', () => {
     await whatToFix();
     const looks = within(main().getByRole('region', { name: 'Worth a look 23' }));
     expect(await looks.findByText('One fix covers 264 of 265 pages')).toBeVisible();
-    expect(looks.queryByText('One fix')).toBeNull();
+    expect(looks.queryByText('Fix once')).toBeNull();
     expect(
       looks.getByRole('link', { name: /^Worth a look Links with nothing to read One fix covers 264 of 265 pages/ }),
     ).toBeVisible();

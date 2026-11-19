@@ -25,7 +25,7 @@ import { isBrokenImage } from '../ui/imageFacts';
 import { plainAddress, plainDetail, plainEvidence, plainImageInsight, plainRelated } from './plainEvidence';
 import { TargetWords } from './TargetWords';
 import { groupsQuery, rowsQuery, type Compare } from './whereQueries';
-import { oneFixTitle } from './oneFixWords';
+import { oneFixHolds, oneFixTitle } from './oneFixWords';
 import {
   causeName,
   causeWords,
@@ -565,8 +565,8 @@ function GroupRow({
           <span className="mb-1 flex flex-wrap items-center gap-2 font-medium">
             {formatCount(count)} {noun(count)}
             {/* One fix, where it clears the whole problem; else how much of it one fix covers. */}
-            {group.likelyTemplate && count >= total ? <OneFixTag /> : null}
-            {group.likelyTemplate && count < total ? (
+            {group.likelyTemplate && oneFixHolds(check) && count >= total ? <OneFixTag /> : null}
+            {group.likelyTemplate && oneFixHolds(check) && count < total ? (
               <span className="text-13 font-regular text-text-secondary">
                 {oneFixTitle(count, total, (check.subject ?? 'page') === 'page' ? 'pages' : 'addresses')}
               </span>

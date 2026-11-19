@@ -188,7 +188,7 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
     await site();
     const list = within(main().getByRole('region', { name: 'Fix these first' }));
     expect(await list.findByText('One fix covers 50 of 61 pages')).toBeVisible();
-    expect(list.queryByText('One fix')).toBeNull();
+    expect(list.queryByText('Fix once')).toBeNull();
   });
 
   it('says what’s fine and what couldn’t be checked, with the engine’s plain reasons', async () => {

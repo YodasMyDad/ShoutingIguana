@@ -135,7 +135,7 @@ describe.skipIf(TABLE_STUBBED)('Where it is, in Simple', () => {
     const where = await open('image-too-large', evidenceRoutes());
     expect(await screen.findByText('One fix covers 12 of 14 pages', { selector: '.si-callout__title' })).toBeVisible();
     expect(await where.findByText('One fix covers 12 of 14 pages')).toBeVisible();
-    expect(where.queryByText('One fix')).toBeNull();
+    expect(where.queryByText('Fix once')).toBeNull();
     expect(screen.queryByText(/One fix clears/)).toBeNull();
   });
 
@@ -153,8 +153,39 @@ describe.skipIf(TABLE_STUBBED)('Where it is, in Simple', () => {
     expect(
       await screen.findByText('One fix clears all 4 of these pages', { selector: '.si-callout__title' }),
     ).toBeVisible();
-    expect(await where.findByText('One fix')).toBeVisible();
+    expect(await where.findByText('Fix once')).toBeVisible();
     expect(screen.queryByText(/One fix covers/)).toBeNull();
+  });
+
+  // The UX audit of 2026-11-19, S-09: "Headings that jump levels" said "45 of these 81 pages have the same fault, in the
+  // part of the site every page shares" over rows that each named a different heading.
+  it('promises no one fix for a kind of fault that is a different thing on every page', async () => {
+    const pages = [1, 2, 3, 4].map((id) => page(id, `/product-${id}/`, { group: 9, detail: 'H1 → H3' }));
+    const where = await open(
+      'heading-levels-skipped',
+      catalogRoutes(
+        'heading-levels-skipped',
+        4,
+        [group({ detail: 'H1 → H3', pages: 4, share: 1, likelyTemplate: true })],
+        pages,
+      ),
+    );
+    expect(await where.findByText('4 pages')).toBeVisible();
+    expect(screen.queryByText(/One fix (clears|covers)/)).toBeNull();
+    expect(where.queryByText('Fix once')).toBeNull();
+    expect(screen.queryByText(/part of the site every page shares/)).toBeNull();
+  });
+
+  // S-09: "One fix clears all 257 of these pages… in the part of the site every page shares", of a sitemap.
+  it('says the sitemap itself is the fault when nearly every page is missing from it', async () => {
+    const pages = [1, 2, 3, 4].map((id) => page(id, `/product-${id}/`));
+    await open('not-in-sitemap', catalogRoutes('not-in-sitemap', 4, [], pages, { counted: { likelyTemplate: true } }));
+    expect(
+      await screen.findByText('The sitemap itself is the fault', { selector: '.si-callout__title' }),
+    ).toBeVisible();
+    expect(screen.getByText(/Nearly every page is missing from it/)).toBeVisible();
+    expect(screen.queryByText(/One fix clears/)).toBeNull();
+    expect(screen.queryByText(/part of the site every page shares/)).toBeNull();
   });
 
   it('heads a language version that doesn’t link back with where the return link goes', async () => {
