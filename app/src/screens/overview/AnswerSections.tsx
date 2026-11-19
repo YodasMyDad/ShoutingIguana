@@ -1,9 +1,11 @@
 import { Link } from '@tanstack/react-router';
+import { RotateCcw } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { CheckChange } from '../../api/fixLoop';
 import type { Checks } from '../../api/types';
 import { affectedNoun, affectedWords, checkReach, type CrawlCounts } from '../../crawl/checkSubject';
 import { formatCount, formatCountOf } from '../../lib/format';
+import { Button } from '../../ui/Button';
 import { Card, CardBody, CardHeader } from '../../ui/Card';
 import { ListRow } from '../../ui/ListRow';
 import { Num } from '../../ui/Num';
@@ -14,7 +16,15 @@ import { TextLink } from '../../ui/TextLink';
 import { outcomeWord } from '../../ui/severity';
 import { causeWords, type AnalysisTotals, type CheckEntry } from '../issues/checkList';
 import { CountWithReach } from '../issues/CountWithReach';
-import { categoryFigures, clearedWords, fixFirst, severityFigures, skippedGroups } from './answer';
+import {
+  asksForACrawl,
+  categoryFigures,
+  clearedWords,
+  fixFirst,
+  severityFigures,
+  skippedGroups,
+  skippedReasonWords,
+} from './answer';
 import { linkProps } from './overviewLinks';
 
 const SEVERITY_LABELS = { error: 'Errors', warning: 'Warnings', notice: 'Notices' } as const;
@@ -258,50 +268,65 @@ export function Categories({
   );
 }
 
-/** "A, B and C". */
-function listed(items: readonly React.ReactNode[]): React.ReactNode[] {
-  return items.flatMap((item, index) => (index === 0 ? [item] : [index === items.length - 1 ? ' and ' : ', ', item]));
-}
-
 /**
- * The checks that didn't run, grouped by why, in the engine's plain words. Always shown when there are any: a skipped
- * check is not a clean one.
+ * The checks that didn't run, grouped by why. Always shown when there are any: a skipped check is not a clean one.
+ * Each group leads with how many checks and the reason (in the plural where it's several), then their names as a
+ * list of links in columns; and where the reason's remedy is a fresh crawl, the card carries it as a control, with
+ * this crawl's settings (the audit of 2026-11-19, H-04 and H-11: one sentence of 22 names, and "Crawl again" as plain
+ * text three times).
  */
 export function SkippedChecks({ crawlId, entries }: { crawlId: string; entries: readonly CheckEntry[] }) {
   const groups = skippedGroups(entries);
-  if (groups.length === 0) return null;
+  const first = groups[0]?.checks[0];
+  if (!first) return null;
   const count = groups.reduce((sum, group) => sum + group.checks.length, 0);
+  const again = groups.some((group) => asksForACrawl(group.reason));
   return (
     <Card as="section" aria-labelledby="overview-skipped-title">
       <CardHeader
         title="Not checked on this crawl"
         titleId="overview-skipped-title"
-        meta={`${formatCountOf(count, 'check')} skipped`}
+        meta={
+          <TextLink {...linkProps(crawlId, first.link)} variant="subtle">
+            {formatCountOf(count, 'check')} skipped
+          </TextLink>
+        }
+        actions={
+          again ? (
+            <Button asChild size="sm" icon={RotateCcw}>
+              <Link to="/new" search={{ from: crawlId }}>
+                Crawl again…
+              </Link>
+            </Button>
+          ) : null
+        }
       />
       <CardBody>
-        <ul className="flex flex-col gap-3">
-          {groups.map((group) => (
-            <li key={group.reason ?? ''} className="flex gap-2.5 text-13">
-              <span className="pt-0.5">
-                <SeverityMark severity="skipped" decorative />
-              </span>
-              <div className="flex min-w-0 flex-col gap-0.5">
-                <span className="font-medium text-text">
+        <ul className="flex flex-col gap-4">
+          {groups.map((group) => {
+            const many = formatCountOf(group.checks.length, 'check');
+            return (
+              <li key={group.reason ?? ''} className="flex flex-col gap-2 text-13">
+                <p className="text-text">
                   <span className="sr-only">Skipped: </span>
-                  {listed(
-                    group.checks.map((check) => (
-                      <TextLink key={check.id} {...linkProps(crawlId, check.link)} variant="subtle">
-                        {check.title}
-                      </TextLink>
-                    )),
-                  )}
-                </span>
-                <span className="text-text-secondary">
-                  {group.reason ?? 'The analysis didn’t record why: its notes say what it couldn’t check.'}
-                </span>
-              </div>
-            </li>
-          ))}
+                  <span className="font-semibold">{many}</span>
+                  <span className="text-text-muted"> · </span>
+                  <span>
+                    {group.reason
+                      ? skippedReasonWords(group.reason, group.checks.length)
+                      : 'The analysis didn’t record why: its notes say what it couldn’t check.'}
+                  </span>
+                </p>
+                <ul aria-label={`The ${many}`} className="si-name-columns">
+                  {group.checks.map((check) => (
+                    <li key={check.id}>
+                      <TextLink {...linkProps(crawlId, check.link)}>{check.title}</TextLink>
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            );
+          })}
         </ul>
       </CardBody>
     </Card>

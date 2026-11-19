@@ -52,6 +52,7 @@ import type { CrawlCounts } from '../crawl/checkSubject';
 import { useAnalysisControl } from './issues/useAnalysisControl';
 import { AlertList } from './overview/AlertList';
 import { alertEntries } from './overview/alerts';
+import { skippedGroups } from './overview/answer';
 import { Categories, FixFirst, SeverityFigures, SkippedChecks } from './overview/AnswerSections';
 import { DepthCard, IndexabilityCard, ResponseCard, StatusCodesCard } from './overview/CrawlSections';
 import { emptyCrawl, isEmptyCrawl, type EmptyCrawl } from './overview/emptyCrawl';
@@ -163,6 +164,7 @@ export function OverviewScreen() {
   // hidden ones came to is said after the sentence, never left to read as clean.
   const counted = useMemo(() => (entries ? countedEntries(entries) : null), [entries]);
   const totals = counted ? analysisTotals(counted) : null;
+  const skippedReasons = counted ? skippedGroups(counted).length : 0;
   const hiddenChecks = entries ? hiddenTotals(entries) : null;
   // The engine's order to fix them in (the analysis's `fixFirst`), the app's own for an earlier engine's analysis.
   const first = entries ? firstCheckToFix(entries, analysis.data?.fixFirst) : null;
@@ -293,6 +295,9 @@ export function OverviewScreen() {
             analysing={analysing}
             canAnalyse={controls.canAnalyse}
             onAnalyse={control.analyse}
+            // The "Not checked on this crawl" card says what was skipped and why, with what to do: the banner says
+            // it again only when the analysis left more notes than the card has reasons (H-11).
+            notes={skippedReasons === 0 || analysis.data.notes.length > skippedReasons}
           />
         ) : null}
 

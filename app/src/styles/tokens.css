@@ -388,6 +388,7 @@
   --overview-card-min: 96px; /* a breakdown card's body while it loads */
   --overview-figure-min: 116px; /* a severity figure, while it loads */
   --overview-list-min: 320px; /* Fix first and the categories, while they load */
+  --name-column-min: 220px; /* a column of check names, in a list set in columns (the skipped checks) */
   /* The inspector's rows: a mark, then the words. */
   --check-row-columns: var(--leading-13) minmax(0, 1fr);
   --chain-columns: var(--icon-box) minmax(0, 1fr); /* a redirect chain's rail, then each step */

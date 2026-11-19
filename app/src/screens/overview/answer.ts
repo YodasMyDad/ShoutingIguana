@@ -206,6 +206,26 @@ export function skippedGroups(entries: readonly CheckEntry[]): SkippedGroup[] {
   return [...groups.values()];
 }
 
+/** Whether a skip reason's remedy is a fresh crawl: the card then carries "Crawl again…" as a control. */
+export function asksForACrawl(reason: string | null): boolean {
+  return reason !== null && /crawl again/i.test(reason);
+}
+
+/**
+ * A group's reason as the card says it (the audit of 2026-11-19, H-11). The engine writes each reason for one check
+ * ("what this check needs. Crawl again to check it."): over several checks it reads in the plural. And "an earlier
+ * version" says whose: Shouting Iguana's.
+ */
+export function skippedReasonWords(reason: string, checks: number): string {
+  const whose = reason.replace(/earlier version(?! of)/g, 'earlier version of Shouting Iguana');
+  if (checks === 1) return whose;
+  return whose
+    .replace(/\b(this|the) check needs\b/g, 'these checks need')
+    .replace(/\bthis check\b/g, 'these checks')
+    .replace(/\bto check it\b/g, 'to check them')
+    .replace(/\bto run it\b/g, 'to run them');
+}
+
 // -------------------------------------------------------------------------------------------------------- Indexability
 
 /** The facets query indexability reads: the site's page URLs the crawl asked for. */

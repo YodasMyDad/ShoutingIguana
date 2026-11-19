@@ -2867,6 +2867,17 @@
   }
 
   /* -------------------------------------------------------------- List rows */
+  /* A long list of short names (Overview's skipped checks), in as many columns as fit: read down, then across. */
+  .si-name-columns {
+    columns: 3 var(--name-column-min);
+    column-gap: var(--space-6);
+  }
+
+  .si-name-columns > li {
+    break-inside: avoid;
+    padding-block: var(--space-0-5);
+  }
+
   .si-list-row {
     display: grid;
     grid-template-columns: var(--icon-md) minmax(0, 1fr) auto;
