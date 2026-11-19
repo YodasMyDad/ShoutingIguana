@@ -104,7 +104,7 @@ export function CommandPalette() {
       list.push({
         id: `settings:${place.section ?? 'general'}`,
         group: 'Go to',
-        title: place.title,
+        title: appMode === 'simple' ? (place.simpleTitle ?? place.title) : place.title,
         keywords: place.keywords,
         run: () => navigate({ to: '/settings/{-$section}', params: { section: place.section } }),
       });

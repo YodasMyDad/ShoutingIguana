@@ -7,6 +7,11 @@ export interface SettingsPlace {
   /** The section's id in the address: `/settings/analysis`. Undefined for General, the first. */
   section: string | undefined;
   title: string;
+  /**
+   * Its name in Simple's palette, where the section's own name is one of Advanced's words ("Crawl", "Analysis"): the
+   * section is the same in both modes, and Simple's palette says none of Advanced's words (simple/simpleWords.test.tsx).
+   */
+  simpleTitle?: string;
   /** The settings in it, by the words someone would type. */
   keywords: readonly string[];
 }
@@ -21,6 +26,7 @@ export const SETTINGS_PLACES: readonly SettingsPlace[] = [
   {
     section: 'crawl-defaults',
     title: 'Settings: Crawl defaults',
+    simpleTitle: 'Settings: Defaults for a new check',
     keywords: [
       'app',
       'preferences',
@@ -47,6 +53,7 @@ export const SETTINGS_PLACES: readonly SettingsPlace[] = [
   {
     section: 'analysis',
     title: 'Settings: Analysis',
+    simpleTitle: 'Settings: Limits the checks use',
     keywords: [
       'app',
       'preferences',
