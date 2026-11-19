@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, ClipboardList, Copy, ExternalLink, Layers, List, PanelRight } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from 'react';
 import { api } from '../../api/client';
@@ -26,7 +26,7 @@ import { StatusCode } from '../../ui/StatusCode';
 import { Url } from '../../ui/Url';
 import { isResourceType, urlDisplay } from '../../ui/urlText';
 import { treeLayout, type OpenGroup } from '../issues/groupTree';
-import { fittedGroupWidths, groupColumnNeeds } from './groupColumns';
+import { MEASURED_GROUPS, fittedGroupWidths, groupColumnNeeds } from './groupColumns';
 import { OPEN_AT_LINK_HINT, linkFollowWords, linkTextMeasure, sourceAtLink } from './linkColumns';
 import {
   FIRST_TARGET_LINKS,
@@ -160,6 +160,7 @@ function LinkedFrom({
 
 const FRAME_SLACK = 24;
 const WIDTHS: Record<string, number> = {
+  target: 420,
   status: 128,
   size: 96,
   pixels: 120,
@@ -400,10 +401,27 @@ export function LinkGroupsGrid({
   // The fonts the widths are measured in may still be on their way (an address measured in a fallback monospace is
   // narrower than it draws): measured again as each arrives.
   const fontsLoaded = useFontsLoaded();
+  // The page that links to each of those targets, as their rows read it (the same reads, by the same keys): measured
+  // once they've all come, so "Linked from" takes its room in one step, not a row at a time.
+  const measured = useMemo(() => (groupsInView ?? []).slice(0, MEASURED_GROUPS), [groupsInView]);
+  const firstPages = useQueries({
+    queries: measured.map((target) => firstLinkQuery(firstLinks, target.id)),
+    combine: (reads) =>
+      reads.every((read) => !read.isPending) ? reads.map((read) => read.data?.rows[0]?.['from.url'] ?? null) : null,
+  });
   const needs = useMemo(
-    () => groupColumnNeeds(groupsInView ?? [], images, siteOrigin, linkTextMeasure()),
+    () => {
+      const pageOf = firstPages ? new Map(measured.map((target, index) => [target.id, firstPages[index]])) : null;
+      return groupColumnNeeds(
+        measured,
+        images,
+        siteOrigin,
+        linkTextMeasure(),
+        pageOf ? (target) => pageOf.get(target.id) : undefined,
+      );
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the fonts arriving change what's measured
-    [groupsInView, images, siteOrigin, fontsLoaded],
+    [measured, firstPages, images, siteOrigin, fontsLoaded],
   );
   const widths = useMemo(
     () => fittedGroupWidths(shownColumns, images ? IMAGE_WIDTHS : WIDTHS, (width ?? 1000) - FRAME_SLACK, needs),
@@ -610,7 +628,8 @@ export function LinkGroupsGrid({
             {...(typeof pageId === 'number'
               ? { onGo: () => onInspect(pageId, 'from', { section: 'outlinks', link: row.group.id }) }
               : {})}
-            className="min-w-1/4 flex-1"
+            // As wide as its address: what the link says comes straight after it, never across the row from it.
+            className="min-w-1/4 shrink"
           />
           <span className="max-w-2/5 min-w-0 shrink truncate" title={link.text ?? ''}>
             {link.text ? `“${link.text}”` : muted(images ? 'No alt text' : 'No text')}
