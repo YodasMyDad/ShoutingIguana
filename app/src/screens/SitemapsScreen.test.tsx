@@ -486,7 +486,8 @@ describe('Sitemaps: the list', () => {
     const href = decodeURIComponent(link.getAttribute('href') ?? '');
     expect(href.startsWith(`/crawls/${TEST_CRAWL_ID}/urls?filter=`)).toBe(true);
     const filter = JSON.parse(href.slice(href.indexOf('filter=') + 'filter='.length)) as unknown;
-    expect(filter).toEqual([...INDEXABLE_SITE_PAGES, { column: 'inSitemap', op: 'is', value: false }]);
+    // One filter, the check's own, so URLs opens under one chip that names the list (the UX audit, D-16).
+    expect(filter).toEqual([{ column: 'check', op: 'in', values: ['not-in-sitemap'] }]);
   });
 
   it('says the analysis didn’t count them, and why, when the engine can’t place the site’s pages: never “in a sitemap”', async () => {

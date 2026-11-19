@@ -387,7 +387,9 @@ export function coverageOf(facets: FacetsPage): Coverage {
     known: true,
     missing: missing?.count ?? 0,
     pages: facets.matching,
-    filters: [...INDEXABLE_SITE_PAGES, missing?.filter ?? { column: 'inSitemap', op: 'is', value: false }],
+    // The check's own pages, which are these (the line and the check count the same): one chip in URLs that says
+    // what the list is, where the facets' filters were eight that had to be decoded (the UX audit, D-16).
+    filters: [{ column: 'check', op: 'in', values: [COVERAGE_CHECK] }],
   };
 }
 

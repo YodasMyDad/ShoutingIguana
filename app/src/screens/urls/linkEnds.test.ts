@@ -31,15 +31,11 @@ describe('the URL grid narrowed to a links view’s ends', () => {
   });
 
   it('says which end of which links, by the view’s name where it is one', () => {
-    expect(linkEndsWords({ end: 'to', filter: BROKEN })).toBe(
-      'Only the URLs that the broken links lead to, each once.',
-    );
+    expect(linkEndsWords({ end: 'to', filter: BROKEN })).toBe('The URLs that the broken links point to, each once.');
     expect(linkEndsWords({ end: 'from' })).toBe('Only the pages with a link on them, each once.');
-    expect(linkEndsWords({ end: 'from', filter: BROKEN })).toBe(
-      'Only the pages that the broken links are on, each once.',
-    );
+    expect(linkEndsWords({ end: 'from', filter: BROKEN })).toBe('The pages that the broken links are on, each once.');
     expect(linksViewWords({ filter: [...BROKEN, { column: 'kind', op: 'in', values: ['image'] }], q: 'x' })).toBe(
-      'the links of a view with 3 filters and the search “x”',
+      'the links matching 3 filters and the search “x” in Links',
     );
   });
 });

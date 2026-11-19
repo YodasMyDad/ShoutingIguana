@@ -26,7 +26,7 @@ export function linksViewWords(links: Pick<LinkEndsSearch, 'filter' | 'q'>): str
     filters.length > 0 ? formatCountOf(filters.length, 'filter') : null,
     links.q ? `the search “${links.q}”` : null,
   ].filter((part): part is string => part !== null);
-  return `the links of a view with ${parts.join(' and ')}`;
+  return `the links matching ${parts.join(' and ')} in Links`;
 }
 
 /** What the narrowed grid says above its rows: which end, of which links. */
@@ -38,6 +38,6 @@ export function linkEndsWords(links: LinkEndsSearch): string {
       : 'Only the pages with a link on them, each once.';
   }
   return links.end === 'to'
-    ? `Only the URLs that ${view} lead to, each once.`
-    : `Only the pages that ${view} are on, each once.`;
+    ? `The URLs that ${view} point to, each once.`
+    : `The pages that ${view} are on, each once.`;
 }

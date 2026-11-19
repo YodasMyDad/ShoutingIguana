@@ -279,13 +279,14 @@ describe('the site’s pages no sitemap lists', () => {
       known: true,
       missing: 2,
       pages: 9,
-      filters: [...INDEXABLE_PAGES, { column: 'inSitemap', op: 'is', value: false }],
+      // The check's own pages: one chip in URLs, not eight.
+      filters: [{ column: 'check', op: 'in', values: ['not-in-sitemap'] }],
     });
     const parts = coverage.known ? coverageWords(coverage) : [];
     expect(sentenceText(parts)).toBe('2 of the site’s 9 indexable pages aren’t in any sitemap.');
     // Both counts are links: the pages no sitemap lists, and the site's indexable pages.
     expect(parts.filter((part) => typeof part !== 'string')).toEqual([
-      { text: '2', filters: [...INDEXABLE_PAGES, { column: 'inSitemap', op: 'is', value: false }] },
+      { text: '2', filters: [{ column: 'check', op: 'in', values: ['not-in-sitemap'] }] },
       { text: '9 indexable pages', filters: INDEXABLE_PAGES },
     ]);
   });
