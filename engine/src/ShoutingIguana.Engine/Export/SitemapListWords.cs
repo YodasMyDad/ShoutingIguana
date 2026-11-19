@@ -93,6 +93,8 @@ internal static partial class SitemapListWords
                 return sitemap.Entries > 0 || sitemap.Urls.Listed > 0 ? $"Read in part{why}" : $"Couldn’t be read{why}";
             case SitemapState.NotRead:
                 return "Left unread";
+            case SitemapState.ListLost:
+                return $"Read: {CountOf(sitemap.Entries, "URL")}, but this crawl no longer has the list";
             default:
                 return crawling ? "Not read yet" : "Never read";
         }

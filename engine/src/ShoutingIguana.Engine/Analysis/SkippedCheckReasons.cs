@@ -83,6 +83,12 @@ public static class SkippedCheckReasons
     public const string EARLIER_VERSION = "earlier-version";
 
     /// <summary>
+    /// A sitemap's row says it listed URLs and the crawl file holds none of them: a recheck by an earlier version deleted
+    /// its entries, then failed. What the sitemaps list can't be compared with the crawl. Crawling again mends it.
+    /// </summary>
+    public const string SITEMAP_LIST_LOST = "sitemap-list-lost";
+
+    /// <summary>
     /// Never stored: the check is newer than the engine that ran the analysis, so the analysis didn't know it.
     /// <see cref="Storage.IssueReader.ReadSkippedChecks"/> reports it for such checks. A check that an analysis by a newer
     /// engine didn't run gets no reason: that engine dropped it.

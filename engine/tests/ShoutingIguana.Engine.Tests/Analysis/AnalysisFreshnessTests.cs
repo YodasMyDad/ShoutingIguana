@@ -49,7 +49,7 @@ public sealed class AnalysisFreshnessTests
     [Fact]
     public void AnAnalysisFromBeforeTheNewChecksIsOutOfDate()
     {
-        Assert.Equal(20, AnalysisFreshness.VERSION);
+        Assert.Equal(21, AnalysisFreshness.VERSION);
         Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 12 }, CRAWLED, new AnalysisSettings()));
     }
 
@@ -128,7 +128,18 @@ public sealed class AnalysisFreshnessTests
     public void AnAnalysisFromBeforeRepeatedHeadersAndOneGroupPerCanonicalLoopIsOutOfDate()
     {
         Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 19 }, CRAWLED, new AnalysisSettings()));
-        Assert.Empty(AnalysisFreshness.Check(Current() with { AnalysisVersion = 20 }, CRAWLED, new AnalysisSettings()));
+    }
+
+    /// <summary>
+    /// Version 21 doesn't run the checks of what the sitemaps list on a crawl file that lost a sitemap's entries to a
+    /// failed recheck, where 20 read the empty list and reported every page as missing from the sitemaps. An analysis 20
+    /// stored is out of date, so such a file's results are worked out again.
+    /// </summary>
+    [Fact]
+    public void AnAnalysisFromBeforeALostSitemapListWasSaidIsOutOfDate()
+    {
+        Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 20 }, CRAWLED, new AnalysisSettings()));
+        Assert.Empty(AnalysisFreshness.Check(Current() with { AnalysisVersion = 21 }, CRAWLED, new AnalysisSettings()));
     }
 
     [Fact]
