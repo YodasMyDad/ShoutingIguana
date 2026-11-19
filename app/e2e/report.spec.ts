@@ -147,16 +147,25 @@ test.describe('in Simple', () => {
       return file;
     };
     try {
-      const file = await saveAs(/^Save…/, /The report/, /^.+ \d{4}-\d{2}-\d{2} report\.html$/);
+      const file = await saveAs(/^Save as HTML…/, /The report/, /^.+ \d{4}-\d{2}-\d{2} report\.html$/);
       expect(existsSync(file)).toBe(true);
       // The saved file is the document shown, without the app's scroll bars, which are the frame's alone (G6).
       const shown = (await frame(page).getAttribute('srcdoc')) ?? '';
       expect(shown).toContain('<style id="si-app-scroll-bars">');
       const saved = readFileSync(file, 'utf8');
       expect(saved).not.toContain('si-app-scroll-bars');
-      expect(saved).toBe(shown.replace(/<style id="si-app-scroll-bars">[\s\S]*?<\/style>/, ''));
+      // Nor the app's own parts (the UX audit's S-11): its style, and the link in each problem's heading, where the
+      // saved file has the engine's comment.
+      expect(shown).toContain('class="si-open"');
+      expect(saved).not.toContain('si-open"');
+      expect(saved).toBe(
+        shown
+          .replace(/<style id="si-app-scroll-bars">[\s\S]*?<\/style>/, '')
+          .replace(/<style id="si-app-report">[\s\S]*?<\/style>/, '')
+          .replace(/<a class="si-open" data-si-open="([a-z0-9-]+)"[^>]*>[^<]*<\/a>/g, '<!--si:open $1-->'),
+      );
 
-      const workbook = await saveAs(/Spreadsheet of everything/, /Spreadsheet of everything/, /^.+ report\.xlsx$/);
+      const workbook = await saveAs(/^Save spreadsheet…/, /Spreadsheet of everything/, /^.+ report\.xlsx$/);
       expect(path.basename(workbook)).toBe(path.basename(file).replace(/\.html$/, '.xlsx'));
       expect(readFileSync(workbook).subarray(0, 2).toString()).toBe('PK');
     } finally {
