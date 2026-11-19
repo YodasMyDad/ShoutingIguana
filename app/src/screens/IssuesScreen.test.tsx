@@ -313,7 +313,7 @@ describe('the Issues screen', () => {
     expect(counts()).not.toHaveTextContent(/to fix/);
     const related = screen.getByRole('list', { name: 'Related checks' });
     expect(related).toHaveTextContent(
-      'Fixing this also clears Links to broken internal URLs: all 3 pages it flags (4 points back).',
+      'Fixing this also clears Links to broken internal URLs: all 3 pages it flags (+4 to the score).',
     );
     fireEvent.click(within(related).getByRole('link', { name: 'Links to broken internal URLs' }));
     await waitFor(() => expect(path(router)).toBe(`${ISSUES}/broken-internal-links`));
@@ -392,11 +392,18 @@ describe('the Issues screen', () => {
 
   it('folds what’s wrong away too in a short window, behind one button that names all it opens', async () => {
     // 1280 × 720: the rows keep the room. Where the pane is wide the three still show (the classes are the narrow pane's).
-    const matchMedia = window.matchMedia;
-    window.matchMedia = ((query: string) => ({
-      ...matchMedia(query),
-      matches: query === '(max-height: 800px)',
-    })) as typeof window.matchMedia;
+    const matchMedia = window.matchMedia.bind(window);
+    window.matchMedia = (query: string) =>
+      ({
+        matches: query === '(max-height: 800px)',
+        media: query,
+        onchange: null,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+        addListener: () => undefined,
+        removeListener: () => undefined,
+        dispatchEvent: () => false,
+      }) satisfies MediaQueryList;
     try {
       sidecar();
       await open(`${ISSUES}/title-too-long`);

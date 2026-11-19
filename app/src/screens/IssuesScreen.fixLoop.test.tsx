@@ -334,6 +334,10 @@ describe('a check’s detail compared with the previous crawl (Advanced)', () =>
     expect(article.querySelector('[data-counts]')).toHaveTextContent(
       /^2 URLs·5% of the 40 URLs crawled·7 fewer since 17 Oct$/,
     );
+    // How it moved is a link to the same check on the crawl compared with (A-15), never dead words.
+    const then = detail.getByRole('link', { name: '7 fewer since 17 Oct' });
+    expect(then.getAttribute('href')).toMatch(/^\/crawls\/[0-9a-f]{16}\/issues\/internal-client-error$/);
+    expect(then.getAttribute('href')).not.toContain(TEST_CRAWL_ID);
     expect(await detail.findByRole('button', { name: 'Recheck 5 URLs' })).toBeVisible();
     // Its list has no group to compare; its groups, once shown, each say their URLs then and how they moved.
     expect(detail.queryByRole('columnheader', { name: 'Change' })).toBeNull();

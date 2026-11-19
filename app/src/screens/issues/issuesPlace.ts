@@ -1,5 +1,5 @@
 // Where a check was left (rule 9 of the 2026-11-19 UX round, A-07): how its rows were shown (the list, or grouped),
-// which rows were open, and the row the cursor was on, kept for the session by crawl and check, so coming back to the
+// which rows were open, the row the cursor was on and how far the rows were scrolled, kept for the session by crawl and check, so coming back to the
 // check (Back from Links, from another check, from the inspector's walk) finds it as it was. The route keeps the
 // check, the group in view, the sort and the inspected URL; this keeps what the route has no place for.
 
@@ -15,6 +15,8 @@ export interface CheckPlace {
   toggledOf?: string;
   /** The grid's cursor: its row and that row's key, by the grid it was in. */
   cursor?: { grid: string; row: number; key: string | number | undefined };
+  /** How far the grid was scrolled, by the grid it was in: the wheel moves the rows and leaves the cursor. */
+  scroll?: { grid: string; offset: number };
   /** The tree's page opened to show where it's found: its group's key and the page's URL id. */
   expanded?: { group: string; page: number } | null;
 }

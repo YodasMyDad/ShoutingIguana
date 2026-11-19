@@ -27,9 +27,11 @@ import { flatRowColumns, wrappedLines, wrapsText } from './evidenceColumns';
 import { fitColumns, type ColumnNeed } from './fitColumns';
 import { IssuePageMenu } from './IssuePageMenu';
 import { GRID_FOOT_HEIGHT, ISSUE_KEY_HINTS, leastFrameHeight } from './issueGrid';
+import { DetailWords } from './DetailWords';
 import { IssueUrl } from './IssueUrl';
 import { URL_OPEN_ROOM, shownUrlWidth } from './issueUrlWidth';
 import { checkPlace, keepCheckPlace } from './issuesPlace';
+import { useKeptScroll } from './useKeptScroll';
 import {
   MoreToggle,
   ReferenceOther,
@@ -212,6 +214,17 @@ export function IssueRowsGrid({
     [crawlId, check.id, sort, asked, compareWith],
   );
   const gridKey = JSON.stringify(queryKey);
+  // The files a check of the site's files is about, by address: its rows' details say them by name.
+  const fileUrls = useMemo(() => (files ?? []).map((file) => file.url), [files]);
+  // Where its rows were scrolled to when the check was left (A-07), with the frame's width measured by the same ref.
+  const keepScroll = useKeptScroll(crawlId, check.id, gridKey);
+  const measureFrame = useCallback(
+    (element: HTMLDivElement | null) => {
+      measure(element);
+      keepScroll(element);
+    },
+    [measure, keepScroll],
+  );
   const fetchPage = useCallback(
     (offset: number, limit: number, signal: AbortSignal) =>
       api.issueRows(
@@ -619,7 +632,13 @@ export function IssueRowsGrid({
               ...sorted('detail'),
               cell: (row: ListRow) => {
                 const own = issue(row);
-                return own ? <span title={own.detail ?? undefined}>{own.detail ?? '–'}</span> : null;
+                if (!own) return null;
+                // Its addresses are links (A-18); the file its row is about is named by its name alone.
+                return own.detail ? (
+                  <DetailWords crawlId={crawlId} detail={own.detail} files={fileUrls} siteOrigin={siteOrigin} />
+                ) : (
+                  <span>–</span>
+                );
               },
               text: (row: ListRow) => issue(row)?.detail ?? '',
             },
@@ -776,6 +795,7 @@ export function IssueRowsGrid({
   }, [
     sort,
     widths,
+    fileUrls,
     noDetail,
     showRelated,
     showRest,
@@ -807,11 +827,14 @@ export function IssueRowsGrid({
     <div className="flex min-h-0 flex-col gap-2">
       {saidOnce !== null && rowCount !== null ? (
         <p className="text-13 text-text-secondary" data-said-once>
-          {rowCount === 2 ? 'Both' : `All ${formatCount(rowCount)}`}: {saidOnce}
+          <span className="flex min-w-0 flex-wrap items-center gap-x-1">
+            <span>{rowCount === 2 ? 'Both' : `All ${formatCount(rowCount)}`}:</span>
+            <DetailWords crawlId={crawlId} detail={saidOnce} files={fileUrls} siteOrigin={siteOrigin} wrap />
+          </span>
         </p>
       ) : null}
       <div
-        ref={measure}
+        ref={measureFrame}
         className={evidenceFrameClass(shown)}
         style={{ height, minHeight: Math.min(height, leastFrameHeight(rowHeight, headerHeight, legend)) }}
       >

@@ -271,6 +271,7 @@ export function IssuesScreen() {
           change: changes?.get(checkId) ?? null,
           period,
           compareWith: comparison.compareWith,
+          withCrawlId: compared.with.id,
           marksRows: marksRows(compared.comparable),
         }
       : null;
@@ -600,17 +601,19 @@ export function IssuesScreen() {
                     references: selected.check.references,
                   }
                 : null,
-            group: placed
-              ? {
-                  ref: groupRefOf(placed),
-                  pages: placed.pages,
-                  words: placed.detail ? `“${placed.detail}”` : 'the group’s pages',
-                }
-              : null,
+            // A check with one group: its pages are the check's, which "This check" already offers (A-15).
+            group:
+              placed && (groupsPage.data?.matching ?? 2) > 1
+                ? {
+                    ref: groupRefOf(placed),
+                    pages: placed.pages,
+                    words: placed.detail ? `“${placed.detail}”` : 'the group’s pages',
+                  }
+                : null,
             listed: listedChecks,
           })
         : null,
-    [item, crawling, simple, selected, found, placed, sort, listedChecks],
+    [item, crawling, simple, selected, found, placed, sort, listedChecks, groupsPage.data?.matching],
     { group: 'Issues', title: 'Export…', choices: CRAWL_FILE_COMMANDS },
   );
 

@@ -47,6 +47,8 @@ export interface CheckCompare {
   period: ComparedPeriod;
   /** `compareWith` for its grids and its Fixed tab. */
   compareWith: string;
+  /** The crawl compared with, by its id: where the check's change leads, to how it stood then. */
+  withCrawlId: string;
   /** Rows can be marked: not with counts only. */
   marksRows: boolean;
 }
@@ -254,10 +256,19 @@ export function CheckDetail({
                     <span title={share.context}>{share.words}</span>
                   </>
                 ) : null}
-                {changeCell && change ? (
+                {changeCell && change && compare ? (
                   <>
                     <span aria-hidden="true">·</span>
-                    <span title={changeCell.title}>{changeCell.spoken}</span>
+                    {/* How it moved is the way to how it stood then: the same check, on the crawl compared with. */}
+                    <TextLink
+                      to="/crawls/$crawl/issues/{-$check}"
+                      params={{ crawl: compare.withCrawlId, check: check.id }}
+                      variant="subtle"
+                      title={`${changeCell.title}. Open this check on that crawl`}
+                      data-change-then
+                    >
+                      {changeCell.spoken}
+                    </TextLink>
                   </>
                 ) : null}
                 {entry.causes !== null && count !== null && entry.causes < count && entry.causes > 0 ? (
@@ -597,7 +608,7 @@ const pagesWords = (pages: number) => formatCountOf(pages, 'page');
 
 /**
  * What a fix also clears, and which fix clears this check's pages: each other check a link to it in Issues, with its
- * pages and, when the fix clears all of it, the points it gives back.
+ * pages and, when the fix clears all of it, what that adds to the score.
  */
 function RelatedLines({
   crawlId,
@@ -624,7 +635,7 @@ function RelatedLines({
           {other.all
             ? `: ${other.pages === 1 ? 'the 1 page' : `all ${pagesWords(other.pages)}`} it flags`
             : ` on ${formatCount(other.pages)} of the ${pagesWords(other.entry.count ?? other.pages)} it flags`}
-          {other.points ? ` (${formatCountOf(other.points, 'point')} back)` : ''}.
+          {other.points ? ` (+${formatCount(other.points)} to the score)` : ''}.
         </li>
       ))}
       {related.clearedBy.map((other) => (

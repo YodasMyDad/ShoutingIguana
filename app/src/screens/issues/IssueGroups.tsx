@@ -74,6 +74,7 @@ import { GRID_FOOT_HEIGHT, ISSUE_KEY_HINTS, leastFrameHeight } from './issueGrid
 import { IssueUrl } from './IssueUrl';
 import { URL_OPEN_ROOM } from './issueUrlWidth';
 import { checkPlace, keepCheckPlace } from './issuesPlace';
+import { useKeptScroll } from './useKeptScroll';
 import { MoreToggle, ReferenceFacts, ReferenceOther, type ReferenceView } from './ReferenceCells';
 import { openAtLink } from './referenceWords';
 import { OPEN_ALL_ROWS } from './rowsTree';
@@ -445,12 +446,14 @@ export function IssueGroups({
   // is already in view, so this moves nothing.
   const model = useRef<RowWindowModel | null>(null);
   const frame = useRef<HTMLDivElement | null>(null);
+  const keepScroll = useKeptScroll(crawlId, check.id, queryKey.join('|'));
   const measureFrame = useCallback(
     (element: HTMLDivElement | null) => {
       frame.current = element;
       measure(element);
+      keepScroll(element);
     },
-    [measure],
+    [measure, keepScroll],
   );
   useEffect(() => {
     if (openIndex === null) return undefined;
