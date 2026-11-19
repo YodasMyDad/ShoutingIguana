@@ -1,8 +1,8 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from '@tanstack/react-router';
+import { Link, useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
-import { ChevronDown, ChevronUp } from 'lucide-react';
-import { useId, useState, type ReactNode } from 'react';
+import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, ChevronsUpDown } from 'lucide-react';
+import { useId, useMemo, useState, type MouseEvent, type ReactNode } from 'react';
 import { api } from '../../api/client';
 import { queryKeys } from '../../api/queries';
 import type { CrawlListItem, CrawlStatus } from '../../api/types';
@@ -21,12 +21,27 @@ import { pickCrawlFiles } from '../../shell/os';
 import { Badge } from '../../ui/Badge';
 import { LiveDot } from '../../ui/LiveBadge';
 import { RelativeTime } from '../../ui/RelativeTime';
-import { SeverityCounts } from '../../ui/SeverityCount';
+import { SeverityCount } from '../../ui/SeverityCount';
+import { SEVERITIES } from '../../ui/severity';
 import { StatusPill } from '../../ui/StatusPill';
 import { TextLink } from '../../ui/TextLink';
 import { CrawlMenu } from './CrawlMenu';
 import { crawlLabel } from './libraryActions';
-import { analyseWords, crawlActions, crawlNote, neverAnalysed, runningBadge, startedLater } from './library';
+import {
+  DEFAULT_LIBRARY_SORT,
+  analyseWords,
+  crawlActions,
+  crawlNote,
+  librarySort,
+  neverAnalysed,
+  runningBadge,
+  sortSites,
+  startedLater,
+  type LibrarySort,
+  type LibrarySortKey,
+} from './library';
+import { ANSWERED_SITE_PAGES } from '../overview/links';
+import { CRAWLED } from '../overview/totals';
 
 /**
  * The library's table (docs/v2-ui-ia.md, Home; `clarity/home.html`): a row a site, its latest crawl's status, URLs,
@@ -34,7 +49,12 @@ import { analyseWords, crawlActions, crawlNote, neverAnalysed, runningBadge, sta
  * crawl offers the one action its state needs beside its status (Continue, Analyse again, Locate the file…), and every
  * action in its menu. A narrow card (200% zoom) folds Pages and Started into second lines of URLs and Status, and
  * nothing scrolls sideways.
+ *
+ * A row opens its crawl from a click anywhere on it, and what it counts are links (the audit of 2026-11-19, H-05): each
+ * severity to Issues at that severity, the URLs to the URL grid, the pages to the pages read, the score to how it's
+ * worked out. Site, URLs, Score and Started sort from their headers.
  */
+
 export function LibraryTable({
   sites,
   running,
@@ -46,6 +66,10 @@ export function LibraryTable({
   /** When each crawl running now started, by its id: whether it's newer than its site's row says so. */
   runningStartedAt?: ReadonlyMap<string, string | null> | undefined;
 }) {
+  const [sort, setSort] = useState(DEFAULT_LIBRARY_SORT);
+  const sorted = useMemo(() => sortSites(sites, sort), [sites, sort]);
+  const sortBy = (key: LibrarySortKey) => setSort((current) => librarySort(current, key));
+  const sortable = (key: LibrarySortKey) => ({ sort: sort.key === key ? sort : null, onSort: () => sortBy(key) });
   return (
     // Should the card ever be narrower than its columns (the sidebar open at 200% zoom), the table scrolls in it, never
     // the page. Positioned, so what's placed absolutely inside it (the Actions header's hidden words) is held in it too.
@@ -54,22 +78,28 @@ export function LibraryTable({
         <caption className="sr-only">Crawls in the library, a row a site with its latest crawl, newest first</caption>
         <thead>
           <tr className="text-left text-12 text-text-secondary">
-            <LibraryHeader fill>Site</LibraryHeader>
+            <LibraryHeader fill {...sortable('site')}>
+              Site
+            </LibraryHeader>
             <LibraryHeader>Status</LibraryHeader>
-            <LibraryHeader numeric>URLs</LibraryHeader>
+            <LibraryHeader numeric {...sortable('urls')}>
+              URLs
+            </LibraryHeader>
             <LibraryHeader numeric folds>
               Pages
             </LibraryHeader>
             <LibraryHeader>Checks with issues</LibraryHeader>
-            <LibraryHeader>Score</LibraryHeader>
-            <LibraryHeader folds>Started</LibraryHeader>
+            <LibraryHeader {...sortable('score')}>Score</LibraryHeader>
+            <LibraryHeader folds {...sortable('started')}>
+              Started
+            </LibraryHeader>
             <LibraryHeader>
               <span className="sr-only">Actions</span>
             </LibraryHeader>
           </tr>
         </thead>
         <tbody>
-          {sites.map((group) => (
+          {sorted.map((group) => (
             <SiteRows
               key={group.key}
               group={group}
@@ -88,6 +118,8 @@ function LibraryHeader({
   numeric = false,
   fill = false,
   folds = false,
+  sort,
+  onSort,
 }: {
   children: ReactNode;
   numeric?: boolean;
@@ -95,10 +127,14 @@ function LibraryHeader({
   folds?: boolean;
   /** Takes the room the other columns leave, its content truncating in it. */
   fill?: boolean;
+  /** The table's sort when it's by this column; null when it's by another. Left out: the column doesn't sort. */
+  sort?: LibrarySort | null | undefined;
+  onSort?: (() => void) | undefined;
 }) {
   return (
     <th
       scope="col"
+      aria-sort={sort ? (sort.descending ? 'descending' : 'ascending') : undefined}
       className={clsx(
         'h-(--grid-header-height) border-y border-border px-3 font-medium whitespace-nowrap first:pl-5 last:pr-5 @max-library/library:px-2 @max-library/library:whitespace-normal',
         numeric && 'text-right',
@@ -106,7 +142,31 @@ function LibraryHeader({
         folds && FOLDS,
       )}
     >
-      {children}
+      {onSort ? (
+        <button
+          type="button"
+          onClick={onSort}
+          title="Sort by this column"
+          className={clsx(
+            'inline-flex min-h-6 items-center gap-1 rounded-xs font-medium hover:text-text',
+            sort && 'text-text',
+          )}
+        >
+          {children}
+          {sort ? (
+            sort.descending ? (
+              <ArrowDown aria-hidden className="size-(--icon-sm)" />
+            ) : (
+              <ArrowUp aria-hidden className="size-(--icon-sm)" />
+            )
+          ) : (
+            // Not sorted by it: still marked as a column that sorts.
+            <ChevronsUpDown aria-hidden className="size-(--icon-sm) text-text-muted" />
+          )}
+        </button>
+      ) : (
+        children
+      )}
     </th>
   );
 }
@@ -213,9 +273,26 @@ function CrawlRow({
   const urls = unreadable ? null : crawledUrls(item);
   const pages = unreadable ? null : item.pageCount;
   const label = crawlLabel(item, nested);
+  const navigate = useNavigate();
+  const canOpen = crawlActions(item, status).canOpen;
+  // A click anywhere on the row opens the crawl, as its name does. A control in the row keeps its own press, and so
+  // does what the row opened elsewhere on the page (its menu, the confirmation): React hands those clicks up to the
+  // row too, and they aren't in it.
+  const openFromRow = (event: MouseEvent<HTMLTableRowElement>) => {
+    const target = event.target as Element;
+    if (!event.currentTarget.contains(target) || target.closest('a, button, input, [role="menu"]')) return;
+    if (window.getSelection()?.toString()) return;
+    void navigate({ to: '/crawls/$crawl', params: { crawl: item.id } });
+  };
+  // Counts with nothing behind them (a file that can't be read) are text, never links.
+  const linked = canOpen && !unreadable && !item.missing;
 
   return (
-    <tr id={id} className={clsx('hover:bg-surface-hover', nested && 'bg-surface-sunken')}>
+    <tr
+      id={id}
+      onClick={canOpen ? openFromRow : undefined}
+      className={clsx('hover:bg-surface-hover', canOpen && 'cursor-pointer', nested && 'bg-surface-sunken')}
+    >
       {/* No width of its own (max-w-0), so the site's names truncate instead of pushing the table wider; never less
           than its least (min-w), so a narrow window's other columns can't squeeze it out. */}
       <td className={clsx('max-w-0 min-w-(--library-site-min)', CELL, nested && 'pl-(--library-nested)!')}>
@@ -241,7 +318,8 @@ function CrawlRow({
             <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
               {runningId ? <RunningBadge id={runningId} newer={runningNewer} /> : null}
               <span className="min-w-0 flex-auto truncate font-mono text-12 text-text-muted" title={item.path}>
-                {nested ? item.fileName : (item.startUrl ?? item.fileName)} · {formatBytes(item.sizeBytes)}
+                {/* Where it started, for an older crawl too (its file's name is on hover): the audit of 2026-11-19. */}
+                {item.startUrl ?? item.fileName} · {formatBytes(item.sizeBytes)}
               </span>
             </span>
           </div>
@@ -260,12 +338,36 @@ function CrawlRow({
         </div>
       </td>
       <td className={clsx('figures text-right', CELL)}>
-        {formatCount(urls)}
+        {linked && urls !== null ? (
+          <Link
+            to="/crawls/$crawl/urls"
+            params={{ crawl: item.id }}
+            search={{ filter: [...CRAWLED] }}
+            className="si-link si-link--subtle"
+          >
+            {formatCount(urls)} <span className="sr-only">URLs</span>
+          </Link>
+        ) : (
+          formatCount(urls)
+        )}
         <span className={FOLDED}>
           {pages === null ? '–' : `${formatCount(pages)} ${pages === 1 ? 'page' : 'pages'}`}
         </span>
       </td>
-      <td className={clsx('figures text-right', CELL, FOLDS)}>{formatCount(pages)}</td>
+      <td className={clsx('figures text-right', CELL, FOLDS)}>
+        {linked && pages !== null ? (
+          <Link
+            to="/crawls/$crawl/urls"
+            params={{ crawl: item.id }}
+            search={{ filter: [...ANSWERED_SITE_PAGES] }}
+            className="si-link si-link--subtle"
+          >
+            {formatCount(pages)} <span className="sr-only">{pages === 1 ? 'page' : 'pages'}</span>
+          </Link>
+        ) : (
+          formatCount(pages)
+        )}
+      </td>
       <td className={CELL_BOX}>
         <IssuesCell item={item} status={status} />
       </td>
@@ -352,11 +454,25 @@ function IssuesCell({ item, status }: { item: CrawlListItem; status: CrawlStatus
   if (item.issues && !counts) return null;
   if (counts) {
     return (
-      // One severity a line in a narrow library, so the column is as wide as its widest count, not all three.
-      <SeverityCounts
-        counts={counts}
-        className="@max-library/library:flex @max-library/library:flex-col @max-library/library:items-start @max-library/library:gap-1"
-      />
+      // One severity a line in a narrow library, so the column is as wide as its widest count, not all three. Each
+      // count opens Issues at its severity; a count of none has nothing to open.
+      <span className="si-sevcounts @max-library/library:flex @max-library/library:flex-col @max-library/library:items-start @max-library/library:gap-1">
+        {SEVERITIES.map((severity) =>
+          counts[severity] > 0 ? (
+            <Link
+              key={severity}
+              to="/crawls/$crawl/issues/{-$check}"
+              params={{ crawl: item.id }}
+              search={{ severity: [severity] }}
+              className="rounded-xs hover:underline"
+            >
+              <SeverityCount severity={severity} count={counts[severity]} />
+            </Link>
+          ) : (
+            <SeverityCount key={severity} severity={severity} count={0} />
+          ),
+        )}
+      </span>
     );
   }
   if (neverAnalysed(item, status) && crawlActions(item, status).canAnalyse) {
@@ -378,7 +494,7 @@ function IssuesCell({ item, status }: { item: CrawlListItem; status: CrawlStatus
  * The crawl's score (the fix loop: the audit's library gap), "86 ▲16": its change since the crawl's previous crawl as
  * text with a glyph, neutral as score movement is everywhere; a screen reader hears it in words ("up 16 points since
  * 3 Nov"). "so far" under a score of a crawl that didn't read all of the site. No score, or a file that can't say, is
- * "–", never 0. Each older crawl has its own, against its own previous crawl.
+ * "–", never 0. Each older crawl has its own, against its own previous crawl. It opens how the score is worked out.
  */
 function ScoreCell({ item, status }: { item: CrawlListItem; status: CrawlStatus }) {
   const score = status === 'unreadable' || item.missing ? null : rowScore(item, status);
@@ -394,9 +510,16 @@ function ScoreCell({ item, status }: { item: CrawlListItem; status: CrawlStatus 
   const since = item.previous?.startedAt ?? null;
   const then = item.previous?.score?.value;
   return (
-    <span
-      className="flex flex-col items-start whitespace-nowrap"
-      title={then === undefined ? undefined : `Score ${then} ${onWords(since)}, ${score.value} now`}
+    <Link
+      to="/crawls/$crawl/overview"
+      params={{ crawl: item.id }}
+      search={{ score: 1 }}
+      className="si-link si-link--subtle flex flex-col items-start whitespace-nowrap"
+      title={
+        then === undefined
+          ? 'How the score is worked out'
+          : `Score ${then} ${onWords(since)}, ${score.value} now. How it’s worked out`
+      }
     >
       <span>
         <span className="figures font-medium text-text">{formatCount(score.value)}</span>
@@ -416,7 +539,7 @@ function ScoreCell({ item, status }: { item: CrawlListItem; status: CrawlStatus 
         )}
       </span>
       {score.partial ? <span className="text-12 text-text-muted">so far</span> : null}
-    </span>
+    </Link>
   );
 }
 
