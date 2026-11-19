@@ -5,8 +5,9 @@
 import { expect, test } from '@playwright/test';
 import type { IssueGroupPage } from '../src/api/grids';
 import type { IssueTargetsPage, RedirectChain } from '../src/api/inspector';
+import { redirectChainWords } from '../src/crawl/evidence';
 import { formatBytes } from '../src/lib/format';
-import { expectNoViolations, read, seededCrawl } from './support';
+import { expectNoViolations, read, seededCrawl, showGroups } from './support';
 
 /** The largest oversized image's group, and the first page showing it, as the sidecar says them. */
 async function largeImage() {
@@ -57,12 +58,27 @@ test('Advanced names an oversized image by its file and size, largest first, and
   // Its own pixels in a column of their own, and its thumbnail, drawn from the test site or its icon in its place.
   await expect(tree.getByRole('columnheader', { name: 'Pixels' })).toBeVisible();
   await expect(row.locator('.si-thumb')).toHaveAttribute('data-thumb', /^(loading|loaded|failed)$/);
-  await expect(page.getByText(/by image, largest file first/)).toBeVisible();
+  // An image is fixed once for every page that shows it, so this check opens grouped by image; the line beside
+  // "Affected pages" says the sidecar's own counts and the order.
+  await expect(
+    page.getByRole('radiogroup', { name: 'How the rows are shown' }).getByRole('radio', { name: 'Grouped by image' }),
+  ).toHaveAttribute('aria-checked', 'true');
+  const analysis = await read<{ counts: { checkId: string; count: number }[] }>(`/api/crawls/${crawl.id}/analysis`);
+  const flagged = analysis.counts.find((count) => count.checkId === 'image-too-large')?.count ?? 0;
+  const groupCount = groups.groupCount ?? 0;
+  await expect(
+    page.getByText(
+      `${flagged.toLocaleString('en-GB')} ${flagged === 1 ? 'page' : 'pages'} in ${groupCount.toLocaleString('en-GB')} ${groupCount === 1 ? 'group' : 'groups'}, largest file first`,
+      { exact: true },
+    ),
+  ).toBeVisible();
 
-  // Open it: its pages say the size they show it at, as the page writes it.
+  // Its first group, the largest file, opens by itself where the groups are few (from the keyboard where they aren't):
+  // its pages say the size they show it at, as the page writes it.
   await tree.focus();
-  await page.keyboard.press('ArrowRight');
+  if (groupCount > 20) await page.keyboard.press('ArrowRight');
   await expect(tree.getByRole('row', { expanded: true })).toBeVisible();
+  await expect(tree.getByRole('row', { expanded: true })).toContainText(formatBytes(size));
   if (target?.img?.width && target.img.height) {
     await expect(tree.getByText(new RegExp(`shown at ${target.img.width}×${target.img.height}`)).first()).toBeVisible();
   }
@@ -74,11 +90,23 @@ test('Advanced lists each redirect chain hop by hop, with the status at each', a
   const chained = rows.find((row) => (row.redirectChain?.hops.length ?? 0) >= 2);
   expect(chained, 'a planted chain of two hops or more').toBeTruthy();
   await page.goto(`/crawls/${crawl.id}/issues/redirect-chain`);
-  const tree = page.getByRole('treegrid', { name: /Redirect chain/ });
+  // It opens as a list, one row a chain: the planted chain's row says every hop with its status, in the words the
+  // sidecar's own chain makes ("→ /plants/chain-b 301 → /plants/chain-c 301 → /plants/thin 200").
+  const origin = new URL(crawl.startUrl ?? '').origin;
+  const words = redirectChainWords(chained!.redirectChain!, origin);
+  expect(words).toMatch(/^→ \S+ \d{3}( → \S+ \d{3})+( · .+)?$/);
+  const list = page.getByRole('treegrid', { name: 'Redirect chain: affected URLs' });
+  await expect(list.getByRole('columnheader', { name: 'Redirect chain' })).toBeVisible();
+  await expect(list.locator('[role="row"][aria-level="1"]').filter({ hasText: words }).first()).toBeVisible();
+  await expectNoViolations(page);
+
+  // Grouped, its chains are under what they share: the first group opens by itself where the groups are few (from the
+  // keyboard where they aren't), and each chain under it is said hop by hop too.
+  await showGroups(page);
+  const tree = page.getByRole('treegrid', { name: /Redirect chain: affected URLs, grouped by / });
   await tree.focus();
-  await page.keyboard.press('ArrowRight');
+  if ((await tree.getByRole('row', { expanded: true }).count()) === 0) await page.keyboard.press('ArrowRight');
   await expect(tree.getByRole('row', { expanded: true })).toBeVisible();
-  // "→ /plants/chain-b 301 → /plants/chain-c 301 → /plants/thin 200": every hop with its status.
   await expect(tree.locator('.si-row-evidence').first()).toHaveText(/^→ \S+ \d{3}( → \S+ \d{3})+( · .+)?$/);
   await expectNoViolations(page);
 });

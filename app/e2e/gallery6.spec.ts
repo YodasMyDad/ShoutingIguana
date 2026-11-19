@@ -1,7 +1,7 @@
 // What the version 6 gallery found, in a 1280x720 window (the gallery's: 1920x1080 at 150%), against the real sidecar
 // and its synthetic crawl: a sitemap's name shows whole while the table has room for it; Simple Home's Site column
-// takes the room its row has, so a long site's name shows whole; and an issue's affected URLs, a found-on list open,
-// scroll with the pane, one scroll bar, under a whole focus ring.
+// takes the room its row has, so a long site’s name shows whole; and an issue’s affected URLs, a found-on list open,
+// scroll in their own grid (the card around them never scrolls), under a whole focus ring.
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import type { CrawlListItem } from '../src/api/types';
 import { openSection, seededCrawl, showChecks } from './support';
@@ -131,31 +131,30 @@ async function pixels(page: Page, points: readonly [number, number][]): Promise<
 const near = (a: [number, number, number], b: [number, number, number]) =>
   a.every((value, index) => Math.abs(value - b[index]!) <= 48);
 
-// The gallery's crawl had 13 broken URLs, more rows than the pane and `--evidence-max-height` had room for in 720 px;
-// the seeded crawl has 4, so the window is as much shorter: the same shape.
-test('an issue’s affected URLs, a found-on list open, scroll with the pane, one scroll bar, under a whole focus ring', async ({
+// The gallery's crawl had 13 broken URLs, more rows than the pane had room for in 720 px; the seeded crawl has 6, so
+// the window is as much shorter: the same shape. One scroller per pane (rule 7 of the 2026-11-19 UX round): the check's
+// card never scrolls, its head may give way, and the rows scroll in their own grid, under the frame's whole ring.
+test('an issue’s affected URLs, a found-on list open, scroll in their own grid, the card never, under a whole focus ring', async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 1280, height: 460 });
+  // 520 px: short enough for the rows to need their scroller (the head has given way to the rows' least height), and
+  // the least the card holds without scrolling itself (its fallback under that, where the head has nothing left to give).
+  await page.setViewportSize({ width: 1280, height: 520 });
   await openSection(page, /^Issues/);
   await showChecks(page);
   await page.getByRole('option', { name: /Internal URL returns 4xx/ }).click();
-  const grid = page.getByRole('treegrid', { name: /Internal URL returns 4xx/ });
+  // The check's list, one row a broken URL: a URL more than one page links to has the rest open under it on arrival.
+  const grid = page.getByRole('treegrid', { name: 'Internal URL returns 4xx: affected URLs' });
+  await expect(grid.locator('[role="row"][aria-level="1"][aria-expanded="true"]').first()).toBeVisible();
+  await expect(grid.locator('[role="row"][aria-level="2"] [data-where="source"]').first()).toBeAttached();
+  await expect(grid.locator('[data-where-found="pending"]')).toHaveCount(0);
   await grid.focus();
-  // Opened from the keyboard, as a user does: the group, then the page found on the most pages, its list open.
+  await expect(grid).toBeFocused();
+  await page.keyboard.press('ArrowDown');
   const active = grid.locator('[role="row"]:has(> [data-active])');
   const rowIndex = async (row: Locator) => Number(await row.getAttribute('aria-rowindex'));
-  await page.keyboard.press('ArrowRight');
-  const most = grid.locator('[role="row"][aria-level="2"]').filter({ hasText: /Found on [2-9]\d* pages/ });
-  await expect(most.first()).toBeVisible();
-  const target = await rowIndex(most.first());
-  while ((await rowIndex(active)) < target) await page.keyboard.press('ArrowDown');
-  await page.keyboard.press('ArrowRight');
-  await expect(active).toHaveAttribute('aria-expanded', 'true');
-  await expect(grid.locator('[role="row"][aria-level="3"]').first()).toBeVisible();
-  await expect(grid).toBeFocused();
 
-  // One scroll container: the pane. Nothing inside it scrolls up and down on its own.
+  // One scroller: the rows' own grid. The card around them never scrolls; its head alone may, where it gives way.
   const pane = page.locator('[data-check-detail]');
   const scrollers = await pane.evaluate((root) =>
     [root, ...root.querySelectorAll('*')]
@@ -163,40 +162,55 @@ test('an issue’s affected URLs, a found-on list open, scroll with the pane, on
         const overflow = getComputedStyle(element).overflowY;
         return (overflow === 'auto' || overflow === 'scroll') && element.scrollHeight > element.clientHeight + 1;
       })
-      .map((element) => (element === root ? 'pane' : (element.getAttribute('role') ?? element.tagName))),
+      .map((element) =>
+        element === root
+          ? 'card'
+          : element.tagName === 'HEADER'
+            ? 'head'
+            : (element.getAttribute('role') ?? element.tagName),
+      ),
   );
-  expect(scrollers).toEqual(['pane']);
+  expect(scrollers).toContain('treegrid');
+  expect(scrollers.filter((name) => name !== 'treegrid' && name !== 'head')).toEqual([]);
+  // More rows than the grid has room for, and the grid itself is whole in the window: it is what scrolls.
+  const rowCount = Number(await grid.getAttribute('aria-rowcount')) - 1;
+  const room = await grid.evaluate((element) => element.clientHeight);
+  expect(rowCount * 32, 'more rows than the grid has room for').toBeGreaterThan(room);
+  await expect(grid).toBeInViewport({ ratio: 1 });
 
-  // The keys keep the cursor in view: the pane scrolls to the row it moves to, at the last row and back up to the first.
+  // The keys keep the cursor in view inside the grid, under its header: at the last row and back up to the first.
+  // The card stays where it is all the while.
   const inView = async () => {
     const cell = (await grid.locator('[data-active]').boundingBox())!;
-    const shown = (await pane.boundingBox())!;
-    return cell.y >= shown.y - 0.5 && cell.y + cell.height <= shown.y + shown.height + 0.5;
+    const shown = (await grid.boundingBox())!;
+    const head = (await grid.getByRole('columnheader').first().boundingBox())!;
+    return cell.y >= head.y + head.height - 0.5 && cell.y + cell.height <= shown.y + shown.height + 0.5;
   };
-  const rowCount = await grid.locator('[role="row"][aria-level]').count();
-  const room = await pane.evaluate((element) => element.clientHeight);
-  expect(rowCount * 32, 'more rows than the pane has room for').toBeGreaterThan(room);
   for (let guard = 0; guard < 40; guard += 1) {
     const before = await rowIndex(active);
     await page.keyboard.press('ArrowDown');
     if ((await rowIndex(active)) === before) break;
   }
+  expect(await rowIndex(active), 'the last row').toBe(rowCount + 1);
   expect(await inView(), 'the last row').toBe(true);
-  for (let step = 0; step < rowCount; step += 1) await page.keyboard.press('ArrowUp');
+  expect(await grid.evaluate((element) => element.scrollTop), 'the grid scrolled to it').toBeGreaterThan(0);
+  // One press fewer than there are rows: from the last row to the first (one more is the header's row).
+  for (let step = 1; step < rowCount; step += 1) await page.keyboard.press('ArrowUp');
+  expect(await rowIndex(active), 'the first row').toBe(2);
   expect(await inView(), 'the first row').toBe(true);
+  expect(await grid.evaluate((element) => element.scrollTop), 'the grid scrolled back').toBe(0);
+  expect(await pane.evaluate((element) => element.scrollTop), 'the card never scrolls').toBe(0);
 
-  // A whole focus ring: each edge of the grid's frame is the focus colour along its length, the top edge with the pane
-  // scrolled to it, the bottom with the frame's end scrolled into view (why it matters and how to fix it follow the
-  // list since step 3b, so the pane's end is past it).
+  // A whole focus ring: each edge of the grid's frame is the focus colour along its length, the frame whole in the
+  // window with nothing to scroll to.
   const colour = await focusColour(page);
   const frame = grid.locator('xpath=..');
+  await expect(frame).toHaveClass(/si-grid-frame/);
+  await expect(frame).toBeInViewport({ ratio: 1 });
   const edgePoints = async (edge: 'top' | 'bottom' | 'left' | 'right') => {
     const box = (await frame.boundingBox())!;
     box.x = Math.floor(box.x);
     box.y = Math.floor(box.y);
-    const shown = (await pane.boundingBox())!;
-    const top = Math.max(box.y, shown.y);
-    const bottom = Math.min(box.y + box.height, shown.y + shown.height);
     const at = [0.1, 0.3, 0.5, 0.7, 0.9];
     // The ring is a hairline just inside the frame's border: one or two pixels in from the frame's edge.
     const inward = [1, 2];
@@ -207,7 +221,7 @@ test('an issue’s affected URLs, a found-on list open, scroll with the pane, on
     }
     const x = edge === 'left' ? box.x : box.x + box.width - 1;
     const sign = edge === 'left' ? 1 : -1;
-    return at.map((f) => inward.map((d): [number, number] => [x + sign * d, top + (bottom - top) * f]));
+    return at.map((f) => inward.map((d): [number, number] => [x + sign * d, box.y + box.height * f]));
   };
   /** For each point along the edge, whether the ring is there (at one of the pixels just inside the border). */
   const ringAt = async (edge: 'top' | 'bottom' | 'left' | 'right') => {
@@ -216,11 +230,13 @@ test('an issue’s affected URLs, a found-on list open, scroll with the pane, on
     return points.map((_, index) => inward(found, index).some((pixel) => near(pixel, colour)));
   };
   const inward = (found: [number, number, number][], index: number) => found.slice(index * 2, index * 2 + 2);
-  await pane.evaluate((element) => (element.scrollTop = 0));
-  await grid.evaluate((element) => element.scrollIntoView({ block: 'start' }));
   expect(await ringAt('top'), 'the top edge').toEqual([true, true, true, true, true]);
   expect(await ringAt('left'), 'the left edge').toEqual([true, true, true, true, true]);
   expect(await ringAt('right'), 'the right edge').toEqual([true, true, true, true, true]);
-  await frame.evaluate((element) => element.scrollIntoView({ block: 'end' }));
   expect(await ringAt('bottom'), 'the bottom edge').toEqual([true, true, true, true, true]);
+  // And with the rows scrolled to their end, the ring is still whole: it is the frame's, not the rows'.
+  await page.keyboard.press('Control+End');
+  expect(await grid.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  expect(await ringAt('top'), 'the top edge, scrolled').toEqual([true, true, true, true, true]);
+  expect(await ringAt('bottom'), 'the bottom edge, scrolled').toEqual([true, true, true, true, true]);
 });

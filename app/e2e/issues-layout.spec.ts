@@ -2,7 +2,7 @@
 // inspector open, the checks list goes behind "All checks" and the check takes the width, so its grid isn't cut and
 // opening the inspector never stacks the check under the list, off-screen. Against the real sidecar's synthetic crawl.
 import { expect, test, type Page } from '@playwright/test';
-import { openSection } from './support';
+import { openSection, showGroups } from './support';
 
 const inspectorOf = (page: Page) => page.getByRole('complementary', { name: 'Inspector' });
 const checksOf = (page: Page) => page.getByRole('listbox', { name: 'Checks' });
@@ -83,19 +83,22 @@ test('at 1920 px the list stays beside the check, until the inspector needs the 
   await expectCheckInView(page, 1000);
 });
 
-// The 3b polish: in a check's group, each page's type and "Found on" flowed after its URL, so they started at a
-// different x on every row. They're columns now, and no URL is cut while the row has room for it.
+// The 3b polish: in a check's group, each page's type and where it's found ("Linked from …") flowed after its URL, so
+// they started at a different x on every row. They're columns now, and no URL is cut while the row has room for it.
 test('a group’s pages line their type and where they’re found up in columns, each URL whole', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await openSection(page, /^Issues/);
   await expect(page).toHaveURL(/\/crawls\/[0-9a-f]{16}\/issues\/[a-z0-9-]+/);
   const crawl = /\/crawls\/([0-9a-f]{16})\//.exec(page.url())?.[1] ?? '';
   await page.goto(`/crawls/${crawl}/issues/internal-client-error`);
-  const grid = page.getByRole('treegrid', { name: /^Internal URL returns 4xx: / });
+  // The check opens as a list: its groups from "Grouped by cause", the 404s' group opening by itself.
+  await showGroups(page);
+  const grid = page.getByRole('treegrid', { name: /^Internal URL returns 4xx: affected URLs, grouped by / });
   const group = grid.locator('[role="row"][aria-level="1"]').filter({ hasText: '404 Not Found' });
-  if ((await group.getAttribute('aria-expanded')) !== 'true') await group.locator('[data-tree-toggle]').click();
+  await expect(group).toHaveAttribute('aria-expanded', 'true');
   const pages = grid.locator('[role="row"][aria-level="2"]');
   await expect(pages.nth(3)).toBeVisible();
+  await expect(grid.locator('[data-where-found="read"]').nth(3)).toBeVisible();
   await expect(grid.locator('[data-where-found="pending"]')).toHaveCount(0);
   const lines = await pages.evaluateAll((rows) =>
     rows
@@ -109,7 +112,7 @@ test('a group’s pages line their type and where they’re found up in columns,
         return {
           url: row.querySelector('.si-url__full')?.textContent ?? '',
           type: left('.si-row-evidence'),
-          where: left('.si-where-line'),
+          where: left('[data-where-found="read"]'),
           cut: !shown || shown.scrollWidth > shown.clientWidth + 0.5 || shown.textContent.includes('…'),
         };
       }),
@@ -118,5 +121,6 @@ test('a group’s pages line their type and where they’re found up in columns,
   expect(new Set(lines.map((line) => line.type)).size, JSON.stringify(lines)).toBe(1);
   expect(new Set(lines.map((line) => line.where)).size, JSON.stringify(lines)).toBe(1);
   expect(lines[0]?.type).not.toBeNull();
+  expect(lines[0]?.where).not.toBeNull();
   expect(lines.filter((line) => line.cut).map((line) => line.url)).toEqual([]);
 });

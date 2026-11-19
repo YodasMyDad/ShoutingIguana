@@ -4,7 +4,7 @@
 // with its counts (`pagesAnalyzed`, `crawledUrlCount`), and no check's count is more than it. Overview's "Fix first"
 // and the inspector word the same counts the same way, and six-digit counts keep their room. Nothing here waits on a clock: every expectation is of what the screen says in the end.
 import { expect, test, type Page } from '@playwright/test';
-import { chooseTab, showChecks, siteRow } from './support';
+import { chooseTab, showChecks, showGroups, siteRow } from './support';
 
 const env = (name: string) => {
   const value = process.env[name];
@@ -25,7 +25,7 @@ interface Analysis {
   pagesAnalyzed: number;
   /** The URLs crawled when the analysis ran; null or missing for an analysis by an engine from before the score. */
   crawledUrlCount?: number | null;
-  counts: { checkId: string; count: number }[];
+  counts: { checkId: string; count: number; templateCauses?: number | null }[];
   skipped: { checkId: string }[];
 }
 interface Item {
@@ -106,6 +106,8 @@ async function crawlFacts() {
     item,
     checks: catalog.checks,
     counts: new Map(analysis.counts.map((entry) => [entry.checkId, entry.count])),
+    /** The causes of each check the engine puts in the site's template: such a check opens grouped. */
+    templateCauses: new Map(analysis.counts.map((entry) => [entry.checkId, entry.templateCauses ?? 0])),
     skipped: new Set(analysis.skipped.map((entry) => entry.checkId)),
     /** The pages the analysis ran on: what a page check's count is a part of. */
     pagesAnalyzed: analysis.pagesAnalyzed,
@@ -124,8 +126,11 @@ async function crawlFacts() {
 
 const detailOf = (page: Page) => page.locator('[data-check-detail]');
 
-/** A figure of the check's header (its label, value and line), by its label. */
-const figure = (page: Page, label: string) => detailOf(page).getByText(label, { exact: true }).locator('xpath=..');
+/**
+ * The check's counts, one line of its head: how many it flags (the way to them in URLs), of how much, then how that
+ * moved and its causes where there are some. Its parts are joined by "·", with no spaces in its text.
+ */
+const countsOf = (page: Page) => detailOf(page).locator('header [data-counts]');
 
 /** From Home to the crawl's Issues, through the sidebar, as a user goes. */
 async function openIssues(page: Page) {
@@ -164,7 +169,7 @@ test('every check’s count is called what the check flags, as a share of the AP
 }) => {
   test.setTimeout(180_000);
   const facts = await crawlFacts();
-  const { item, checks, counts, skipped } = facts;
+  const { item, checks, counts, skipped, templateCauses } = facts;
 
   // The catalog says what every check flags, and "pages" is one number wherever it's read.
   expect(checks.length).toBeGreaterThan(0);
@@ -220,7 +225,8 @@ test('every check’s count is called what the check flags, as a share of the AP
       await option.click();
       await expect(page).toHaveURL(new RegExp(`/issues/${check.id}(\\?|$)`));
       await expect(detail.getByRole('heading', { name: check.title, level: 2, exact: true })).toBeVisible();
-      const figures = detail.getByText(/^(Pages|URLs) affected$|^Share of (pages|URLs)$/);
+      // The check's counts are one line of its head: how many, of how much. A check that flagged nothing has none.
+      const figures = countsOf(page);
 
       const flaggedCount = counts.get(check.id);
       if (skipped.has(check.id) || flaggedCount === undefined) {
@@ -233,6 +239,7 @@ test('every check’s count is called what the check flags, as a share of the AP
         await expect(figures).toHaveCount(0);
         return;
       }
+      await expect(figures).toHaveCount(1);
 
       const words = wordsOf(check);
       const whole = check.subject === 'page' ? facts.pagesAnalyzed : (facts.urlsAnalysed ?? 0);
@@ -246,48 +253,60 @@ test('every check’s count is called what the check flags, as a share of the AP
       expect(flaggedCount, `no more than the ${words.many} ${words.of}`).toBeLessThanOrEqual(whole);
 
       // The count, by what it's of, leading to its URLs.
-      const affected = detail.getByRole('link', { name: new RegExp(`^${words.Many} affected`) });
-      await expect(affected).toHaveText(
-        new RegExp(`^${words.Many} affected\\s*${count(flaggedCount)}\\s*Open them in URLs$`),
-      );
+      const affected = figures.getByRole('link').first();
+      await expect(affected).toHaveText(counted(flaggedCount, words));
+      await expect(affected).toHaveAttribute('title', 'Open them in URLs');
+      await expect(affected).toHaveAttribute('href', new RegExp(`/crawls/${item.id}/urls\\?filter=`));
+      // After the count and its share, only how many causes there are to fix, where its URLs share some.
       // A fault of the whole site is the whole site, as Simple says, never "1 page, <0.1%" (round 5, gap 28).
       if (check.siteWide) {
-        await expect(figure(page, 'Reach')).toHaveText(
-          /^Reach\s*Whole site\s*A fault of the whole site, whatever its count$/,
+        await expect(figures).toHaveText(
+          new RegExp(`^${literal(counted(flaggedCount, words))}·the whole site${CAUSES}$`),
         );
-        await expect(detail.getByText(/^Share of (pages|URLs)$/)).toHaveCount(0);
+        await expect(figures.getByText('the whole site', { exact: true })).toHaveAttribute(
+          'title',
+          'A fault of the whole site, whatever its count',
+        );
+        await expect(figures).not.toContainText('%');
         await showChecks(page);
         await expect(option).toHaveAccessibleName(new RegExp(`, the whole site$`));
         return;
       }
       // A check reported once for the whole site isn't a share of its URLs either (round 5 review R1-9).
       if (check.reportedOnce) {
-        await expect(figure(page, 'Reach')).toHaveText(
-          /^Reach\s*Whole site\s*Checked once for the whole site, not URL by URL$/,
+        await expect(figures).toHaveText(
+          new RegExp(`^${literal(counted(flaggedCount, words))}·checked once for the whole site${CAUSES}$`),
         );
-        await expect(detail.getByText(/^Share of (pages|URLs)$/)).toHaveCount(0);
+        await expect(figures.getByText('checked once for the whole site', { exact: true })).toHaveAttribute(
+          'title',
+          'Checked once for the whole site, not URL by URL',
+        );
+        await expect(figures).not.toContainText('%');
         await showChecks(page);
         await expect(option).toHaveAccessibleName(new RegExp(`, checked once for the whole site$`));
         return;
       }
       // Its share, of the right count of the right thing.
-      const share = figure(page, `Share of ${words.many}`);
       const shareText = new RegExp(
-        `^Share of ${words.many}\\s*([<>]?[\\d.]+%)\\s*of the ${literal(counted(whole, words))} ${words.of}$`,
+        `^${literal(counted(flaggedCount, words))}·([<>]?[\\d.]+%) of the ${literal(counted(whole, words))} ${words.of}${CAUSES}$`,
       );
-      await expect(share).toHaveText(shareText);
-      const shown = shareText.exec(((await share.textContent()) ?? '').trim())?.[1] ?? '';
+      await expect(figures).toHaveText(shareText);
+      const shown = shareText.exec(((await figures.textContent()) ?? '').trim())?.[1] ?? '';
       expectShare(shown, flaggedCount, whole, check.id);
       // And nothing of it in the other's words.
-      await expect(figures).toHaveCount(2);
       await expect(detail.getByText(check.subject === 'page' ? /URLs crawled/ : /pages analysed/)).toHaveCount(0);
       await expect(detail.getByText(/pages crawled|URLs found/)).toHaveCount(0);
 
-      // What it flags, listed under the same word.
+      // What it flags, listed under the same word, one row each: a list, unless grouping saves work (an image, fixed
+      // once for every page that shows it; a cause in the site's template), which opens grouped.
       const listed = detail.getByRole('heading', { name: `Affected ${words.many}`, level: 3, exact: true });
       await expect(listed).toBeVisible();
+      const views = detail.getByRole('radiogroup', { name: 'How the rows are shown' });
       if (check.grouping === 'none') {
-        await expect(detail.getByRole('grid')).toHaveAccessibleName(`${check.title}: affected ${words.many}`);
+        await expect(views).toHaveCount(0);
+        await expect(detail.locator('[role="grid"], [role="treegrid"]')).toHaveAccessibleName(
+          `${check.title}: affected ${words.many}`,
+        );
         await expect(listed.locator('xpath=..')).toHaveText(
           // Then the order the engine gives them in (evidence): the most linked first, the most used, or the fewest
           // links first (pages missing from the sitemaps).
@@ -296,11 +315,28 @@ test('every check’s count is called what the check flags, as a share of the AP
           ),
         );
       } else {
-        const groups = detail.getByRole('treegrid');
-        await expect(groups).toHaveAccessibleName(
-          `${check.title}: affected ${words.many}, grouped by ${check.grouping === 'relatedUrl' ? 'related URL' : 'detail'}`,
-        );
-        await expect(groups.getByRole('columnheader', { name: words.Many, exact: true })).toBeVisible();
+        const grouped = views.getByRole('radio', { name: /^Grouped by / });
+        const rows = detail.locator('[role="grid"], [role="treegrid"]');
+        const opensGrouped =
+          (check.grouping === 'relatedUrl' && check.id.startsWith('image-')) || (templateCauses.get(check.id) ?? 0) > 0;
+        if (opensGrouped) {
+          await expect(grouped).toHaveAttribute('aria-checked', 'true');
+          await expect(rows).toHaveAccessibleName(
+            new RegExp(`^${literal(check.title)}: affected ${words.many}, grouped by `),
+          );
+          await expect(rows.getByRole('columnheader', { name: words.Many, exact: true })).toBeVisible();
+          await expect(listed.locator('xpath=..')).toHaveText(
+            new RegExp(`^Affected ${words.many}\\s*${literal(counted(flaggedCount, words))} in [\\d,]+ groups?`),
+          );
+        } else {
+          await expect(views.getByRole('radio', { name: 'List' })).toHaveAttribute('aria-checked', 'true');
+          await expect(rows).toHaveAccessibleName(`${check.title}: affected ${words.many}`);
+          await expect(listed.locator('xpath=..')).toHaveText(
+            new RegExp(
+              `^Affected ${words.many}\\s*${literal(counted(flaggedCount, words))}(, (most (linked|used)|fewest links) first)?List`,
+            ),
+          );
+        }
       }
       // Its row in the list says the same.
       await showChecks(page);
@@ -404,9 +440,15 @@ test('the inspector counts the URLs whose issues name a URL in what their check 
   }
 });
 
+/** After a check's count and its share, only how many causes there are to fix, where its URLs share some. */
+const CAUSES = '(·[\\d,]+ causes? to fix(, [\\d,]+ in the site’s template)?)?';
+
 /** The checks the six-digit test opens: a page check listed flat, and a URL check that groups. */
 const BIG = { page: 'not-in-sitemap', url: 'internal-client-error', pages: 987_654, urls: 1_234_567 } as const;
 const BIG_COUNTS: Record<string, number> = { [BIG.page]: 654_321, [BIG.url]: 312_876 };
+/** The line of counts of each, whole: the count, its share, and what it's a share of. */
+const PAGE_COUNTS = new RegExp(`^654,321 pages·66% of the 987,654 pages analysed${CAUSES}$`);
+const URL_COUNTS = new RegExp(`^312,876 URLs·25% of the 1,234,567 URLs crawled${CAUSES}$`);
 
 /**
  * The crawl with six-digit counts: the sidecar's own answers with the analysis's counts and its two totals (the pages
@@ -433,9 +475,9 @@ async function withSixDigitCounts(page: Page, crawl: string) {
 }
 
 /**
- * Nothing in the check's header is cut off or overprinted: each figure's label, value and line show whole, no two
- * figures overlap, none reaches outside the panel, and the panel doesn't scroll sideways. Nor is a count in the
- * checks list cut off or run into its title.
+ * Nothing in the check's line of counts is cut off or overprinted: each of its parts (the count, its share and what
+ * it is a share of, then any more) shows whole, no two overlap, none reaches outside the line or the panel, and the
+ * panel doesn't scroll sideways. Nor is a count in the checks list cut off or run into its title.
  */
 async function expectFiguresFit(page: Page, where: string) {
   const problems = await page.evaluate(() => {
@@ -443,8 +485,16 @@ async function expectFiguresFit(page: Page, where: string) {
     const detail = document.querySelector('[data-check-detail]');
     if (!detail) return ['there’s no check panel'];
     const panel = detail.getBoundingClientRect();
-    const figures = [...detail.querySelectorAll<HTMLElement>('.si-stat')];
-    if (figures.length < 2) found.push(`the header has ${figures.length} figures`);
+    const line = detail.querySelector<HTMLElement>('header [data-counts]');
+    if (!line) return ['the check’s head has no line of counts'];
+    const lineBox = line.getBoundingClientRect();
+    if (lineBox.left < panel.left - 0.5 || lineBox.right > panel.right + 0.5) found.push('the counts leave the panel');
+    if (line.scrollWidth > line.clientWidth + 1) found.push('the counts are cut off');
+    // Its parts, the dots between them left out: the count and its share at least.
+    const figures = [...line.children].filter(
+      (part): part is HTMLElement => part instanceof HTMLElement && part.getAttribute('aria-hidden') !== 'true',
+    );
+    if (figures.length < 2) found.push(`the line of counts has ${figures.length} parts`);
     const boxes = figures.map((figure) => figure.getBoundingClientRect());
     figures.forEach((figure, index) => {
       const box = boxes[index];
@@ -452,11 +502,8 @@ async function expectFiguresFit(page: Page, where: string) {
       const text = figure.textContent;
       if (box.width === 0 || box.height === 0) found.push(`not drawn: ${text}`);
       if (box.left < panel.left - 0.5 || box.right > panel.right + 0.5) found.push(`outside the panel: ${text}`);
-      for (const part of figure.children) {
-        if (part.scrollWidth > part.clientWidth + 1) found.push(`cut off: ${part.textContent}`);
-        const inner = part.getBoundingClientRect();
-        if (inner.right > box.right + 0.5) found.push(`wider than its figure: ${part.textContent}`);
-      }
+      if (box.left < lineBox.left - 0.5 || box.right > lineBox.right + 0.5) found.push(`wider than its line: ${text}`);
+      if (figure.scrollWidth > figure.clientWidth + 1) found.push(`cut off: ${text}`);
       boxes.forEach((other, at) => {
         const apart =
           other.left >= box.right - 0.5 ||
@@ -493,8 +540,11 @@ test('six-digit counts keep their room at 1280x720, beside the inspector, and at
 
   // A check that flags only pages: a share of the pages analysed.
   await page.goto(`/crawls/${item.id}/issues/${BIG.page}`);
-  await expect(figure(page, 'Pages affected')).toHaveText(/^Pages affected\s*654,321\s*Open them in URLs$/);
-  await expect(figure(page, 'Share of pages')).toHaveText(/^Share of pages\s*66%\s*of the 987,654 pages analysed$/);
+  await expect(countsOf(page)).toHaveText(PAGE_COUNTS);
+  await expect(countsOf(page).getByRole('link', { name: '654,321 pages', exact: true })).toHaveAttribute(
+    'title',
+    'Open them in URLs',
+  );
   // The count, then the order the engine gives the pages in (evidence): pages missing from the sitemaps come with the
   // fewest links first, where a sitemap helps most.
   await expect(detail.getByText('654,321 pages, fewest links first', { exact: true })).toBeVisible();
@@ -507,7 +557,7 @@ test('six-digit counts keep their room at 1280x720, beside the inspector, and at
   await rows.getByRole('gridcell').first().click();
   await page.keyboard.press('Enter');
   await expect(inspector).toBeVisible();
-  await expect(figure(page, 'Share of pages')).toHaveText(/of the 987,654 pages analysed$/);
+  await expect(countsOf(page)).toHaveText(PAGE_COUNTS);
   await expectFiguresFit(page, 'a page check beside the inspector');
   await detail.locator('header').screenshot({ path: testInfo.outputPath('six-digits-page-check-narrow.png') });
   await page.keyboard.press('Escape');
@@ -516,21 +566,29 @@ test('six-digit counts keep their room at 1280x720, beside the inspector, and at
   // A check that can flag any URL: a share of the URLs crawled, a seven-digit count.
   await showChecks(page);
   await page.getByRole('listbox', { name: 'Checks' }).locator(`[role="option"][data-check="${BIG.url}"]`).click();
-  await expect(figure(page, 'URLs affected')).toHaveText(/^URLs affected\s*312,876\s*Open them in URLs$/);
-  await expect(figure(page, 'Share of URLs')).toHaveText(/^Share of URLs\s*25%\s*of the 1,234,567 URLs crawled$/);
+  await expect(countsOf(page)).toHaveText(URL_COUNTS);
+  await expect(countsOf(page).getByRole('link', { name: '312,876 URLs', exact: true })).toHaveAttribute(
+    'title',
+    'Open them in URLs',
+  );
   await expectFiguresFit(page, 'a URL check at 1280x720');
   await detail.locator('header').screenshot({ path: testInfo.outputPath('six-digits-url-check.png') });
 
-  const groups = detail.getByRole('treegrid');
+  // It opens as a list, its count over the rows said in the same six digits; its groups from "Grouped by cause",
+  // the first of them opening by itself.
+  await expect(detail.getByText(/^312,876 URLs, most (linked|used) first$/)).toBeVisible();
+  await expect(detail.getByRole('treegrid', { name: 'Internal URL returns 4xx: affected URLs' })).toBeVisible();
+  await showGroups(page);
+  const groups = detail.getByRole('treegrid', { name: /, grouped by / });
   await expect(groups.getByRole('row').nth(1)).toBeVisible();
-  await groups.focus();
-  await page.keyboard.press('ArrowRight');
+  await expect(detail.getByText(/^312,876 URLs in [\d,]+ groups?$/)).toBeVisible();
   await expect(groups.getByRole('row', { expanded: true })).toBeVisible();
+  await groups.focus();
   await expect(groups.getByRole('link', { name: /^Show (all [\d,]+|it) in URLs$/ })).toBeVisible();
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('Enter');
   await expect(inspector).toBeVisible();
-  await expect(figure(page, 'Share of URLs')).toHaveText(/of the 1,234,567 URLs crawled$/);
+  await expect(countsOf(page)).toHaveText(URL_COUNTS);
   await expectFiguresFit(page, 'a URL check beside the inspector');
   await detail.locator('header').screenshot({ path: testInfo.outputPath('six-digits-url-check-narrow.png') });
   await page.keyboard.press('Escape');
@@ -538,12 +596,12 @@ test('six-digit counts keep their room at 1280x720, beside the inspector, and at
 
   // The same window at 200% zoom has half the room each way: the figures wrap rather than overprint.
   await page.setViewportSize({ width: 640, height: 360 });
-  await expect(figure(page, 'Share of URLs')).toHaveText(/^Share of URLs\s*25%\s*of the 1,234,567 URLs crawled$/);
+  await expect(countsOf(page)).toHaveText(URL_COUNTS);
   await expectFiguresFit(page, 'a URL check at 200% zoom');
   await detail.locator('header').screenshot({ path: testInfo.outputPath('six-digits-url-check-zoomed.png') });
   await showChecks(page);
   await page.getByRole('listbox', { name: 'Checks' }).locator(`[role="option"][data-check="${BIG.page}"]`).click();
-  await expect(figure(page, 'Share of pages')).toHaveText(/^Share of pages\s*66%\s*of the 987,654 pages analysed$/);
+  await expect(countsOf(page)).toHaveText(PAGE_COUNTS);
   await expectFiguresFit(page, 'a page check at 200% zoom');
   await detail.locator('header').screenshot({ path: testInfo.outputPath('six-digits-page-check-zoomed.png') });
 });

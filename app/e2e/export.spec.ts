@@ -340,7 +340,10 @@ test('a check that doesn’t group exports its list in the grid’s sort (the re
   if (!flat) throw new Error('The seeded crawl has no flat check with more than one page');
   const sort = [{ column: 'url', desc: true }];
   await page.goto(`/crawls/${crawl}/issues/${flat.id}?sort=${encodeURIComponent(JSON.stringify(sort))}`);
-  await expect(page.getByRole('main').getByRole('grid').getByRole('row').nth(2)).toBeVisible();
+  // Its list: a grid, or a treegrid where its rows open in place to show where each is found.
+  const list = page.getByRole('main').locator('[data-check-detail]').locator('[role="grid"], [role="treegrid"]');
+  await expect(list.getByRole('row').nth(2)).toBeVisible();
+  await expect(list.getByRole('columnheader').first()).toHaveAttribute('aria-sort', 'descending');
   await page.keyboard.press('Control+e');
   const box = dialog(page, 'Export issues');
   await box.getByRole('radio', { name: /^This check/ }).check();
