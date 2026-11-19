@@ -14,10 +14,13 @@ public static class RecheckReader
     /// <summary>The most URLs a page of a recheck's holds.</summary>
     public const int MAX_LIMIT = 1_000;
 
-    private const string COLUMNS = """
+    // A recheck recorded as failed (by an earlier engine: one that fails now is rolled back, and leaves no row) judged
+    // nothing it can stand by. The score the analysis after it stored isn't its doing, so it has none.
+    private static readonly string COLUMNS = $"""
         k.id, k.status, k.started_at, k.ended_at, k.settled_at,
         (SELECT SUM(t.crawled_ms) FROM run_time t WHERE t.run = k.run), k.check_id, k.group_detail, k.group_related_url_id, k.url_list, k.kinds,
-        k.judged, k.fetched, k.count_before, k.fixed, k.still, k.not_checked, k.not_rechecked, k.new, k.score_before, k.score_after
+        k.judged, k.fetched, k.count_before, k.fixed, k.still, k.not_checked, k.not_rechecked, k.new, k.score_before,
+        CASE WHEN k.status = {(int)RecheckStatus.Failed} THEN NULL ELSE k.score_after END
         """;
 
     /// <summary>Every recheck of the crawl, newest first.</summary>

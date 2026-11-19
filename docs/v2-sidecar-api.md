@@ -3212,6 +3212,14 @@ every address). It is the catalog's, as `references` is: not stored, not in the 
   after phase 1. Neither counts what pages now link to that the crawl doesn't have yet, fetched one step, nor robots.txt.
 - **`capped`** is true when that would pass `limit` (1,000): the recheck then takes the most important first (the
   check's rows in their default order) and leaves `notRechecked` of them as the crawl found them.
+- **The units.** `judged` and `notRechecked` count the check's own URLs; `phase1`, `phase2Max` and `limit` count
+  fetches. The URLs of the check a recheck reads are `judged - notRechecked`, never `limit`: a `targets` check over 240
+  pages naming 1,442 images gives `judged` 240, `phase1` 1,000, `notRechecked` 90 (150 pages and their 850 images
+  fill the cap). `capped` with `notRechecked` 0 means only the referring pages of phase 2 were cut. For a check read
+  only by `robotsTxt`, `sitemaps` or `siteVersions` (no `urls` in `kinds`), `phase1` counts the URLs it records and
+  none is fetched.
+- A recheck whose `status` is `failed` (only files an earlier version rechecked hold one) has `scoreAfter` null: it
+  has no result, and the score the analysis after it stored isn't its doing.
 - **`estimateMs`** comes from the crawl's own pace (its URLs crawled over its time spent crawling, no faster than the
   slow start's), plus robots.txt and the analysis after (the last analysis's `durationMs`). **`suggestFullCheck`** is
   true when the recheck would fetch more than half the crawl's URLs: a full crawl would take about as long and settle
