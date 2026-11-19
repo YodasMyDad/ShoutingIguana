@@ -1,5 +1,6 @@
 // The words of a reference of a check's row (ReferenceCells.tsx draws them): what its link says, where on the page it
 // is, what else the check says of it, and the page's URL opened at the link. Pure.
+import type { IssueTarget, LinkRow } from '../../api/inspector';
 import type { Check } from '../../api/types';
 import { followWords } from '../../inspector/links';
 import { urlAtText } from '../../lib/textFragment';
@@ -16,11 +17,18 @@ function wordsOf(text: string | null | undefined): string | null {
 
 /**
  * The page's URL opened at a link's words (`urlAtText`), with the tooltip that says so; nothing where the link has no
- * words to find, and the page then opens at its top as any URL does.
+ * words to find, and the page then opens at its top as any URL does. `link` says what kind of link it is and where:
+ * only a link in the page's body shows its words (a hreflang link's "de", an og:image's "og:image" and an image's alt
+ * text are in its markup, and a browser sent to look for them would light up some other "de" on the page).
  */
-export function openAtLink(pageUrl: string, text: string | null | undefined): { openUrl?: string; openHint?: string } {
+export function openAtLink(
+  pageUrl: string,
+  text: string | null | undefined,
+  link?: Pick<LinkRow, 'kind' | 'position'> | Pick<IssueTarget, 'kind' | 'position'>,
+): { openUrl?: string; openHint?: string } {
   const words = wordsOf(text);
   if (!words) return {};
+  if (link && (link.kind !== 'hyperlink' || link.position === 'head')) return {};
   const at = urlAtText(pageUrl, words);
   return at === pageUrl ? {} : { openUrl: at, openHint: OPEN_AT_LINK };
 }

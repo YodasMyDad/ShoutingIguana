@@ -171,6 +171,9 @@ function noDetailShown(check: Pick<Check, 'id'>): string {
 /** A group that names no URL (a link to nowhere, a page that names none): said in place of one. */
 const NO_URL = 'No URL named';
 
+/** A header inside a sentence: its first letter small, the rest as written ("linked URL", never "linked url"). */
+const lowerFirst = (words: string) => words.charAt(0).toLowerCase() + words.slice(1);
+
 /** The first column's header for a check grouped by URL: the image, the shared title, or what the other URL is. */
 function relatedHeader(check: Check, shared: boolean): string {
   if (shared) {
@@ -1103,7 +1106,7 @@ export function IssueGroups({
       >
         <GridCore<TreeRow>
           key={treeKey}
-          label={`${check.title}: ${words.named}, grouped by ${grouping === 'relatedUrl' ? relatedHeader(check, shared).toLowerCase() : 'cause'}`}
+          label={`${check.title}: ${words.named}, grouped by ${grouping === 'relatedUrl' ? lowerFirst(relatedHeader(check, shared)) : 'cause'}`}
           columns={laid.columns}
           columnLayout={laid.columnLayout}
           rowCount={groupCount === null ? null : rows}
@@ -1229,7 +1232,7 @@ function PageUrl({
       url={row.url ?? ''}
       siteOrigin={siteOrigin}
       onInspect={() => onInspect(row.id)}
-      {...(own && row.url ? openAtLink(row.url, own.text) : {})}
+      {...(own && row.url ? openAtLink(row.url, own.text, own) : {})}
     />
   );
 }

@@ -130,7 +130,7 @@ describe('a check’s groups', () => {
 
   it('shows the groups of a check the address names a group of, without asking', async () => {
     await open(`${ISSUES}/empty-anchor-text?group=${HOME_GROUP}`);
-    expect(await screen.findByRole('treegrid', { name: /grouped by linked url/ })).toBeVisible();
+    expect(await screen.findByRole('treegrid', { name: /grouped by linked URL/ })).toBeVisible();
     expect(screen.getByRole('radio', { name: 'Grouped by linked URL' })).toHaveAttribute('aria-checked', 'true');
   });
 

@@ -71,6 +71,18 @@ describe('the page’s URL opened at a link', () => {
     expect(openAtLink(PAGE, '   ')).toEqual({});
   });
 
+  it('is nothing for a link whose words the page doesn’t show: one in its head, an image’s alt text', () => {
+    // A hreflang link's "de" and an og:image's "og:image" are markup: the browser would light up another "de".
+    expect(openAtLink(PAGE, 'de', { kind: 'hreflang', position: 'head' })).toEqual({});
+    expect(openAtLink(PAGE, 'og:image', { kind: 'image', position: 'head' })).toEqual({});
+    expect(openAtLink(PAGE, 'A bench in the sun', { kind: 'image', position: 'content' })).toEqual({});
+    // A link in the page's body is found by what it says.
+    expect(openAtLink(PAGE, 'Old range', { kind: 'hyperlink', position: 'footer' }).openUrl).toBe(
+      urlAtText(PAGE, 'Old range'),
+    );
+    expect(openAtLink(PAGE, 'Old range', { kind: 'hyperlink', position: null }).openHint).toBe(OPEN_AT_LINK);
+  });
+
   it('is nothing for an address a browser can’t open at its words', () => {
     expect(openAtLink('mailto:shop@example.com', 'Write to us')).toEqual({});
   });

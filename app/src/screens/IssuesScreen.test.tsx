@@ -336,7 +336,7 @@ describe('the Issues screen', () => {
     );
     // A cause in the template is one fix for its pages: the check opens grouped, with no asking.
     expect(await screen.findByRole('radio', { name: 'Grouped by linked URL' })).toHaveAttribute('aria-checked', 'true');
-    expect(await screen.findByRole('treegrid', { name: /grouped by linked url/ })).toBeVisible();
+    expect(await screen.findByRole('treegrid', { name: /grouped by linked URL/ })).toBeVisible();
   });
 
   it('never shows a count over an empty list: a grouped check whose groups come back empty lists its URLs flat', async () => {
@@ -696,7 +696,7 @@ describe('the Issues screen', () => {
     const { router } = await open(`${ISSUES}/empty-anchor-text`);
     // It opens as a list; its groups are named by what their URL is, the URL each page links to.
     const grid = await showGroups();
-    expect(grid).toHaveAccessibleName(/grouped by linked url$/);
+    expect(grid).toHaveAccessibleName(/grouped by linked URL$/);
     expect(within(grid).getByRole('columnheader', { name: 'Linked URL' })).toBeVisible();
     expect(await screen.findByText('Likely in the site’s template')).toBeVisible();
     await within(grid).findByText('5');
@@ -1429,7 +1429,7 @@ describe('a check’s count, worded by what the check flags', () => {
     sidecar();
     await open(`${ISSUES}/empty-anchor-text${OPEN_GROUP}`);
     const grid = await screen.findByRole('treegrid', {
-      name: 'Internal links without anchor text: affected pages, grouped by linked url',
+      name: 'Internal links without anchor text: affected pages, grouped by linked URL',
     });
     expect(within(grid).getByRole('columnheader', { name: 'Pages' })).toBeVisible();
     expect(await within(grid).findByRole('link', { name: 'Show all 5 pages in URLs' })).toBeVisible();
@@ -1445,7 +1445,7 @@ describe('a check’s count, worded by what the check flags', () => {
     sidecar({ checks: ISSUES_CHECKS_WITHOUT_SUBJECTS });
     await open(`${ISSUES}/empty-anchor-text${OPEN_GROUP}`);
     const grid = await screen.findByRole('treegrid', {
-      name: 'Internal links without anchor text: affected URLs, grouped by linked url',
+      name: 'Internal links without anchor text: affected URLs, grouped by linked URL',
     });
     expect(within(grid).getByRole('columnheader', { name: 'URLs' })).toBeVisible();
     expect(await within(grid).findByRole('link', { name: 'Show all 5 in URLs' })).toBeVisible();

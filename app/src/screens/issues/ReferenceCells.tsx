@@ -73,7 +73,7 @@ export function ReferenceOther({
             url={where.link.url}
             siteOrigin={siteOrigin}
             onInspect={() => onInspect(where.link.id)}
-            {...openAtLink(where.link.url, where.link.text)}
+            {...openAtLink(where.link.url, where.link.text, where.link)}
           />
         </>
       );

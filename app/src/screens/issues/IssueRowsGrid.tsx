@@ -609,7 +609,7 @@ export function IssueRowsGrid({
               // A page holding the bad links: its open button lands on the row's own link.
               const at =
                 references === 'targets' && where?.kind === 'target' && subject.url
-                  ? openAtLink(subject.url, where.target.text)
+                  ? openAtLink(subject.url, where.target.text, where.target)
                   : {};
               return (
                 <IssueUrl
