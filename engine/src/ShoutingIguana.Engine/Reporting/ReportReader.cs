@@ -51,6 +51,8 @@ internal static class ReportReader
         var running = stats.Status is CrawlStatus.Running or CrawlStatus.Paused;
         var ran = IssueCatalog.All.Count(check => counts.ContainsKey(check.Id));
         var fixFirst = ReportSources.FixFirst(results);
+        var wording = listing?.Wording ?? ReportWording.Plain;
+        var origin = OriginOf(Home(crawlPath, stats.StartUrl, cancellationToken));
 
         // The files the checks of robots.txt and the sitemaps are about, of this analysis only.
         var files = IssueFileReader.Read(crawlPath, export.Cache, cancellationToken) is { } stored && stored.AnalyzedAt == results.Analysis.AnalyzedAt ? stored.Checks : null;
@@ -65,7 +67,7 @@ internal static class ReportReader
             var check = IssueCatalog.Find(id)!;
             var listed = examples(check.Severity);
             var words = ReportSources.Words(check, settings);
-            var rows = listed > 0 ? ReportRows.Read(crawlPath, check, listed, export, words.IsPlain, cancellationToken) : [];
+            var rows = listed > 0 ? ReportRows.Read(crawlPath, check, listed, export, words.IsPlain, cancellationToken, wording, origin) : [];
             var (foundOn, targets) = References(crawlPath, check, rows, export, cancellationToken);
             var group = check.Grouping == IssueGrouping.None ? null : IssueGroupReader.ReadGroups(crawlPath, id, 0, 1, export.Cache, cancellationToken)?.Groups.FirstOrDefault();
             var oneFix = group is { LikelyTemplate: true } ? new ReportOneFix(group.Pages, group.RelatedUrl, group.Detail)
@@ -107,7 +109,7 @@ internal static class ReportReader
         {
             Site = SiteOf(stats.StartUrl),
             StartUrl = stats.StartUrl,
-            Origin = OriginOf(Home(crawlPath, stats.StartUrl, cancellationToken)),
+            Origin = origin,
             Status = stats.Status,
             StillRunning = running,
             StartedAt = stats.StartedAt,
@@ -173,7 +175,7 @@ internal static class ReportReader
             IssueReferences.Sources => (FoundOnReader.ReadFoundOn(crawlPath, ids, LISTED_SOURCES, export.Cache, cancellationToken).ToDictionary(url => url.UrlId),
                 new Dictionary<int, Storage.Models.IssueTargetsOfUrl>()),
             IssueReferences.Targets => (new Dictionary<int, Storage.Models.UrlFoundOn>(),
-                (FoundOnReader.ReadTargets(crawlPath, check.Id, ids, LISTED_SOURCES, export.Cache, cancellationToken) ?? []).ToDictionary(url => url.UrlId)),
+                (FoundOnReader.ReadTargets(crawlPath, check.Id, ids, LISTED_TARGETS, export.Cache, cancellationToken) ?? []).ToDictionary(url => url.UrlId)),
             _ => (new Dictionary<int, Storage.Models.UrlFoundOn>(), new Dictionary<int, Storage.Models.IssueTargetsOfUrl>())
         };
     }
@@ -221,6 +223,9 @@ internal static class ReportReader
 
     /// <summary>The pages linking to each listed URL that the report names, before "and N more".</summary>
     internal const int LISTED_SOURCES = 3;
+
+    /// <summary>The URLs a listed page's issue names that the report shows, before "and N others": the five broken links on one page are all there.</summary>
+    internal const int LISTED_TARGETS = 5;
 
     /// <summary>The site's home page: where the start URL's redirects end, or the start URL when the crawl has no such page.</summary>
     private static string Home(string crawlPath, string startUrl, CancellationToken cancellationToken)

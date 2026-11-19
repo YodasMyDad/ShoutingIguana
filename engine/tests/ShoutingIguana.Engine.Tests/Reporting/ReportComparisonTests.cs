@@ -49,7 +49,7 @@ public sealed class ReportComparisonTests(ComparisonCrawls crawls) : IDisposable
 
         // Each group lists its checks by their words, in the comparison's order.
         var groups = document.QuerySelectorAll("h3.group-title").ToList();
-        foreach (var (state, name) in new[] { (CheckChangeState.Fixed, "Fixed"), (CheckChangeState.New, "New"), (CheckChangeState.Fewer, "Fewer"), (CheckChangeState.More, "More") })
+        foreach (var (state, name) in new[] { (CheckChangeState.Fixed, "Fixed"), (CheckChangeState.New, "New"), (CheckChangeState.Fewer, "Got better"), (CheckChangeState.More, "Got worse") })
         {
             List<string> titles = [.. comparison.Checks.Where(check => check.State == state).Select(check => ReportSources.Words(IssueCatalog.Find(check.CheckId)!, settings).Title + ".")];
             var group = groups.SingleOrDefault(title => title.FirstChild?.TextContent.Trim() == name);
@@ -78,7 +78,26 @@ public sealed class ReportComparisonTests(ComparisonCrawls crawls) : IDisposable
         var fixedCount = comparison.Checks.Count(check => check.State == CheckChangeState.Fixed);
         Assert.StartsWith($"Since your last check on {on}: The score ", line, StringComparison.Ordinal);
         Assert.Contains($"{fixedCount} problems fixed", line, StringComparison.Ordinal);
+
+        // In English (the UX audit's S-11, A-12): "2 problems fixed, 1 new, 3 got better, 2 got worse.", never "2 on more."
+        int Of(CheckChangeState state) => comparison.Checks.Count(check => check.State == state);
+        Assert.True(Of(CheckChangeState.More) > 0 && Of(CheckChangeState.Fewer) > 0, "The comparison crawls have a problem on more pages and one on fewer.");
+        Assert.Contains($", {Of(CheckChangeState.Fewer)} got better", line, StringComparison.Ordinal);
+        Assert.Contains($", {Of(CheckChangeState.More)} got worse.", line, StringComparison.Ordinal);
+        Assert.DoesNotContain(" on more", line, StringComparison.Ordinal);
+        Assert.DoesNotContain(" on fewer", line, StringComparison.Ordinal);
     }
+
+    /// <summary>The counts of the summary's line, the first with its noun: a line of one count reads alone ("2 problems got worse.").</summary>
+    [Theory]
+    [InlineData(2, 0, 0, 2, "2 problems fixed, 2 got worse.")]
+    [InlineData(1, 1, 1, 1, "1 problem fixed, 1 new, 1 got better, 1 got worse.")]
+    [InlineData(0, 2, 0, 0, "2 new problems.")]
+    [InlineData(0, 0, 3, 1, "3 problems got better, 1 got worse.")]
+    [InlineData(0, 0, 0, 1, "1 problem got worse.")]
+    [InlineData(0, 0, 0, 0, "No problem was fixed, and none is new.")]
+    public void TheSummaryLineCountsWhatChangedInEnglish(int fixedCount, int added, int fewer, int more, string said) =>
+        Assert.Equal(said, ReportWords.ChangeCounts(fixedCount, added, fewer, more));
 
     /// <summary>Without a comparison, nothing of it; one that can't be made is said under About this check, and the report is still made.</summary>
     [Fact]
