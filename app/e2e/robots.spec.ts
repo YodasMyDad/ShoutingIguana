@@ -160,7 +160,8 @@ test('the file shows the line that blocked a planted URL, and choosing the line 
   await expect(
     file(page).getByText(new RegExp(`${robots.lines.length} lines.*the crawl obeyed lines? \\d+`)),
   ).toBeVisible();
-  const link = file(page).locator('.cm-si-action');
+  // (The file's Sitemap line has a link of its own, to that sitemap's page: below.)
+  const link = file(page).locator('.cm-si-action', { hasText: /^Blocked/ });
   await expect(link).toHaveText(`Blocked ${rule.blocked} URLs`);
   await expect(file(page).locator('.cm-si-line-strong').first()).toBeVisible();
 
@@ -409,6 +410,67 @@ test('a deep link to an origin and its line survives a reload; an origin the cra
   await page.getByRole('button', { name: 'Show every origin' }).click();
   await expect(page).toHaveURL(/\/robots$/);
   await expect(origins(page)).toBeVisible();
+});
+
+test('an origin opens on one click, and its blocked URL, that URL’s rule and the file’s Sitemap line are links', async ({
+  page,
+}) => {
+  const { crawl, own, rule, robots } = await planted();
+  await openRobots(page);
+  // The origin is a link: one click opens its file. (Its row opens on a click anywhere else too.)
+  const first = origins(page).getByRole('row').nth(1);
+  await first.getByRole('link', { name: own.origin, exact: true }).click();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(`robots.txt of ${own.origin}`);
+  await expect(shown(page)).toHaveText(String(own.blocked));
+  await page.goBack();
+  await expect(first.locator('[data-active]')).toHaveCount(1);
+  await first.getByRole('gridcell').nth(1).click();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(`robots.txt of ${own.origin}`);
+
+  // The rule in a URL's "Blocked by" shows its line in the file, and narrows nothing.
+  await expect(file(page).locator('.cm-si-line-chosen')).toHaveCount(0);
+  await blocked(page).getByRole('row').nth(1).getByRole('button', { name: rule.text, exact: true }).click();
+  await expect(file(page).locator('.cm-si-line-chosen')).toContainText(rule.text);
+  await expect(page).not.toHaveURL(/line=/);
+  await expect(shown(page)).toHaveText(String(own.blocked));
+
+  // A blocked URL is a link: one click opens the inspector on it, and Back closes it.
+  await blocked(page).getByRole('row').nth(1).locator('.si-url__go').click();
+  await expect(page).toHaveURL(/inspect=\d+/);
+  await expect(page.getByRole('complementary', { name: 'Inspector' })).toBeVisible();
+  await page.goBack();
+  await expect(page).not.toHaveURL(/inspect=/);
+
+  // The file's Sitemap line opens that sitemap's page, when the crawl has the sitemap.
+  const sitemaps = await read<{ sitemaps: { id: number; url: string }[] }>(`/api/crawls/${crawl}/sitemaps`);
+  const named = robots.lines
+    .filter((line) => line.kind === 'sitemap')
+    .map((line) => sitemaps.sitemaps.find((sitemap) => line.text.endsWith(sitemap.url)))
+    .find((sitemap) => sitemap !== undefined);
+  expect(named, 'the synthetic site’s robots.txt names its sitemap index').toBeTruthy();
+  if (!named) return;
+  await file(page).locator('.cm-si-action', { hasText: 'Open this sitemap' }).first().click();
+  await expect(page).toHaveURL(new RegExp(`/sitemaps/${named.id}$`));
+});
+
+test('at 1280 x 720 the file’s box is as tall as its few lines, and the blocked URLs are in view under it', async ({
+  page,
+}) => {
+  const { at, own } = await planted();
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto(at);
+  await expect(shown(page)).toHaveText(String(own.blocked));
+  // The panes stack here. A file of a few lines takes a few lines' room, not the pane's whole height...
+  const box = await file(page).boundingBox();
+  if (!box) throw new Error('The file is drawn');
+  expect(box.height).toBeLessThan(260);
+  // ...with none of its lines cut off, and the first blocked URL on screen without scrolling.
+  expect(
+    await file(page)
+      .locator('.cm-scroller')
+      .evaluate((node) => node.scrollHeight - node.clientHeight),
+  ).toBe(0);
+  await expect(blocked(page).getByRole('row').nth(1)).toBeInViewport({ ratio: 1 });
 });
 
 test('the file and the blocked URLs are copied as they are', async ({ page, context }) => {

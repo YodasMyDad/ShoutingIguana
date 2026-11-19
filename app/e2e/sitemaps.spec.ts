@@ -18,11 +18,16 @@ interface Sitemap {
 
 const main = (page: Page) => page.getByRole('main');
 const tree = (page: Page) => page.getByRole('treegrid', { name: 'Sitemaps' });
-/** A sitemap's row in the list, by the end of its address. */
+/**
+ * A sitemap's row in the list, by the end of its address in its first cell: a sitemap an index lists names the index
+ * in its Found via cell ("In /sitemap.xml"), so the row's whole text would find the index's sitemaps too.
+ */
 const row = (page: Page, sitemap: Sitemap) =>
   tree(page)
     .getByRole('row')
-    .filter({ hasText: new URL(sitemap.url).pathname });
+    .filter({ has: page.locator('[aria-colindex="1"]', { hasText: new URL(sitemap.url).pathname }) });
+/** A row's counts that open something: "3 URLs listed", "1 URL blocked by robots.txt". Not the index it names. */
+const countLinks = (page: Page, sitemap: Sitemap) => row(page, sitemap).getByRole('link', { name: /^[\d,]+ URLs? / });
 /** The grid's own count: "264" of "264 of 4,521 URLs". */
 const shown = (page: Page) => main(page).locator('.si-result-count__n');
 
@@ -58,9 +63,15 @@ test('the list: an index with its sitemaps under it, what became of each, and th
   await expect(row(page, index)).toContainText('robots.txt');
   await expect(row(page, failed)).toHaveAttribute('aria-level', '2');
   await expect(row(page, failed)).toContainText('Couldn’t be read: 404 Not Found');
-  // What it lists isn't known: dashes, never 0.
-  await expect(row(page, failed).getByRole('link')).toHaveCount(0);
+  // What it lists isn't known: dashes, never 0, and no count to open. Its one link is the index that lists it, by
+  // name ("In /sitemap.xml"): "Sitemap index" on every one of the index's sitemaps read as its type.
+  await expect(countLinks(page, failed)).toHaveCount(0);
   await expect(row(page, failed).getByText('–')).toHaveCount(5);
+  await expect(row(page, failed).getByRole('gridcell').nth(1)).toHaveText(`In ${new URL(index.url).pathname}`);
+  await expect(row(page, failed).getByRole('link', { name: new URL(index.url).pathname })).toHaveAttribute(
+    'href',
+    new RegExp(`/sitemaps/${index.id}$`),
+  );
   // Five counts: what was crawled, what robots.txt blocked and what wasn't crawled add up to what's listed.
   await expect(tree(page).getByRole('columnheader')).toHaveText([
     'Sitemap',
@@ -123,7 +134,7 @@ test('every count in the list lands on exactly its URLs, and back returns to the
   expect(walked.length).toBeGreaterThan(0);
   let landings = 0;
   for (const sitemap of walked) {
-    const links = row(page, sitemap).getByRole('link');
+    const links = countLinks(page, sitemap);
     for (let at = 0; at < (await links.count()); at++) {
       const link = links.nth(at);
       const said = countOf(await link.innerText());
@@ -280,13 +291,71 @@ test('one sitemap: its grid filters with a quick filter, sorts from a header and
   // Enter on a row opens the inspector, in place; Esc closes it to the grid as it was.
   await show.getByRole('radio', { name: /All/ }).click();
   await expect(shown(page)).toHaveText(index.urls.listed.toLocaleString('en-GB'));
-  await grid.getByRole('row').nth(1).getByRole('gridcell').first().click();
+  // (A cell that isn't the URL's: a click on the URL itself opens the inspector, below.)
+  await grid.getByRole('row').nth(1).getByRole('gridcell').nth(1).click();
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/inspect=\d+/);
   await expect(page.getByRole('complementary', { name: 'Inspector' })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page).not.toHaveURL(/inspect=/);
   await expect(page).toHaveURL(new RegExp(`/sitemaps/${index.id}`));
+
+  // A URL is a link: one click on it opens the inspector on that URL, and Back closes it to the grid as it was.
+  await grid.getByRole('row').nth(2).locator('.si-url__go').click();
+  await expect(page).toHaveURL(/inspect=\d+/);
+  await expect(page.getByRole('complementary', { name: 'Inspector' })).toBeVisible();
+  await page.goBack();
+  await expect(page).not.toHaveURL(/inspect=/);
+  await expect(page).toHaveURL(new RegExp(`/sitemaps/${index.id}`));
+});
+
+test('a sitemap opens on one click on its name or anywhere on its row, and back returns to its row', async ({
+  page,
+}) => {
+  const { sitemaps } = await sitemapsOf();
+  const failed = sitemaps.find((sitemap) => sitemap.state === 'failed');
+  const listing = sitemaps.find((sitemap) => !sitemap.isIndex && sitemap.urls.listed > 0);
+  if (!failed || !listing) return;
+  await openSitemaps(page);
+  // The name is a link: one click, on a sitemap that couldn't be read too (it has no count to open).
+  await row(page, failed).locator('.si-url__go').click();
+  await expect(page).toHaveURL(new RegExp(`/sitemaps/${failed.id}$`));
+  await expect(main(page).getByText('No URLs to show for this sitemap.')).toBeVisible();
+  await page.goBack();
+  // Back in the list, the row it was opened from is the cursor's, and marked.
+  await expect(row(page, failed).locator('[data-active]')).toHaveCount(1);
+  // A click anywhere else on a row opens it as well: here, on what became of it.
+  await row(page, listing).getByRole('gridcell').nth(2).click();
+  await expect(page).toHaveURL(new RegExp(`/sitemaps/${listing.id}$`));
+  await expect(shown(page)).toHaveText(listing.urls.listed.toLocaleString('en-GB'));
+  // The heading is the sitemap's whole address, never cut in the middle.
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(listing.url);
+});
+
+test('a link that names one of a sitemap’s URLs lands on its row, marked and in view, the inspector on it', async ({
+  page,
+}) => {
+  const { crawl, sitemaps } = await sitemapsOf();
+  const big = [...sitemaps].filter((sitemap) => !sitemap.isIndex).sort((a, b) => b.urls.listed - a.urls.listed)[0];
+  if (!big || big.urls.listed < 60) return;
+  // A URL far down the list, as the engine orders it: the inspector's "In a sitemap: Yes: extra.xml" links like this.
+  const far = await read<{ rows: { id: number; url: string }[] }>(`/api/crawls/${crawl}/sitemaps/urls`, {
+    sitemapId: big.id,
+    columns: ['url'],
+    filters: [],
+    sort: [],
+    offset: big.urls.listed - 5,
+    limit: 1,
+  });
+  const target = far.rows[0];
+  if (!target) throw new Error('The sitemap lists a URL near its end');
+  await page.goto(`/crawls/${crawl}/sitemaps/${big.id}?inspect=${target.id}`);
+  const grid = main(page).getByRole('grid', { name: `URLs listed by ${big.url}` });
+  const landed = grid.getByRole('row').filter({ has: page.locator('[data-active]') });
+  await expect(landed).toContainText(new URL(target.url).pathname);
+  await expect(landed).toBeInViewport();
+  await expect(page.getByRole('complementary', { name: 'Inspector' })).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`inspect=${target.id}`));
 });
 
 test('a deep link to a sitemap, with its filter, survives a reload; a stale one says so and offers the list', async ({

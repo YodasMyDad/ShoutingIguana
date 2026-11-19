@@ -72,7 +72,10 @@ export const Synthetic: Story = {
   render: () => <ScreenApp path={`/crawls/${SYNTHETIC_CRAWL}/robots`} crawlId={SYNTHETIC_CRAWL} />,
 };
 
-/** The origins, one in each state: read, unreachable (its URLs refused), missing, and unanswered (crawled anyway). */
+/**
+ * The origins, one in each state: read, unreachable (its URLs refused), missing, and unanswered (crawled anyway). The
+ * origin is a link and a click anywhere on its row opens its file; the button after it opens the live robots.txt.
+ */
 export const Origins: Story = {
   loaders: [() => own(EVERY_STATE)],
   render: () => <ScreenApp path={LIST} />,
@@ -170,7 +173,10 @@ export const OriginsError: Story = {
 
 // ------------------------------------------------------------------------------------------------ One origin's file
 
-/** One origin: the file with the group the crawl obeyed marked, and the URLs it blocked beside it. */
+/**
+ * One origin: the file with the group the crawl obeyed marked, and the URLs it blocked beside it. A blocked URL opens
+ * the inspector, its rule shows its line in the file, and the file's Sitemap line opens that sitemap's page.
+ */
 export const File: Story = {
   loaders: [() => own(EVERY_STATE)],
   render: () => <ScreenApp path={at(SITE)} />,
@@ -182,7 +188,10 @@ export const FileAt1440: Story = {
   render: () => <ScreenApp path={at(SITE)} size={{ width: 1440, height: 900 }} />,
 };
 
-/** At the window's least (960 x 600, the shell's): the file over the blocked URLs, which keep every column. */
+/**
+ * At the window's least (960 x 600, the shell's): the file over the blocked URLs, which keep every column. The file's
+ * box is as tall as its lines, up to the pane's height.
+ */
 export const FileAtMinimumWindow: Story = {
   loaders: [() => own(EVERY_STATE)],
   render: () => <ScreenApp path={at(SITE)} size={{ width: 960, height: 600 }} />,

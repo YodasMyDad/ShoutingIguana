@@ -89,7 +89,7 @@ const ROUTE = '/crawls/$crawl/robots/{-$origin}';
 
 // Every column fits beside the URL in the pane, at 1440 px and at the window's least (stacked there): a few words in
 // each, the whole of it behind them on hover and for a screen reader.
-const WHY_WIDTH = 168;
+const WHY_WIDTH = 144;
 const LINKED_WIDTH = 128;
 const SITEMAP_WIDTH = 112;
 const CONFLICT_WIDTH = 128;
@@ -729,7 +729,7 @@ function BlockedUrls({
             return (
               <button
                 type="button"
-                className="si-link block max-w-full truncate text-start font-mono text-(length:--mono-scale)"
+                className="si-link block max-w-full truncate text-start"
                 title={withRecorded(why.sentence, why.recorded)}
                 // The grid is the one Tab stop, and a press leaves focus on it.
                 tabIndex={-1}

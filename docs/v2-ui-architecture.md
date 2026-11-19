@@ -1339,6 +1339,19 @@ is two views on one route: a list, and one thing from it, named in the path. Wha
   `onActivate`, which is told the column too since Links, so the two could be made one) and `GridTree.activates`
   (a group's row is a thing of its own, which Enter opens as it opens any row: an index has URLs of its own, those
   of every sitemap under it; Right, Left and the chevron open and close it).
+- **A list of places to go** (the UX round of 19 Nov, D-07): a sitemap's name is a link that opens it (`Url` with
+  `onGo`), and a plain click anywhere else on its row opens it too, as an origin's does on robots.txt: every row is
+  a place, one that lists nothing or couldn't be read as well, and a single click on these rows did nothing before.
+  `opensItsRow` (`screens/listPlace.ts`) says which clicks: the main button, no modifier (Shift and Ctrl clicks
+  still select rows to copy), off the row's own links, buttons and chevron, and not the end of a drag that selected
+  text. The rows have the pointer (`si-rows-open`). A row has a menu (`RowMenu`): open it, open it in the browser,
+  copy its URL, copy the row; Shift+Enter opens it in the browser (`openUrlOf`). The page a row opens drops the
+  second click of a double-click, the way in before (`useStrayClickGuard`): it would land on the filter or the row
+  under the pointer there.
+- **A sitemap an index lists names the index** in Found via: "In /sitemap.xml", the name a link to the index
+  (`foundInWords`). "Sitemap index" on every one of an index's sitemaps read as the row's type.
+- **The row a list was left on is marked, coming back** (`si-mark-cursor`): `startRow` places the grid's cursor,
+  which shows only while the grid has focus, so while nothing is selected the cursor's row has the selection's tint.
 - **Every count is a link to exactly its URLs**: that sitemap's page under the count's filter (`COUNT_FILTERS`).
   The links are in the cells, out of the tab order, and Enter on a cell does what a click on its link does. A count
   of 0 is a plain 0 (nothing to open). A sitemap whose contents the crawl doesn't know (left unread, not read yet,
@@ -1401,6 +1414,22 @@ is two views on one route: a list, and one thing from it, named in the path. Wha
   (`grid/summaryWords.ts`, `grid/NeedsAnalysis.tsx`): the button is worded by why the analysis can't be read
   ("Analyse again" for a crawl that was analysed before), and while the crawl is being analysed the columns "fill
   in when the analysis that's running is done", with nothing to press.
+- **Its URLs look and act as the URL grid's** (D-02, D-18; `urls/urlGridParts.ts`, `fixedUrlColumns`): a URL is a
+  link that opens the inspector on one click, shown as its path with the host named once in the header ("Show full
+  URLs" shows them whole, as on URLs), a file by its name; a status has its class's mark (`StatusCode`), and a URL
+  with none a dash, its Outcome beside it saying what happened; the URL and the Title take their width from what
+  they hold (`fit`). It's a big grid: a URL's open-in-browser button shows on the row pointed at and the cursor's
+  (`si-open-on-row`). Not the URL grid's yet: the preset tabs, the column chooser and Add filter.
+- **Its heading is the sitemap's whole address**: `Url` with `truncate="wrap"`. Middle truncation measured the text
+  without the heading's letter-spacing, so it cut an address that fit. Open in the browser and copy sit straight
+  after the address (in the header's count slot), not with Export at its far edge.
+- **A link can land on one of its URLs**: `?inspect=<the URL's id>`, nothing else in the search. The inspector stays
+  on that URL, and the grid starts with its cursor on the URL's row (`startRow`, `startKey`), marked and in view.
+  The list is in the crawl's order while nothing sorts it, so the row is as many rows down as the list has URLs with
+  a smaller id: one count (`sitemapCountQuery` under `id < n`, with the view's own filters), and a second
+  (`id = n`) says the sitemap lists the URL at all; one it doesn't list leaves the grid at its top, as does a view
+  that arrives sorted or searched. The grid is made once both are in (its frame alone until then): a grid reads
+  where it starts when it's made.
 - **Its search field is the same field whatever is searched for** (`grid/useSearchText.ts`, which the URL grid uses
   too): controlled by its own text, which follows the route's `q` when that changes from elsewhere. Keyed on `q`,
   as it was, Enter made a new field and the one with focus was gone.
@@ -1440,7 +1469,11 @@ is two views on one route: a list, and one thing from it, named in the path. Wha
   out of the Source section as they stood, as `inspector/SourcePane.tsx`, which both use: Ctrl+F, Enter and
   Shift+Enter, the 10,000-match limit and the caret are the same. The viewer gained a `language` (HTML, or plain),
   marks for lines (`inspector/sourceLines.ts`: a tone, a name, a note, a link) and a chosen line. The engine says
-  what each line is and whether it's part of the group the crawl obeyed: nothing is parsed or matched in the app.
+  what each line is and whether it's part of the group the crawl obeyed: nothing is parsed or matched in the app,
+  but for the address a Sitemap line names (`sitemapLineUrl`), which the engine doesn't give.
+- **A Sitemap line is a link to that sitemap's page** when the crawl has the sitemap (`sitemapOfLine`, by its
+  address, however it's spelled): its mark's link reads "Open this sitemap". The page reads the crawl's sitemaps for
+  it; without them, or for a sitemap the crawl doesn't have, the line is plain.
 - **What the marks mean**: the obeyed group carries the accent's rule at its left edge, the other groups are muted, a
   directive's name is set apart, a line the crawler made nothing of says why after it, and a rule that blocked URLs
   says how many, as a link. A rule that blocked none says nothing (a real file has hundreds). The file's line above
@@ -1449,7 +1482,10 @@ is two views on one route: a list, and one thing from it, named in the path. Wha
   class is on the editor's content, as a theme's rules inside a media query can't name the editor itself.
 - **Choosing either way.** A line is chosen with a press on its link, or Enter with the caret on it: the route takes
   `line`, the list is that line's URLs, and the file marks it. Moving the list's cursor shows each URL's line in the
-  file, focus arriving on the list included. The two cases no line accounts for (`unreachable`, `unknown`) are links
+  file, focus arriving on the list included. The rule in a URL's "Blocked by" is a link that does the same from the
+  pointer, and brings the line back into view if the file was scrolled since: the viewer reveals a line when it
+  becomes the chosen one, so the page tells it no line is chosen for a frame, then the line again. It narrows
+  nothing: the reader keeps the URLs they were reading. The two cases no line accounts for (`unreachable`, `unknown`) are links
   over the list, with the route's `reason`. What narrows the list shows as a chip that removes it: "Line is 2:
   Disallow: /private/", which holds of any line a link can name. With nothing listed the words go by the line: the
   file has no such line, the line isn't a rule, or it's a rule that blocked no URLs. The note over the list has two
@@ -1461,8 +1497,15 @@ is two views on one route: a list, and one thing from it, named in the path. Wha
 - **Copying**: the file as it is, and the blocked URLs the list is narrowed to (Ctrl+Shift+C), read 1,000 at a time
   by the Issues screen's copy, with its progress toast.
 - **The layout**: the file and the list side by side, stacked below the `split` width (a narrow window, or the
-  inspector open beside them). Stacked, the file has a height of its own (360 px) and the blocked URLs at least
-  that: never less than their header, their note and five rows of the list.
+  inspector open beside them). Stacked, the file's box is as tall as its lines (`fileBoxHeight`, given to the styles
+  as `--robots-file-fit`), up to the pane's own height (360 px), past which it scrolls in its box; the blocked URLs
+  have at least that height: never less than their header, their note and five rows of the list. A four-line file
+  held 340 px and left the blocked URLs the last 40 px of a 1280 x 720 window. Side by side, the two are one grid
+  row of `minmax(0, 1fr)` with a least height of its own: an `auto` row took the height of the file's text, so a
+  file of 400 lines made both panes 7,000 px tall and the screen scroll.
+- **Controls sit beside what they act on**: open the robots.txt in the browser straight after the origin in the
+  heading, Copy the file with the file's own controls (`SourcePane`'s `actions`). A blocked URL is a link that
+  opens the inspector, and its grid is a big one (`si-open-on-row`).
 - **Its commands** are the registry's robots.txt group: search the file (Ctrl+F from anywhere on an origin's page:
   the pane's search field is asked to take focus, as the inspector's Source is by its command; with focus in the
   file the pane takes the key itself), show every origin, copy the file, copy the blocked URLs, open the robots.txt
@@ -1471,7 +1514,8 @@ is two views on one route: a list, and one thing from it, named in the path. Wha
 ### From elsewhere
 
 - The inspector's "Blocked by robots.txt" leads to the file on that URL's own origin, and "In a sitemap" to
-  Sitemaps. `/urls/inspect` says neither which line nor which sitemaps, so neither link can be more exact.
+  Sitemaps. `/urls/inspect` doesn't say which line, so that link can't be more exact; a link to a sitemap can land
+  on the URL (`/sitemaps/<id>?inspect=<url id>`, above).
 - The mock answers these endpoints from fixtures of their own (`api/mock/sitemapsRobots.ts`, saved by
   `design/data/extract/sitemaps-robots.mjs`). It counts each sitemap's URLs over the rows its own grid has.
 

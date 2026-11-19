@@ -292,7 +292,12 @@ found, 265 pages; the 100k crawl 110,251 and 112,577, and 101,106 pages, everywh
 
 - The answer in a sentence, then the sitemap tree: an index with the sitemaps it lists under it. Each says how the
   crawl found it, what became of it, and its URLs counted: listed, crawled, blocked by robots.txt, not crawled,
-  non-indexable. Every count opens exactly those URLs.
+  non-indexable. Every count opens exactly those URLs. A sitemap an index lists says which ("In /sitemap.xml", the
+  name a link to the index).
+- A list of places to go: a sitemap's name is a link that opens it, with open-in-browser straight after it, and a
+  click anywhere else on its row opens it too. Every row opens, one that lists nothing or couldn't be read as well.
+  A row's menu (right-click, Shift+F10): open the sitemap, open it in the browser, copy its URL, copy the row.
+  Coming back, the list is on the row it was left on, marked.
 - "Crawled" means the crawl requested the URL. A URL robots.txt refused was never requested: it's counted as
   blocked, not as crawled. Listed is crawled, blocked and not crawled added up.
 - An index's counts are those of the sitemaps under it, shown once the crawl has read every one of them: until
@@ -301,7 +306,12 @@ found, 265 pages; the 100k crawl 110,251 and 112,577, and 101,106 pages, everywh
   sitemap, not one that failed), a sitemap that couldn't be read and why, and how many of the site's pages no
   sitemap lists (a link to them in URLs), or that the analysis didn't count them and why.
 - Open a sitemap for its URLs: the URL grid narrowed to it, each URL with what the crawl did with it, and quick
-  filters for each of its counts and for redirecting or broken. "All sitemaps" leads back.
+  filters for each of its counts and for redirecting or broken. "All sitemaps" leads back. Its heading is the
+  sitemap's whole address (it wraps, never cut in the middle), with open-in-browser and copy straight after it. A
+  URL is a link that opens the inspector, shown as on URLs: its path with the host named once in the header, its
+  status with its class's mark.
+- A link can land on one of a sitemap's URLs (`?inspect=` with the URL's id): the grid starts on that URL's row,
+  marked and in view, with the inspector on it.
 - In a short window (200% zoom) the screen scrolls: the list keeps five rows, or all it has, and a sitemap's URLs
   keep five. In a window too narrow for every column the counts come straight after the sitemap's address, and a
   sitemap's filters take a second line.
@@ -311,16 +321,22 @@ found, 265 pages; the 100k crawl 110,251 and 112,577, and 101,106 pages, everywh
 - The origins the crawl asked, the site's own first, then the rest by the URLs they blocked. Each says what its
   answer meant: read, missing (nothing refused), couldn't be read (its URLs refused), or no answer (crawled anyway).
   How a request failed is said by its kind, in plain words, with what the crawl recorded a hover away.
+- A list of places to go: the origin is a link that opens its file, and a click anywhere else on its row opens it
+  too, an origin that blocked nothing as well. The button straight after the origin opens its live robots.txt in
+  the browser. A row's menu: open its robots.txt, open robots.txt in the browser, copy the origin, copy the row.
 - Only the last answer is kept: an origin whose last answer refuses nothing, with URLs stored as refused, says
   they were refused earlier.
 - Open an origin for its file, with line numbers, as text: the group the crawl obeyed is marked, the others are
   quiet, and each rule says how many URLs it blocked.
 - Beside it, the blocked URLs, each with the line that decided it. Choosing a rule marks it and lists what it
-  blocked; moving through the URLs shows each one's line. A URL opens the inspector.
+  blocked; moving through the URLs shows each one's line. A URL is a link that opens the inspector. The rule in a
+  URL's "Blocked by" is a link that shows its line in the file (the list stays as it is), and the file's Sitemap
+  line is a link to that sitemap's page when the crawl has the sitemap.
 - A crawl told to ignore robots.txt says so at the top, and is never said to have obeyed a file, a line or a rule.
 - In a short window (200% zoom) the screen scrolls: the origins keep five rows, or all there are, with what each
   blocked straight after the origin where not every column fits; the file and its blocked URLs stack, and the
-  blocked URLs keep five rows.
+  blocked URLs keep five rows. Stacked (1280 x 720 too), the file's box is as tall as its lines, up to its pane's
+  height, so a short file leaves the blocked URLs in view. Side by side, each pane scrolls what it holds.
 - A sitemap or an origin the crawl doesn't have: "not so far" while the crawl hasn't ended (the page fills in if it
   gets there), a stale link once it has.
 
@@ -515,10 +531,13 @@ With focus in the HTML itself (Source's viewer, which has a caret and can't be t
 | Right, Left | The tree, on a sitemap index | Open it, close it; Left on a sitemap under one goes up to it |
 | Enter | The tree | Open the sitemap, or the count the cursor is on |
 | Enter | The origins | Open the origin's file |
+| Shift+Enter | The tree, the origins | Open the sitemap, or the origin's live robots.txt, in the browser |
+| Shift+F10, the menu key | The tree, the origins | The row's menu: open it, open it in the browser, copy its URL |
 | Enter | A sitemap's URLs, the blocked URLs | Inspect |
 | Ctrl+F | One sitemap | Search its URLs |
 | Ctrl+F | One origin's page: the file, the blocked URLs, the title | Search the file; Enter and Shift+Enter step through the matches |
 | Enter | The file, with the caret on a rule that blocked URLs | List the URLs it blocked |
+| Enter | The file, with the caret on a Sitemap line the crawl has | Open that sitemap's page |
 | Ctrl+Shift+C | One origin's file | Copy the blocked URLs listed |
 
 The file is the source viewer: with focus in it, the keys are those of the HTML source above.
