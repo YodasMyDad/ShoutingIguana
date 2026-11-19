@@ -111,6 +111,8 @@ describe('a row menu open while a running crawl moves the rows', () => {
       index: 1,
       name: /^Menu for the link to /,
       url: String(second['to.url']),
+      // Links' menu names the end in every item (the UX round's D-16): the menu was opened on the target's side.
+      copy: 'Copy the target URL',
       move: () => (state.links = [...state.links, { ...sorted[0]!, id: 999, 'to.url': 'https://example.com/new' }]),
       moved: '999',
       queryClient,
