@@ -2972,9 +2972,9 @@
     column-gap: var(--space-6);
   }
 
+  /* No padding of its own: each name is a link 24 px tall with its own (a target of its own, WCAG 2.5.8). */
   .si-name-columns > li {
     break-inside: avoid;
-    padding-block: var(--space-0-5);
   }
 
   .si-list-row {

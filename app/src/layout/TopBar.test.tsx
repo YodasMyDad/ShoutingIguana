@@ -52,6 +52,14 @@ describe('the top bar’s crumbs (the audit of 2026-11-19, H-17: only Home was a
     await waitFor(() => expect(router.state.location.pathname).toBe(`/crawls/${TEST_CRAWL_ID}/overview`));
   });
 
+  it('on the Overview itself, the bar still has one current place: the section, not the site’s link to it', async () => {
+    await open(`/crawls/${TEST_CRAWL_ID}/overview`);
+    await within(crumbs()).findByRole('link', { name: 'example.com' });
+    const current = crumbs().querySelectorAll('[aria-current="page"]');
+    expect([...current].map((element) => element.textContent)).toEqual(['Overview']);
+    expect(bar().querySelectorAll('[aria-current="page"]')).toHaveLength(1);
+  });
+
   it('the crawl’s date opens the switcher, which lists the crawls to change to', async () => {
     await open(`/crawls/${TEST_CRAWL_ID}/urls`);
     const date = await within(crumbs()).findByRole('button', { name: /: switch crawl$/ });

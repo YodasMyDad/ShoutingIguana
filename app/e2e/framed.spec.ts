@@ -106,7 +106,8 @@ test.describe('the panel', () => {
     const card = page.locator('main .si-card').first();
     await expect(card).toBeVisible();
     expect((await style(card, 'border-top-style'))['border-top-style']).toBe('solid');
-    const figure = page.getByRole('region', { name: 'Totals' }).locator('.si-stat').first();
+    // The totals are one strip since the UX round of 2026-11-19 (H-19): its edge is what shows.
+    const figure = page.getByRole('region', { name: 'Totals' }).locator('.si-totals');
     expect((await style(figure, 'border-top-style'))['border-top-style']).toBe('solid');
     const current = page.getByRole('navigation', { name: 'Main' }).locator('a[aria-current="page"]');
     await expect(current).toHaveText(/Overview/);
@@ -253,8 +254,9 @@ test.describe('capped screens grow with a wide window', () => {
     expect(seen.main).toBeGreaterThan(seen.column);
     // Centred: the room left over is shared either side.
     expect(seen.left).toBeCloseTo((seen.main - seen.column) / 2, 0);
-    // The figures spread across it: five in a row.
-    const figures = page.getByRole('region', { name: 'Totals' }).locator('.si-stat');
+    // The figures spread across it: five in a row, one strip (H-19).
+    const figures = page.getByRole('region', { name: 'Totals' }).locator('.si-totals > li');
+    await expect(figures).toHaveCount(5);
     const tops = await figures.evaluateAll((elements) =>
       elements.map((element) => element.getBoundingClientRect().top),
     );

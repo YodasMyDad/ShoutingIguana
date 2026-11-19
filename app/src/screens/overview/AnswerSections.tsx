@@ -358,7 +358,10 @@ export function SkippedChecks({ crawlId, entries }: { crawlId: string; entries: 
                 <ul aria-label={`The ${many}`} className="si-name-columns">
                   {group.checks.map((check) => (
                     <li key={check.id}>
-                      <TextLink {...linkProps(crawlId, check.link)}>{check.title}</TextLink>
+                      {/* 24 px tall with its padding: each name a target of its own in the list (WCAG 2.5.8). */}
+                      <TextLink {...linkProps(crawlId, check.link)} className="inline-block py-1">
+                        {check.title}
+                      </TextLink>
                     </li>
                   ))}
                 </ul>

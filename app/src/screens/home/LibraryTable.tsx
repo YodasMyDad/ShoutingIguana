@@ -464,7 +464,8 @@ function IssuesCell({ item, status }: { item: CrawlListItem; status: CrawlStatus
               to="/crawls/$crawl/issues/{-$check}"
               params={{ crawl: item.id }}
               search={{ severity: [severity] }}
-              className="rounded-xs hover:underline"
+              // Stacked in a narrow library, each is 24 px tall: a target of its own (WCAG 2.5.8).
+              className="rounded-xs hover:underline @max-library/library:py-0.5"
             >
               <SeverityCount severity={severity} count={counts[severity]} />
             </Link>

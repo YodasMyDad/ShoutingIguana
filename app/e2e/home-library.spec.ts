@@ -247,7 +247,7 @@ test('Overview opens with its totals, and Issues says each check’s share besid
   await page.goto(`/crawls/${crawl.id}/overview`);
   const totals = page.getByRole('region', { name: 'Totals' });
   await expect(totals.getByRole('link')).toHaveCount(5);
-  await expect(totals.locator('.si-stat__value').first()).toHaveText(/\d/);
+  await expect(totals.locator('.si-totals__value').first()).toHaveText(/\d/);
   await shoot(page, 'overview-totals');
   await page.setViewportSize({ width: 640, height: 360 });
   await expectNoSidewaysScroll(page);

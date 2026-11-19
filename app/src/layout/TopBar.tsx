@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link, useLocation, useParams, useRouter, useRouterState } from '@tanstack/react-router';
+import { useLocation, useParams, useRouter, useRouterState } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { ChevronLeft, ChevronRight, Ellipsis, Pause, Play, RefreshCw, Search, Square } from 'lucide-react';
 import { useRef, type ReactNode } from 'react';
@@ -177,14 +177,13 @@ export function TopBar() {
                 title={crawl?.startUrl ?? site ?? undefined}
               >
                 {/* The site is the crawl: its name opens the crawl's first screen, the Overview (the Summary). */}
-                <Link
-                  to="/crawls/$crawl/overview"
-                  params={{ crawl: crawlId }}
+                <OverviewLink
+                  crawlId={crawlId}
                   className="flex min-w-0 items-center gap-2 rounded-sm px-1.5 py-1 hover:bg-surface-hover"
                 >
                   <CrawlFavicon item={crawl} site={site ?? ''} size="md" />
                   <span className="min-w-0 truncate">{site}</span>
-                </Link>
+                </OverviewLink>
               </li>
               {date ? (
                 <>
@@ -224,15 +223,9 @@ export function TopBar() {
           className="flex items-center gap-2 group-data-give-5/topbar:[&_.si-status-pill\_\_count]:sr-only group-data-give-11/topbar:[&_.si-status-pill\_\_word]:sr-only group-data-give-1/topbar:[&_kbd]:hidden"
         >
           {/* What the crawl did is on its Overview, under "The crawl": the status leads there. */}
-          <Link
-            to="/crawls/$crawl/overview"
-            params={{ crawl: crawlId }}
-            hash={CRAWL_FACTS_HASH}
-            className="flex rounded-full"
-            title={pillWords}
-          >
+          <OverviewLink crawlId={crawlId} hash={CRAWL_FACTS_HASH} className="flex rounded-full" title={pillWords}>
             <StatusPill status={status} fetched={fetched} words={mode} />
-          </Link>
+          </OverviewLink>
           <span data-controls="" className="flex items-center gap-2 group-data-give-10/topbar:hidden">
             {controls.canPause ? (
               <ControlButton
@@ -290,6 +283,51 @@ export function TopBar() {
       </span>
       <ModeSwitch />
     </header>
+  );
+}
+
+/**
+ * A way to the crawl's Overview from the bar: the site's crumb, and the status (to "The crawl", by `hash`). An anchor
+ * of its own, not the router's `Link`: on the Overview that marks itself `aria-current="page"`, and the bar has one
+ * current place, the section's crumb.
+ */
+function OverviewLink({
+  crawlId,
+  hash,
+  className,
+  title,
+  children,
+}: {
+  crawlId: string;
+  hash?: string | undefined;
+  className: string;
+  title?: string | undefined;
+  children: ReactNode;
+}) {
+  const router = useRouter();
+  const to = { to: '/crawls/$crawl/overview', params: { crawl: crawlId }, ...(hash ? { hash } : {}) } as const;
+  return (
+    <a
+      href={router.buildLocation(to).href}
+      className={className}
+      title={title}
+      onClick={(event) => {
+        // A plain click goes there in the app; with a modifier or another button it's the browser's to open.
+        if (
+          event.defaultPrevented ||
+          event.button !== 0 ||
+          event.metaKey ||
+          event.ctrlKey ||
+          event.shiftKey ||
+          event.altKey
+        )
+          return;
+        event.preventDefault();
+        void router.navigate(to);
+      }}
+    >
+      {children}
+    </a>
   );
 }
 
