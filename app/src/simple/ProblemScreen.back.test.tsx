@@ -93,17 +93,23 @@ describe.skipIf(TABLE_STUBBED)('the ways down a problem’s page, from its head'
     Element.prototype.scrollIntoView = () => undefined;
     await open(`${FIX}/internal-client-error`);
     const head = within(screen.getByRole('main').querySelector('header')!);
-    fireEvent.click(head.getByRole('button', { name: 'Jump to where to fix it' }));
-    expect(screen.getByRole('heading', { level: 2, name: 'Where to fix it' })).toHaveFocus();
+    // A link fault's list leads the page, so the jump is to the explanation under it.
+    fireEvent.click(head.getByRole('button', { name: 'What’s wrong, and how to fix it' }));
+    expect(screen.getByRole('heading', { level: 2, name: 'What’s wrong, and why it matters' })).toHaveFocus();
     fireEvent.click(head.getByRole('button', { name: 'Fixed it? Check it again' }));
     expect(screen.getByRole('heading', { level: 2, name: 'Fixed it?' })).toHaveFocus();
   });
 
-  it('names the list by what it is on a problem that isn’t a link', async () => {
-    await open(`${FIX}/empty-anchor-text`);
-    expect(screen.getByRole('button', { name: 'Jump to where to fix it' })).toBeVisible();
+  it('leads a link fault’s page with where to fix it, and any other with what’s wrong', async () => {
+    await open(`${FIX}/internal-client-error`);
+    const order = () =>
+      within(screen.getByRole('main'))
+        .getAllByRole('heading', { level: 2 })
+        .map((heading) => heading.textContent);
+    expect(order().slice(0, 2)).toEqual(['Where to fix it', 'What’s wrong, and why it matters']);
     cleanup();
     await open(`${FIX}/slow-response`);
     expect(screen.getByRole('button', { name: 'Jump to the list' })).toBeVisible();
+    expect(order().slice(0, 3)).toEqual(['What’s wrong, and why it matters', 'How to fix it', 'Where it is']);
   });
 });

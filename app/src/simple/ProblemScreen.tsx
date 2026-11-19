@@ -429,6 +429,38 @@ function FoundProblem({
   const noun = (check.subject ?? 'page') === 'page' ? 'pages' : 'addresses';
   const what = check.plainWhat ?? [check.description];
   const steps = check.plainFix ?? [check.fix];
+  const explain = owner ? (
+    // Nothing to fix: what was found, in its first sentence alone (the others say why it matters, and who'd fix it).
+    <Card as="section" aria-labelledby="problem-what" className="px-7 py-6">
+      <h2 id="problem-what" className="mb-2 text-14 font-semibold">
+        What was found
+      </h2>
+      <p className="text-16 text-text">{what[0]}</p>
+    </Card>
+  ) : (
+    <Card className="si-explain2 @max-split:grid-cols-1">
+      <section aria-labelledby="problem-what" className="si-explain2__col">
+        <h2 id="problem-what" className="mb-2 text-14 font-semibold">
+          What’s wrong, and why it matters
+        </h2>
+        {what.map((sentence, index) => (
+          <p key={index} className={index === 0 ? 'text-16 text-text' : 'mt-2.5 text-16 text-text-secondary'}>
+            {sentence}
+          </p>
+        ))}
+      </section>
+      <section aria-labelledby="problem-fix" className="si-explain2__col">
+        <h2 id="problem-fix" className="mb-2 text-14 font-semibold">
+          How to fix it
+        </h2>
+        <ol className="si-steps text-16">
+          {steps.map((step, index) => (
+            <li key={index}>{step}</li>
+          ))}
+        </ol>
+      </section>
+    </Card>
+  );
   return (
     <>
       <ProblemHead
@@ -462,42 +494,14 @@ function FoundProblem({
           ) : null
         }
         jumps={[
-          { to: 'the-list', words: shape ? 'Jump to where to fix it' : 'Jump to the list' },
+          // The list leads a link fault's page, so its jump is to the explanation under it.
+          shape
+            ? { to: 'how-to-fix-it', words: 'What’s wrong, and how to fix it' }
+            : { to: 'the-list', words: 'Jump to the list' },
           ...(owner ? [] : [{ to: 'fixed-it', words: 'Fixed it? Check it again' }]),
         ]}
       />
-      {owner ? (
-        // Nothing to fix: what was found, in its first sentence alone (the others say why it matters, and who'd fix it).
-        <Card as="section" aria-labelledby="problem-what" className="px-7 py-6">
-          <h2 id="problem-what" className="mb-2 text-14 font-semibold">
-            What was found
-          </h2>
-          <p className="text-16 text-text">{what[0]}</p>
-        </Card>
-      ) : (
-        <Card className="si-explain2 @max-split:grid-cols-1">
-          <section aria-labelledby="problem-what" className="si-explain2__col">
-            <h2 id="problem-what" className="mb-2 text-14 font-semibold">
-              What’s wrong, and why it matters
-            </h2>
-            {what.map((sentence, index) => (
-              <p key={index} className={index === 0 ? 'text-16 text-text' : 'mt-2.5 text-16 text-text-secondary'}>
-                {sentence}
-              </p>
-            ))}
-          </section>
-          <section aria-labelledby="problem-fix" className="si-explain2__col">
-            <h2 id="problem-fix" className="mb-2 text-14 font-semibold">
-              How to fix it
-            </h2>
-            <ol className="si-steps text-16">
-              {steps.map((step, index) => (
-                <li key={index}>{step}</li>
-              ))}
-            </ol>
-          </section>
-        </Card>
-      )}
+      {shape ? null : explain}
       {owner ? null : template ? (
         <Callout className="mt-4" title={oneFixTitle(template.urls ?? template.pages, count, noun)}>
           <OneFixWords
@@ -551,6 +555,13 @@ function FoundProblem({
           files={files}
         />
       )}
+      {/* A fault that is a link leads with where to fix it (the owner: people are "more interested as to where the
+          broken link is"): at 1280 × 720 the explanation filled the first screen and the list began under it. */}
+      {shape ? (
+        <div id="how-to-fix-it" className="mt-4">
+          {explain}
+        </div>
+      ) : null}
       {/* The fix loop: Fixed it? is a recheck of these pages (./RecheckCard); none for what the owner can't change. */}
       {owner ? null : <RecheckCard crawlId={crawlId} item={item} check={check} />}
     </>
