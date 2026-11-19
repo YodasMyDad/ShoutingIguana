@@ -31,10 +31,18 @@ describe('the grouped Links grid’s column widths', () => {
     expect(widths.where).toBe(1800 - FIXED - 300 - 250 - 200);
   });
 
-  it('cut the addresses only past the others’ least, each by what it wants, and give each its least with less room still', () => {
+  it('cut the addresses only past the others’ least, the target’s last, and give each its least with less room still', () => {
     const short = fittedGroupWidths(SHOWN, WIDTHS, FIXED + 800, { target: 500, pages: 400, text: 260, where: 380 });
-    // 88 px past everyone's least, shared between the two addresses by what each wants past its own.
-    expect(short).toMatchObject({ target: 271, pages: 236, text: 140, where: 152 });
+    // The target is what the row is: it has what there is past the others' least before the page that links to it.
+    expect(short).toMatchObject({
+      target: 800 - GROUP_LEAST.pages - GROUP_LEAST.text - GROUP_LEAST.where,
+      pages: 200,
+      text: 140,
+      where: 152,
+    });
+    // With room for the target whole, the page has the rest of it (e2e: a target is whole at 1440 px).
+    const roomy = fittedGroupWidths(SHOWN, WIDTHS, FIXED + 928, { target: 404, pages: 350, text: 260, where: 380 });
+    expect(roomy).toMatchObject({ target: 404, pages: 928 - 404 - 140 - 152, text: 140, where: 152 });
     const narrow = fittedGroupWidths(SHOWN, WIDTHS, FIXED + 300, { target: 500, pages: 400, text: 260, where: 380 });
     expect(narrow).toMatchObject({ target: 220, pages: 200, text: 140, where: 152 });
   });
@@ -42,11 +50,7 @@ describe('the grouped Links grid’s column widths', () => {
   it('give a column no more than its values take, short of room: the addresses have what it leaves', () => {
     // The garden crawl's broken links at 1280 px: every link sits in "Content", which doesn't take the 152 px it had.
     const widths = fittedGroupWidths(SHOWN, WIDTHS, FIXED + 764, { target: 600, pages: 393, text: 274, where: 79 });
-    expect(widths.where).toBe(88);
-    expect(widths.text).toBe(140);
-    expect(widths.target! + widths.pages!).toBeGreaterThanOrEqual(764 - 140 - 88 - 2);
-    expect(widths.target).toBeGreaterThan(GROUP_LEAST.target);
-    expect(widths.pages).toBeGreaterThan(GROUP_LEAST.pages);
+    expect(widths).toMatchObject({ target: 764 - 200 - 140 - 88, pages: 200, text: 140, where: 88 });
   });
 
   it('want the default widths for columns with nothing in view', () => {

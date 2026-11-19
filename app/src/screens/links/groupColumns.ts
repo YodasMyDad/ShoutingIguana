@@ -10,7 +10,7 @@ import { morePagesWords, otherTextsWords, positionsWords } from './linkGroups';
 export const FLEXIBLE_GROUP_COLUMNS = ['target', 'pages', 'text', 'where'] as const;
 type Flexible = (typeof FLEXIBLE_GROUP_COLUMNS)[number];
 
-/** The addresses: short of room they're given what there is before the text and the places. */
+/** The addresses: short of room they're given what there is before the text and the places, in this order. */
 const ADDRESSES: readonly Flexible[] = ['target', 'pages'];
 
 /** The least each flexible column is given, short of room, where its values take as much. */
@@ -93,9 +93,9 @@ export function groupColumnNeeds(
  * Each shown column's width in `available` px. The counts and statuses keep `widths`. With room for every flexible
  * value whole, each takes what it needs, no more, and the last of them takes the rest: a column starts where the one
  * before it ends, so the page that holds a link sits beside the link's target, never across a blank screen from it.
- * Short of that, the addresses come first (the target's and the page's, by what each wants): they take what they
- * need while the anchor text and the places keep their least, so an address is never cut in the middle while the grid
- * has room for it, and those two share what's left by what each wants past its least. A column's least is never more
+ * Short of that, the addresses come first (the target's, which is what the row is, then the page's): each takes what
+ * it needs while the columns after it keep their least, so a target is never cut in the middle while the grid has
+ * room for it, and the anchor text and the places share what's left by what each wants past its least. A column's least is never more
  * than its values take ("Content" doesn't hold 152 px the addresses are cut for). With less room still, each gets its
  * least, and the grid scrolls. A column with nothing in view wants its default width.
  */
@@ -120,21 +120,21 @@ export function fittedGroupWidths(
   } else if (room <= sum(flexible, least)) {
     for (const id of flexible) out[id] = least(id);
   } else {
-    // What there is past everyone's least goes to the addresses first, then to the others, each by what it wants
-    // past its own least.
-    const past = (id: Flexible) => wanted(id) - least(id);
-    const share = (ids: readonly Flexible[], spare: number): number => {
-      const over = sum(ids, past);
-      const given = Math.min(spare, over);
-      for (const id of ids) out[id] = least(id) + (over > 0 ? (given * past(id)) / over : 0);
-      return spare - given;
-    };
-    const addresses = flexible.filter((id) => ADDRESSES.includes(id));
-    const left = share(addresses, room - sum(flexible, least));
-    share(
-      flexible.filter((id) => !ADDRESSES.includes(id)),
-      left,
-    );
+    // The addresses first, each up to what the columns after it leave past their least; then the others by what
+    // each wants past its least.
+    let left = room;
+    let after = flexible;
+    for (const id of ADDRESSES.filter((address) => flexible.includes(address))) {
+      after = after.filter((other) => other !== id);
+      const width = Math.min(wanted(id), left - sum(after, least));
+      out[id] = width;
+      left -= width;
+    }
+    const spare = left - sum(after, least);
+    const over = sum(after, (id) => wanted(id) - least(id));
+    for (const id of after) {
+      out[id] = least(id) + (over > 0 ? (spare * (wanted(id) - least(id))) / over : spare / after.length);
+    }
   }
   return Object.fromEntries(shown.map((id) => [id, Math.floor(out[id] ?? widths[id] ?? 120)]));
 }

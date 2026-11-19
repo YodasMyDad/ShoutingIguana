@@ -108,13 +108,16 @@ test('groups the broken links by target: one row a target, the most linked from 
   ).toBeVisible();
   const grid = main(page).getByRole('treegrid', { name: 'Links grouped by target' });
   await expect(grid).toHaveAttribute('aria-rowcount', String(grouped.total + 1));
-  await expect(grid.getByRole('columnheader', { name: /Linking pages/ })).toHaveAttribute('aria-sort', 'descending');
+  await expect(grid.getByRole('columnheader', { name: /Linked from/ })).toHaveAttribute('aria-sort', 'descending');
 
-  // The rows in the sidecar's order, each with its pages and links.
+  // The rows in the sidecar's order, each with the page that links to it (a link, and how many more) and its links.
   for (const [index, group] of grouped.rows.slice(0, 3).entries()) {
     const row = grid.getByRole('row').nth(index + 1);
     await expect(row.locator('.si-url__go').first()).toHaveAccessibleName(group.url);
-    await expect(row.getByRole('gridcell').nth(2)).toHaveText(count(group.pages));
+    const from = row.getByRole('gridcell').nth(2);
+    await expect(from.locator('.si-url__go')).toBeVisible();
+    if (group.pages > 1) await expect(from).toContainText(`+${count(group.pages - 1)} more`);
+    else await expect(from).not.toContainText('more');
     await expect(row.getByRole('gridcell').nth(3)).toHaveText(count(group.links));
   }
 
@@ -125,9 +128,7 @@ test('groups the broken links by target: one row a target, the most linked from 
   await expect(grid.getByRole('row').nth(1)).toHaveAttribute('aria-expanded', 'true');
   const more = grid.getByRole('row', {
     name:
-      first.links === 1
-        ? /Show the one link to this target/
-        : new RegExp(`Show all ${count(first.links)} links to this target`),
+      first.links === 1 ? /Show in the flat list/ : new RegExp(`Show all ${count(first.links)} links in the flat list`),
   });
   await expect(more).toBeVisible();
   await more.getByRole('gridcell').first().click();

@@ -258,15 +258,28 @@ found, 265 pages; the 100k crawl 110,251 and 112,577, and 101,106 pages, everywh
 
 - Every link the crawl stored, in crawl order, in the same grid: the page it's on, its target, its anchor or alt
   text, its kind, its position, whether it's followed, and how its target answered. More columns of the link, its
-  source page and its target are in the column chooser.
+  source page and its target are in the column chooser. Where the screen is narrower than 1,280 px (a 1280 px
+  window), the kind, position and follow are one column ("Hyperlink · Content · Followed") so the URLs keep the room,
+  and the toolbar's tools are their icons so it stays one row.
 - Views for what a link audit looks for: Broken links, Links to redirects, Nofollow links, No anchor text, External
-  links. Each is its filters, shown as chips.
+  links, Images. Each is its filters, shown as chips. Links to redirects has its own columns, with "Ends at": where
+  the target ends (a link), how that answered, and how it got there ("meta refresh", "3 hops"), which is what says
+  why a target that answered 200 is in the list.
+- Group by target: one row a target, with the page that links to it in the row ("Linked from": the first, a link
+  like any other URL, and "+3 more"). A click anywhere on a target's row opens it in place to its first links, each
+  with its page as a link, what it says and where it sits, and "Show all N links in the flat list". Never a count
+  behind a chevron.
 - Quick filters with counts (kind, position, follow, the target's status, the target's site), each count opening
   exactly that many links, counted when their menu opens; a filter bar over any column of the link or of either end
   (at most 20 filters, as a query takes); search over the anchor text and both URLs. A filter the engine won't run (a
   pattern it refuses) says so in the engine's own words, with "Change the filter" and "Remove the filter".
 - Either end opens the inspector on that URL, which then follows the cursor down that end; which end is in the
-  address. The inspector's Inlinks and Outlinks open here: "All N in Links" ("Show it in Links" for one).
+  address. It arrives on the link itself: the page's Outlinks with the link's target first and marked, the target's
+  Inlinks with the page first and marked. The open-in-browser button of the page a link is on opens the page at the
+  link's own words ("Open the page at this link"). The row's menu names the end in every item ("Inspect the source
+  page", "Open the target in your browser", "Copy the source URL"). The inspector's Inlinks and Outlinks open here:
+  "All N in Links" ("Show it in Links" for one), whose chip for the page's own links reads "Not counting a page's
+  links to itself".
 - A sort is by a column the grid shows: hiding the column drops the sort.
 - Copy: the selected rows, the column the cursor is in, the view's source or target URLs. A copy reads the view's
   first 10,000 links, and says so on a bigger view ("Copy the first 10,000 links' target URLs"). Export (Ctrl+E) writes

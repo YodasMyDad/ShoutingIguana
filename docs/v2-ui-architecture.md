@@ -1025,7 +1025,8 @@ full grid's pieces, which are any grid's (below). What it settled:
   status: "Blocked by robots.txt", "Timed out", "Not checked", and "Not crawled" ("so far" while the crawl runs) only
   for a URL the crawl has no outcome for, in the URL grid's words for the same URL (`urlStatusWords`, one helper for
   both). Never a guess, and never 0. Each end's URL is asked for whether its column shows or not: a row's menu opens
-  and copies it.
+  and copies it. So are the link's kind, its words and whether those are an image's alt text: the page a link is on
+  opens in the browser at the link (`sourceAtLink`, the fix round's rule 4).
 - **Presets are only filters.** Broken links (`to.statusClass` in 4xx, 5xx), Links to redirects (3xx), Nofollow
   links (`noFollow` is yes), No anchor text (hyperlinks whose `text` is empty) and External links (`to.isInternal`
   is no) put their filters in the route, where they show as chips; a preset reads as chosen exactly while the
@@ -1042,7 +1043,28 @@ full grid's pieces, which are any grid's (below). What it settled:
 - **Each end is a place.** A URL in a row opens the inspector on it; Enter opens the end the cursor's column is of
   (the page the link is on from one of its columns, the target from anywhere else), a double-click likewise. While
   the inspector is open it follows the cursor down the same end, in place, as it follows the URL grid's rows. Which
-  end is the route's (`end`), never the screen's own state.
+  end is the route's (`end`), never the screen's own state. Since the UX round it arrives on the link the row is
+  (`linkPlaces.ts`'s `linkArrival`, passed as `Inspector.open`'s `show`): the page's Outlinks with the target marked,
+  the target's Inlinks with the page marked; the cursor moving an open inspector marks the link and leaves the tab.
+- **The UX round, 2026-11-19** (docs/handoff/2026-11-19, D-02, D-03, D-08, D-16, D-17, D-20):
+  - *Grouped by target*, the page that holds the link is in the target's row: "Linked from", the first page as a
+    `Url` with `onGo` and `openUrl`, then "+N more" (a `data-tree-toggle`). The engine's `/links/groups` doesn't say
+    which page, so each drawn target reads its first link (`['crawl', id, 'linkGroupFirst', …]`: `to.id eq`, limit 1,
+    which the links' index by target walks alone; aborted when its row leaves the window). A click anywhere on a
+    target's row opens or closes it: `LinkGroupsGrid` handles the click on the element that holds the grid and
+    swallows the double-click that would toggle it back. Its widths (`groupColumns.ts`): the target and "Linked from"
+    take what their addresses need and no more, the last column takes the rest, so each column starts where the one
+    before ends; short of room the target comes first, then the page, and no column keeps more than its values take.
+  - *Every item of a row's menu names its end*: Inspect, Open in your browser and Copy, for the source page and for
+    the target, with the keys shown on the end the menu was opened in. The grid's shared `UrlRowItems` isn't used.
+  - *Narrow* (the screen under 1,280 px of its own): kind, position and follow are drawn as one column
+    (`LINK_FACTS_COLUMN`, `foldedLinkColumns`; the route, the chooser and an export keep the three), and the tools
+    beside the views are icon buttons, so the toolbar is one row at 1280 x 720.
+  - *"Ends at"* (`ENDS_AT_COLUMN`, drawn from the target's `redirectChain`, exported as the engine's `finalUrl` and
+    `finalStatusCode`): the Links to redirects preset's own columns have it. An end's "Redirects to" and "Final URL"
+    columns are links too, by the chain's ids; its canonical has no id to open and stays text.
+  - The URL and anchor columns are marked `fit` for the grid's own sizing (`grid/columnFit.ts`); until that sizes
+    them, `fittedLinkWidths` still does.
 - **From the inspector**: Inlinks and Outlinks have "All N in Links" ("Show it in Links" for one link, never "All
   1"), the same links here: `to.id` (or `from.id`) is the URL, the kind chosen stays, and `selfLink` is no, because
   the inspector's lists leave out a page's links to itself and the links grid doesn't. N is the section's own count,
@@ -1220,8 +1242,9 @@ What it settled:
   needs a folded part opens it), Export is an icon in the header, and the header's actions wrap: at 640x360 the grid
   shows 6 rows (0 before), 5 with the inspector open (2 before).
 - **The row menu**: inspect, open in the browser, copy the URL (or the selection's URLs, each once), copy the row (or
-  rows) as Ctrl+C does, and "Show its inlinks in Links" (the inspector's "All N in Links" filters). The same piece on
-  Links (each end: the end the menu was opened in, and Inspect the source page, Inspect the target), Issues' pages
+  rows) as Ctrl+C does, and "Show its inlinks in Links" (the inspector's "All N in Links" filters). Links has its
+  own items instead, each named for its end (Inspect, Open in your browser and Copy, for the source page and for the
+  target; no "Open in the browser" or "Copy the URL" to guess at), Issues' pages
   ("Show the page in URLs": the URL grid filtered to its URL, `url eq`, or by its id for a URL longer than a filter's
   1,000 characters, with the inspector on it) and groups (the group's URLs copied, its row, "Show all N pages in
   URLs"), one sitemap's URLs ("Show the URL in URLs") and an origin's blocked URLs ("List what line N
@@ -2339,7 +2362,7 @@ What each view shows is in [the IA](v2-ui-ia.md#where-its-found-uifound-on); the
   browser), so no new permission. `GridCore` takes `openUrlOf(row, column)` for Shift+Enter (default: the row's `url`;
   Links: the end the cursor's column is on; Issues: the page or the source under the cursor), listed in the shortcut
   sheet as `grid.openInBrowser`, and shown on the row menus' "Open in the browser". Links' menu has "Open the source
-  page in your browser" and "Open the target in your browser".
+  page in your browser" (at the link's own words, where it has them) and "Open the target in your browser".
 - **Tests:** `api/whereFoundBatch.test.ts` (one request a moment, chunks of 100, a failure to each ask),
   `screens/issues/whereFound.test.ts`, `screens/IssuesScreen.whereFound.test.tsx` (the row's line, Right to open,
   Enter to inspect, Show all to Links, the menu, the targets line and the template's place),

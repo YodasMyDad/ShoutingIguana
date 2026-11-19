@@ -21,7 +21,7 @@ import {
   type LinksSidecarState,
 } from '../test/linksSidecar';
 import { inspectorRoutes, testUrlDetail } from '../test/inspectorSidecar';
-import { IMAGE_COLUMNS, IMAGE_SORT } from './links/presets';
+import { IMAGE_COLUMNS, IMAGE_SORT, LINKS_TO_REDIRECTS, REDIRECT_COLUMNS } from './links/presets';
 
 const meta = { title: 'Screens/Links' } satisfies Meta;
 export default meta;
@@ -515,7 +515,45 @@ export const GardenImagesGrouped: Story = {
   ),
 };
 
-/** A target opened to its first links: the page each is on, what it says, where it sits, and the row for all of them. */
+/**
+ * The "Links to redirects" preset (the UX round's D-20): its own columns, with where each target ends as a link, how
+ * that answered, and how it got there ("meta refresh" is why a target that answered 200 is in the list).
+ */
+export const LinksToRedirects: Story = {
+  loaders: [
+    () => {
+      const about = { id: 2, url: 'https://example.com/about', statusCode: 200, outcome: 'success' as const };
+      const urls = LINKS_URLS.map((url) =>
+        url.id === 3
+          ? {
+              ...url,
+              redirectChain: {
+                hops: [{ ...about, via: 'metaRefresh' as const }],
+                final: about,
+                loop: false,
+                tooLong: false,
+              },
+            }
+          : url,
+      );
+      return own({ urls, links: testLinkRows(LINKS_FACTS, urls) });
+    },
+  ],
+  render: () => (
+    <LinksApp
+      path={withFilters(
+        LINKS,
+        [...LINKS_TO_REDIRECTS],
+        `&cols=${encodeURIComponent(JSON.stringify(REDIRECT_COLUMNS))}`,
+      )}
+    />
+  ),
+};
+
+/**
+ * A target opened to its first links: the page each is on (a link, as the page in the target's own row is), what it
+ * says, where it sits, and the row that shows them all in the flat list.
+ */
 export const GroupedTargetOpen: Story = {
   loaders: [() => own()],
   render: () => <LinksApp path={`${LINKS}?by=target`} />,
@@ -554,8 +592,9 @@ export const GroupedExport: Story = {
   play: async ({ canvasElement }) => {
     const document = canvasElement.ownerDocument;
     await waitForCell(() => document.querySelector<HTMLElement>('[role="treegrid"] [role="row"][aria-rowindex="2"]'));
+    // By its name: in a narrow canvas the button is its icon alone.
     const button = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
-      (candidate) => candidate.textContent.trim() === 'Export',
+      (candidate) => (candidate.getAttribute('aria-label') ?? candidate.textContent.trim()) === 'Export',
     );
     button?.click();
   },
