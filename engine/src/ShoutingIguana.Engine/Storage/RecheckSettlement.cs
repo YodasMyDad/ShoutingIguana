@@ -101,9 +101,12 @@ internal static class RecheckSettlement
         var rechecked = fetchesUrls
             ? "COALESCE((SELECT r2.fetched_at FROM responses r2 WHERE r2.url_id = recheck_urls.url_id), 0) >= $startedAt"
             : readOnlyCompleted ? "1" : "0";
-        var unanswered = !fetchesUrls && hasAnswers
-            ? $"WHEN recheck_urls.answer IN ({(int)RecheckAnswer.RateLimited}, {(int)RecheckAnswer.Blocked}, {(int)RecheckAnswer.RobotsTxt}, {(int)RecheckAnswer.NoAnswer}) THEN {(int)RecheckOutcome.NotChecked}"
-            : string.Empty;
+        // A URL it fetched that the site turned away, where the crawl had read it, kept the crawl's record (and the issues on
+        // it): it was asked and refused, so it's not checked, never fixed.
+        var refusals = $"{(int)RecheckAnswer.RateLimited}, {(int)RecheckAnswer.Blocked}, {(int)RecheckAnswer.RobotsTxt}, {(int)RecheckAnswer.NoAnswer}";
+        var unanswered = !hasAnswers ? string.Empty
+            : fetchesUrls ? $"WHEN recheck_urls.answer IN ({refusals}) AND NOT ({rechecked}) THEN {(int)RecheckOutcome.NotChecked}"
+            : $"WHEN recheck_urls.answer IN ({refusals}) THEN {(int)RecheckOutcome.NotChecked}";
         var reading = $"(SELECT {CheckJudging.READING} FROM urls u LEFT JOIN responses r ON r.url_id = u.id WHERE u.id = recheck_urls.url_id)";
 
         // A duplicate no longer flagged though its own text is as it was: the others changed, and a page the recheck didn't

@@ -220,8 +220,16 @@ internal sealed partial class CrawlWriter
         var entry = _urls[key];
         _inFlight--;
 
+        var stored = _statements.ReadOutcome(entry.Id);
+        if (stored is { } read && WasRead(read) && RecheckAnswers.Of(response) is RecheckAnswer.RateLimited or RecheckAnswer.Blocked or RecheckAnswer.NoAnswer
+                or RecheckAnswer.NotAsked)
+        {
+            KeepAsRead(item, response);
+            return;
+        }
+
         HashSet<int> before = [];
-        if (_statements.ReadOutcome(entry.Id) is { } old)
+        if (stored is { } old)
         {
             before = LinkTargets(entry.Id);
             _statements.DeleteResponse(entry.Id);
@@ -278,6 +286,26 @@ internal sealed partial class CrawlWriter
             recheck.LostLinks.UnionWith(before.Where(target => !after.Contains(target)));
         }
         PropagateDepths();
+    }
+
+    /// <summary>The site answered the URL for what it was when the crawl read it: a page, a redirect, or an error code of its own.</summary>
+    private static bool WasRead(StoredOutcome stored) =>
+        stored.Outcome is (FetchOutcome.Success or FetchOutcome.Redirect or FetchOutcome.ClientError or FetchOutcome.ServerError) && !stored.IsNotChecked;
+
+    /// <summary>
+    /// The site turned the recheck away from a URL the crawl had read (it asked to slow down, a firewall answered, or no
+    /// answer came; or its turn never came): that says nothing new of the URL, so it stays as the crawl read it, its
+    /// response, HTML and links, and so do the issues on it. Only how the site answered is kept, and the settlement says
+    /// it wasn't checked, never fixed. A URL the crawl couldn't read either is stored as answered now, as ever: that is
+    /// what checks of failing URLs judge.
+    /// </summary>
+    private void KeepAsRead(FrontierItem item, ResponseRow response)
+    {
+        var key = UrlKey.Compute(item.Url);
+        _urls[key] = _urls[key] with { State = UrlState.Done };
+        // As claimed, so the counts are as they were: the stored response stands.
+        _counters.OnReturned();
+        _recheck!.Recorded(item, response);
     }
 
     /// <summary>
