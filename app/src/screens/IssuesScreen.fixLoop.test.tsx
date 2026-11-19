@@ -278,14 +278,28 @@ describe('the checks list compared with the previous crawl (Advanced)', () => {
     expect(within(fixed).getByRole('option', { name: /Internal URL returns 5xx/ })).toHaveTextContent(/Fixed/);
   });
 
-  it('narrows to the checks that moved one way, as a chip that removes itself', async () => {
+  it('narrows to the checks that moved one way from a chip that stays pressed, the others still beside it (A-12)', async () => {
     const router = await open(`${ISSUES}/internal-client-error`);
     const group = await screen.findByRole('group', { name: 'Since 17 Oct' });
-    await userEvent.click(within(group).getByRole('button', { name: /^New/ }));
+    const chip = (name: RegExp) => within(group).getByRole('button', { name });
+    // Each says what it keeps, in words a first-time reader understands.
+    // Its tooltip (what it keeps, in a sentence) isn't pinned here yet: see docs/handoff/2026-11-19/state-issues.md.
+    expect(chip(/^More URLs/)).toBeVisible();
+    expect(chip(/^New/)).toBeVisible();
+    expect(chip(/^Fewer URLs/)).toBeVisible();
+    expect(chip(/^Any change/)).toBeVisible();
+    await userEvent.click(chip(/^New/));
     await waitFor(() => expect(router.state.location.search).toMatchObject({ change: 'new' }));
     await waitFor(() => expect(checksList().getAllByRole('option')).toHaveLength(1));
     expect(option(/Internal links without anchor text/)).toBeVisible();
-    await userEvent.click(screen.getByRole('button', { name: /Remove.*Since 17 Oct/ }));
+    // The chips are still there: the one in use is pressed, and another is one press away.
+    expect(chip(/^New/)).toHaveAttribute('aria-pressed', 'true');
+    expect(chip(/^Fixed/)).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.click(chip(/^Fixed/));
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ change: 'fixed' }));
+    expect(chip(/^Fixed/)).toHaveAttribute('aria-pressed', 'true');
+    // Pressed again, it lets go.
+    await userEvent.click(chip(/^Fixed/));
     await waitFor(() => expect(router.state.location.search).not.toHaveProperty('change'));
   });
 

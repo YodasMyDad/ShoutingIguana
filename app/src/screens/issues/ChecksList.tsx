@@ -5,6 +5,7 @@ import type { Severity } from '../../api/types';
 import type { ChangeFilterSearch } from '../../routing/search';
 import { Icon } from '../../ui/Icon';
 import { hasMoved } from '../../changes/changes';
+import { changeDate } from '../../changes/changeWords';
 import { checkChangeCell, periodLabel, type ComparedPeriod } from '../compare/changeCell';
 import { affectedWords, checkReach, type CrawlCounts } from '../../crawl/checkSubject';
 import { useFocusRescue } from '../../feedback/useFocusRescue';
@@ -73,13 +74,40 @@ export interface ChecksListProps {
   changeCounts?: Readonly<Record<ChangeFilterSearch, number>> | undefined;
 }
 
+/** The change filters' chips, in words a first-time reader understands (A-12). */
 const CHANGE_LABELS: Record<ChangeFilterSearch, string> = {
   new: 'New',
   fixed: 'Fixed',
-  fewer: 'Fewer',
-  more: 'More',
-  changed: 'Changed',
+  fewer: 'Fewer URLs',
+  more: 'More URLs',
+  changed: 'Any change',
 };
+
+/** A change filter as its chip among the filters that left nothing says it: "Since 17 Nov is fewer". */
+const CHANGE_WORDS: Record<ChangeFilterSearch, string> = {
+  new: 'new',
+  fixed: 'fixed',
+  fewer: 'fewer',
+  more: 'more',
+  changed: 'changed',
+};
+
+/** What a change filter keeps, for its chip's tooltip: "Checks that flag more URLs than on 17 Nov". */
+function changeHint(change: ChangeFilterSearch, period: ComparedPeriod): string {
+  const date = changeDate(period.iso) || 'the crawl compared with';
+  switch (change) {
+    case 'new':
+      return `Checks that flag URLs now and flagged none on ${date}`;
+    case 'fixed':
+      return `Checks that flagged URLs on ${date} and flag none now`;
+    case 'fewer':
+      return `Checks that flag fewer URLs than on ${date}`;
+    case 'more':
+      return `Checks that flag more URLs than on ${date}`;
+    case 'changed':
+      return `Every check that moved since ${date}: new, fixed, fewer or more`;
+  }
+}
 
 const SEVERITY_LABELS: Record<Severity, string> = { error: 'Errors', warning: 'Warnings', notice: 'Notices' };
 
@@ -176,7 +204,7 @@ export function ChecksList({
       <FilterChip
         key="change"
         field={periodLabel(period)}
-        value={CHANGE_LABELS[change].toLowerCase()}
+        value={CHANGE_WORDS[change]}
         size="sm"
         onRemove={() => onChangeFilter?.(undefined)}
       />
@@ -263,7 +291,9 @@ export function ChecksList({
             </Button>
           ) : null}
         </div>
-        {compared && !change && onChangeFilter && changeCounts ? (
+        {compared && onChangeFilter && changeCounts ? (
+          // The one in use stays pressed with the others beside it, as the severities above do: another is one press
+          // away, and pressing it again lets go (A-12).
           <div role="group" aria-label={periodLabel(period)} className="flex flex-wrap items-center gap-1">
             <span className="mr-1 text-12 text-text-secondary">{periodLabel(period)}</span>
             {(['new', 'fixed', 'fewer', 'more', 'changed'] as const).map((value) => (
@@ -271,8 +301,10 @@ export function ChecksList({
                 key={value}
                 size="sm"
                 variant="ghost"
-                disabled={changeCounts[value] === 0}
-                onClick={() => onChangeFilter(value)}
+                pressed={change === value}
+                title={changeHint(value, period)}
+                disabled={changeCounts[value] === 0 && change !== value}
+                onClick={() => onChangeFilter(change === value ? undefined : value)}
               >
                 {CHANGE_LABELS[value]}
                 <span className="text-text-muted tabular-nums">{formatCount(changeCounts[value])}</span>
@@ -280,10 +312,9 @@ export function ChecksList({
             ))}
           </div>
         ) : null}
-        {(categoryChip || changeChip) && !list.filteredToNothing ? (
+        {categoryChip && !list.filteredToNothing ? (
           <div role="group" aria-label="Filters" className="flex flex-wrap gap-2">
             {categoryChip}
-            {changeChip}
           </div>
         ) : null}
       </div>
