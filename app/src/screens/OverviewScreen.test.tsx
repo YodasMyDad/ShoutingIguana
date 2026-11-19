@@ -1272,6 +1272,12 @@ describe('the Overview while the crawl runs', () => {
     // The same log, with the alert added to it.
     expect(alerts.getByRole('log')).toBe(log);
     expect(within(log).getByText('Sitemaps read')).toBeVisible();
+    // Its figure names a list, so the figure is the link to it, and no "Open Sitemaps" repeats it (H-07).
+    expect(within(log).getByRole('link', { name: '4 sitemaps list 6,146 URLs.' })).toHaveAttribute(
+      'href',
+      `/crawls/${TEST_CRAWL_ID}/sitemaps`,
+    );
+    expect(within(log).queryByRole('link', { name: 'Open Sitemaps' })).toBeNull();
     expect(alerts.queryByText('None so far')).toBeNull();
     // Its age is rewritten by the clock every minute ("1 minute ago", "2 minutes ago"): no part of what the log reads.
     const age = log.querySelector('time');

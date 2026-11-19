@@ -58,6 +58,11 @@ describe('alerts', () => {
 
     const [sitemaps] = alertEntries([alert({ code: 'sitemaps', level: 'info', data: { count: 1, urlCount: 4_200 } })]);
     expect(sitemaps).toMatchObject({ title: 'Sitemaps read', detail: '1 sitemap lists 4,200 URLs.', advice: null });
+    // The figure opens the list it names; with no figure, "Open Sitemaps" does.
+    expect(sitemaps).toMatchObject({ detailLink: { kind: 'sitemaps' }, action: null });
+    const [uncounted] = alertEntries([alert({ code: 'sitemaps', level: 'info', data: {} })]);
+    expect(uncounted).toMatchObject({ detail: null, action: { kind: 'sitemaps', label: 'Open Sitemaps' } });
+    expect(uncounted?.detailLink).toBeUndefined();
   });
 
   it('says Shopify’s limit on crawlers without a signature, and a signature Shopify refused, with what to do', () => {

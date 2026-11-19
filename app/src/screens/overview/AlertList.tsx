@@ -88,7 +88,19 @@ const AlertItem = memo(function AlertItem({ crawlId, entry, live, canContinue, o
         {entry.detail || tally ? (
           // How the crawl recorded a failure is behind the plain words: the facts' tooltip and description.
           <p className="break-words" title={entry.recorded}>
-            {[entry.detail, tally].filter(Boolean).join(' ')}
+            {entry.detail && entry.detailLink ? (
+              <>
+                <ActionFor
+                  crawlId={crawlId}
+                  action={{ ...entry.detailLink, label: entry.detail }}
+                  canContinue={canContinue}
+                  onContinue={onContinue}
+                />
+                {tally ? ` ${tally}` : null}
+              </>
+            ) : (
+              [entry.detail, tally].filter(Boolean).join(' ')
+            )}
           </p>
         ) : null}
         {entry.advice ? <p>{entry.advice}</p> : null}
