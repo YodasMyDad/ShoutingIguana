@@ -440,11 +440,11 @@ describe('a sitemap whose list of URLs the crawl file lost', () => {
   it('never reads "Read" beside zeros: it says how many it listed, that the list is gone, and to crawl again', () => {
     const words = stateWords(lost, false);
     expect(words.tone).toBe('failed');
-    expect(words.short).toBe('Read: 240 URLs, but this crawl no longer has the list');
+    expect(words.short).toBe('Read, but its 240 URLs are lost');
     expect(words.sentence).toBe(
       'The crawl read it and it listed 240 URLs, but this crawl no longer has the list: a recheck by an earlier version of Shouting Iguana lost it. Crawl the site again to restore it.',
     );
-    expect(stateWords({ ...lost, entries: 1 }, false).short).toBe('Read: 1 URL, but this crawl no longer has the list');
+    expect(stateWords({ ...lost, entries: 1 }, false).short).toBe('Read, but its 1 URL is lost');
   });
 
   it('is counted apart, and the answer says so for one sitemap and for several', () => {

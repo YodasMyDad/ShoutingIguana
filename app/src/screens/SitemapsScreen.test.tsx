@@ -498,6 +498,39 @@ describe('Sitemaps: what isn’t there', () => {
     expect(screen.queryByText(/in any sitemap/)).toBeNull();
   });
 
+  it('says a sitemap’s list is lost where the crawl file no longer holds it: never “Read” beside zeros, nor “no sitemap was read”', async () => {
+    // The garden furniture crawl after the recheck of 18 Nov: the sitemap counted 240 URLs and the file holds none.
+    const none = { listed: 0, fetched: 0, indexable: 0, nonIndexable: 0, robotsDisallowed: 0, redirectingOrBroken: 0 };
+    const lost = testSitemap({ id: 1, foundVia: 'defaultLocation', state: 'listLost', entries: 240, urls: none });
+    const why =
+      'This crawl no longer holds the 240 URLs https://example.com/sitemap.xml listed: a recheck by an earlier version of the app lost them. Crawl the site again to check this.';
+    sidecar({
+      sitemaps: { ...TEST_SITEMAP_LIST, sitemaps: [lost] },
+      coverage: {
+        ...COVERAGE_PAGE,
+        matching: 257,
+        facets: { inSitemap: [{ value: null, count: 257, filter: { column: 'inSitemap', op: 'isEmpty' } }] },
+      },
+      analysis: { skipped: [{ checkId: 'not-in-sitemap', reason: { code: 'sitemap-list-lost', text: why } }] },
+    });
+    await open(SITEMAPS);
+    expect(
+      await screen.findByText(
+        'The crawl found 1 sitemap and read it, but this crawl no longer has its list of URLs. Crawl the site again to restore it.',
+      ),
+    ).toBeVisible();
+    const row = within(rowOf(lost.url));
+    expect(row.getByText('Read, but its 240 URLs are lost')).toBeVisible();
+    expect(row.queryByText('0')).toBeNull();
+    expect(row.getAllByText('–').length).toBeGreaterThan(0);
+    expect(screen.queryByText('No sitemap was read')).toBeNull();
+    // The pages can't be compared with it, and the line says so with the analysis's reason: never "257 aren't in any".
+    expect(
+      await screen.findByText(`The analysis didn’t count the site’s pages no sitemap lists. ${why}`),
+    ).toBeVisible();
+    expect(screen.queryByText(/in any sitemap/)).toBeNull();
+  });
+
   it('says the list isn’t all there is when the crawl stopped before reading every sitemap, with Continue', async () => {
     sidecar({ sitemaps: { ...TEST_SITEMAP_LIST, discovery: 'unfinished' }, item: { status: 'stopped' } });
     await open(SITEMAPS);

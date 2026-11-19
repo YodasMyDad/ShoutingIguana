@@ -238,7 +238,8 @@ function wordsOf(
       const listed = formatCountOf(sitemap.entries, 'URL');
       return {
         tone: 'failed',
-        short: `Read: ${listed}, but this crawl no longer has the list`,
+        // Short enough for the status cell: the sentence, a hover away, says how and what to do.
+        short: `Read, but its ${listed} ${sitemap.entries === 1 ? 'is' : 'are'} lost`,
         sentence: `The crawl read it and it listed ${listed}, but this crawl no longer has the list: a recheck by an earlier version of Shouting Iguana lost it. Crawl the site again to restore it.`,
       };
     }
