@@ -67,7 +67,7 @@ import { sortShown } from './links/presets';
 import { SavedViewsMenu, ViewNameDialog } from './urls/SavedViews';
 import { useSavedViews } from './urls/useSavedViews';
 import { noUrlsMatchWords, noUrlsWords } from './urls/urlPlaces';
-import { ANALYSIS_FACETS, URL_FACET_IDS, URL_FACET_TITLES, buildUrlFacets, type UrlFacetValue } from './urls/urlFacets';
+import { ANALYSIS_FACETS, URL_FACET_IDS, URL_FACET_TITLES, buildUrlFacets } from './urls/urlFacets';
 import { UrlFilterChips } from './urls/UrlFilterChips';
 import { FIXED_URL_COLUMNS, FIXED_URL_QUERY_COLUMNS, fixedColumnNames } from './urls/urlGridParts';
 import {
@@ -88,6 +88,16 @@ import {
   urlGridColumns,
   urlQueryColumns,
 } from './urls/urlColumns';
+import {
+  CONTENT_FACETS,
+  contentFacetValues,
+  indexabilityCountFilters,
+  isNotIndexable,
+  notIndexableValues,
+  tickedIndexability,
+  withIndexability,
+  type ContentFacet,
+} from './urls/pageFacets';
 import { useUrlFilterWords } from './urls/useUrlFilterWords';
 import { RecheckMenuItem } from './rechecks/RecheckMenuItem';
 import { onlyFullCheck } from './rechecks/rechecks';
@@ -199,14 +209,24 @@ export function UrlsScreen() {
   // and nothing on the screen but an open menu shows it. While a menu is open a running crawl's refresh keeps its
   // counts fresh; closed, they're only marked stale, and read again on opening.
   const [openFacet, setOpenFacet] = useState<FacetId | null>(null);
+  // Indexability takes several values: its counts are of the view without its own filter, among pages (pageFacets.ts).
   const facetsQuery = useMemo(
-    () => ({ filters: [...filters], ...(q ? { search: q } : {}), ...endsPart }),
-    [filters, q, endsPart],
+    () => ({
+      filters: openFacet === 'indexability' ? indexabilityCountFilters(filters) : [...filters],
+      ...(q ? { search: q } : {}),
+      ...endsPart,
+    }),
+    [filters, q, endsPart, openFacet],
   );
+  // Titles, descriptions and H1s: what the checks found, counted by the analysis, read once one of their menus opens.
+  const [openContent, setOpenContent] = useState<ContentFacet['id'] | null>(null);
   const facetsRead = useQuery({ ...urlGridFacetsQuery(crawlId, facetsQuery), enabled: openFacet !== null });
   // The not-in-sitemap check's pages, offered in the Sitemaps menu in one click (the fix-it pass): its count is the
   // analysis's, read only once the menu is opened, as the facets are.
-  const analysisRead = useQuery({ ...analysisQuery(crawlId), enabled: openFacet === 'inSitemap' });
+  const analysisRead = useQuery({
+    ...analysisQuery(crawlId),
+    enabled: openFacet === 'inSitemap' || openContent !== null,
+  });
   const notInSitemap = analysisRead.data?.counts.find((count) => count.checkId === 'not-in-sitemap')?.count ?? null;
   const facets = useMemo(
     () =>
@@ -769,7 +789,15 @@ export function UrlsScreen() {
       ? UNAVAILABLE_WHILE_ANALYSING
       : UNAVAILABLE_BECAUSE[summary?.reason ?? 'notAnalyzed'];
   // The value's filter beside the view's: what the menu counted, so the grid lands on its count.
-  const chooseFacet = (value: UrlFacetValue) => setFilters(withFacetValue(filters, value.filter));
+  const chooseFacet = (value: { filter: GridFilter }) => setFilters(withFacetValue(filters, value.filter));
+  // Indexability's tick-boxes: the values in force, each change, and every reason at once.
+  const ticked = tickedIndexability(filters);
+  const indexabilityValues = facets?.find((facet) => facet.id === 'indexability')?.values ?? null;
+  const reasons = notIndexableValues((indexabilityValues ?? []).map((value) => value.key));
+  const allReasons = isNotIndexable(
+    ticked,
+    (indexabilityValues ?? []).map((value) => value.key),
+  );
 
   return (
     <GridScreen ref={frame}>
@@ -931,16 +959,77 @@ export function UrlsScreen() {
               <FacetMenu
                 key={id}
                 title={URL_FACET_TITLES[id]}
-                noun="URL"
-                values={facets ? (facets.find((facet) => facet.id === id)?.values ?? []) : null}
+                noun={id === 'indexability' ? 'page' : 'URL'}
+                values={
+                  facets
+                    ? (facets.find((facet) => facet.id === id)?.values ?? []).filter(
+                        // A URL not crawled has no indexability to tick: Status says which those are.
+                        (value) => id !== 'indexability' || value.key !== 'null',
+                      )
+                    : null
+                }
                 matching={facetsRead.data?.matching}
                 failed={facetsRead.isError && !facetsRead.data}
                 unavailable={facetsUnavailable(id)}
                 onRetry={() => void facetsRead.refetch()}
                 onChoose={chooseFacet}
+                multi={
+                  id === 'indexability'
+                    ? {
+                        ticked,
+                        onToggle: (value, on) =>
+                          setFilters(
+                            withIndexability(
+                              filters,
+                              on ? [...ticked, value.key] : ticked.filter((key) => key !== value.key),
+                            ),
+                          ),
+                        shortcuts:
+                          reasons.length > 0
+                            ? [
+                                {
+                                  key: 'notIndexable',
+                                  words: 'Not indexable (any reason)',
+                                  count: (indexabilityValues ?? [])
+                                    .filter((value) => reasons.includes(value.key))
+                                    .reduce((sum, value) => sum + value.count, 0),
+                                  ticked: allReasons,
+                                  onChoose: () => setFilters(withIndexability(filters, allReasons ? [] : reasons)),
+                                },
+                              ]
+                            : [],
+                      }
+                    : undefined
+                }
                 onOpenChange={(open) => setOpenFacet((current) => (open ? id : current === id ? null : current))}
               />
             ))}
+            {/* On the Content tab: missing, duplicate and badly sized titles, descriptions and H1s, one choice each. */}
+            {preset?.id === 'content'
+              ? CONTENT_FACETS.map((facet) => (
+                  <FacetMenu
+                    key={facet.id}
+                    title={facet.title}
+                    noun="page"
+                    values={contentFacetValues(facet, analysisRead.data?.counts, filters)}
+                    failed={analysisRead.isError && !analysisRead.data}
+                    unavailable={
+                      !summaryAvailable && summary
+                        ? `Counted by the analysis: these counts ${
+                            analysing && summary.reason !== 'crawling'
+                              ? UNAVAILABLE_WHILE_ANALYSING
+                              : UNAVAILABLE_BECAUSE[summary.reason ?? 'notAnalyzed']
+                          }.`
+                        : undefined
+                    }
+                    onRetry={() => void analysisRead.refetch()}
+                    onChoose={chooseFacet}
+                    onOpenChange={(open) =>
+                      setOpenContent((current) => (open ? facet.id : current === facet.id ? null : current))
+                    }
+                  />
+                ))
+              : null}
           </FilterBar>
           {search.links ? (
             <Banner
