@@ -189,6 +189,8 @@ export function SitemapDetail({ crawlId, sitemapId, list, crawl }: SitemapDetail
       id: 'outcome',
       header: 'Outcome',
       width: 168,
+      // Never cut, and no wider than its header and its words where room is short.
+      fit: 'value',
       cell: (row) => outcomeWords(row, crawl.crawling),
       text: (row) => outcomeWords(row, crawl.crawling),
     };

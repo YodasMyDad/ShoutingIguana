@@ -54,7 +54,7 @@ describe('columnNeeds', () => {
       [row(10, 10)],
       MEASURE,
     );
-    expect(needs.url?.header).toBe(30 + 70 + 6 + 20 + 20);
+    expect(needs.url?.header).toBe(30 + 70 + 6 + 16 + 20);
   });
 });
 
@@ -87,10 +87,10 @@ describe('fitColumns', () => {
   });
 
   it('short of room, shares it between the URL and the words in proportion, neither under a usable width', () => {
-    // Floors 280 and 160; they ask for 450 and 480 (the title's limit). 245 px to share between wants of 170 and 320.
-    const fitted = widthsOf(fitColumns(COLUMNS, 60 + 80 + 280 + 160 + 245, needs([row(40, 80)])));
-    expect(fitted.url).toBe(280 + 85);
-    expect(fitted.title).toBe(160 + 160);
+    // Floors 240 and 140; they ask for 450 and 480 (the title's limit). 275 px to share between wants of 210 and 340.
+    const fitted = widthsOf(fitColumns(COLUMNS, 60 + 80 + 240 + 140 + 275, needs([row(40, 80)])));
+    expect(fitted.url).toBe(240 + 105);
+    expect(fitted.title).toBe(140 + 170);
     expect(fitted.status).toBe(80);
   });
 
@@ -103,7 +103,7 @@ describe('fitColumns', () => {
     expect(short).toEqual({ url: 450, status: 80, title: 480, depth: 60 });
     // Nothing fits: every column at its floor, wider than the grid, which scrolls.
     const none = widthsOf(fitColumns(wide, 300, tight));
-    expect(none).toEqual({ url: 280, status: 80, title: 160, depth: 60 });
+    expect(none).toEqual({ url: 240, status: 80, title: 140, depth: 60 });
   });
 
   it('makes a column with no value among the rows as wide as its header', () => {

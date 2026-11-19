@@ -11,11 +11,11 @@ import type { GridColumn } from './types';
 export const FIT_SAMPLE_ROWS = 200;
 
 /** The width a column gives way to where room is short, px, when its values are wider: still usable. */
-const FLOOR = { url: 280, text: 160 } as const;
+const FLOOR = { url: 240, text: 140 } as const;
 /** The most a column asks for before the others have what they need, px: past it, it grows only into spare room. */
 const SOFT = { url: 720, text: 480 } as const;
 /** A sortable header's arrow and the gap before it. */
-const SORT_ROOM = 20;
+const SORT_ROOM = 16;
 /** The gap between a header's name and its quieter detail ("on example.com"). */
 const DETAIL_GAP = 6;
 
@@ -103,7 +103,9 @@ function partOf<Row>(column: GridColumn<Row>, need: ColumnNeed): Part {
   const most = Math.max(least, Math.min(column.maxWidth ?? MAX_COLUMN_WIDTH, MAX_COLUMN_WIDTH));
   const whole = Math.max(need.header, need.content);
   if (column.fit === 'value') {
-    const floor = clamp(whole, least, most);
+    // Its own width is known to hold its header (it was set by hand for that): the measure of a header never makes
+    // a column of short values wider than it was.
+    const floor = clamp(Math.max(need.content, Math.min(need.header, column.width)), least, most);
     const soft = clamp(Math.max(column.width, whole), floor, most);
     return { floor, soft, hard: soft };
   }

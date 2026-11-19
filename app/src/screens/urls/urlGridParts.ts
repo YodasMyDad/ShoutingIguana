@@ -91,6 +91,8 @@ export function fixedUrlColumns({ siteOrigin = null, onGo }: FixedUrlColumnsCont
       id: 'statusCode',
       header: 'Status',
       width: 88,
+      fit: 'value',
+      fitExtra: 16,
       // The code with its class's mark, as the URL grid shows it; what happened instead of one is the Outcome's to say.
       cell: (row) =>
         typeof row.statusCode === 'number' ? createElement(StatusCode, { code: row.statusCode }) : status(row) || '–',
@@ -100,6 +102,7 @@ export function fixedUrlColumns({ siteOrigin = null, onGo }: FixedUrlColumnsCont
       id: 'indexability',
       header: 'Indexability',
       width: 136,
+      fit: 'value',
       cell: (row) => words(indexability(row)),
       text: indexability,
     },

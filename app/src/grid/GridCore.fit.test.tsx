@@ -84,12 +84,12 @@ describe('a grid whose columns fit what they hold', () => {
   });
 
   it('shares a narrow grid between them, and again when the grid’s width changes', () => {
-    gridWidth = 64 + 280 + 160 + 100;
+    gridWidth = 64 + 240 + 140 + 100;
     show([row(60, 80)]);
-    // Floors of 280 and 160, and 100 px shared by what each still wants: (508 - 280) and (480 - 160).
-    const wants = [60 * CHAR + 28 - 280, 480 - 160];
+    // Floors of 240 and 140, and 100 px shared by what each still wants: (508 - 240) and (480 - 140).
+    const wants = [60 * CHAR + 28 - 240, 480 - 140];
     const share = 100 / (wants[0]! + wants[1]!);
-    expect(templateOf()).toBe(`${Math.floor(280 + wants[0]! * share)}px ${Math.floor(160 + wants[1]! * share)}px 64px`);
+    expect(templateOf()).toBe(`${Math.floor(240 + wants[0]! * share)}px ${Math.floor(140 + wants[1]! * share)}px 64px`);
     gridWidth = 2_000;
     act(() => resized.forEach((callback) => callback()));
     expect(templateOf()).toBe(`${60 * CHAR + 28}px ${80 * CHAR}px 64px`);
