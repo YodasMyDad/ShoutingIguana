@@ -545,15 +545,33 @@ machine):
   - The installer (unsigned) passed `smoke:tauri`.
   - Linux Docker: clippy clean, cargo test 136 + 3.
 
+- **Gallery 7 found seven defects, all fixed (2026-11-19):**
+  - beb2c78d: inspecting with "All checks" open folds the list away; Sitemaps' "Found via" shows whole.
+  - f4852d4c:
+    - a page refused on recheck kept nothing and so looked fixed ("Nothing wrong"). Now it keeps its record, links and
+      issues, and never counts as fixed;
+    - Simple counts addresses held back in a slowed section, and never says "Nearly done" while they wait;
+    - the section limit is said once;
+    - a recheck from the Shopify form says what it read.
+  - 3aa35e0a: the report numbers only the jobs, and broken links fold under the 4xx.
+- **Re-gated at 3aa35e0a, all passing first time:**
+  - Vitest 5,501; e2e 292 (3 skipped); `e2e:filled` 33;
+  - stories 665 × 2 themes, clean in all four modes;
+  - `smoke:shell` 19 + 9; the installer (unsigned, 47,624,107 bytes) passed `smoke:tauri`.
+  - The engine (2,402, 331 and 45 tests, plus bench and readbench) was green on the same engine code in the fix lane.
+- **Gallery 7.1 published** (version 9) at <https://claude.ai/artifact/NWJJ4cCWtaDor2FfkzdHsR>: 69 views × 2
+  themes, with 24 new for 3b, all shot on 3aa35e0a.
+- **The owner's install was upgraded** to 3aa35e0a with setup `/S` while it was closed (2026-11-19, 04:53).
+
+**Step 3b is finished.**
+
 Next:
 
-- **The owner's plan:**
-  1. Upgrade the owner's install with setup `/S`, only while the app is closed.
-  2. Open the app, and the owner adds the Jitsunami signature in the Shopify form.
-  3. Run one signed crawl in the app, together.
-  4. Delete `%USERPROFILE%\.shouting-iguana\shopify\jitsunami.com.txt`; the owner deletes the signature in Shopify.
-- Then gallery 7, then tell the owner step 3b is finished. The release waits for the owner's word. Any further real
-  crawl or recheck needs the owner's word again.
+- **The owner's walkthrough:**
+  1. Open the app, and the owner adds the Jitsunami signature in the Shopify form.
+  2. Run one signed crawl in the app, together.
+  3. Delete `%USERPROFILE%\.shouting-iguana\shopify\jitsunami.com.txt`; the owner deletes the signature in Shopify.
+- The release waits for the owner's word. Any further real crawl or recheck needs the owner's word again.
 
 1. ~~The installer from `35d4888`, `smoke:tauri`, and the owner's install upgraded with setup `/S` while the app is
    closed.~~ Done.
