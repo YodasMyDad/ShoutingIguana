@@ -57,6 +57,10 @@ obvious fix, it needs to be very easy to read. In a brilliant UI and UX, so the 
 
 ## Mounting it in the pane, once `ui/ux-issues` has landed
 
+**Since 2026-11-19, about 09:45: merged into `ui/step-3` (`14f87577`) and mounted on the base pane (`3387487b`), in
+`Explain`, without `preferredCase`.** What is left, in order, is in `docs/v2-rebuild.md`, "The fix as code: merged, and
+what is outstanding". The steps below are what to carry over when `ui/ux-issues` is merged.
+
 Nothing here is mounted in the live screen: the pane is that lane's. The change is one element.
 
 1. In `app/src/screens/issues/CheckDetail.tsx` (on the base, the `Explain` function: its `parts` entry

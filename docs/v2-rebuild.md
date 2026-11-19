@@ -137,7 +137,9 @@ resume. Merging to `master` or releasing still needs an explicit yes.
 
 **PAUSED 2026-11-19, about 09:15, for usage, mid-way through a UX round (session `da833503`). Resume here.**
 Nothing is running: every agent stopped, every sidecar, Vite server and test site is down, every worktree is clean.
-Nothing was pushed. Nothing below is merged into `ui/step-3` except the two severity changes. The whole record is in
+Nothing was pushed. Nothing below is merged into `ui/step-3` except the two severity changes and, since about 09:45
+(session `90e68be9`), the fix as code, which has its own block below: **"The fix as code: merged, and what is
+outstanding"**. The whole record is in
 [`docs/handoff/2026-11-19/`](handoff/2026-11-19/): read [`checkpoint.md`](handoff/2026-11-19/checkpoint.md) first.
 
 *What the owner asked (2026-11-19, on the installed app and their own garden crawl):* "The UI looks nice in most cases
@@ -174,7 +176,7 @@ finding by finding, with what ran and what didn't, is in its `state-<lane>.md`:
 | simple | `ui/ux-simple` (`ux-simple`) | `4a7fab91` | `4a7fab91` | **Nothing built**: its agent ended on a server error after deciding how; the decisions are in `state-simple.md` |
 | simple's report | `ui/ux-simple-report` (`ux-simple-report`) | `4a7fab91` | `84b2641a` | The report in two wordings, with working links and "where to fix"; the spreadsheet's linking-page columns. e2e rewritten, not run (`state-simple-report.md`) |
 | engine | `ui/ux-engine` (`ux-engine`) | `4a7fab91` | `c71fe5bd` | The lost sitemap list traced and three more row losses on a recheck fixed; a damaged file says so; the recheck's numbers and words fixed. `AnalysisFreshness.VERSION` is **21** there. The whole engine suite, bench and readbench were **not run at head** |
-| fix as code | `ui/ux-fix` (`ux-fix`) | `f2ae0922` | `179f838a` | Finished as a component, **not mounted**: 67 checks carry a fix as before and after code (`fixExamples`), with `CodeExample` and `HowToFix`. Mounting it in the Issues pane is one element, once `ui/ux-issues` lands (`fix-lane.md`) |
+| fix as code | `ui/ux-fix` (`ux-fix`) | `f2ae0922` | `179f838a` | **Merged into `ui/step-3`** (`14f87577`) and mounted in the Issues pane as it is on the base (`3387487b`). 67 checks carry a fix as before and after code (`fixExamples`), with `CodeExample` and `HowToFix`. What is left is in the block below; the branch is no longer needed |
 
 *The lost sitemap list (the data audit's D-01) was not a fault of any installed build.* An in-progress engine build of
 18 Nov (`8cbd8c24`) deleted a sitemap's rows on a recheck, then failed inserting them into a file without a `lastmod`
@@ -190,12 +192,13 @@ opened to confirm.
    `ui/ux-simple-report` into it, then S-01 and the "Where to fix it" card), then **data** (the `Url` open-button
    fault, column sizing, the URLs screen), **shell** (13 findings), **issues** (the five partly done, the 1280 × 720
    scroll), **engine** (its gates at head).
-3. **Merge** into an integration branch off `ui/step-3`, in this order: data, issues, fix as code, shell, simple (with
-   its report), engine. Expect conflicts in `app/src/ui/Url.tsx` (data's `a57d5990` and issues' `4b38b12b` both add
+3. **Merge** into an integration branch off `ui/step-3`, in this order: data, issues, shell, simple (with its report),
+   engine (the fix as code is already on `ui/step-3`: don't merge `ui/ux-fix` again). Expect conflicts in `app/src/ui/Url.tsx` (data's `a57d5990` and issues' `4b38b12b` both add
    `openUrl` / `openHint`, to the same agreed shape: keep data's), `app/src/styles/components.css` and `tokens.css`
    (appended blocks: keep all), `IssueCatalog.cs`, and the `Shared:` commits each state file lists. Capture
-   `app/src/test/simple/engine-checks.json` once from the merged sidecar instead of merging it by hand. Then mount
-   `HowToFix` in the Issues pane as `fix-lane.md` says.
+   `app/src/test/simple/engine-checks.json` once from the merged sidecar instead of merging it by hand. `ui/ux-issues`
+   will conflict in `app/src/screens/issues/CheckDetail.tsx` where `Explain` now draws `<HowToFix>`: do items 1 to 3 of
+   "The fix as code: merged, and what is outstanding" below while resolving it.
 4. **The whole-suite gates on the merge**, since no lane ran them: `verify-engine.sh` (bench and readbench),
    `verify-app.sh`, `e2e:filled`, `tauri build --no-bundle`, `smoke:shell`; Linux in Docker if `src-tauri` changed.
 5. **Look at it as the owner**: drive the merged app at 2560 × 1380 and 1280 × 720 on the crawl copies
@@ -203,6 +206,94 @@ opened to confirm.
    task and each audit's tasks with click counts, in both modes. Fix what still fails `fix-common.md`'s rules.
 6. Merge into `ui/step-3`, update this section, a new gallery shot **at the owner's window size**, the installer, and
    upgrade the owner's install only while the app is closed. Never push.
+
+**The fix as code: merged, and what is outstanding (2026-11-19, session `90e68be9`).** The owner read a correct
+"Internal links without anchor text" finding on the garden crawl as a false positive: 260 pages, all one link, the
+header logo `<a href="/"><svg>…</svg></a>` with no `aria-label` and no `<title>` in the SVG. The pane never said it
+was one link or what to type. Their words: "if there's an obvious fix, it needs to be very easy to read. In a brilliant
+UI and UX, so the user understands how to fix things", then "I need it all merged into the main app like everything
+else" and "anything not done add it back into step 3 … so that when I start another agent session, it knows what needs
+doing".
+
+*Done, on `ui/step-3`:*
+
+- `14f87577` merges `ui/ux-fix` (no conflicts): what it adds is in
+  [`docs/handoff/2026-11-19/fix-lane.md`](handoff/2026-11-19/fix-lane.md), "What the lane adds". In short: 67 of the 170
+  checks carry `FixExamples` (78 examples; `empty-anchor-text` has three cases, `icon-link`, `image-link`,
+  `empty-link`, and its `Fix` now covers an inline SVG); `GET /api/checks` sends `fixExamples`; `ui/CodeExample.tsx`
+  draws "Now" over "Fixed" with the change marked and a Copy button; `screens/issues/HowToFix.tsx` draws the heading,
+  the words and the example, one case at a time as tabs.
+- `3387487b` mounts it: `Explain` in `app/src/screens/issues/CheckDetail.tsx` takes the check and draws "Why it
+  matters" beside `<HowToFix check={check} />` (the fix in the wider column, `--how-to-fix-columns`, at the `wide:`
+  breakpoint; stacked below it). `app/src/test/issuesSidecar.ts` gives `empty-anchor-text` two examples, and
+  `IssuesScreen.test.tsx` has "shows a check's fix as code under How to fix it, a case at a time, and words alone where
+  it has none".
+- Ran at `3387487b`: typecheck, lint, format check, the whole Vitest suite with `--maxWorkers=8` (5,615 passed, 189
+  skipped, 520 files). With the sidecar built from the merged engine,
+  `e2e/issues.spec.ts` and `e2e/what-matters.spec.ts` passed (17 of 17); the rest of the e2e suite was not run.
+- The engine code at `3387487b` is byte for byte the lane's at `179f838a` (`git diff 179f838a 3387487b -- engine` is
+  empty), where `verify-engine.sh` passed whole (build, tests, 100k bench, readbench). The stories passed axe (light,
+  dark, forced colours, reduced motion) at the lane's head, before the mount.
+
+*Outstanding, in the order to do it. Nothing here is started unless it says so.*
+
+1. **The fix is still at the bottom of the pane.** On the base the "Why it matters / How to fix it" strip sits under
+   the affected pages, a "Why it matters and how to fix it" button away. The owner's bar is that the fix is easy to
+   read, so it belongs near the top. That move is the issues lane's A-09 and A-10 (partly done on `ui/ux-issues`:
+   "why" and "how" beside "What's wrong" at wide sizes, folded at narrow ones). When `ui/ux-issues` is merged it
+   conflicts in `CheckDetail.tsx`: keep the lane's layout, and where the lane draws the paragraph of `check.fix` put
+   `<HowToFix check={check} preferredCase={…} />` instead (it draws its own `<h3>` "How to fix it" with the pane's
+   classes, and returns null for a check with no fix and no examples). Give it the wider column
+   (`wide:grid-cols-(--how-to-fix-columns)`: the code wants up to 100 characters, the words about 46); in the narrow
+   fold it goes in whole. Then fix the new test in `IssuesScreen.test.tsx`, which finds the strip by
+   `closest('[tabindex="-1"]')`. If the issues lane is not going to be finished soon, do the move on the base instead:
+   put "How to fix it" directly under "What's wrong" in the head and leave "Why it matters" in the strip; the test
+   "puts what the check flags ahead of why it matters and how to fix it, a button away" (`IssuesScreen.test.tsx`),
+   `app/e2e/issues.spec.ts:47-51` and `app/scripts/smoke-shell.mjs:423-445` name the button and the headings.
+2. **"On this site" is not wired.** `HowToFix` gets no `preferredCase`, so the first case shows (for
+   `empty-anchor-text` the icon case, which happens to be the garden site's) with no "On this site" marker. Pass
+   `preferredFixCase(check.id, targets.map((target) => target.flags))` (`screens/issues/fixCase.ts`) from the
+   `IssueTarget`s the pane has already read (`/issues/{checkId}/targets`: `useWhereFound` on the base,
+   `useRowReferences` on `ui/ux-issues`), never from a request of its own; `undefined` until some are loaded. Add a
+   test that the `image-link` tab is selected and marked when the targets carry `imageLink`.
+3. **"260 pages" still reads as 260 links.** The template callout (`TemplateCallout`, `IssueGroups.tsx`, about line
+   1287 on the base; the issues lane has changed that file) says "The same URL, /, on 260 of 260 pages, so it's likely
+   in the site's template: one fix clears the group. It's a link in the header." It should lead with the count of
+   things: "1 link, to /, in the header, repeated on 260 pages: one fix clears them", and the group's rows should not
+   look like 260 separate faults ("in the header" 260 times). Pinned by `IssuesScreen.test.tsx` (the template callout
+   tests, about lines 541, 1229 and 1242 before this round) and `IssuesScreen.evidence.test.tsx:87-97`. Simple already
+   says it well (`simple/plainEvidence.ts:207-240`).
+4. **The gates not run on the merged branch**: `build-storybook` and `npm run test:stories` (plain, `--forced`,
+   `--reduced-motion`), the whole e2e suite, `e2e:filled`, `tauri build --no-bundle`, `smoke:shell`. They are step 4 of
+   the resume list above; run them there, on the integration branch.
+5. **Not in the owner's installed app.** No installer was built from `3387487b`. It goes in with step 6 of the resume
+   list (installer, then upgrade the owner's install only while the app is closed). The owner has not yet seen the
+   block anywhere but in a Storybook shot.
+6. **Look at it as the owner** on the garden crawl copy at 2560 × 1380 and 1280 × 720, light and dark: open
+   "Internal links without anchor text" and each check in the owner's list that has an example (images without width
+   and height, missing meta description, missing canonical, Open Graph tags missing, X card missing and incomplete,
+   cookies without Secure or HttpOnly, security headers missing, missing H1), and ask of each: in five seconds, do I
+   know what to type and where? Fix what fails.
+7. **The other 103 checks have words only.** The lane judged their fixes editorial or structural. Nobody has reviewed
+   that list. Go through the checks that fire on the three real crawl copies and have no example, and decide each:
+   an example, better words, or right as it is.
+8. **The code shown is a sample, not the site's own markup** ("Example Furniture", not the owner's logo link). The
+   crawl stores no HTML of the element a check names (`links` holds `from_id, to_id, kind, flags, position, text,
+   fragment`; `response_html` is kept only with `StoreHtml`, off by default). To show the real element as "Now": the
+   parser (`Parsing/PageWalker.cs`, where a link without a name is found) keeps the element's opening tag and a
+   shortened inside, capped at a few hundred characters, only for links and images a check will name; a new column or
+   side table that only `Storage/CrawlWriter` writes; `IssueTarget` and `/issues/{checkId}/targets` send it;
+   `CodeExample` shows it in place of the sample `before`, and builds "Fixed" from it where the fix is one attribute.
+   The 100k bench must stay flat, the crawl file's schema version and `AnalysisFreshness.VERSION` go up, and existing
+   crawls show the sample until crawled again. **Not agreed with the owner: ask before building.** `v2-ui-design.md`
+   lists it as "Later; needs stored HTML".
+9. **Simple doesn't show the code.** `simple/ProblemScreen.tsx` shows `plainFix` steps only. `CodeExample` is in `ui/`
+   so it can sit under the steps, perhaps only where the fixer is a developer. Not agreed with the owner: ask.
+10. **`image-legacy-format` says one thing and checks another** (`fix-lane.md`, "Found on the way"): the words offer a
+    `<picture>` fallback, the rule still flags the `<img>` inside one. Either the rule passes an image whose
+    `<picture>` offers a modern source (`ImageFact.InPicture`) or the words stop offering it. The owner's to decide.
+11. `app/src/test/simple/engine-checks.json` on `ui/step-3` is now the capture with `fixExamples`. Capture it again
+    from the merged sidecar after any lane that changes the catalog (`fix-lane.md` says how; there is no script).
 
 *Decided by the owner on 2026-11-19, after the pause:* **JavaScript rendering is imperative** ("or we won't be able to
 properly crawl or check things") and **custom extraction is needed**. So step 4 follows this UX round, JavaScript

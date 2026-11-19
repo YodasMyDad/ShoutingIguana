@@ -59,7 +59,7 @@ The status and the order to resume in are in `docs/v2-rebuild.md`, "Where step 3
 | simple | `ui/ux-simple` / `ux-simple` | `4a7fab91` | `4a7fab91` | 49914… | Nothing built (agent ended on HTTP 529) |
 | simple's report | `ui/ux-simple-report` / `ux-simple-report` | `4a7fab91` | `84b2641a` | 49916… | Built, e2e not run |
 | engine | `ui/ux-engine` / `ux-engine` | `4a7fab91` | `c71fe5bd` | 49924… | Jobs done, gates not run at head; `AnalysisFreshness.VERSION` 21 |
-| fix as code | `ui/ux-fix` / `ux-fix` | `f2ae0922` | `179f838a` | | Finished, not mounted |
+| fix as code | `ui/ux-fix` / `ux-fix` | `f2ae0922` | `179f838a` | | **Merged into `ui/step-3`** (`14f87577`) and mounted on the base pane (`3387487b`); what is left is in `docs/v2-rebuild.md`, "The fix as code: merged, and what is outstanding" |
 
 No lane ran the whole Vitest suite, lint, format check, stories or e2e at its head. No lane's "after" was looked at by
 the orchestrator. Treat every "done" as "written and unit-tested in its own files", not as verified.
