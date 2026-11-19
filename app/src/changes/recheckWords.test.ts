@@ -211,11 +211,36 @@ describe('what a recheck found', () => {
         subject: 'page',
         notCheckedWhy: 'the site didn’t answer',
       }),
-    ).toEqual(['3 of 5 fixed.', '2 couldn’t be rechecked: the site didn’t answer.']);
+    ).toEqual([
+      '3 of 5 fixed.',
+      '2 couldn’t be rechecked: the site didn’t answer.',
+      'They stay on the list until they can be checked again.',
+    ]);
     const unread = result({ fixed: 0, still: 0, notChecked: 5 });
     expect(recheckResultKind(unread, 5)).toBe('noneChecked');
     expect(simpleResultWords({ status: 'completed', judged: 5, result: unread, subject: 'page' })).toEqual([
       'None of the 5 could be rechecked.',
+      'They stay on the list until they can be checked again.',
+    ]);
+    expect(
+      simpleResultWords({
+        status: 'completed',
+        judged: 1,
+        result: result({ fixed: 0, still: 0, notChecked: 1 }),
+        subject: 'page',
+      }),
+    ).toEqual(['It couldn’t be rechecked.', 'It stays on the list until it can be checked again.']);
+    expect(
+      simpleResultWords({
+        status: 'stopped',
+        judged: 5,
+        result: result({ fixed: 1, still: 0, notChecked: 1, notRechecked: 3 }),
+        subject: 'page',
+      }),
+    ).toEqual([
+      'Stopped: 2 of 5 rechecked. 1 fixed.',
+      '1 couldn’t be rechecked.',
+      'It stays on the list until it can be checked again.',
     ]);
   });
 
@@ -233,11 +258,12 @@ describe('what a recheck found', () => {
     expect(refusedAgainWords(null)).toBeNull();
     expect(refusedAgainWords(answers({ read: 5 }))).toBeNull();
     expect(refusedAgainWords(answers({ read: 3, rateLimited: 2, refused: 2 }))).toBe(
-      'the site turned them away again: it asked us to slow down',
+      'the site asked us to slow down and turned them away again',
     );
     expect(refusedAgainWords(answers({ read: 4, blocked: 1, refused: 1 }))).toBe(
-      'the site turned it away again: its security stopped us',
+      'the site’s security turned it away again',
     );
+    expect(refusedAgainWords(answers({ robotsTxt: 2, refused: 2 }))).toBe('the site’s robots.txt doesn’t allow them');
     expect(refusedAgainWords(answers({ robotsTxt: 1, noAnswer: 1, refused: 2 }))).toBe(
       'the site turned them away again, or didn’t answer',
     );
@@ -249,7 +275,24 @@ describe('what a recheck found', () => {
         subject: 'page',
         notCheckedWhy: refusedAgainWords(answers({ read: 3, rateLimited: 2, refused: 2 })),
       }),
-    ).toEqual(['3 of 5 fixed.', '2 couldn’t be rechecked: the site turned them away again: it asked us to slow down.']);
+    ).toEqual([
+      '3 of 5 fixed.',
+      '2 couldn’t be rechecked: the site asked us to slow down and turned them away again.',
+      'They stay on the list until they can be checked again.',
+    ]);
+    // One colon to a sentence: the reason never adds a second.
+    const refused = simpleResultWords({
+      status: 'completed',
+      judged: 7,
+      result: result({ fixed: 0, still: 0, notChecked: 7, new: 0 }),
+      subject: 'page',
+      notCheckedWhy: refusedAgainWords(answers({ rateLimited: 6, notAsked: 1, refused: 6 })),
+    });
+    expect(refused).toEqual([
+      'None of the 7 could be rechecked: the site asked us to slow down and turned them away again.',
+      'They stay on the list until they can be checked again.',
+    ]);
+    for (const line of refused) expect(line.split(':').length).toBeLessThanOrEqual(2);
   });
 
   it('reads a stopped recheck as what it got through', () => {
