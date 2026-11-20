@@ -281,7 +281,7 @@ try {
   });
 
   await walk.step(
-    'the inspector opens on Enter, walks a link, comes back with Alt+Left and closes with Esc',
+    'the inspector opens on Enter, walks a link, comes back on its own back and closes with Esc',
     async () => {
       await nav.getByRole('link', { name: /^URLs/ }).click();
       await page.waitForURL(/\/urls$/);
@@ -297,8 +297,9 @@ try {
       await page.keyboard.press('Enter');
       await until('the walk', async () => (await heading()) !== first);
       const walked = await heading();
-      await page.keyboard.press('Alt+ArrowLeft');
-      await until('Alt+Left', async () => (await heading()) === first);
+      // A hop is in place, so Alt+Left is history's Back and closes the inspector. The hop is retraced by its own back.
+      await inspector.getByRole('button', { name: /^Back to / }).click();
+      await until('the way back', async () => (await heading()) === first);
       await picture('04-inspector');
       await page.keyboard.press('Escape');
       await inspector.waitFor({ state: 'hidden' });
@@ -434,7 +435,11 @@ try {
         await allChecks.click();
       await sleep(250);
     }
-    await checks.getByRole('option').first().click();
+    const titled = checks.getByRole('option', { name: /Title too long/ });
+    await ((await titled.count()) > 0 ? titled.first() : checks.getByRole('option').first()).click();
+    // A pane narrower than the checks list folds why and how behind their button. Open it, then all three are in the head.
+    const fold = main.locator('[data-explain] button[aria-expanded="false"]');
+    if (await fold.isVisible()) await fold.click();
     for (const text of ['What’s wrong', 'Why it matters', 'How to fix it'])
       await main.getByText(text).first().waitFor();
     await picture('06-issues');
@@ -541,7 +546,7 @@ try {
     );
     expectThat(bars.applied, 'the report frame refused the app’s scroll bars');
     expectThat(
-      Math.abs(bars.width - size) < 1,
+      Math.abs(bars.width - size) <= 1,
       `the report frame's scroll bar is ${bars.width} px wide, not the app's ${size} px`,
     );
     const bar = await page.getByRole('heading', { level: 1, name: 'Report' }).evaluate((title) => {
@@ -552,7 +557,7 @@ try {
       return {
         lines: Math.round(line.getBoundingClientRect().height / Number.parseFloat(getComputedStyle(line).lineHeight)),
         print: Math.round(button('Print or save as PDF').getBoundingClientRect().top),
-        save: Math.round(button('Save…').getBoundingClientRect().top),
+        save: Math.round(button('Save as HTML').getBoundingClientRect().top),
       };
     });
     expectThat(bar.lines === 1, `the report's line takes ${bar.lines} lines at 1280 px`);
