@@ -63,7 +63,11 @@ the switch in the shell, the Report route and screen, a Simple line in the flows
   Summary, What to fix and Report. In Advanced, Report joins as the eighth section, below the crawl's Settings.
   What switching does, and the order in which the rest of the bar gives way, are in
   [Simple mode](v2-ui-simple.md#the-switch).
-- **Inspector.** Opens for the selected URL on any grid, and holds its place while you move between rows.
+- **Inspector.** Opens for the selected URL on any grid, and holds its place while you move between rows. Until you
+  drag its edge (which shows a grip, and is remembered) it takes about a third of a wide window, enough for its ten
+  tabs and a link with its anchor text (920 px at 2,560), 400 px in a 1,440 px window and 368 px at 1,360 and under,
+  so the grid beside it keeps its room; docked at the bottom, two fifths of the window's height. Tabs that don't fit
+  go to an "N more" menu at the end of the strip, never cut and never scrolled.
 - **Overview has two states.** While a crawl runs, it's the live crawl screen. Once the analysis is done, it's the
   answer. That gives one place to look, whatever the crawl's state.
 
@@ -230,9 +234,12 @@ found, 265 pages; the 100k crawl 110,251 and 112,577, and 101,106 pages, everywh
 
 **URLs.**
 
-- The one grid: column presets (Overview, Indexability, Content, Performance, Links), the column chooser and the
-  filter bar. A preset is only columns, and reads as chosen while the columns are its own; one wider than the window
-  scrolls inside the grid.
+- The one grid: column presets (Overview, Indexability, Content, Redirects, Performance, Links), the column chooser
+  and the filter bar. A preset reads as chosen while the columns are its own; one wider than the window scrolls
+  inside the grid. Indexability and Content bring the filters "Type is page" and "On this site is yes" (an
+  indexability and a title are a page's), Redirects "Status class is 3xx"; they are chips like any other, and leaving
+  the tab takes them with it. A URL's text inspects it on one click, a count that stands for a list (inlinks,
+  outlinks, issues, used on) opens that list, and "Clear all" clears the filters, the search and the sort.
 - Quick filters with counts (status, status code, indexability, type, depth, response time, sitemaps, issues), each
   count opening exactly that many URLs, counted when their menu opens; a filter bar over any column the engine filters
   (at most 20).
@@ -258,15 +265,30 @@ found, 265 pages; the 100k crawl 110,251 and 112,577, and 101,106 pages, everywh
 
 - Every link the crawl stored, in crawl order, in the same grid: the page it's on, its target, its anchor or alt
   text, its kind, its position, whether it's followed, and how its target answered. More columns of the link, its
-  source page and its target are in the column chooser.
+  source page and its target are in the column chooser. Where the screen is narrower than 1,280 px (a 1280 px
+  window), the kind, position and follow are one column ("Hyperlink · Content · Followed") so the URLs keep the room,
+  and the toolbar's tools are their icons so it stays one row.
 - Views for what a link audit looks for: Broken links, Links to redirects, Nofollow links, No anchor text, External
-  links. Each is its filters, shown as chips.
+  links, Images. Each is its filters, shown as chips. Links to redirects has its own columns, with "Ends at": where
+  the target ends (a link), how that answered, and how it got there ("meta refresh", "3 hops"), which is what says
+  why a target that answered 200 is in the list.
+- Group by target: one row a target, with the page that links to it in the row ("Linked from": the first, a link
+  like any other URL, and "+3 more"). A click anywhere on a target's row opens it in place to its first links, each
+  with its page as a link, what it says and where it sits, and "Show all N links in the flat list". Never a count
+  behind a chevron.
 - Quick filters with counts (kind, position, follow, the target's status, the target's site), each count opening
   exactly that many links, counted when their menu opens; a filter bar over any column of the link or of either end
-  (at most 20 filters, as a query takes); search over the anchor text and both URLs. A filter the engine won't run (a
-  pattern it refuses) says so in the engine's own words, with "Change the filter" and "Remove the filter".
+  (at most 20 filters, as a query takes). Search covers the anchor text and both URLs, and shows as a chip. "Clear
+  all" clears the filters, the search and the sort; the columns stay. Coming back to a view starts on the row left.
+  A filter the engine won't run (a pattern it refuses) says so in the engine's own words, with "Change the filter"
+  and "Remove the filter".
 - Either end opens the inspector on that URL, which then follows the cursor down that end; which end is in the
-  address. The inspector's Inlinks and Outlinks open here: "All N in Links" ("Show it in Links" for one).
+  address. It arrives on the link itself: the page's Outlinks with the link's target first and marked, the target's
+  Inlinks with the page first and marked. The open-in-browser button of the page a link is on opens the page at the
+  link's own words ("Open the page at this link"). The row's menu names the end in every item ("Inspect the source
+  page", "Open the target in your browser", "Copy the source URL"). The inspector's Inlinks and Outlinks open here:
+  "All N in Links" ("Show it in Links" for one), whose chip for the page's own links reads "Not counting a page's
+  links to itself".
 - A sort is by a column the grid shows: hiding the column drops the sort.
 - Copy: the selected rows, the column the cursor is in, the view's source or target URLs. A copy reads the view's
   first 10,000 links, and says so on a bigger view ("Copy the first 10,000 links' target URLs"). Export (Ctrl+E) writes
@@ -279,7 +301,12 @@ found, 265 pages; the 100k crawl 110,251 and 112,577, and 101,106 pages, everywh
 
 - The answer in a sentence, then the sitemap tree: an index with the sitemaps it lists under it. Each says how the
   crawl found it, what became of it, and its URLs counted: listed, crawled, blocked by robots.txt, not crawled,
-  non-indexable. Every count opens exactly those URLs.
+  non-indexable. Every count opens exactly those URLs. A sitemap an index lists says which ("In /sitemap.xml", the
+  name a link to the index).
+- A list of places to go: a sitemap's name is a link that opens it, with open-in-browser straight after it, and a
+  click anywhere else on its row opens it too. Every row opens, one that lists nothing or couldn't be read as well.
+  A row's menu (right-click, Shift+F10): open the sitemap, open it in the browser, copy its URL, copy the row.
+  Coming back, the list is on the row it was left on, marked.
 - "Crawled" means the crawl requested the URL. A URL robots.txt refused was never requested: it's counted as
   blocked, not as crawled. Listed is crawled, blocked and not crawled added up.
 - An index's counts are those of the sitemaps under it, shown once the crawl has read every one of them: until
@@ -288,7 +315,12 @@ found, 265 pages; the 100k crawl 110,251 and 112,577, and 101,106 pages, everywh
   sitemap, not one that failed), a sitemap that couldn't be read and why, and how many of the site's pages no
   sitemap lists (a link to them in URLs), or that the analysis didn't count them and why.
 - Open a sitemap for its URLs: the URL grid narrowed to it, each URL with what the crawl did with it, and quick
-  filters for each of its counts and for redirecting or broken. "All sitemaps" leads back.
+  filters for each of its counts and for redirecting or broken. "All sitemaps" leads back. Its heading is the
+  sitemap's whole address (it wraps, never cut in the middle), with open-in-browser and copy straight after it. A
+  URL is a link that opens the inspector, shown as on URLs: its path with the host named once in the header, its
+  status with its class's mark.
+- A link can land on one of a sitemap's URLs (`?inspect=` with the URL's id): the grid starts on that URL's row,
+  marked and in view, with the inspector on it.
 - In a short window (200% zoom) the screen scrolls: the list keeps five rows, or all it has, and a sitemap's URLs
   keep five. In a window too narrow for every column the counts come straight after the sitemap's address, and a
   sitemap's filters take a second line.
@@ -298,24 +330,44 @@ found, 265 pages; the 100k crawl 110,251 and 112,577, and 101,106 pages, everywh
 - The origins the crawl asked, the site's own first, then the rest by the URLs they blocked. Each says what its
   answer meant: read, missing (nothing refused), couldn't be read (its URLs refused), or no answer (crawled anyway).
   How a request failed is said by its kind, in plain words, with what the crawl recorded a hover away.
+- A list of places to go: the origin is a link that opens its file, and a click anywhere else on its row opens it
+  too, an origin that blocked nothing as well. The button straight after the origin opens its live robots.txt in
+  the browser. A row's menu: open its robots.txt, open robots.txt in the browser, copy the origin, copy the row.
 - Only the last answer is kept: an origin whose last answer refuses nothing, with URLs stored as refused, says
   they were refused earlier.
 - Open an origin for its file, with line numbers, as text: the group the crawl obeyed is marked, the others are
   quiet, and each rule says how many URLs it blocked.
 - Beside it, the blocked URLs, each with the line that decided it. Choosing a rule marks it and lists what it
-  blocked; moving through the URLs shows each one's line. A URL opens the inspector.
+  blocked; moving through the URLs shows each one's line. A URL is a link that opens the inspector. The rule in a
+  URL's "Blocked by" is a link that shows its line in the file (the list stays as it is), and the file's Sitemap
+  line is a link to that sitemap's page when the crawl has the sitemap.
 - A crawl told to ignore robots.txt says so at the top, and is never said to have obeyed a file, a line or a rule.
 - In a short window (200% zoom) the screen scrolls: the origins keep five rows, or all there are, with what each
   blocked straight after the origin where not every column fits; the file and its blocked URLs stack, and the
-  blocked URLs keep five rows.
+  blocked URLs keep five rows. Stacked (1280 x 720 too), the file's box is as tall as its lines, up to its pane's
+  height, so a short file leaves the blocked URLs in view. Side by side, each pane scrolls what it holds.
 - A sitemap or an origin the crawl doesn't have: "not so far" while the crawl hasn't ended (the page fills in if it
   gets there), a stale link once it has.
 
 **URL inspector tabs.**
 
-- Summary: status, indexability and why, title, description, H1, canonical, word count, timings.
+- Summary: status, indexability and why, title, description, H1, canonical, word count, timings. Every count and
+  name in it that stands for a list is a link to that list: "Inlinks 257 links" and "Outlinks 27 links" (the tabs'
+  own totals, then the hyperlinks among them) open those sections, the count of issues opens Issues, a check's name
+  its page on Issues, the robots.txt rule that blocks the URL ("Blocked by `Disallow: /private/`, line 2 of its
+  robots.txt") that origin's file, "Found on" the page that linked to it (on its Outlinks, at the link). "In a
+  sitemap" names the sitemaps ("Yes: extra.xml", then "and 2 more"), each a link to its own page with the URL still
+  open; a page no sitemap lists that the analysis says should be leads to the pages missing from the sitemaps.
+  An image is shown as an image: its picture, what the file is (size, type, pixels) and "Used on 3 pages: /page/"
+  (a hop to that page's Images, the image first; the rest in Inlinks), with no indexability checklist; issues filed
+  on the pages that show it are listed as that ("1 issue, filed on the page that shows it"), never "No issues".
 - Issues.
-- Inlinks and outlinks.
+- Inlinks and outlinks. A list of up to 1,000 links comes whole, ordered: the link you came for (first, marked, and
+  said over the list), then the broken ones, then the rest as the crawl found them; a Status menu beside Kind narrows
+  it to the broken links or the redirects. A longer list is paged as found, narrowed by kind alone. A click on an
+  inlink's page hops to that page's Outlinks, with its link to the URL you left first; its open-in-browser opens the
+  page at the link's anchor text. In a narrow sheet each link is two lines (the URL over its anchor and position).
+- Images: the page's image files, the largest first (the one you came from first, where you came from an image).
 - Redirects, drawn hop by hop.
 - Headers.
 - Structured data.
@@ -390,13 +442,19 @@ always on a selected row; it's no Tab stop (Shift+Enter is its key) and a press 
      Continue asks for them.
 3. **Triage.**
    - From "Fix first", or Issues, pick a check. Read what, why and how to fix it, then look at its groups.
-   - Open a group's URLs, and press Enter on one for the inspector.
-   - Esc closes it, and Alt+Left goes back to where you were.
-4. **Inspect a URL.** From any row (Enter or double-click), or the palette ("Go to URL…"). Its inlinks and outlinks
-   are links themselves, so you can walk the site, and back and forward retrace your steps. Moving the grid's cursor
-   moves the inspector with it, in place. Esc closes it to the view as it was before it opened, however far you walked.
+   - Open a group's URLs, and click one's URL (or press Enter on it) for the inspector.
+   - Esc closes it, as Back (Alt+Left) does: the check as it was, its group, row and scroll kept. Opening the
+     inspector is one place in history, whatever is done inside it.
+4. **Inspect a URL.** From any row (a click on its URL, Enter or a double-click), or the palette ("Go to URL…").
+   Opening it is one new place in history. Its inlinks and outlinks are links themselves, so you can walk the site:
+   each hop is in place, and a strip at the top of the inspector ("← Back to /page/") retraces the hops one at a
+   time, each on the section it was left on, with the keyboard back in the list it was made from. An inlink hops to
+   the page that holds the link, on its Outlinks, with that link first and marked: from a 404 to the link to fix is
+   two clicks (the 404's Inlinks, the page). Moving the grid's cursor moves the inspector with it, in place. Back
+   and Esc both close it to the view as it was before it opened, however far you walked; forward opens it again.
    "Go to URL…" takes a URL or a path on the site; from a view without an inspector (Overview, the crawl's settings)
-   it opens the crawl's URLs with the inspector on it. The sections are tabs, and the one you're on stays as you walk.
+   it opens the crawl's URLs with the inspector on it. The sections are tabs, and the one you're on stays as you walk
+   an outlink.
 5. **Hand over.**
    - On any grid, Export (Ctrl+E) offers CSV or Excel of what you see: these filters, these columns.
    - On Issues, it offers this check, or every check with a summary sheet.
@@ -475,8 +533,10 @@ read the Summary, open a problem and send its list on, or open the report. They 
 | Keys | Action |
 | --- | --- |
 | Left and Right on the tabs | The section before or after |
-| Enter on a link's row | Walk to that URL |
-| Alt+Left, Alt+Right | Back and forward along the walk |
+| Enter on a link's row | Walk to that URL, in place (an inlink's page: on its Outlinks, at the link) |
+| The "Back to" strip at its top | Back along the walk, a hop a press |
+| Shift+Enter on an inlink's row | Open its page in the browser at the link's anchor text |
+| Alt+Left | Close it: history goes back to the view as it was before it opened (Alt+Right opens it again) |
 | Esc | Close it, to the view as it was before it opened |
 | Ctrl+F in Source | Search the HTML |
 | Enter, Shift+Enter in the search | The next match, the one before |
@@ -489,7 +549,7 @@ With focus in the HTML itself (Source's viewer, which has a caret and can't be t
 | Arrows, Home, End, Page Up, Page Down, Ctrl+Home, Ctrl+End; with Shift | The viewer's | Move the caret; select |
 | Ctrl+A, Ctrl+C | The viewer's | Select all of the HTML; copy the selection |
 | Ctrl+F | The section's | Its search field |
-| Alt+Left, Alt+Right | The app's | Back and forward (on macOS too, where a text field keeps Option+arrows) |
+| Alt+Left, Alt+Right | The app's | Back (which closes the inspector) and forward (on macOS too, where a text field keeps Option+arrows) |
 | Esc | The app's | Close the inspector, whatever is selected |
 | Ctrl+K, `?`, F7, F8, Ctrl+1 to Ctrl+7, Ctrl+N, Ctrl+O, Ctrl+, | The app's | As everywhere |
 | Letters and other typing keys | Nobody's | Nothing: a screen's single-letter keys (Issues' J and K) wait for focus outside the HTML |
@@ -502,10 +562,13 @@ With focus in the HTML itself (Source's viewer, which has a caret and can't be t
 | Right, Left | The tree, on a sitemap index | Open it, close it; Left on a sitemap under one goes up to it |
 | Enter | The tree | Open the sitemap, or the count the cursor is on |
 | Enter | The origins | Open the origin's file |
+| Shift+Enter | The tree, the origins | Open the sitemap, or the origin's live robots.txt, in the browser |
+| Shift+F10, the menu key | The tree, the origins | The row's menu: open it, open it in the browser, copy its URL |
 | Enter | A sitemap's URLs, the blocked URLs | Inspect |
 | Ctrl+F | One sitemap | Search its URLs |
 | Ctrl+F | One origin's page: the file, the blocked URLs, the title | Search the file; Enter and Shift+Enter step through the matches |
 | Enter | The file, with the caret on a rule that blocked URLs | List the URLs it blocked |
+| Enter | The file, with the caret on a Sitemap line the crawl has | Open that sitemap's page |
 | Ctrl+Shift+C | One origin's file | Copy the blocked URLs listed |
 
 The file is the source viewer: with focus in it, the keys are those of the HTML source above.

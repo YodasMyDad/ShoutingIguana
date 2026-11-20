@@ -3,42 +3,60 @@ import type { LinkGroup } from '../../api/grids';
 import { GROUP_LEAST, MEASURED_GROUPS, fittedGroupWidths, groupColumnNeeds } from './groupColumns';
 
 const SHOWN = ['target', 'status', 'pages', 'links', 'text', 'where'];
-const WIDTHS = { status: 128, pages: 112, links: 96, text: 216, where: 256 };
-const FIXED = 128 + 112 + 96;
+const WIDTHS = { status: 128, pages: 280, links: 80, text: 216, where: 256 };
+const FIXED = 128 + 80;
 const total = (widths: Record<string, number>) => Object.values(widths).reduce((sum, width) => sum + width, 0);
 
 describe('the grouped Links grid’s column widths', () => {
-  it('give a target’s address what it needs while the anchor text and the places can give it room', () => {
-    // As gallery 6.1 had it at 1440 px: the address wanted 380, the old target column got the 308 the rest left.
-    const widths = fittedGroupWidths(SHOWN, WIDTHS, 1116, { target: 380, text: 260, where: 380 });
+  it('give a target’s address and the page that links to it what they need while the text and the places can give room', () => {
+    const widths = fittedGroupWidths(SHOWN, WIDTHS, 1316, { target: 380, pages: 300, text: 260, where: 380 });
+    // Neither address is cut in the middle while the grid has room for it.
     expect(widths.target).toBe(380);
+    expect(widths.pages).toBe(300);
     expect(widths.text).toBeGreaterThanOrEqual(GROUP_LEAST.text);
     expect(widths.where).toBeGreaterThanOrEqual(GROUP_LEAST.where);
     // The places want more past their least than the text does, so they get more of what's left.
     expect(widths.where).toBeGreaterThan(widths.text!);
-    expect(total(widths)).toBeLessThanOrEqual(1116);
-    expect(total(widths)).toBeGreaterThan(1116 - 3);
-    // The counts and the status keep their own widths.
-    expect([widths.status, widths.pages, widths.links]).toEqual([128, 112, 96]);
+    expect(total(widths)).toBeLessThanOrEqual(1316);
+    expect(total(widths)).toBeGreaterThan(1316 - 3);
+    // The count and the status keep their own widths.
+    expect([widths.status, widths.links]).toEqual([128, 80]);
   });
 
-  it('give each what it needs with room for all, and the rest to the target', () => {
-    const widths = fittedGroupWidths(SHOWN, WIDTHS, 1400, { target: 300, text: 200, where: 260 });
-    expect([widths.text, widths.where]).toEqual([200, 260]);
-    expect(widths.target).toBe(1400 - FIXED - 200 - 260);
+  // The UX round's D-03 and rule 8. It used to be "the rest to the target": the page that holds the link then sat
+  // 1,300 px from its target in a wide window, across blank space.
+  it('give each what it needs with room for all, and the rest to the last column: each starts where the one before ends', () => {
+    const widths = fittedGroupWidths(SHOWN, WIDTHS, 1800, { target: 300, pages: 250, text: 200, where: 260 });
+    expect([widths.target, widths.pages, widths.text]).toEqual([300, 250, 200]);
+    expect(widths.where).toBe(1800 - FIXED - 300 - 250 - 200);
   });
 
-  it('cut the address only past the others’ least, and give each its least with less room still', () => {
-    const short = fittedGroupWidths(SHOWN, WIDTHS, FIXED + 600, { target: 500, text: 260, where: 380 });
-    expect(short).toMatchObject({ target: 600 - GROUP_LEAST.text - GROUP_LEAST.where, text: 140, where: 152 });
-    const narrow = fittedGroupWidths(SHOWN, WIDTHS, FIXED + 300, { target: 500, text: 260, where: 380 });
-    expect(narrow).toMatchObject({ target: 220, text: 140, where: 152 });
+  it('cut the addresses only past the others’ least, the target’s last, and give each its least with less room still', () => {
+    const short = fittedGroupWidths(SHOWN, WIDTHS, FIXED + 800, { target: 500, pages: 400, text: 260, where: 380 });
+    // The target is what the row is: it has what there is past the others' least before the page that links to it.
+    expect(short).toMatchObject({
+      target: 800 - GROUP_LEAST.pages - GROUP_LEAST.text - GROUP_LEAST.where,
+      pages: 200,
+      text: 140,
+      where: 152,
+    });
+    // With room for the target whole, the page has the rest of it (e2e: a target is whole at 1440 px).
+    const roomy = fittedGroupWidths(SHOWN, WIDTHS, FIXED + 928, { target: 404, pages: 350, text: 260, where: 380 });
+    expect(roomy).toMatchObject({ target: 404, pages: 928 - 404 - 140 - 152, text: 140, where: 152 });
+    const narrow = fittedGroupWidths(SHOWN, WIDTHS, FIXED + 300, { target: 500, pages: 400, text: 260, where: 380 });
+    expect(narrow).toMatchObject({ target: 220, pages: 200, text: 140, where: 152 });
+  });
+
+  it('give a column no more than its values take, short of room: the addresses have what it leaves', () => {
+    // The garden crawl's broken links at 1280 px: every link sits in "Content", which doesn't take the 152 px it had.
+    const widths = fittedGroupWidths(SHOWN, WIDTHS, FIXED + 764, { target: 600, pages: 393, text: 274, where: 79 });
+    expect(widths).toMatchObject({ target: 764 - 200 - 140 - 88, pages: 200, text: 140, where: 88 });
   });
 
   it('want the default widths for columns with nothing in view', () => {
-    const widths = fittedGroupWidths(SHOWN, WIDTHS, 1116, {});
-    expect([widths.text, widths.where]).toEqual([216, 256]);
-    expect(widths.target).toBe(1116 - FIXED - 216 - 256);
+    const widths = fittedGroupWidths(SHOWN, { ...WIDTHS, target: 420 }, 1516, {});
+    expect([widths.target, widths.pages, widths.text]).toEqual([420, 280, 216]);
+    expect(widths.where).toBe(1516 - FIXED - 420 - 280 - 216);
   });
 });
 
@@ -70,6 +88,29 @@ describe('what the grouped grid’s columns need', () => {
     expect(needs.target).toBe(230 + 24 + 34 + 26);
     expect(needs.text).toBe(40 + 24);
     expect(needs.where).toBeGreaterThan(24);
+    // The pages that link to them aren't read yet: that column wants its default.
+    expect(needs.pages).toBeUndefined();
+  });
+
+  it('measure the page that links to a target as it shows, with “+3 more” and the open button beside it', () => {
+    const pages = new Map([
+      [1, 'https://example.com/blog/'],
+      [2, 'https://example.com/a-longer-page/'],
+    ]);
+    const needs = groupColumnNeeds(
+      [group({ id: 1, pages: 4 }), group({ id: 2 }), group({ id: 3 })],
+      false,
+      'https://example.com',
+      measure,
+      (target) => pages.get(target.id),
+    );
+    // "/a-longer-page/" (15) is the widest; "/blog/" with "+3 more" is 60 + 8 + 70.
+    expect(needs.pages).toBe(150 + 24 + 26);
+    expect(
+      groupColumnNeeds([group({ id: 1, pages: 4 })], false, 'https://example.com', measure, (target) =>
+        pages.get(target.id),
+      ).pages,
+    ).toBe(60 + 8 + 70 + 24 + 26);
   });
 
   it('measure the groups a window shows of the view’s first, not one long address further down', () => {

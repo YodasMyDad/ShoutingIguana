@@ -142,7 +142,8 @@ test('every grid’s URL opens in the browser from its button and from Shift+Ent
 
   // In forced colours it still shows, in the link colour, on the selected row.
   await page.emulateMedia({ forcedColors: 'active' });
-  await grid.locator('[role="row"][aria-rowindex="3"] [role="gridcell"]').first().click();
+  // A cell that isn't the URL's: the URL's own text is a link that opens the inspector.
+  await grid.locator('[role="row"][aria-rowindex="3"] [role="gridcell"]').nth(1).click();
   await page.mouse.move(0, 0);
   const selected = grid.locator('[role="row"][data-selected]').first().locator('.si-url__open').first();
   await expect(selected).toBeVisible();

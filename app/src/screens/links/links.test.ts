@@ -11,20 +11,26 @@ import {
   DEFAULT_LINK_COLUMNS,
   endStatusWords,
   endUrls,
+  endsAtOf,
+  endsAtWords,
+  foldedLinkColumns,
   isLinkColumn,
+  linkExportShown,
+  linkFactsWords,
+  sourceAtLink,
+  unfoldedLinkColumns,
   linkChooserGroups,
   linkFilterColumns,
   linkFollowWords,
   linkGridColumns,
   linkQueryColumns,
-  fittedLinkWidths,
-  linkColumnNeeds,
-  sharedUrlWidth,
   shownLinkColumns,
 } from './linkColumns';
-import { allInLinksWords, linksOfUrl } from './linkPlaces';
+import { allInLinksWords, linkArrival, linksOfUrl } from './linkPlaces';
 import {
+  ENDS_AT_COLUMN,
   FOLLOW_COLUMN,
+  LINK_FACTS_COLUMN,
   linkColumnGroup,
   linkColumnName,
   linkColumnShortName,
@@ -33,7 +39,15 @@ import {
   linkValueName,
   urlIdsNamed,
 } from './linkWords';
-import { ALL_LINKS, LINK_PRESETS, activePreset, sameFilters, sortShown } from './presets';
+import {
+  ALL_LINKS,
+  LINK_PRESETS,
+  REDIRECT_COLUMNS,
+  activePreset,
+  presetSearch,
+  sameFilters,
+  sortShown,
+} from './presets';
 import { passReason, slowReadWords } from './readCost';
 import { analysisNote, noLinksWords, noMatchWords } from './states';
 
@@ -145,7 +159,9 @@ describe('the links’ words', () => {
     expect(sentence({ column: 'from.isInternal', op: 'is', value: true })).toBe('Source is on this site');
     expect(sentence({ column: 'noFollow', op: 'is', value: true })).toBe('Nofollow is yes');
     expect(sentence({ column: 'to.id', op: 'eq', value: 4 })).toBe('Target URL is /gone');
-    expect(sentence({ column: 'selfLink', op: 'is', value: false })).toBe('Link doesn’t lead to its own page');
+    // The UX round's D-16: no "Link doesn't lead to its own page" to decode.
+    expect(sentence({ column: 'selfLink', op: 'is', value: false })).toBe('Not counting a page’s links to itself');
+    expect(sentence({ column: 'selfLink', op: 'is', value: true })).toBe('Only a page’s links to itself');
     expect(sentence({ column: 'to.responseMs', op: 'gte', value: 1000 })).toBe(
       'Target response time is at least 1,000 ms',
     );
@@ -274,6 +290,18 @@ describe('the links’ presets', () => {
       activePreset([...noText.filters, { column: 'position', op: 'in', values: ['footer'] }], undefined),
     ).toBeNull();
     expect(activePreset([], 'rattan')).toBeNull();
+  });
+
+  it('Links to redirects shows where each target ends, and gives the columns back when another view is chosen', () => {
+    const redirects = LINK_PRESETS.find((preset) => preset.id === 'redirects')!;
+    expect(redirects.columns).toBe(REDIRECT_COLUMNS);
+    expect(REDIRECT_COLUMNS).toEqual(['from.url', 'to.url', 'to.statusCode', ENDS_AT_COLUMN, 'text', 'position']);
+    expect(REDIRECT_COLUMNS.every((id) => isLinkColumn(id, LINK_COLUMNS))).toBe(true);
+    expect(presetSearch(redirects, {}).cols).toEqual([...REDIRECT_COLUMNS]);
+    const broken = LINK_PRESETS.find((preset) => preset.id === 'broken')!;
+    expect(presetSearch(broken, { cols: [...REDIRECT_COLUMNS] }).cols).toBeUndefined();
+    // Columns of the user's own choosing stay.
+    expect(presetSearch(broken, { cols: ['to.url', 'text'] }).cols).toEqual(['to.url', 'text']);
   });
 
   it('keeps a sort only while its column is shown', () => {
@@ -506,8 +534,9 @@ describe('the links’ columns', () => {
       'to.id',
       'from.url',
       'to.url',
-      'text',
       'kind',
+      'text',
+      'imageLink',
       'position',
       'followed',
       'noFollow',
@@ -518,6 +547,20 @@ describe('the links’ columns', () => {
       'to.fetched',
       'to.statusClass',
     ]);
+    // Whatever is shown, what the page a link is on needs to open at the link: the link's kind and its words, and
+    // whether those are an image's alt text (which a browser can't find on the page).
+    expect(linkQueryColumns(['to.url'])).toEqual([
+      'from.id',
+      'to.id',
+      'from.url',
+      'to.url',
+      'kind',
+      'text',
+      'imageLink',
+    ]);
+    // The "Ends at" column is drawn from the target's redirect chain.
+    expect(linkQueryColumns(['to.url', ENDS_AT_COLUMN])).toContain('to.redirectChain');
+    expect(linkQueryColumns(['to.url', ENDS_AT_COLUMN])).not.toContain(ENDS_AT_COLUMN);
     // Every column asked for is one the engine has.
     const answer = answerLinkQuery(
       rows,
@@ -544,6 +587,97 @@ describe('the links’ columns', () => {
     expect(endStatusWords({ id: 1, 'to.statusCode': null, 'to.outcome': 'timeout', 'to.fetched': true }, 'to')).toBe(
       'Timed out',
     );
+  });
+
+  it('opens the page a link is on at the link’s own words, where a browser can find them', () => {
+    const link: LinkRow = {
+      id: 1,
+      kind: 'hyperlink',
+      text: 'Buy Now',
+      'from.url': 'https://example.com/blog/best-rattan-patio-sets/',
+    };
+    expect(sourceAtLink(link)).toBe('https://example.com/blog/best-rattan-patio-sets/#:~:text=Buy%20Now');
+    // No words, an image's alt text (it isn't on the page to find), and a link that isn't a hyperlink: the page itself.
+    expect(sourceAtLink({ ...link, text: null })).toBeUndefined();
+    expect(sourceAtLink({ ...link, imageLink: true })).toBeUndefined();
+    expect(sourceAtLink({ ...link, kind: 'image', text: 'A sofa' })).toBeUndefined();
+    expect(sourceAtLink({ id: 2, kind: 'hyperlink', text: 'x' })).toBeUndefined();
+  });
+
+  it('marks the URLs and the anchor as the columns that take their width from what they hold', () => {
+    const columns = linkGridColumns(DEFAULT_LINK_COLUMNS, LINK_COLUMNS, {
+      siteOrigin: 'https://example.com',
+      onOpen: () => undefined,
+      sort: [],
+    });
+    const fit = Object.fromEntries(columns.map((column) => [column.id, column.fit]));
+    expect(fit).toEqual({
+      'from.url': 'url',
+      'to.url': 'url',
+      text: 'text',
+      kind: 'value',
+      position: 'value',
+      follow: 'value',
+      'to.statusCode': 'value',
+    });
+    // A URL is measured as it shows: its path on the crawl's own site.
+    const source = columns[0]!;
+    expect(source.fitText?.({ id: 1, 'from.url': 'https://example.com/blog/' })).toBe('/blog/');
+    expect(source.fitExtra).toBeGreaterThan(0);
+  });
+
+  it('folds kind, position and follow into one column where the grid is narrow', () => {
+    expect(foldedLinkColumns(DEFAULT_LINK_COLUMNS, false)).toBe(DEFAULT_LINK_COLUMNS);
+    const folded = foldedLinkColumns(DEFAULT_LINK_COLUMNS, true);
+    expect(folded).toEqual(['from.url', 'to.url', 'text', LINK_FACTS_COLUMN, 'to.statusCode']);
+    // Only the three together: a view without one of them keeps its columns.
+    const without = ['from.url', 'kind', 'position'];
+    expect(foldedLinkColumns(without, true)).toBe(without);
+    // The route and the chooser never see it: a new order of the drawn columns is of the three again.
+    expect(unfoldedLinkColumns(['to.url', LINK_FACTS_COLUMN, 'from.url'])).toEqual([
+      'to.url',
+      'kind',
+      'position',
+      FOLLOW_COLUMN,
+      'from.url',
+    ]);
+    const link: LinkRow = { id: 1, kind: 'hyperlink', position: 'content', followed: true };
+    expect(linkFactsWords(link)).toBe('Hyperlink · Content · Followed');
+    expect(linkFactsWords({ id: 2, kind: 'stylesheet', position: 'head', followed: null })).toBe('Stylesheet · Head');
+    const [column] = linkGridColumns([LINK_FACTS_COLUMN], LINK_COLUMNS, {
+      siteOrigin: null,
+      onOpen: () => undefined,
+      sort: [],
+    });
+    expect(column?.header).toBe('Kind · Position · Follow');
+    expect(column?.fit).toBe('value');
+    expect(column?.text(link)).toBe('Hyperlink · Content · Followed');
+  });
+
+  it('says where a redirecting target ends, how that answered, and how it got there', () => {
+    const end = { id: 69, url: 'https://example.com/thin', statusCode: 200, outcome: 'success' as const };
+    const hop = (via: 'http' | 'metaRefresh', id = 69) => ({ ...end, id, via });
+    const chain = (hops: unknown[]) =>
+      ({ 'to.redirectChain': { hops, final: end, loop: false, tooLong: false } }) as unknown as Partial<LinkRow>;
+    const chained: LinkRow = { id: 1, ...chain([hop('http', 3), hop('http', 4), hop('http')]) };
+    expect(endsAtOf(chained)).toEqual({ ...end, note: '3 hops' });
+    // A target that answered 200 and is in "Links to redirects": a meta refresh sent it on, and the row says so.
+    const refreshed: LinkRow = { id: 2, ...chain([hop('metaRefresh')]) };
+    expect(endsAtOf(refreshed)?.note).toBe('meta refresh');
+    expect(endsAtWords(refreshed)).toBe('https://example.com/thin 200 · meta refresh');
+    // A target that doesn't redirect ends nowhere else.
+    expect(endsAtOf({ id: 3 })).toBeNull();
+    expect(endsAtOf({ id: 4, ...chain([]) })).toBeNull();
+    expect(endsAtWords({ id: 3 })).toBe('');
+    // It's a column of the grid's own, of the target, made of the engine's; an export writes the engine's.
+    expect(isLinkColumn(ENDS_AT_COLUMN, LINK_COLUMNS)).toBe(true);
+    expect(linkColumnName(ENDS_AT_COLUMN)).toBe('Target ends at');
+    expect(linkColumnShortName(ENDS_AT_COLUMN)).toBe('Ends at');
+    expect(linkColumnGroup(ENDS_AT_COLUMN)).toBe('to');
+    expect(linkExportShown(['to.url', ENDS_AT_COLUMN])).toEqual(['to.url', 'to.finalUrl', 'to.finalStatusCode']);
+    expect(
+      linkChooserGroups(LINK_COLUMNS, true)[2]!.columns.filter((column) => column.name === 'Ends at'),
+    ).toHaveLength(1);
   });
 
   it('says whether a link is followed, then its other flags', () => {
@@ -599,75 +733,6 @@ describe('the links’ columns', () => {
       'Target status',
       'Follow',
     ]);
-  });
-
-  it('shares the grid’s room between the URL columns, never under their least', () => {
-    expect(sharedUrlWidth(DEFAULT_LINK_COLUMNS, LINK_COLUMNS, null)).toBeUndefined();
-    expect(sharedUrlWidth(['text', 'kind'], LINK_COLUMNS, 1_000)).toBeUndefined();
-    const wide = sharedUrlWidth(DEFAULT_LINK_COLUMNS, LINK_COLUMNS, 1_600)!;
-    const columns = linkGridColumns(DEFAULT_LINK_COLUMNS, LINK_COLUMNS, {
-      siteOrigin: null,
-      onOpen: () => undefined,
-      sort: [],
-      urlWidth: wide,
-    });
-    const used = columns.reduce((sum, column) => sum + column.width, 0);
-    expect(used).toBeLessThanOrEqual(1_600);
-    expect(used).toBeGreaterThan(1_598);
-    expect(sharedUrlWidth(DEFAULT_LINK_COLUMNS, LINK_COLUMNS, 600)).toBe(160);
-    // The default view fits a 1280 px window beside the sidebar.
-    expect(sharedUrlWidth(DEFAULT_LINK_COLUMNS, LINK_COLUMNS, 980)).toBeGreaterThanOrEqual(160);
-  });
-
-  it('gives the URLs and the anchor the room their values in view take, before cutting any URL in the middle', () => {
-    // The garden crawl's broken link at 1,440 px: two paths of about 30 characters, a short anchor, and the room the
-    // grid has beside the sidebar.
-    const shown = DEFAULT_LINK_COLUMNS;
-    const page: LinkRow[] = [
-      {
-        id: 1,
-        'from.url': 'https://www.example.co.uk/blog/best-rattan-patio-sets/',
-        'to.url': 'https://www.example.co.uk/3-pieces-patio-furniture-set/',
-        kind: 'hyperlink',
-        text: 'Buy Now',
-      },
-    ];
-    // A character of a URL as 7.25 px, of text as 7 px: the grid's fonts, near enough.
-    const measure = (text: string, face: 'url' | 'text') => text.length * (face === 'url' ? 7.25 : 7);
-    const needs = linkColumnNeeds(page, shown, 'https://www.example.co.uk', measure);
-    const widths = fittedLinkWidths(shown, LINK_COLUMNS, 1_116, {}, needs)!;
-    // Each URL whole, with its cell's padding and the open button's room.
-    expect(widths['from.url']).toBeGreaterThanOrEqual(needs['from.url']!);
-    expect(widths['to.url']).toBeGreaterThanOrEqual(needs['to.url']!);
-    // "Buy Now" doesn't take 176 px the paths could use; and the columns fill the grid, no more.
-    expect(widths.text).toBeLessThan(176);
-    const columns = linkGridColumns(shown, LINK_COLUMNS, {
-      siteOrigin: null,
-      onOpen: () => undefined,
-      sort: [],
-      widths,
-    });
-    const used = columns.reduce((sum, column) => sum + column.width, 0);
-    expect(used).toBeLessThanOrEqual(1_116);
-    expect(used).toBeGreaterThan(1_110);
-
-    // Short of room, each URL is cut in proportion to what it wants past its least, never under it.
-    const long: LinkRow[] = [{ ...page[0]!, 'to.url': `https://www.example.co.uk/${'very-long-path/'.repeat(12)}` }];
-    const squeezed = fittedLinkWidths(
-      shown,
-      LINK_COLUMNS,
-      1_000,
-      {},
-      linkColumnNeeds(long, shown, 'https://www.example.co.uk', measure),
-    )!;
-    expect(squeezed['to.url']).toBeGreaterThan(squeezed['from.url']!);
-    expect(squeezed['from.url']).toBeGreaterThanOrEqual(160);
-    // A width the user gave a column is theirs; with nothing in view, the URLs share the room as they did.
-    expect(fittedLinkWidths(shown, LINK_COLUMNS, 1_116, { 'from.url': 400 }, needs)!['from.url']).toBeUndefined();
-    expect(fittedLinkWidths(DEFAULT_LINK_COLUMNS, LINK_COLUMNS, 1_600, {}, {})!['to.url']).toBe(
-      sharedUrlWidth(DEFAULT_LINK_COLUMNS, LINK_COLUMNS, 1_600),
-    );
-    expect(fittedLinkWidths(DEFAULT_LINK_COLUMNS, LINK_COLUMNS, null, {}, needs)).toBeUndefined();
   });
 
   it('offers every column to show, grouped, the follow column in place of the flags it shows', () => {
@@ -727,6 +792,19 @@ describe('the links’ columns', () => {
       ].join('\n'),
     });
     expect(endUrls(rows, 'from').count).toBe(3);
+  });
+});
+
+describe('where Links lands in the inspector', () => {
+  it('arrives on the link the row is, from either end', () => {
+    // The page a link is on: its outlinks, with the link's target marked. The target: its inlinks, with the page.
+    expect(linkArrival('from', 8)).toEqual({ section: 'outlinks', link: 8 });
+    expect(linkArrival('to', 2)).toEqual({ section: 'inlinks', link: 2 });
+    // The cursor moving an inspector that's open marks the row's link, and leaves the tab the reader chose.
+    expect(linkArrival('from', 8, true)).toEqual({ link: 8 });
+    // With no link to arrive on (where a redirect ends), the inspector opens as it would from anywhere.
+    expect(linkArrival('to', undefined)).toBeUndefined();
+    expect(linkArrival('to', undefined, true)).toBeUndefined();
   });
 });
 

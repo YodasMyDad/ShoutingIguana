@@ -48,10 +48,23 @@ function viewOf(page: Page): { filters: Filter[]; search: string | undefined } {
   };
 }
 
-const FACETS = ['status', 'status code', 'indexability', 'type', 'depth', 'response time', 'sitemaps', 'issues'];
+const FACETS = ['status class', 'status code', 'indexability', 'type', 'depth', 'response time', 'sitemaps', 'issues'];
 /** Facets whose values can overlap: a URL with an error and a warning counts under both. */
 const OVERLAPPING = new Set(['issues']);
-const PRESETS = ['Overview', 'Indexability', 'Content', 'Performance', 'Links'];
+/** The site's pages, and the redirects: the filters three of the tabs bring with their columns. */
+const PAGES: Filter[] = [
+  { column: 'type', op: 'in', values: ['page'] },
+  { column: 'isInternal', op: 'is', value: true },
+];
+const REDIRECTS: Filter[] = [{ column: 'statusClass', op: 'in', values: ['3xx'] }];
+const PRESETS: [name: string, filters: Filter[]][] = [
+  ['Overview', []],
+  ['Indexability', PAGES],
+  ['Content', PAGES],
+  ['Redirects', REDIRECTS],
+  ['Performance', []],
+  ['Links', []],
+];
 const FULL = process.env.SI_E2E_CRAWL !== undefined || process.env.SI_E2E_SWEEP === 'full';
 
 let figures = 0;
@@ -63,7 +76,11 @@ async function sweepFacets(page: Page, view: string) {
     const button = main(page).getByRole('button', { name: `Filter by ${facet}`, exact: true });
     await button.click();
     const menu = page.getByRole('menu');
-    const heading = menu.getByText(/, of [\d,]+ URLs?$/);
+    // Indexability is a page's: its values are tick-boxes, counted among the view's pages (a view that names no type
+    // is narrowed to pages by a value), with every reason at once offered first.
+    const ofPages = facet === 'indexability';
+    const role = ofPages ? 'menuitemcheckbox' : 'menuitem';
+    const heading = menu.getByText(ofPages ? /, of [\d,]+ pages?$/ : /, of [\d,]+ URLs?$/);
     // A facet the analysis counts, on a crawl without one, says so: nothing to land on.
     const unavailable = menu.getByText(/^Counted by the analysis/);
     await expect(heading.or(unavailable), `${view}: ${facet}`).toBeVisible({ timeout: 60_000 });
@@ -71,8 +88,10 @@ async function sweepFacets(page: Page, view: string) {
       await page.keyboard.press('Escape');
       continue;
     }
-    expect(number((await heading.innerText()).split(', of ')[1] ?? ''), `${view}: ${facet}`).toBe(inView);
-    const values = await menu.getByRole('menuitem').evaluateAll((items) =>
+    const menuOf = number((await heading.innerText()).split(', of ')[1] ?? '');
+    if (ofPages) expect(menuOf, `${view}: ${facet} counts no more than the view`).toBeLessThanOrEqual(inView);
+    else expect(menuOf, `${view}: ${facet}`).toBe(inView);
+    const values = await menu.getByRole(role).evaluateAll((items) =>
       items.map((item) => ({
         words: item.querySelector('.si-menu-item__label')?.textContent ?? '',
         count: Number(
@@ -81,7 +100,17 @@ async function sweepFacets(page: Page, view: string) {
         applied: item.getAttribute('aria-disabled') === 'true',
       })),
     );
-    if (!OVERLAPPING.has(facet)) {
+    if (ofPages) {
+      // The values add up to no more than the pages counted (a page not crawled has no indexability to tick), and
+      // "Not indexable (any reason)" is every value but "Indexable".
+      const reasons = values.filter((value) => !['Not indexable (any reason)', 'Indexable'].includes(value.words));
+      const any = values.find((value) => value.words === 'Not indexable (any reason)');
+      if (any) expect(any.count, `${view}: every reason at once`).toBe(reasons.reduce((sum, v) => sum + v.count, 0));
+      expect(
+        values.filter((value) => value !== any).reduce((sum, value) => sum + value.count, 0),
+        `${view}: the ${facet} values add up to no more than the pages`,
+      ).toBeLessThanOrEqual(menuOf);
+    } else if (!OVERLAPPING.has(facet)) {
       // The Sitemaps menu's offer of the not-in-sitemap check's pages (the fix-it pass) is some of "In no sitemap" again.
       expect(
         values
@@ -99,9 +128,11 @@ async function sweepFacets(page: Page, view: string) {
         continue;
       }
       await button.click();
-      const item = page.getByRole('menu').getByRole('menuitem').nth(index);
+      const item = page.getByRole('menu').getByRole(role).nth(index);
       await expect(item.locator('.si-menu-item__label'), what).toHaveText(value.words);
       await item.click();
+      // A tick-box leaves its menu open for the next value.
+      if (ofPages) await page.keyboard.press('Escape');
       await expectShown(page, value.count, what);
       const landed = viewOf(page);
       expect(await counted(landed.filters, landed.search), `${what}, and the sidecar counts its view`).toBe(
@@ -122,8 +153,9 @@ test('every count on URLs lands on itself: the header, each preset, and every fa
   await expectShown(page, total, 'All URLs');
   figures++;
 
-  // A preset chooses columns: the count stays the view's.
-  for (const preset of PRESETS) {
+  // A tab chooses columns, and three bring filters with them (the site's pages, the redirects): the count is the
+  // engine's for those filters, and the view's own again on a tab that brings none.
+  for (const [preset, filters] of PRESETS) {
     await main(page)
       .getByRole('group', { name: 'Column presets' })
       .getByRole('button', { name: preset, exact: true })
@@ -131,7 +163,7 @@ test('every count on URLs lands on itself: the header, each preset, and every fa
     await expect(
       main(page).getByRole('group', { name: 'Column presets' }).getByRole('button', { name: preset, exact: true }),
     ).toHaveAttribute('aria-pressed', 'true');
-    await expectShown(page, total, preset);
+    await expectShown(page, filters.length > 0 ? await counted(filters) : total, preset);
     figures++;
   }
 

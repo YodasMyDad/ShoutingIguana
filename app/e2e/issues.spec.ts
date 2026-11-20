@@ -66,9 +66,8 @@ test('triage: pick a check, read it, open a group, its URLs, inspect one, then E
 
   const urls = page.getByRole('grid', { name: 'URLs' });
   await expect(urls.getByRole('row').nth(1)).toBeVisible();
-  // A row picked, then Enter: the inspector.
-  await urls.getByRole('gridcell').first().click();
-  await page.keyboard.press('Enter');
+  // A click on the URL's text opens the inspector. The rest of the cell only selects the row.
+  await urls.locator('.si-url__go').first().click();
   const inspector = page.getByRole('complementary', { name: 'Inspector' });
   await expect(inspector).toBeVisible();
   await expect(page).toHaveURL(/inspect=\d+/);
@@ -109,17 +108,21 @@ test('the inspector follows the URL grid’s cursor in place: Esc, then Alt+Left
   const urls = page.getByRole('grid', { name: 'URLs' });
   await expect(urls.getByRole('row').nth(2)).toBeVisible();
   const entries = await page.evaluate(() => history.length);
-  await urls.getByRole('gridcell').first().click();
-  await page.keyboard.press('Enter');
+  // A click on the URL's text opens the inspector: a new place, so Esc returns to this view. The click leaves the
+  // keyboard where it was, so the grid is focused before Down, which follows in place.
+  await urls.locator('.si-url__go').first().click();
   const inspector = page.getByRole('complementary', { name: 'Inspector' });
   await expect(inspector).toBeVisible();
+  expect(await page.evaluate(() => history.length)).toBe(entries + 1);
   const first = new URL(page.url()).searchParams.get('inspect');
+  await urls.focus();
   await page.keyboard.press('ArrowDown');
   await expect.poll(() => new URL(page.url()).searchParams.get('inspect')).not.toBe(first);
-  // Opening and following are in place: no new history entries.
-  expect(await page.evaluate(() => history.length)).toBe(entries);
+  // Following replaces the entry the open pushed. history.length does not shrink when Esc steps back off it.
+  expect(await page.evaluate(() => history.length)).toBe(entries + 1);
   await page.keyboard.press('Escape');
   await expect(inspector).toBeHidden();
+  await expect(page).not.toHaveURL(/inspect=/);
   await page.keyboard.press('Alt+ArrowLeft');
   await expect(page).toHaveURL(/\/issues\//);
 });
@@ -132,7 +135,8 @@ test('the inspector follows a flat check’s cursor in place: Esc, then Alt+Left
   await page.getByRole('option', { name: /Indexable page not in a sitemap/ }).click();
   const grid = page.getByRole('grid', { name: /Indexable page not in a sitemap: affected pages/ });
   await expect(grid.getByRole('row').nth(2)).toBeVisible();
-  await grid.getByRole('gridcell').first().click();
+  // This grid's URL is not a link: the cell selects the row, Enter opens the inspector, and the grid keeps the keys.
+  await grid.getByRole('row').nth(1).getByRole('gridcell').first().click();
   await page.keyboard.press('Enter');
   const inspector = page.getByRole('complementary', { name: 'Inspector' });
   await expect(inspector).toBeVisible();

@@ -1,7 +1,9 @@
 // One origin's robots.txt as the viewer shows it, and the link both ways between a blocked URL and the line that
 // decided it. The engine says what each line is, whether it's part of the group the crawl obeyed and how many URLs it
-// refused (docs/v2-sidecar-api.md, robots.txt): nothing is parsed or matched again here. Pure, so it's unit-tested.
-import type { RobotsBlockedQuery, RobotsBlockedUrl, RobotsFile, RobotsLine } from '../../api/grids';
+// refused (docs/v2-sidecar-api.md, robots.txt): nothing is parsed or matched again here, but for one thing the
+// engine doesn't give: the address a Sitemap line names, read from its text, to link the line to that sitemap's page.
+// Pure, so it's unit-tested.
+import type { RobotsBlockedQuery, RobotsBlockedUrl, RobotsFile, RobotsLine, Sitemap } from '../../api/grids';
 import { robotsOriginOf } from '../../inspector/placeLinks';
 import type { SourceLineMark } from '../../inspector/sourceLines';
 import { formatCount, formatCountOf } from '../../lib/format';
@@ -19,11 +21,46 @@ function nameEnd(text: string): number {
   return colon > 0 ? colon : 0;
 }
 
+/** The address a Sitemap line names: what follows its colon, a comment after it left out. Null when it names none. */
+export function sitemapLineUrl(text: string): string | null {
+  const colon = text.indexOf(':');
+  if (colon <= 0) return null;
+  const value = text
+    .slice(colon + 1)
+    .replace(/\s#.*$/, '')
+    .trim();
+  return value === '' ? null : value;
+}
+
+/** An address as a URL spells it (scheme and host in lower case), so two spellings of one address match. */
+function sameAddress(a: string, b: string): boolean {
+  if (a === b) return true;
+  try {
+    return new URL(a).href === new URL(b).href;
+  } catch {
+    return false;
+  }
+}
+
+/** The sitemap of the crawl's that a Sitemap line names, or undefined: another kind of line, or one it doesn't have. */
+export function sitemapOfLine<S extends Pick<Sitemap, 'id' | 'url'>>(
+  line: Pick<RobotsLine, 'kind' | 'text'>,
+  sitemaps: readonly S[],
+): S | undefined {
+  if (line.kind !== 'sitemap') return undefined;
+  const url = sitemapLineUrl(line.text);
+  return url === null ? undefined : sitemaps.find((sitemap) => sameAddress(sitemap.url, url));
+}
+
 /**
  * How the viewer draws each line: the group the crawl obeyed marked and the other groups quiet, a directive's name
- * set apart, a comment as one, why a line was ignored after it, and how many URLs a rule refused, as a link.
+ * set apart, a comment as one, why a line was ignored after it, and how many URLs a rule refused, as a link. A
+ * Sitemap line that names a sitemap the crawl has (`sitemaps`) is a link to that sitemap's page.
  */
-export function fileMarks(lines: readonly RobotsLine[]): SourceLineMark[] {
+export function fileMarks(
+  lines: readonly RobotsLine[],
+  sitemaps: readonly Pick<Sitemap, 'id' | 'url'>[] = [],
+): SourceLineMark[] {
   return lines.flatMap((line): SourceLineMark[] => {
     if (line.kind === 'blank') return [];
     const mark: SourceLineMark = { line: line.number };
@@ -44,6 +81,11 @@ export function fileMarks(lines: readonly RobotsLine[]): SourceLineMark[] {
     if (line.blocked !== null && line.blocked > 0) {
       mark.action = `Blocked ${formatCountOf(line.blocked, 'URL')}`;
       mark.actionTitle = `List the ${formatCountOf(line.blocked, 'URL')} line ${formatCount(line.number)} blocked`;
+    }
+    const sitemap = sitemapOfLine(line, sitemaps);
+    if (sitemap) {
+      mark.action = 'Open this sitemap';
+      mark.actionTitle = `Open ${sitemap.url} in Sitemaps`;
     }
     return [mark];
   });
@@ -180,6 +222,23 @@ export function emptyLineWords(file: Pick<RobotsFile, 'lines'> | undefined, numb
   return line.kind === 'allow' || line.kind === 'disallow'
     ? `Line ${at} blocked no URLs.`
     : `Line ${at} isn’t a rule, so it blocked no URLs.`;
+}
+
+// --------------------------------------------------------------------------------- The file's box where the panes stack
+
+/** A line of the file in the viewer, px, and what its box holds besides the lines: the search, the line under it, its padding. */
+export const FILE_LINE_PX = 18;
+const FILE_CHROME_PX = 108;
+/** The fewest lines' room the box keeps: what its empty state needs, where there's no text to show. */
+const FILE_MIN_LINES = 3;
+
+/**
+ * How tall the file's box is where the two panes stack (a narrow window), px: as tall as its lines, so a file of four
+ * lines doesn't hold a tall empty box over the blocked URLs. The styles never let it pass the pane's own height
+ * (`--robots-pane-height`), past which the file scrolls in its box as before.
+ */
+export function fileBoxHeight(lines: number): number {
+  return FILE_CHROME_PX + Math.max(lines, FILE_MIN_LINES) * FILE_LINE_PX;
 }
 
 // ------------------------------------------------------------------------------------------- The origin in the route

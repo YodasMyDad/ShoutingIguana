@@ -45,7 +45,10 @@ export const Synthetic: Story = {
   render: () => <ScreenApp path={`/crawls/${SYNTHETIC_CRAWL}/sitemaps`} crawlId={SYNTHETIC_CRAWL} />,
 };
 
-/** The list: an index and its sitemaps, one given in the settings, one the crawl can't say how it found. */
+/**
+ * The list: an index and its sitemaps, one given in the settings, one the crawl can't say how it found. A sitemap's
+ * name is a link and a click anywhere on its row opens it; one an index lists says "In /sitemap.xml".
+ */
 export const List: Story = {
   loaders: [() => own()],
   render: () => <ScreenApp path={LIST} />,
@@ -434,6 +437,21 @@ export const OneSitemapInspecting: Story = {
       ]),
   ],
   render: () => <ScreenApp path={`${LIST}/2?inspect=2`} />,
+};
+
+/**
+ * A link landed on one of its URLs (`?inspect=`, the inspector's "In a sitemap: Yes: pages.xml"): the grid starts on
+ * that URL's row, marked though the grid hasn't focus, and the inspector stays on it.
+ */
+export const OneSitemapLandedOnAUrl: Story = {
+  loaders: [
+    () =>
+      ownSidecar([
+        ...inspectorRoutes({ urls: { 4: testUrlDetail({ id: 4, url: `${SITE}/contact` }) } }),
+        ...sitemapsRobotsRoutes(),
+      ]),
+  ],
+  render: () => <ScreenApp path={`${LIST}/2?inspect=4`} />,
 };
 
 // ------------------------------------------------------------------------------------ What the review's fixes added

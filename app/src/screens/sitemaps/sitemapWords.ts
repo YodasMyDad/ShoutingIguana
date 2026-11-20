@@ -16,6 +16,7 @@ import { formatCount, formatCountOf } from '../../lib/format';
 import type { SentencePart } from '../countSentence';
 import { wholeSubtree, type Subtree } from './sitemapTree';
 import { ANSWERED_SITE_PAGES } from '../overview/links';
+import { urlDisplay } from '../../ui/urlText';
 
 export interface Words {
   /** A few words, for a cell or a badge. */
@@ -43,6 +44,16 @@ export function foundViaWords(foundVia: SitemapSource | null): Words {
           'The crawl can’t say how it found this sitemap: neither robots.txt, as it was last read, nor the crawl’s settings name it any more.',
       }
     : FOUND_VIA[foundVia];
+}
+
+/**
+ * A sitemap an index lists, by the index's name: "In /sitemap.xml", the name a link to the index. On every child,
+ * "Sitemap index" read as the row's type. The name is the index's path where it's on the crawl's own site, as the
+ * list shows it, else its whole address.
+ */
+export function foundInWords(indexUrl: string, siteOrigin: string | null | undefined): Words & { name: string } {
+  const name = urlDisplay(indexUrl, siteOrigin).shown;
+  return { name, short: `In ${name}`, sentence: `The sitemap index ${indexUrl} lists it.` };
 }
 
 /** No sitemap was declared, and the default location has none: said in place of "a sitemap couldn't be read". */
@@ -376,7 +387,9 @@ export function coverageOf(facets: FacetsPage): Coverage {
     known: true,
     missing: missing?.count ?? 0,
     pages: facets.matching,
-    filters: [...INDEXABLE_SITE_PAGES, missing?.filter ?? { column: 'inSitemap', op: 'is', value: false }],
+    // The check's own pages, which are these (the line and the check count the same): one chip in URLs that says
+    // what the list is, where the facets' filters were eight that had to be decoded (the UX audit, D-16).
+    filters: [{ column: 'check', op: 'in', values: [COVERAGE_CHECK] }],
   };
 }
 

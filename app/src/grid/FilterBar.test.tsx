@@ -86,3 +86,57 @@ describe('the filter bar, keeping its own editors', () => {
     expect(pattern).not.toBeInvalid();
   });
 });
+
+describe('the filter bar of a view whose search and sort clear with its filters', () => {
+  it('shows the search as a chip among the filters, removed where the filters are', async () => {
+    const onRemove = vi.fn();
+    render(
+      <FilterBar
+        filters={[AT_LEAST_400]}
+        onChange={vi.fn()}
+        words={WORDS}
+        onClear={vi.fn()}
+        clearsAll
+        search={{ field: 'URL or title', text: 'rattan', onRemove }}
+      />,
+    );
+    const bar = screen.getByRole('group', { name: 'Filters' });
+    expect(within(bar).getByText('URL or title')).toBeVisible();
+    expect(within(bar).getByText('rattan')).toBeVisible();
+    await userEvent.click(within(bar).getByRole('button', { name: /Remove the filter URL or title contains rattan/ }));
+    expect(onRemove).toHaveBeenCalledOnce();
+  });
+
+  it('offers “Clear all” while a search or a sort is all that narrows the view, and says what it clears', async () => {
+    const onClear = vi.fn();
+    const { rerender } = render(
+      <FilterBar filters={[]} onChange={vi.fn()} words={WORDS} onClear={onClear} clearsAll />,
+    );
+    // Nothing set: nothing to clear.
+    expect(screen.queryByRole('button', { name: 'Clear all' })).toBeNull();
+    rerender(<FilterBar filters={[]} onChange={vi.fn()} words={WORDS} onClear={onClear} clearsAll sorted />);
+    await userEvent.hover(screen.getByRole('button', { name: 'Clear all' }));
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'Clears the filters, the search and the sort. The columns stay.',
+    );
+    rerender(
+      <FilterBar
+        filters={[]}
+        onChange={vi.fn()}
+        words={WORDS}
+        onClear={onClear}
+        clearsAll
+        search={{ field: 'URL or title', text: 'rattan', onRemove: vi.fn() }}
+      />,
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Clear all' }));
+    expect(onClear).toHaveBeenCalledOnce();
+  });
+
+  it('stays “Clear filters”, shown with a filter only, for a view that clears just those', () => {
+    const { rerender } = render(<FilterBar filters={[]} onChange={vi.fn()} words={WORDS} onClear={vi.fn()} sorted />);
+    expect(screen.queryByRole('button', { name: /Clear/ })).toBeNull();
+    rerender(<FilterBar filters={[AT_LEAST_400]} onChange={vi.fn()} words={WORDS} onClear={vi.fn()} />);
+    expect(screen.getByRole('button', { name: 'Clear filters' })).toBeVisible();
+  });
+});

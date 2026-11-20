@@ -172,7 +172,9 @@ test('opens from the sidebar on every link, in crawl order, with what each is an
     grid(page)
       .getByRole('columnheader')
       .evaluateAll((cells) => cells.map((cell) => cell.textContent)),
-  ).resolves.toEqual(['Source URL', 'Target URL', 'Anchor or alt text', 'Kind', 'Position', 'Follow', 'Target status']);
+    // In this 1280 px window the link's kind, position and follow are one column, so the URLs keep the room (the UX
+    // round's D-17); a wider one shows the three.
+  ).resolves.toEqual(['Source URL', 'Target URL', 'Anchor or alt text', 'Kind · Position · Follow', 'Target status']);
   // The first rows are the crawl's first links, each end by its path on the site.
   for (const [index, link] of all.rows.slice(0, 5).entries()) {
     const row = grid(page)
@@ -370,11 +372,12 @@ test('opens a link’s target in the inspector, walks to a page that links to it
   const source = inlinks.getByRole('row').nth(1).getByRole('button').first();
   const sourceUrl = (await source.getAttribute('aria-label')) ?? (await source.innerText());
   await source.click();
-  // A step of the walk: the inspector is on the page the link is on, still on Inlinks.
+  // A step of the walk: the inspector is on the page the link is on, on its Outlinks, where that link is first.
   await expect(inspector.getByRole('heading', { level: 2 })).not.toContainText(new URL(target).pathname);
-  await expect(inspector.getByRole('tab', { name: /^Inlinks/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(inspector.getByRole('tab', { name: /^Outlinks/ })).toHaveAttribute('aria-selected', 'true');
   expect(sourceUrl).not.toBe('');
-  await page.goBack();
+  // The inspector's own way back: the walk is one place in history, so the browser's Back would close it.
+  await inspector.getByRole('button', { name: /^Back to/ }).click();
   await expect(inspector.getByRole('heading', { level: 2 })).toContainText(new URL(target).pathname);
   // Esc closes it to the view as it was: the broken links, with nothing inspected.
   await page.keyboard.press('Escape');
@@ -461,7 +464,7 @@ test('“All N in Links” keeps the kind chosen, and leaves out a page’s link
   await expectShown(page, counted);
   const bar = main(page).getByRole('group', { name: 'Filters' });
   await expect(bar).toContainText('Target URL is /');
-  await expect(bar).toContainText('Link doesn’t lead to its own page');
+  await expect(bar).toContainText('Not counting a page’s links to itself');
   await expect(bar).toContainText('Kind is Hyperlink');
 });
 
@@ -583,7 +586,10 @@ test('holds at 1280x720 and at 200% zoom: nothing overprints, and the toolbar wr
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     // The toolbar's controls are all in the window, none under another.
     const boxes = await main(page)
-      .locator('header input, [role="group"] button, button:has-text("Columns"), button:has-text("Copy")')
+      // Copy is its icon alone in a window this narrow, named by its label.
+      .locator(
+        'header input, [role="group"] button, button:has-text("Columns"), button:has-text("Copy"), button[aria-label="Copy"]',
+      )
       .evaluateAll((controls) =>
         controls.map((control) => {
           const box = control.getBoundingClientRect();

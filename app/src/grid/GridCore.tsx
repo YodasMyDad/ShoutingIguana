@@ -48,6 +48,15 @@ import { RefreshLine } from '../ui/ProgressBar';
 import { Icon } from '../ui/Icon';
 import { Kbd } from '../ui/Kbd';
 import { MenuAt, MenuItem, MenuSeparator } from '../ui/Menu';
+import {
+  FIT_SAMPLE_ROWS,
+  columnNeeds,
+  fitColumns,
+  fontMeasure,
+  sameNeeds,
+  type ColumnNeed,
+  type FitMeasure,
+} from './columnFit';
 import { RESIZE_STEP, clampWidth, movedOrder } from './columnLayout';
 import { footWords, type GridKeyHint } from './gridFoot';
 
@@ -197,6 +206,14 @@ export interface GridCoreProps<Row> {
   rowKey?: ((row: Row) => string | number) | undefined;
   /** With `startRow` and `rowKey`: the row the grid was left on, so it starts there even if the row has moved. */
   startKey?: string | number | undefined;
+  /**
+   * With `rowKey`: the row something beside the grid is showing (the URL the inspector is on). When it changes to a
+   * row other than the cursor's (a hop inside the inspector), the cursor and its tint go to that row where it's among
+   * the rows read, without telling the move (`onActiveRowChange`): the grid's highlight follows the walk. Where the
+   * row isn't among them, the tint is taken off the row left (`data-cursor-elsewhere` on the frame), so the grid
+   * never marks one URL while the panel shows another.
+   */
+  followKey?: string | number | undefined;
   /** The columns can be resized, moved and pinned: see `GridColumnLayoutProps`. Left out, they're fixed. */
   columnLayout?: GridColumnLayoutProps | undefined;
   /**
@@ -248,6 +265,34 @@ function coveredWidth(element: HTMLElement, windowed: boolean): number {
   if (!windowed) return 0;
   const size = Number.parseFloat(getComputedStyle(element).getPropertyValue('--scrollbar-size'));
   return Number.isFinite(size) ? size : 0;
+}
+
+/**
+ * How a grid's text draws, for columns sized to what they hold (grid/columnFit.ts): the fonts of a cell, of a URL in
+ * one and of a header, and a cell's padding, read from cells put in the grid for the reading and taken out again.
+ */
+function readFitMeasure(grid: HTMLElement): FitMeasure {
+  const element = (className: string, parent: HTMLElement) => {
+    const made = document.createElement('div');
+    made.className = className;
+    parent.appendChild(made);
+    return made;
+  };
+  const probe = element('', grid);
+  probe.setAttribute('aria-hidden', 'true');
+  probe.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none';
+  const head = element('si-grid-cell', element('si-grid-row si-grid-head', probe));
+  const cell = element('si-grid-cell', element('si-grid-row', probe));
+  const url = element('si-url', cell);
+  const fontOf = (of: HTMLElement) => {
+    const style = getComputedStyle(of);
+    return `${style.fontStyle || 'normal'} ${style.fontWeight || '400'} ${style.fontSize || '13px'} ${style.fontFamily || 'sans-serif'}`;
+  };
+  const style = getComputedStyle(cell);
+  const padding = (Number.parseFloat(style.paddingLeft) || 0) + (Number.parseFloat(style.paddingRight) || 0);
+  const measure = fontMeasure({ text: fontOf(cell), mono: fontOf(url), head: fontOf(head) }, padding);
+  probe.remove();
+  return measure;
 }
 
 /** The footer's height (tokens.css `--grid-foot-height`), for the room a grid with a least height keeps. */
@@ -311,6 +356,7 @@ function GridCoreInner<Row>({
   startRow,
   rowKey,
   startKey,
+  followKey,
   columnLayout,
   keyHints,
   rowNoun = ['row', 'rows'],
@@ -319,12 +365,17 @@ function GridCoreInner<Row>({
   const id = useId();
   // A column's edge being dragged: its width as it goes, before the layout keeps it on letting go.
   const [dragWidth, setDragWidth] = useState<{ id: string; width: number } | null>(null);
+  // Columns sized to what they hold (`fit`): the room the grid has, and what each needs for the rows read first.
+  const fits = givenColumns.some((column) => column.fit !== undefined);
+  const [available, setAvailable] = useState<number | null>(null);
+  const [needs, setNeeds] = useState<Record<string, ColumnNeed> | null>(null);
+  const fittedColumns = useMemo(() => fitColumns(givenColumns, available, needs), [givenColumns, available, needs]);
   const columns = useMemo(
     () =>
       dragWidth === null
-        ? givenColumns
-        : givenColumns.map((column) => (column.id === dragWidth.id ? { ...column, width: dragWidth.width } : column)),
-    [givenColumns, dragWidth],
+        ? fittedColumns
+        : fittedColumns.map((column) => (column.id === dragWidth.id ? { ...column, width: dragWidth.width } : column)),
+    [fittedColumns, dragWidth],
   );
   const offsets = useMemo(() => columnOffsets(columns), [columns]);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -353,6 +404,47 @@ function GridCoreInner<Row>({
   const count = loading ? 0 : rowCount;
 
   const { view, model } = useRowWindow(scrollRef, { count, rowHeight, headerHeight, overscan });
+
+  // The room the columns share: the grid's own width, less what its scrollbar covers.
+  useLayoutEffect(() => {
+    const element = scrollRef.current;
+    if (!fits || !element || typeof ResizeObserver === 'undefined') return undefined;
+    const read = () => setAvailable(Math.floor(element.clientWidth - coveredWidth(element, view.windowed)));
+    read();
+    const observer = new ResizeObserver(read);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [fits, view.windowed]);
+  // What the columns need, measured on the rows read first and again only when those change: scrolling never moves a
+  // column. A view with no row to measure keeps the last measure, so a refresh doesn't jump the columns.
+  const fitMeasure = useRef<{ rowHeight: number; measure: FitMeasure } | null>(null);
+  const [fontsLoaded, setFontsLoaded] = useState(0);
+  const measureNeeds = useEffectEvent(() => {
+    const element = scrollRef.current;
+    if (!fits || !element || available === null) return;
+    const rows: Row[] = [];
+    for (let index = 0; index < Math.min(count, FIT_SAMPLE_ROWS); index++) {
+      const row = getRow(index);
+      if (row !== undefined && spanRow?.(row, index) == null) rows.push(row);
+    }
+    if (rows.length === 0) return;
+    // The fonts are read once for a density (the row's height is its mark), and again when a face has loaded.
+    if (fitMeasure.current?.rowHeight !== rowHeight) {
+      fitMeasure.current = { rowHeight, measure: readFitMeasure(element) };
+    }
+    const next = columnNeeds(givenColumns, rows, fitMeasure.current.measure);
+    setNeeds((current) => (sameNeeds(current, next) ? current : next));
+  });
+  useLayoutEffect(() => measureNeeds(), [getRow, count, givenColumns, available, rowHeight, fontsLoaded]);
+  useEffect(() => {
+    if (!fits || typeof document.fonts === 'undefined') return undefined;
+    const reread = () => {
+      fitMeasure.current = null;
+      setFontsLoaded((times) => times + 1);
+    };
+    document.fonts.addEventListener('loadingdone', reread);
+    return () => document.fonts.removeEventListener('loadingdone', reread);
+  }, [fits]);
 
   const exposeModel = useEffectEvent(() => {
     modelRef?.(model);
@@ -428,6 +520,34 @@ function GridCoreInner<Row>({
     anchor.current = { key: rowKey(here), row: nav.active.row, start: false };
   });
   useLayoutEffect(() => reanchor(), [getRow, count, nav.active?.row]);
+
+  // The highlight follows what's shown beside the grid (`followKey`): on its change only, so a cursor the user just
+  // moved is never pulled back while the panel catches up with it.
+  const [followed, setFollowed] = useState(followKey);
+  const [followedTo, setFollowedTo] = useState<{ key: string | number; row: number } | null>(null);
+  if (followed !== followKey) {
+    setFollowed(followKey);
+    const at = nav.active ? Math.min(nav.active.row, count - 1) : Math.max(0, view.first);
+    const here = count > 0 ? getRow(at) : undefined;
+    const onIt = nav.active !== null && here !== undefined && rowKey?.(here) === followKey;
+    if (followKey !== undefined && rowKey && count > 0 && !onIt) {
+      search: for (let step = nav.active ? 1 : 0; step <= REANCHOR_REACH; step++) {
+        for (const row of step === 0 ? [at] : [at + step, at - step]) {
+          const candidate = row >= 0 && row < count ? getRow(row) : undefined;
+          if (candidate === undefined || rowKey(candidate) !== followKey) continue;
+          setNav({ active: { row, col: nav.active?.col ?? 0 }, selection: selectOnly(row), follow: true });
+          setFollowedTo({ key: followKey, row });
+          break search;
+        }
+      }
+    }
+  }
+  // The row the highlight went to comes into view, and is the row the cursor is held on from here.
+  useLayoutEffect(() => {
+    if (!followedTo) return;
+    anchor.current = { ...followedTo, start: false };
+    model.scrollToIndex(followedTo.row);
+  }, [followedTo, model]);
 
   const template = columns.map((column) => `${column.width}px`).join(' ');
   const width = columns.reduce((sum, column) => sum + column.width, 0);
@@ -635,10 +755,11 @@ function GridCoreInner<Row>({
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    // Text selected inside the grid by mouse: let the browser copy that instead.
+    // Text dragged over inside the grid: the browser copies that instead. Not with several rows selected: those are
+    // what Ctrl+C is for then, whatever text a click left selected (the UX audit of 2026-11-19, D-06).
     const textSelected = (window.getSelection()?.toString() ?? '') !== '';
     const mod = isMac ? event.metaKey : event.ctrlKey;
-    if (mod && event.key.toLowerCase() === 'c' && textSelected) return;
+    if (mod && event.key.toLowerCase() === 'c' && textSelected && selectedCount(selection) <= 1) return;
     // Esc closes what's open around the grid (the inspector) before it clears the grid's selection.
     if (event.key === 'Escape' && commands.claims(event.nativeEvent)) return;
     // A control in the header that has focus (a click can give it focus in some browsers) keeps its own keys.
@@ -977,6 +1098,27 @@ function GridCoreInner<Row>({
     );
   };
 
+  /**
+   * A Shift+click or a Ctrl+click selects rows: the browser mustn't also extend a text selection over them, which
+   * Ctrl+C would then copy in place of the rows. The press is prevented, what was selected is cleared, and the grid
+   * takes the focus the press would have given it.
+   */
+  const bodyRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (!body) return undefined;
+    // The browser's own press, which is what starts a text selection: React's pointer handler can't stop it.
+    const onMouseDown = (event: globalThis.MouseEvent) => {
+      if (event.button !== 0 || !(event.shiftKey || (isMac ? event.metaKey : event.ctrlKey))) return;
+      if (!(event.target instanceof Element) || !event.target.closest('[data-row][data-col]')) return;
+      event.preventDefault();
+      window.getSelection()?.removeAllRanges();
+      scrollRef.current?.focus({ preventScroll: true });
+    };
+    body.addEventListener('mousedown', onMouseDown);
+    return () => body.removeEventListener('mousedown', onMouseDown);
+  }, []);
+
   const onDoubleClick = (event: MouseEvent<HTMLDivElement>) => {
     const position = positionOf(event.target);
     if (!position) return;
@@ -1056,8 +1198,17 @@ function GridCoreInner<Row>({
       ? undefined
       : clsx('si-grid-cell--pinned', col === offsets.lastPinned && 'si-grid-cell--pin-edge');
   const menuColumn = headerMenu ? columns[headerMenu.col] : undefined;
+  // The row the cursor's tint is on isn't the one shown beside the grid (and that one isn't among the rows read).
+  const cursorRow = active ? getRow(active.row) : undefined;
+  const cursorElsewhere =
+    followKey !== undefined &&
+    rowKey !== undefined &&
+    nav.follow &&
+    cursorRow !== undefined &&
+    rowKey(cursorRow) !== followKey;
   return (
     <div
+      data-cursor-elsewhere={cursorElsewhere || undefined}
       className={clsx('si-grid-frame relative flex min-h-0 flex-col overflow-hidden', className)}
       // With a least height the frame's size is its container's to give and never its rows' (a scroller of millions
       // of pixels): `contain: size` says so, so a container that sizes to its content takes the least height from it.
@@ -1182,6 +1333,7 @@ function GridCoreInner<Row>({
           role="rowgroup"
           className="relative"
           style={{ height: skeleton ? SKELETON_ROWS * rowHeight : loading ? 0 : bodyHeight, width }}
+          ref={bodyRef}
           onPointerDown={onPointerDown}
           onDoubleClick={onDoubleClick}
           onContextMenu={onContextMenuEvent}
@@ -1374,11 +1526,15 @@ function GridFoot({ hints, where }: { hints: readonly GridKeyHint[]; where: stri
   return (
     <div className="si-grid-foot">
       {hints.map((hint) => (
-        <span key={hint.chord} className="si-grid-foot__hint">
-          {hint.chord.split(' ').map((chord) => (
-            <Kbd key={chord} chord={chord} size="sm" aria-hidden />
-          ))}
-          <span className="sr-only">{hint.chord.split(' ').join(' or ')}</span>
+        <span key={hint.chord || hint.words} className="si-grid-foot__hint">
+          {hint.chord === '' ? null : (
+            <>
+              {hint.chord.split(' ').map((chord) => (
+                <Kbd key={chord} chord={chord} size="sm" aria-hidden />
+              ))}
+              <span className="sr-only">{hint.chord.split(' ').join(' or ')}</span>
+            </>
+          )}
           {hint.words}
         </span>
       ))}

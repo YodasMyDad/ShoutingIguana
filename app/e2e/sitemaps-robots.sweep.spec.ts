@@ -380,16 +380,20 @@ test('sweep: every count on robots.txt lands on exactly its URLs, and the lines 
     const said = countOf(row.cells[2] ?? '');
     expect(said, origin.origin).toBe(origin.blocked);
     const at = `/crawls/${crawl.id}/robots/${encodeURIComponent(origin.origin)}`;
+    // Every row's first link is the origin itself, to its file: every row opens something.
+    const [opens, ...counts] = row.links;
+    expect(opens?.text, origin.origin).toBe(origin.origin);
+    expect(decodeURIComponent(opens?.href ?? ''), origin.origin).toBe(decodeURIComponent(at));
     if (said === 0) {
-      // Nothing blocked, so no link.
-      expect(row.links, origin.origin).toEqual([]);
+      // Nothing blocked, so no count to open.
+      expect(counts, origin.origin).toEqual([]);
       continue;
     }
-    expect(countOf(row.links[0]?.text ?? ''), origin.origin).toBe(said);
+    expect(countOf(counts[0]?.text ?? ''), origin.origin).toBe(said);
     if (landings >= MAX_LANDINGS) continue;
 
     // The count's link opens the origin's file, whose list holds exactly that many.
-    await page.goto(row.links[0]?.href ?? at);
+    await page.goto(counts[0]?.href ?? at);
     const list = main(page).getByRole('region', { name: 'Blocked URLs' });
     await expect(shownIn(list), origin.origin).toHaveText(number(said));
     landings++;

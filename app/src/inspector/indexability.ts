@@ -18,6 +18,8 @@ export interface IndexabilityRow {
   plain?: boolean | undefined;
   /** The other URL the test names: a canonical's target, an instant meta refresh's. */
   target?: { id: number | null; url: string; statusCode: number | null; outcome?: UrlOutcome | null } | undefined;
+  /** The line of robots.txt that refused the URL (E6), and the origin whose file it is: a link to that file. */
+  robots?: { origin: string; line: number; rule: string } | undefined;
 }
 
 export interface IndexabilityVerdict {
@@ -116,6 +118,9 @@ function rowFor(subject: Subject, test: IndexabilityTest, earlierFailed: boolean
       return {
         ...base,
         detail: test.unreachable ? 'robots.txt couldn’t be read, which blocks every URL' : 'robots.txt disallows it',
+        ...(test.origin !== undefined && test.line !== undefined && test.rule !== undefined
+          ? { robots: { origin: test.origin, line: test.line, rule: test.rule } }
+          : {}),
       };
     case 'noindex': {
       if (test.outcome === 'pass') {

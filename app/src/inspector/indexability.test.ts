@@ -114,6 +114,26 @@ describe('indexabilityVerdict', () => {
     expect(blocked.failed).toEqual(['robotsTxt']);
     expect(row(blocked, 'answered').detail).toBe('Not requested: robots.txt disallows it');
     expect(row(blocked, 'robotsTxt').detail).toBe('robots.txt disallows it');
+    // An engine that says which line refused it (E6): the rule, its line and the origin whose file it is.
+    expect(row(blocked, 'robotsTxt').robots).toBeUndefined();
+    const byRule = indexabilityVerdict(
+      testUrlDetail({
+        indexability: withTests({
+          robotsTxt: {
+            outcome: 'fail',
+            origin: 'https://example.com',
+            reason: 'rule',
+            line: 2,
+            rule: 'Disallow: /private/',
+          },
+        }),
+      }),
+    );
+    expect(row(byRule, 'robotsTxt').robots).toEqual({
+      origin: 'https://example.com',
+      line: 2,
+      rule: 'Disallow: /private/',
+    });
     expect(blocked.why).toBe('robots.txt stops search engines reading it.');
 
     const unreachable = indexabilityVerdict(

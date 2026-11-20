@@ -3,7 +3,7 @@
 // the preset reads as chosen exactly while the route's filters are its own. So a preset's count is the grid's count,
 // and nothing is filtered that the filter bar doesn't say.
 import type { GridFilter, GridSort } from '../../api/grids';
-import { PIXELS_COLUMN } from './linkWords';
+import { ENDS_AT_COLUMN, PIXELS_COLUMN } from './linkWords';
 
 export interface LinkPreset {
   id: string;
@@ -27,6 +27,20 @@ export const IMAGE_COLUMNS: readonly string[] = [
   PIXELS_COLUMN,
   'text',
   'from.url',
+  'position',
+];
+
+/**
+ * The Links to redirects preset's columns (the UX round's D-20): the link, how its target answered and where that
+ * ends, which is what says why a target that answered 200 is here (a meta refresh), and what to change the link to.
+ * Every link here is a hyperlink, so its kind isn't said again.
+ */
+export const REDIRECT_COLUMNS: readonly string[] = [
+  'from.url',
+  'to.url',
+  'to.statusCode',
+  ENDS_AT_COLUMN,
+  'text',
   'position',
 ];
 
@@ -69,8 +83,9 @@ export const LINK_PRESETS: readonly LinkPreset[] = [
   {
     id: 'redirects',
     title: 'Links to redirects',
-    hint: 'Links to the site’s URLs that redirect for good to a working page, as the check counts them',
+    hint: 'Links to the site’s URLs that redirect for good to a working page, as the check counts them, with where each ends',
     filters: LINKS_TO_REDIRECTS,
+    columns: REDIRECT_COLUMNS,
   },
   {
     id: 'nofollow',

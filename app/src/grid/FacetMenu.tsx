@@ -1,7 +1,7 @@
 import { ChevronDown } from 'lucide-react';
 import { formatCount } from '../lib/format';
 import { Button } from '../ui/Button';
-import { DropdownMenu, MenuItem, MenuLabel, MenuSeparator } from '../ui/Menu';
+import { DropdownMenu, MenuCheckboxItem, MenuItem, MenuLabel, MenuSeparator } from '../ui/Menu';
 
 export interface FacetMenuValue {
   key: string;
@@ -31,6 +31,19 @@ export interface FacetMenuProps<Value extends FacetMenuValue> {
   unavailable?: string | undefined;
   /** A value was chosen: the view narrows to it. */
   onChoose: (value: Value) => void;
+  /**
+   * The facet takes several values at once: each is a tick-box, the menu stays open while they're ticked, and the
+   * counts are of the view without this facet's own filter (the view reads them so), so a second value can be added
+   * after a first. `ticked` are the keys in force; `onToggle` hears each change. `onChoose` isn't called.
+   */
+  multi?:
+    | {
+        ticked: readonly string[];
+        onToggle: (value: Value, ticked: boolean) => void;
+        /** Choices that stand for several values ("Not indexable, any reason"), listed first. */
+        shortcuts?: readonly { key: string; words: string; count: number; ticked: boolean; onChoose: () => void }[];
+      }
+    | undefined;
   /** Whether the menu is open, when something other than its button says (a story). */
   open?: boolean | undefined;
   /**
@@ -54,10 +67,20 @@ export function FacetMenu<Value extends FacetMenuValue>({
   failed = false,
   onRetry,
   onChoose,
+  multi,
   open,
   onOpenChange,
   unavailable,
 }: FacetMenuProps<Value>) {
+  const countOf = (count: number, applied: boolean) => (
+    <>
+      <span aria-hidden="true">{formatCount(count)}</span>
+      <span className="sr-only">
+        , {formatCount(count)} {count === 1 ? noun : `${noun}s`}
+        {applied ? ', the filter in force' : ''}
+      </span>
+    </>
+  );
   return (
     <DropdownMenu
       {...(open === undefined ? {} : { open })}
@@ -89,6 +112,30 @@ export function FacetMenu<Value extends FacetMenuValue>({
         <MenuItem disabled>Counting…</MenuItem>
       ) : values.length === 0 ? (
         <MenuItem disabled>Nothing to count.</MenuItem>
+      ) : multi ? (
+        <>
+          {(multi.shortcuts ?? []).map((shortcut) => (
+            <MenuCheckboxItem
+              key={shortcut.key}
+              checked={shortcut.ticked}
+              onCheckedChange={shortcut.onChoose}
+              detail={countOf(shortcut.count, false)}
+            >
+              {shortcut.words}
+            </MenuCheckboxItem>
+          ))}
+          {(multi.shortcuts ?? []).length > 0 ? <MenuSeparator /> : null}
+          {values.map((value) => (
+            <MenuCheckboxItem
+              key={value.key}
+              checked={multi.ticked.includes(value.key)}
+              onCheckedChange={(ticked) => multi.onToggle(value, ticked)}
+              detail={countOf(value.count, false)}
+            >
+              {value.words}
+            </MenuCheckboxItem>
+          ))}
+        </>
       ) : (
         values.map((value) => (
           <MenuItem

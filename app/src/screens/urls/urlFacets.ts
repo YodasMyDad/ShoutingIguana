@@ -19,7 +19,7 @@ export const URL_FACET_IDS: readonly FacetId[] = [
 ];
 
 export const URL_FACET_TITLES: Record<FacetId, string> = {
-  statusClass: 'Status',
+  statusClass: 'Status class',
   statusCode: 'Status code',
   indexability: 'Indexability',
   type: 'Type',

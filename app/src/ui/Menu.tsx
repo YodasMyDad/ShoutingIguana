@@ -244,10 +244,19 @@ export function MenuItem({
 export interface MenuCheckboxItemProps extends ItemCommon {
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
+  /** What the item would give, at its end: a count ("17,641"), read with its label as a `MenuItem`'s is. */
+  detail?: ReactNode;
 }
 
 /** An item that's on or off ("Show full URLs"): a tick where the icon goes while it's on. */
-export function MenuCheckboxItem({ children, shortcut, disabled, checked, onCheckedChange }: MenuCheckboxItemProps) {
+export function MenuCheckboxItem({
+  children,
+  shortcut,
+  disabled,
+  checked,
+  onCheckedChange,
+  detail,
+}: MenuCheckboxItemProps) {
   const Parts = useParts();
   const { keys, aria } = useKeys(shortcut, undefined);
   return (
@@ -265,6 +274,9 @@ export function MenuCheckboxItem({ children, shortcut, disabled, checked, onChec
         </Parts.ItemIndicator>
       </span>
       <span className="si-menu-item__label">{children}</span>
+      {detail === undefined || detail === null ? null : (
+        <span className="si-menu-item__end si-menu-item__detail">{detail}</span>
+      )}
       <ItemEnd keys={keys} />
     </Parts.CheckboxItem>
   );

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { Copy, Globe, Link2, RefreshCw } from 'lucide-react';
+import { Copy, Globe, Link2, ListChecks, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { isProblem } from '../api/errors';
@@ -11,7 +11,7 @@ import { analyseCrawl } from '../crawl/actions';
 import { crawlControls, effectiveStatus } from '../crawl/status';
 import { announce } from '../feedback/announce';
 import { ErrorState } from '../feedback/ErrorState';
-import { notifyResult } from '../feedback/notify';
+import { notifyError, notifyResult } from '../feedback/notify';
 import { useAnnounceResults } from '../feedback/useAnnounceResults';
 import { useFocusRescue } from '../feedback/useFocusRescue';
 import { ColumnChooser } from '../grid/ColumnChooser';
@@ -26,7 +26,7 @@ import { useSearchApplyHint } from '../grid/SearchApplyHint';
 import { ToolsToggle } from '../grid/ToolsToggle';
 import { useShortScreen } from '../grid/useShortScreen';
 import { queryRefusalWords } from '../grid/queryRefusal';
-import { storeColumnLayout, useColumnLayout, useStoredColumnLayout } from '../grid/useColumnLayout';
+import { storeColumnLayout, useColumnLayout } from '../grid/useColumnLayout';
 import { GRID_SCREEN_MIN_ROWS, GridScreen, GridScreenBody } from '../grid/GridScreen';
 import { useGridMetrics } from '../grid/metrics';
 import { NeedsAnalysis } from '../grid/NeedsAnalysis';
@@ -39,11 +39,11 @@ import type { SavedView } from '../grid/savedViews';
 import { nextMultiSort, sortFullWords, useHeaderHandoff } from '../grid/sort';
 import { UNAVAILABLE_BECAUSE, UNAVAILABLE_WHILE_ANALYSING, analyseWords, listOfNames } from '../grid/summaryWords';
 import { MAX_COPY_ROWS, toTsv } from '../grid/tsv';
-import { useElementWidth } from '../grid/useElementWidth';
 import { usePagedRows } from '../grid/usePagedRows';
 import { ExportButton } from '../export/ExportButton';
 import { useExportCommand } from '../export/useExportCommand';
 import { urlExportColumns, urlGridOffer } from '../export/offers';
+import { rememberPlace, rememberedKey, rememberedPlace } from './listPlace';
 import { linkEndsOf, linkEndsWords } from './urls/linkEnds';
 import { useCommands, type Command } from '../keyboard/registry';
 import { formatCount, formatShownOf } from '../lib/format';
@@ -67,7 +67,7 @@ import { sortShown } from './links/presets';
 import { SavedViewsMenu, ViewNameDialog } from './urls/SavedViews';
 import { useSavedViews } from './urls/useSavedViews';
 import { noUrlsMatchWords, noUrlsWords } from './urls/urlPlaces';
-import { ANALYSIS_FACETS, URL_FACET_IDS, URL_FACET_TITLES, buildUrlFacets, type UrlFacetValue } from './urls/urlFacets';
+import { ANALYSIS_FACETS, URL_FACET_IDS, URL_FACET_TITLES, buildUrlFacets } from './urls/urlFacets';
 import { UrlFilterChips } from './urls/UrlFilterChips';
 import { FIXED_URL_COLUMNS, FIXED_URL_QUERY_COLUMNS, fixedColumnNames } from './urls/urlGridParts';
 import {
@@ -78,23 +78,34 @@ import {
   URL_PRESETS,
   activeUrlPreset,
   colsParam,
+  presetFilters,
   presetOrderOf,
   shownUrlColumns,
   urlChooserGroups,
   urlColumnName,
-  urlColumnWidth,
+  urlCountPlace,
   urlFilterColumns,
   urlGridColumns,
   urlQueryColumns,
 } from './urls/urlColumns';
+import {
+  CONTENT_FACETS,
+  contentFacetValues,
+  indexabilityCountFilters,
+  isNotIndexable,
+  notIndexableValues,
+  tickedIndexability,
+  withIndexability,
+  type ContentFacet,
+} from './urls/pageFacets';
 import { useUrlFilterWords } from './urls/useUrlFilterWords';
 import { RecheckMenuItem } from './rechecks/RecheckMenuItem';
 import { onlyFullCheck } from './rechecks/rechecks';
 
 const ROUTE = '/crawls/$crawl/urls';
 
-/** The room the grid's frame takes beside its columns: its border and the scrollbar over its right edge. */
-const FRAME_SLACK = 24;
+/** A row's identity: its URL's id. */
+const rowKeyOf = (row: UrlRow) => row.id;
 
 /** What the last read of a view said of it, kept while the same view is read again for other columns. */
 interface Counted {
@@ -198,14 +209,24 @@ export function UrlsScreen() {
   // and nothing on the screen but an open menu shows it. While a menu is open a running crawl's refresh keeps its
   // counts fresh; closed, they're only marked stale, and read again on opening.
   const [openFacet, setOpenFacet] = useState<FacetId | null>(null);
+  // Indexability takes several values: its counts are of the view without its own filter, among pages (pageFacets.ts).
   const facetsQuery = useMemo(
-    () => ({ filters: [...filters], ...(q ? { search: q } : {}), ...endsPart }),
-    [filters, q, endsPart],
+    () => ({
+      filters: openFacet === 'indexability' ? indexabilityCountFilters(filters) : [...filters],
+      ...(q ? { search: q } : {}),
+      ...endsPart,
+    }),
+    [filters, q, endsPart, openFacet],
   );
+  // Titles, descriptions and H1s: what the checks found, counted by the analysis, read once one of their menus opens.
+  const [openContent, setOpenContent] = useState<ContentFacet['id'] | null>(null);
   const facetsRead = useQuery({ ...urlGridFacetsQuery(crawlId, facetsQuery), enabled: openFacet !== null });
   // The not-in-sitemap check's pages, offered in the Sitemaps menu in one click (the fix-it pass): its count is the
   // analysis's, read only once the menu is opened, as the facets are.
-  const analysisRead = useQuery({ ...analysisQuery(crawlId), enabled: openFacet === 'inSitemap' });
+  const analysisRead = useQuery({
+    ...analysisQuery(crawlId),
+    enabled: openFacet === 'inSitemap' || openContent !== null,
+  });
   const notInSitemap = analysisRead.data?.counts.find((count) => count.checkId === 'not-in-sitemap')?.count ?? null;
   const facets = useMemo(
     () =>
@@ -265,8 +286,11 @@ export function UrlsScreen() {
   };
   /** The narrowing to the links' ends gone; the view's own filters, search and sort stay. */
   const showEveryUrl = () => void navigate({ search: (previous) => ({ ...previous, links: undefined }) });
-  /** Every URL again, in crawl order, with the columns as they are. */
-  const clearView = useCallback(() => void navigate({ search: (previous) => ({ cols: previous.cols }) }), [navigate]);
+  /** Every URL again, in crawl order, with the columns as they are (and the URL inspected, if one is). */
+  const clearView = useCallback(
+    () => void navigate({ search: (previous) => ({ cols: previous.cols, inspect: previous.inspect }) }),
+    [navigate],
+  );
   /** The filters and the search gone: the sort and the columns stay, as "Clear the filters" says. */
   const clearFilters = useCallback(
     () => void navigate({ search: (previous) => ({ cols: previous.cols, sort: previous.sort }) }),
@@ -295,12 +319,58 @@ export function UrlsScreen() {
   }, [hiddenSort, navigate, shown]);
 
   const handoff = useHeaderHandoff(sort);
-  const [measure, width] = useElementWidth();
-  const layoutWidths = useStoredColumnLayout('urls').widths;
-  const urlWidth = urlColumnWidth(shown, catalogue.data, width === null ? null : width - FRAME_SLACK, layoutWidths);
+  // Where this view was left, for the grid it comes back to (the grid is made again for each view).
+  const placeKey = `urls|${view}`;
+  const [place, setPlace] = useState({ key: placeKey, row: rememberedPlace(placeKey), id: rememberedKey(placeKey) });
+  if (place.key !== placeKey) {
+    setPlace({ key: placeKey, row: rememberedPlace(placeKey), id: rememberedKey(placeKey) });
+  }
+  const startRow = place.key === placeKey ? place.row : undefined;
+  const startKey = place.key === placeKey && place.id !== undefined ? Number(place.id) : undefined;
+  // What a click in a cell opens (rules 1 and 5 of the UX round of 2026-11-19): the row's URL in the inspector, another
+  // URL the row names (looked up, as the crawl may not have it), and the list a count stands for.
+  const inspectRow = useCallback((row: UrlRow) => inspector.open(row.id), [inspector]);
+  const inspectUrl = useCallback(
+    (url: string) => {
+      api.lookupUrl(crawlId, url).then(
+        (found) => inspector.open(found.id),
+        (error: unknown) => {
+          if (isProblem(error, 'not-found')) {
+            notifyResult('That URL isn’t in this crawl', {
+              id: 'urls.notInCrawl',
+              description: `The crawl found no URL ${url}: it can be opened in your browser from the icon after it.`,
+            });
+          } else notifyError(error, { title: 'The URL couldn’t be looked up.' });
+        },
+      );
+    },
+    [crawlId, inspector],
+  );
+  const openCount = useCallback(
+    (row: UrlRow, column: string) => {
+      const place = urlCountPlace(column);
+      if (place === 'usedOn') {
+        void navigate({
+          to: '/crawls/$crawl/links',
+          params: { crawl: crawlId },
+          search: { filter: linksOfUrl('inlinks', row.id, 'all') },
+        });
+      } else if (place) inspector.open(row.id, undefined, { section: place });
+    },
+    [crawlId, inspector, navigate],
+  );
   const columns = useMemo(
-    () => urlGridColumns(shown, catalogue.data, { siteOrigin, fullUrls, sort, urlWidth, crawling }),
-    [shown, catalogue.data, siteOrigin, fullUrls, sort, urlWidth, crawling],
+    () =>
+      urlGridColumns(shown, catalogue.data, {
+        siteOrigin,
+        fullUrls,
+        sort,
+        crawling,
+        onInspect: inspectRow,
+        onGoUrl: inspectUrl,
+        onCount: openCount,
+      }),
+    [shown, catalogue.data, siteOrigin, fullUrls, sort, crawling, inspectRow, inspectUrl, openCount],
   );
   // The columns as the user laid them out: their widths and pins kept with the preferences, their order the route's.
   const columnOrder = useMemo(() => ({ ids: shown, onChange: setColumns }), [shown, setColumns]);
@@ -437,6 +507,32 @@ export function UrlsScreen() {
     });
     setCopying(false);
   };
+  // The view's rows as the grid shows them, for a spreadsheet: what Ctrl+A then Ctrl+C copies, without selecting.
+  const copyRowsTitle = copyPart
+    ? `Copy the first ${formatCount(MAX_COPY_ROWS)} rows of this view`
+    : 'Copy the rows of this view';
+  const copyViewRows = async () => {
+    if (copying) return;
+    setCopying(true);
+    const shownColumns = laid.columns;
+    await copyAll<UrlRow>({
+      read: reader(urlQueryColumns(shown)),
+      text: (read) => ({
+        text: toTsv(
+          shownColumns.map((column) => column.header),
+          read.map((row) => shownColumns.map((column) => column.text(row))),
+        ),
+        count: read.length,
+      }),
+      noun: ['row', 'rows'],
+      failed: 'The rows couldn’t be copied.',
+      truncated: (read, matching) => ({
+        title: `Copied the first ${formatCount(read)} rows of this view`,
+        description: `The view has ${formatCount(matching)} URLs: a copy takes no more than ${formatCount(read)}.`,
+      }),
+    });
+    setCopying(false);
+  };
   const copyOneColumn = async () => {
     const column = columns.find((candidate) => candidate.id === copyColumn);
     if (copying || !column) return;
@@ -459,6 +555,27 @@ export function UrlsScreen() {
   const hasRows = rowCount !== null && rowCount > 0;
   const noUrls = noUrlsWords(crawling);
   const preset = activeUrlPreset(shown);
+  /**
+   * A tab chosen: its columns, and the filters it brings in place of those the tab it leaves brought (the site's pages
+   * for Indexability and Content, the redirects for Redirects). The user's own filters, search and sort stay.
+   */
+  const choosePreset = useCallback(
+    (entering: { columns: readonly string[]; filters?: readonly GridFilter[] | undefined }) => {
+      void navigate({
+        search: (previous) => {
+          const next = presetFilters(previous.filter ?? [], activeUrlPreset(shown), entering);
+          return {
+            ...previous,
+            cols: colsParam(entering.columns),
+            sort: sortShown(previous.sort, entering.columns),
+            filter: next.length > 0 ? next : undefined,
+          };
+        },
+        replace: true,
+      });
+    },
+    [navigate, shown],
+  );
   // "All columns": every column the engine has, known once its list is read.
   const allColumns = useMemo(() => (catalogue.data ? allUrlColumns(catalogue.data) : null), [catalogue.data]);
   const showsAll =
@@ -524,7 +641,7 @@ export function UrlsScreen() {
         title: `Show the ${candidate.title.toLowerCase()} columns`,
         group: 'URLs',
         keywords: ['columns', 'preset', candidate.hint],
-        run: () => setColumns(candidate.columns),
+        run: () => choosePreset(candidate),
       })),
       {
         id: `urls.preset.${ALL_COLUMNS_PRESET.id}`,
@@ -533,7 +650,7 @@ export function UrlsScreen() {
         keywords: ['columns', 'preset', 'everything', 'full export', ALL_COLUMNS_PRESET.hint],
         enabled: () => allColumns !== null,
         run: () => {
-          if (allColumns) setColumns(allColumns);
+          if (allColumns) choosePreset({ columns: allColumns });
         },
       },
       {
@@ -544,6 +661,14 @@ export function UrlsScreen() {
         keywords: ['copy', 'urls', 'clipboard'],
         enabled: () => hasRows && !copying,
         run: () => void copyUrls(),
+      },
+      {
+        id: 'urls.copyRows',
+        title: copyRowsTitle,
+        group: 'URLs',
+        keywords: ['copy', 'rows', 'spreadsheet', 'excel', 'clipboard'],
+        enabled: () => hasRows && !copying,
+        run: () => void copyViewRows(),
       },
       {
         id: 'urls.copyColumn',
@@ -602,9 +727,10 @@ export function UrlsScreen() {
       hasRows,
       copying,
       copyUrlsTitle,
+      copyRowsTitle,
       copyColumnTitle,
       clearView,
-      setColumns,
+      choosePreset,
       saved.views,
       saved.current,
       saved.problem,
@@ -663,7 +789,15 @@ export function UrlsScreen() {
       ? UNAVAILABLE_WHILE_ANALYSING
       : UNAVAILABLE_BECAUSE[summary?.reason ?? 'notAnalyzed'];
   // The value's filter beside the view's: what the menu counted, so the grid lands on its count.
-  const chooseFacet = (value: UrlFacetValue) => setFilters(withFacetValue(filters, value.filter));
+  const chooseFacet = (value: { filter: GridFilter }) => setFilters(withFacetValue(filters, value.filter));
+  // Indexability's tick-boxes: the values in force, each change, and every reason at once.
+  const ticked = tickedIndexability(filters);
+  const indexabilityValues = facets?.find((facet) => facet.id === 'indexability')?.values ?? null;
+  const reasons = notIndexableValues((indexabilityValues ?? []).map((value) => value.key));
+  const allReasons = isNotIndexable(
+    ticked,
+    (indexabilityValues ?? []).map((value) => value.key),
+  );
 
   return (
     <GridScreen ref={frame}>
@@ -733,7 +867,7 @@ export function UrlsScreen() {
                     variant="ghost"
                     size="sm"
                     pressed={preset?.id === candidate.id}
-                    onClick={() => setColumns(candidate.columns)}
+                    onClick={() => choosePreset(candidate)}
                   >
                     {candidate.title}
                   </Button>
@@ -746,7 +880,7 @@ export function UrlsScreen() {
                   pressed={showsAll}
                   disabled={allColumns === null}
                   onClick={() => {
-                    if (allColumns) setColumns(allColumns);
+                    if (allColumns) choosePreset({ columns: allColumns });
                   }}
                 >
                   {ALL_COLUMNS_PRESET.title}
@@ -793,6 +927,7 @@ export function UrlsScreen() {
                   </Button>
                 }
               >
+                <MenuItem command="urls.copyRows">{copyRowsTitle}</MenuItem>
                 <MenuItem command="urls.copyUrls">{copyUrlsTitle}</MenuItem>
                 <MenuItem command="urls.copyColumn">{copyColumnTitle}</MenuItem>
               </DropdownMenu>
@@ -813,23 +948,88 @@ export function UrlsScreen() {
             onEditingChange={setEditingFilter}
             refused={refused}
             maxFilters={MAX_FILTERS}
-            onClear={() => setFilters([])}
+            // "Clear all": the filters, the search and the sort go; the columns stay (rule 9's other half is Back).
+            onClear={clearView}
+            clearsAll
+            sorted={sort.length > 0}
+            search={q ? { field: 'URL or title', text: q, onRemove: () => applySearch('') } : undefined}
             className="flex flex-wrap items-center gap-2 px-6 pb-3"
           >
             {URL_FACET_IDS.map((id) => (
               <FacetMenu
                 key={id}
                 title={URL_FACET_TITLES[id]}
-                noun="URL"
-                values={facets ? (facets.find((facet) => facet.id === id)?.values ?? []) : null}
+                noun={id === 'indexability' ? 'page' : 'URL'}
+                values={
+                  facets
+                    ? (facets.find((facet) => facet.id === id)?.values ?? []).filter(
+                        // A URL not crawled has no indexability to tick: Status says which those are.
+                        (value) => id !== 'indexability' || value.key !== 'null',
+                      )
+                    : null
+                }
                 matching={facetsRead.data?.matching}
                 failed={facetsRead.isError && !facetsRead.data}
                 unavailable={facetsUnavailable(id)}
                 onRetry={() => void facetsRead.refetch()}
                 onChoose={chooseFacet}
+                multi={
+                  id === 'indexability'
+                    ? {
+                        ticked,
+                        onToggle: (value, on) =>
+                          setFilters(
+                            withIndexability(
+                              filters,
+                              on ? [...ticked, value.key] : ticked.filter((key) => key !== value.key),
+                            ),
+                          ),
+                        shortcuts:
+                          reasons.length > 0
+                            ? [
+                                {
+                                  key: 'notIndexable',
+                                  words: 'Not indexable (any reason)',
+                                  count: (indexabilityValues ?? [])
+                                    .filter((value) => reasons.includes(value.key))
+                                    .reduce((sum, value) => sum + value.count, 0),
+                                  ticked: allReasons,
+                                  onChoose: () => setFilters(withIndexability(filters, allReasons ? [] : reasons)),
+                                },
+                              ]
+                            : [],
+                      }
+                    : undefined
+                }
                 onOpenChange={(open) => setOpenFacet((current) => (open ? id : current === id ? null : current))}
               />
             ))}
+            {/* On the Content tab: missing, duplicate and badly sized titles, descriptions and H1s, one choice each. */}
+            {preset?.id === 'content'
+              ? CONTENT_FACETS.map((facet) => (
+                  <FacetMenu
+                    key={facet.id}
+                    title={facet.title}
+                    noun="page"
+                    values={contentFacetValues(facet, analysisRead.data?.counts, filters)}
+                    failed={analysisRead.isError && !analysisRead.data}
+                    unavailable={
+                      !summaryAvailable && summary
+                        ? `Counted by the analysis: these counts ${
+                            analysing && summary.reason !== 'crawling'
+                              ? UNAVAILABLE_WHILE_ANALYSING
+                              : UNAVAILABLE_BECAUSE[summary.reason ?? 'notAnalyzed']
+                          }.`
+                        : undefined
+                    }
+                    onRetry={() => void analysisRead.refetch()}
+                    onChoose={chooseFacet}
+                    onOpenChange={(open) =>
+                      setOpenContent((current) => (open ? facet.id : current === facet.id ? null : current))
+                    }
+                  />
+                ))
+              : null}
           </FilterBar>
           {search.links ? (
             <Banner
@@ -916,7 +1116,7 @@ export function UrlsScreen() {
           <ErrorState error={rows.error} onRetry={rows.refetch} />
         )
       ) : (
-        <GridScreenBody ref={measure} className="mx-6 pb-4">
+        <GridScreenBody className="mx-6 pb-4">
           <GridCore<UrlRow>
             key={view}
             label="URLs"
@@ -936,7 +1136,12 @@ export function UrlsScreen() {
             fetchRows={rows.fetchRows}
             onCopy={onCopy}
             // The cursor is on a URL, not at a row number: a running crawl's refresh that moves rows keeps it on its URL.
-            rowKey={(row) => row.id}
+            rowKey={rowKeyOf}
+            // Back to this view (from Links, from another screen) starts on the URL it was left on (rule 9).
+            startRow={startRow}
+            startKey={startKey}
+            // The highlight follows the inspector's walk: the URL it shows is the row marked, or none is.
+            followKey={search.inspect}
             onSort={onSort}
             focusHeader={handoff.focusHeader}
             onActivate={(_index, row) => {
@@ -944,7 +1149,9 @@ export function UrlsScreen() {
             }}
             // While it's open, the inspector follows the cursor, in place.
             onActiveRowChange={(index) => {
-              const row = inspecting && index !== null ? rows.getRow(index) : undefined;
+              const at = index === null ? undefined : rows.getRow(index);
+              if (index !== null && at) rememberPlace(placeKey, index, String(at.id));
+              const row = inspecting ? at : undefined;
               if (row) inspector.open(row.id);
             }}
             onActiveColumnChange={setCursorColumn}
@@ -969,7 +1176,8 @@ export function UrlsScreen() {
                 />
               )
             }
-            className="flex-1 rounded-lg border border-border-card"
+            // A big grid: a URL's open-in-browser button shows on the row pointed at and on the cursor's.
+            className="si-open-on-row si-mark-cursor flex-1 rounded-lg border border-border-card"
           />
         </GridScreenBody>
       )}
@@ -1013,6 +1221,29 @@ export function UrlsScreen() {
           }}
         >
           Show its inlinks in Links
+        </MenuItem>
+        <MenuItem
+          icon={Link2}
+          disabled={!menuRow}
+          onSelect={() => {
+            if (!menuRow) return;
+            void navigate({
+              to: '/crawls/$crawl/links',
+              params: { crawl: crawlId },
+              search: { filter: linksOfUrl('outlinks', menuRow.id, 'all') },
+            });
+          }}
+        >
+          Show its outlinks in Links
+        </MenuItem>
+        <MenuItem
+          icon={ListChecks}
+          disabled={!menuRow}
+          onSelect={() => {
+            if (menuRow) inspector.open(menuRow.id, undefined, { section: 'issues' });
+          }}
+        >
+          Show its issues
         </MenuItem>
         {/* The fix loop: the row, or the selection, fetched again into the crawl (at most 1,000). */}
         <RecheckMenuItem<UrlRow>

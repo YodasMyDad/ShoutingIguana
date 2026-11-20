@@ -3,6 +3,7 @@
 import type { GridFilter } from '../../api/grids';
 import type { LinkKind } from '../../api/inspector';
 import { formatCount } from '../../lib/format';
+import type { InspectShow } from '../../routing/inspector';
 
 /**
  * The links to a URL (its inlinks) or from it (its outlinks), of one kind or of every kind: what the inspector's link
@@ -16,6 +17,18 @@ export function linksOfUrl(direction: 'inlinks' | 'outlinks', urlId: number, kin
     { column: 'selfLink', op: 'is', value: false },
   ];
   return kind === 'all' ? filters : [...filters, { column: 'kind', op: 'in', values: [kind] }];
+}
+
+/**
+ * What the inspector shows when Links opens it on one end of a link (the UX round's D-08): the page the link is on
+ * arrives on its outlinks, the target on its inlinks, each with the URL at the link's other end marked, so the link
+ * the reader came for is the one in front of them. `following` is the grid's cursor moving an inspector that's
+ * already open: the link is marked, and the tab stays the one the reader chose. With no other end (where a redirect
+ * ends, a target many pages link to), nothing is asked for.
+ */
+export function linkArrival(end: 'from' | 'to', other: number | undefined, following = false): InspectShow | undefined {
+  if (other === undefined) return undefined;
+  return following ? { link: other } : { section: end === 'from' ? 'outlinks' : 'inlinks', link: other };
 }
 
 /**

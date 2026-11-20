@@ -6,7 +6,16 @@ import { App } from '../app/App';
 import { createQueryClient } from '../app/queryClient';
 import { createAppRouter, type AppRouter } from '../app/router';
 import { TEST_CRAWL_ID, fakeSidecar, standardRoutes } from '../test/fakeSidecar';
-import { closeInspector, goToUrl, inspectFromGrid, viewInspects, walkTo, walkedSteps } from './inspector';
+import {
+  closeInspector,
+  goToUrl,
+  inspectFromGrid,
+  inspectTrail,
+  viewInspects,
+  walkBack,
+  walkTo,
+  walkedSteps,
+} from './inspector';
 
 const CRAWL = `/crawls/${TEST_CRAWL_ID}`;
 
@@ -80,14 +89,19 @@ const step = (action: () => unknown) =>
 afterEach(() => setTransport(fakeSidecar([])));
 
 describe('the inspector in history', () => {
-  it('opens from a grid in place, so back after closing it leaves the screen', async () => {
-    const history = fromOverview();
+  it('opens as one new place: back closes it and returns to the view as it was', async () => {
+    const history = createMemoryHistory({
+      initialEntries: [`${CRAWL}/overview`, `${CRAWL}/urls?q=rattan`],
+      initialIndex: 1,
+    });
     const router = await open(history);
     await step(() => inspectFromGrid(router, 1));
     expect(at(router)).toEqual({ path: `${CRAWL}/urls`, inspect: 1 });
-    expect(history.length).toBe(2);
-    await step(() => closeInspector(router));
+    expect(history.length).toBe(3);
+    await step(() => history.back());
+    // The view it opened from, untouched: its search is still there, and the inspector is closed.
     expect(at(router)).toEqual({ path: `${CRAWL}/urls`, inspect: undefined });
+    expect((router.state.location.search as { q?: string }).q).toBe('rattan');
     await step(() => history.back());
     expect(at(router).path).toBe(`${CRAWL}/overview`);
   });
@@ -99,76 +113,102 @@ describe('the inspector in history', () => {
     await step(() => inspectFromGrid(router, 2));
     await step(() => inspectFromGrid(router, 3));
     expect(at(router).inspect).toBe(3);
-    expect(history.length).toBe(2);
+    expect(history.length).toBe(3);
+    await step(() => history.back());
+    expect(at(router)).toEqual({ path: `${CRAWL}/urls`, inspect: undefined });
   });
 
-  it('retraces a walk with back and forward, and Esc closes to the screen as it was before the inspector', async () => {
+  it('hops inside it in place: however long the walk, back is one step to the view', async () => {
     const history = fromOverview();
     const router = await open(history);
     await step(() => inspectFromGrid(router, 1));
     await step(() => walkTo(router, 2));
     await step(() => walkTo(router, 3));
+    expect(at(router).inspect).toBe(3);
+    expect(history.length).toBe(3);
     expect(walkedSteps(router.state.location.state)).toBe(2);
     await step(() => history.back());
-    expect(at(router).inspect).toBe(2);
-    await step(() => history.forward());
-    expect(at(router).inspect).toBe(3);
-    await step(() => closeInspector(router));
     expect(at(router)).toEqual({ path: `${CRAWL}/urls`, inspect: undefined });
-    expect(walkedSteps(router.state.location.state)).toBe(0);
-    await step(() => history.back());
-    expect(at(router).path).toBe(`${CRAWL}/overview`);
   });
 
-  it('keeps the steps walked when the cursor moves the inspector to another URL', async () => {
+  it('keeps the hops for its own way back, with the section each was left on', async () => {
+    const history = fromOverview();
+    const router = await open(history);
+    await step(() => inspectFromGrid(router, 1));
+    await step(() => walkTo(router, 2, { leaving: 'inlinks' }));
+    await step(() => walkTo(router, 3, { leaving: 'outlinks', show: { section: 'outlinks', link: 9 } }));
+    expect(inspectTrail(router.state.location.state)).toEqual([
+      { url: 1, section: 'inlinks' },
+      { url: 2, section: 'outlinks' },
+    ]);
+    expect(router.state.location.state.inspectShow).toEqual({ section: 'outlinks', link: 9 });
+    await step(() => walkBack(router));
+    expect(at(router).inspect).toBe(2);
+    // Back on the section it left, and what the hop asked to show isn't asked of this URL.
+    expect(router.state.location.state.inspectShow).toEqual({ section: 'outlinks' });
+    await step(() => walkBack(router));
+    expect(at(router).inspect).toBe(1);
+    expect(router.state.location.state.inspectShow).toEqual({ section: 'inlinks' });
+    expect(walkedSteps(router.state.location.state)).toBe(0);
+    // Nothing left to retrace: it stays.
+    await step(() => walkBack(router));
+    expect(at(router).inspect).toBe(1);
+    expect(history.length).toBe(3);
+  });
+
+  it('ends the walk when the grid’s cursor moves it to another URL, and keeps it for the same one', async () => {
     const history = fromOverview();
     const router = await open(history);
     await step(() => inspectFromGrid(router, 1));
     await step(() => walkTo(router, 2));
-    await step(() => inspectFromGrid(router, 5));
+    // The grid's cursor catching up with the hop: the same URL, the walk still there.
+    await step(() => inspectFromGrid(router, 2));
     expect(walkedSteps(router.state.location.state)).toBe(1);
+    await step(() => inspectFromGrid(router, 5));
+    expect(walkedSteps(router.state.location.state)).toBe(0);
+  });
+
+  it('closes by stepping back to the view it opened from, leaving no second entry for it', async () => {
+    const history = fromOverview();
+    const router = await open(history);
+    await step(() => inspectFromGrid(router, 1));
+    await step(() => walkTo(router, 2));
     await step(() => closeInspector(router));
     expect(at(router)).toEqual({ path: `${CRAWL}/urls`, inspect: undefined });
     await step(() => history.back());
     expect(at(router).path).toBe(`${CRAWL}/overview`);
   });
 
-  it('never goes further back than history goes', async () => {
-    const history = createMemoryHistory({ initialEntries: [`${CRAWL}/urls`] });
+  it('closes in place when the view changed while it was open: its filters aren’t undone', async () => {
+    const history = fromOverview();
     const router = await open(history);
+    await step(() => inspectFromGrid(router, 1));
     await step(() =>
       router.navigate({
         to: '.',
-        search: { inspect: 4 } as never,
-        state: { inspectSteps: 3 },
+        search: ((previous: object) => ({ ...previous, q: 'rattan' })) as never,
+        state: true,
         replace: true,
       }),
     );
     await step(() => closeInspector(router));
     expect(at(router)).toEqual({ path: `${CRAWL}/urls`, inspect: undefined });
+    expect((router.state.location.search as { q?: string }).q).toBe('rattan');
   });
 
-  it('closes after a walk longer than history keeps: back as far as it goes, then closed there', async () => {
-    const history = browserLikeHistory([`${CRAWL}/urls`], 5);
+  it('closes in place where it was opened by a link, with nothing behind it', async () => {
+    const history = createMemoryHistory({ initialEntries: [`${CRAWL}/urls?inspect=4`] });
     const router = await open(history);
-    await step(() => inspectFromGrid(router, 1));
-    for (let urlId = 2; urlId <= 9; urlId++) await step(() => walkTo(router, urlId));
-    // Eight steps walked, and history holds the last five entries: the one the inspector opened on is gone.
-    expect(walkedSteps(router.state.location.state)).toBe(8);
-    expect(history.length).toBe(5);
     await step(() => closeInspector(router));
     expect(at(router)).toEqual({ path: `${CRAWL}/urls`, inspect: undefined });
-    expect(walkedSteps(router.state.location.state)).toBe(0);
+    expect(history.length).toBe(1);
   });
 
-  it('closes in place when history can’t go back as far as it was asked to', async () => {
-    const history = browserLikeHistory([`${CRAWL}/urls`], 5);
+  it('closes in place when history can’t step back', async () => {
+    // A browser that dropped the entry behind: one entry kept.
+    const history = browserLikeHistory([`${CRAWL}/urls`], 1);
     const router = await open(history);
     await step(() => inspectFromGrid(router, 1));
-    for (let urlId = 2; urlId <= 9; urlId++) await step(() => walkTo(router, urlId));
-    // Two steps back along the walk: two entries are behind this one, and nothing says so.
-    history.go(-2);
-    await waitFor(() => expect(at(router).inspect).toBe(7));
     await act(async () => {
       await closeInspector(router);
     });
@@ -181,7 +221,6 @@ describe('the inspector in history', () => {
     const router = await open(history);
     await step(() => inspectFromGrid(router, 1));
     await step(() => walkTo(router, 2));
-    await step(() => walkTo(router, 3));
     await step(() => Promise.all([closeInspector(router), closeInspector(router)]));
     // Time for a second step back to land, had one been asked for.
     await step(() => new Promise((resolve) => setTimeout(resolve, 20)));
@@ -234,19 +273,16 @@ describe('“Go to URL…”', () => {
     }
   });
 
-  it('opens the inspector in place on a view that has it closed, then is a step of the walk back retraces', async () => {
+  it('opens the inspector as one new place on a view that has it closed, then hops in place', async () => {
     const history = fromOverview();
     const router = await open(history);
     await step(() => goToUrl(router, TEST_CRAWL_ID, 2));
     expect(at(router)).toEqual({ path: `${CRAWL}/urls`, inspect: 2 });
-    // In place, as a grid opens it: closing it leaves no second entry for the same view.
-    expect(history.length).toBe(2);
+    expect(history.length).toBe(3);
     await step(() => goToUrl(router, TEST_CRAWL_ID, 3));
     expect(history.length).toBe(3);
     expect(walkedSteps(router.state.location.state)).toBe(1);
-    await step(() => history.back());
-    expect(at(router).inspect).toBe(2);
-    // Esc from the first URL gone to: the screen as it was before, and back from there leaves it.
+    // Esc: the screen as it was before, and back from there leaves it.
     await step(() => closeInspector(router));
     expect(at(router)).toEqual({ path: `${CRAWL}/urls`, inspect: undefined });
     await step(() => history.back());
@@ -268,6 +304,8 @@ describe('“Go to URL…”', () => {
     const router = await open(history);
     await step(() => goToUrl(router, TEST_CRAWL_ID, 2));
     expect(at(router)).toEqual({ path: `${CRAWL}/urls`, inspect: 2 });
+    await step(() => closeInspector(router));
+    expect(at(router)).toEqual({ path: `${CRAWL}/urls`, inspect: undefined });
     await step(() => history.back());
     expect(at(router).path).toBe(`${CRAWL}/overview`);
   });

@@ -43,6 +43,12 @@ export interface UrlProps {
    * Enter does what the click does.
    */
   tabbable?: boolean | undefined;
+  /**
+   * What the open-in-browser button opens, where it isn't the URL shown: the page at the words of the fault
+   * (`urlAtText`). `openHint` is its tooltip then ("Open the page at this link").
+   */
+  openUrl?: string | undefined;
+  openHint?: string | undefined;
   className?: string | undefined;
 }
 
@@ -92,11 +98,13 @@ function useMiddleTruncate(text: string, keepStart: number, enabled: boolean) {
       setShown(text);
       return;
     }
-    // Fractional, as the text's own width is, so a URL that just fits isn't cut by rounding; less the room kept for the
-    // open-in-browser button.
+    // Fractional, as the text's own width is, so a URL that just fits isn't cut by rounding; less the room of the
+    // open-in-browser button, which sits straight after the text.
     const style = getComputedStyle(root);
     const padding = (Number.parseFloat(style.paddingLeft) || 0) + (Number.parseFloat(style.paddingRight) || 0);
-    const width = root.getBoundingClientRect().width - padding;
+    const open = root.querySelector<HTMLElement>(':scope > .si-url__open');
+    const reserved = open ? open.getBoundingClientRect().width + (Number.parseFloat(style.columnGap) || 0) : 0;
+    const width = root.getBoundingClientRect().width - padding - reserved;
     if (width <= 0) {
       setShown(text);
       return;
@@ -127,9 +135,10 @@ function useMiddleTruncate(text: string, keepStart: number, enabled: boolean) {
 
 /**
  * A URL: monospace, its host muted and its path strong, truncated in the middle so the host and the end stay visible.
- * The full URL shows on hover, copies on click (with "Copied" in the tooltip and a word to screen readers), and opens
- * in the browser from the icon that shows on hover or focus. URLs on the crawl's own origin show their path. With
- * `onGo` it's a link instead: the click goes there (the inspector walks to it), in the link's colour.
+ * The full URL shows on hover, and it opens in the browser from the icon straight after its text (never at the far
+ * edge of its cell). URLs on the crawl's own origin show their path. With `onGo` it's a link: the click goes there
+ * (the inspector opens on it), in the link's colour. Without, `copyable` copies it on click (with "Copied" in the
+ * tooltip and a word to screen readers); with neither it's text, and looks like text.
  */
 export function Url({
   url,
@@ -142,6 +151,8 @@ export function Url({
   onGo,
   goHint = 'Inspect',
   tabbable = true,
+  openUrl,
+  openHint,
   className,
 }: UrlProps) {
   const display = urlDisplay(url, siteOrigin);
@@ -166,6 +177,10 @@ export function Url({
   const text = (
     <>
       <span className="si-url__full">{display.full}</span>
+      {/* What the layout's width reads: the text as shown, whole, so the button follows a path and not its host's room. */}
+      {file === null && truncate !== 'wrap' ? (
+        <span className="si-url__sizer" data-text={display.shown} aria-hidden="true" />
+      ) : null}
       <span ref={shownRef} className={clsx('si-url__shown', file && 'si-url__shown--file')} aria-hidden="true">
         {file ? (
           <>
@@ -195,13 +210,7 @@ export function Url({
   return (
     <span
       ref={rootRef}
-      className={clsx(
-        'si-url',
-        inline && 'si-url--inline',
-        truncate === 'wrap' && 'si-url--wrap',
-        openable && web && 'si-url--openable',
-        className,
-      )}
+      className={clsx('si-url', inline && 'si-url--inline', truncate === 'wrap' && 'si-url--wrap', className)}
     >
       {onGo ? (
         <Tooltip content={url} hint={goHint} triggerName={display.full}>
@@ -244,17 +253,17 @@ export function Url({
       {openable && web ? (
         <IconButton
           label={openLabel(url)}
-          tooltip="Open in your browser"
+          tooltip={openHint ?? 'Open in your browser'}
           icon={ExternalLink}
           size="xs"
           className="si-url__open"
-          data-open-url={url}
+          data-open-url={openUrl ?? url}
           // In a grid's cell it's no Tab stop (the grid is one, and Shift+Enter opens the row's URL), a press leaves
           // focus on the grid, and a quick second press is no double-click on the row (which would inspect it).
           tabIndex={tabbable ? undefined : -1}
           onMouseDown={tabbable ? undefined : (event) => event.preventDefault()}
           onDoubleClick={(event) => event.stopPropagation()}
-          onClick={() => void openInBrowser(url)}
+          onClick={() => void openInBrowser(openUrl ?? url)}
         />
       ) : null}
     </span>

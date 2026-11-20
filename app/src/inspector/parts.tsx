@@ -7,17 +7,19 @@ import type { CheckGroupRef, UrlOutcome } from '../api/grids';
 import type { UrlDetail, UrlIssue } from '../api/inspector';
 import { analysisQuery, crawlQuery } from '../api/queries';
 import { analyseCrawl } from '../crawl/actions';
+import { affectedCount } from '../crawl/checkSubject';
 import { LastAnalysisBanner } from '../crawl/LastAnalysisBanner';
 import { crawlControls, effectiveStatus } from '../crawl/status';
 import { ErrorState } from '../feedback/ErrorState';
 import { Skeleton } from '../feedback/Skeleton';
 import { useLiveCrawl } from '../live/liveStore';
+import type { InspectShow } from '../routing/inspector';
 import { Badge } from '../ui/Badge';
 import { SeverityMark } from '../ui/SeverityMark';
 import { StatusCode } from '../ui/StatusCode';
 import { TextLink } from '../ui/TextLink';
 import { Url } from '../ui/Url';
-import { checkTitle, issuesAreStale, useChecks, useInspectorContext } from './inspectorContext';
+import { checkTitle, issuesAreStale, useChecks, useInspectorContext, useNamedBy } from './inspectorContext';
 import { issueLink } from './issueLinks';
 import { splitHidden } from './sections';
 import { noStatusWords, reasonPhrase } from './words';
@@ -68,6 +70,7 @@ export function WalkUrl({
   outcome,
   showStatus = false,
   truncate = 'middle',
+  show,
   className,
 }: {
   /** Null for a URL the crawl doesn't have (a canonical to somewhere it never went). */
@@ -79,6 +82,8 @@ export function WalkUrl({
   /** Its status after it, when that's the point: where a canonical or a redirect leads. */
   showStatus?: boolean | undefined;
   truncate?: 'middle' | 'wrap' | undefined;
+  /** What to arrive on there: the page a URL was found on opens on its Outlinks, its link to this URL first. */
+  show?: InspectShow | undefined;
   className?: string | undefined;
 }) {
   const { urlId, siteOrigin, walk } = useInspectorContext();
@@ -91,7 +96,7 @@ export function WalkUrl({
         copyable={!walkable}
         openable={!walkable}
         truncate={truncate}
-        onGo={walkable ? () => walk(id) : undefined}
+        onGo={walkable ? () => walk(id, show ? { show } : undefined) : undefined}
         className="min-w-0 flex-1 text-12"
       />
       {showStatus && statusCode !== undefined ? (
@@ -106,7 +111,10 @@ export function WalkUrl({
   );
 }
 
-/** The Issues route for one of the URL's issues: its check, with the group it's in open. */
+/**
+ * The Issues route for one of the URL's issues: its check, with the group it's in open. A check's name is a link, and
+ * looks like one.
+ */
 export function IssueCheckLink({
   checkId,
   group,
@@ -124,7 +132,6 @@ export function IssueCheckLink({
       to="/crawls/$crawl/issues/{-$check}"
       params={{ crawl: crawlId, check: checkId }}
       search={group ? { group } : {}}
-      variant="subtle"
       className={className}
     >
       {children}
@@ -196,6 +203,40 @@ export function IssueList({
       {hidden.map((issue, index) => (
         <IssueRow key={`hidden-${issue.checkId}-${index}`} issue={issue} detail={detail} hidden />
       ))}
+    </ul>
+  );
+}
+
+/**
+ * The issues on other URLs that name this one, a check a row: its title leads to the check on Issues, on this URL's
+ * group where the check groups by the URL named, with how many URLs' issues name it.
+ */
+export function NamedByList({ detail }: { detail: Pick<UrlDetail, 'id' | 'namedBy'> }) {
+  const { byId, ready } = useChecks();
+  const named = useNamedBy(detail);
+  return (
+    <ul aria-label="Issues on other URLs that name this one" className="flex flex-col">
+      {[...named.counted, ...named.hidden].map((entry) => {
+        const check = byId.get(entry.checkId);
+        const isHidden = named.hidden.includes(entry);
+        return (
+          <li key={entry.checkId} className="flex min-h-(--row-height-issue) items-baseline gap-3 py-1 text-13">
+            <IssueCheckLink
+              checkId={entry.checkId}
+              // A check grouped by the other URL has this URL's group: the URLs whose issue names it.
+              group={check?.grouping === 'relatedUrl' ? { detail: null, relatedUrlId: detail.id } : undefined}
+              className="inline-flex min-h-(--target-min) min-w-0 items-center font-medium"
+            >
+              {checkTitle(check, ready)}
+            </IssueCheckLink>
+            {isHidden ? <Badge variant="outline">Hidden</Badge> : null}
+            <span className="figures ml-auto shrink-0 text-12 text-text-muted">
+              {/* How many URLs have an issue that names this one: pages, where the check flags nothing else. */}
+              {affectedCount(check, entry.count)}
+            </span>
+          </li>
+        );
+      })}
     </ul>
   );
 }

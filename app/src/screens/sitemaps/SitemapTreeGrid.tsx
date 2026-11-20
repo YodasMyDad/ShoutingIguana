@@ -1,10 +1,13 @@
-import { ChevronRight } from 'lucide-react';
+import clsx from 'clsx';
+import { ArrowRight, ChevronRight } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { GridFilter, Sitemap, SitemapDiscovery } from '../../api/grids';
 import { GridCore } from '../../grid/GridCore';
 import { useColumnLayout } from '../../grid/useColumnLayout';
 import { GRID_SCREEN_MIN_ROWS } from '../../grid/GridScreen';
 import { useGridMetrics } from '../../grid/metrics';
+import { RowMenu, UrlRowItems } from '../../grid/RowMenu';
+import { copyRowUrls, rowMenuLabel, useRowMenu } from '../../grid/rowMenuState';
 import type { GridColumn, GridTree } from '../../grid/types';
 import { useElementWidth } from '../../grid/useElementWidth';
 import { withRecorded } from '../../lib/failure';
@@ -12,12 +15,14 @@ import { formatCount, formatCountOf } from '../../lib/format';
 import { textWidth, tokenValue, twoLineWidth } from '../../lib/textWidth';
 import { Badge } from '../../ui/Badge';
 import { Icon } from '../../ui/Icon';
+import { MenuItem } from '../../ui/Menu';
 import { TextLink } from '../../ui/TextLink';
 import { Url } from '../../ui/Url';
-import { pressedRow, rememberPlace, rememberedPlace } from '../listPlace';
+import { urlDisplay } from '../../ui/urlText';
+import { opensItsRow, pressedRow, rememberPlace, rememberedPlace } from '../listPlace';
 import { COUNT_FILTERS, COUNT_WORDS, ENGINE_DOESNT_SAY, countOf, type SitemapCount } from './sitemapLinks';
 import { countsKnown, sitemapRows, type SitemapRow } from './sitemapTree';
-import { foundViaWords, indexBadgeWords, stateWords } from './sitemapWords';
+import { foundInWords, foundViaWords, indexBadgeWords, stateWords } from './sitemapWords';
 
 const ROUTE = '/crawls/$crawl/sitemaps/{-$sitemap}';
 
@@ -30,13 +35,17 @@ const LIST_COUNTS: readonly SitemapCount[] = ['listed', 'crawled', 'blocked', 'n
 // Five counts, how the sitemap was found and what became of it have to fit beside its address in a 1280 px window.
 // How it was found is at least this wide, and as wide as the list's words need ("Default location" whole: 3b final).
 const FOUND_WIDTH = 112;
+/** The most it grows to for the name of the index that lists a sitemap ("In /sitemap.xml"): a longer one is cut. */
+const FOUND_MAX_WIDTH = 220;
 /**
- * What became of a sitemap: at least this wide, and wider for the longest words in the list ("Couldn’t be read: 404 Not
- * Found" whole, gallery 6's re-shoot), up to `STATE_MAX_WIDTH`, past which its words are a hover away. It grows only
- * into room the address doesn't need: the address keeps `URL_ROOM_FIRST` first, as names are what tell the rows
+ * What became of a sitemap: as wide as the longest words in the list need ("Couldn’t be read: 404 Not Found" whole,
+ * gallery 6's re-shoot; a list that only says "Read" keeps no more than that, so the names beside it aren't cut
+ * beside blank room), up to `STATE_MAX_WIDTH`, past which its words are a hover away. Past `STATE_WIDTH` it grows
+ * only into room the address doesn't need: the address keeps `URL_ROOM_FIRST` first, as names are what tell the rows
  * apart, so a 1280 px window shows every name whole and a failure's reason cut, a wider one both whole.
  */
 const STATE_WIDTH = 198;
+const STATE_MIN_WIDTH = 96;
 const STATE_MAX_WIDTH = 300;
 const URL_ROOM_FIRST = 300;
 /**
@@ -97,20 +106,38 @@ function stateWidth(rows: readonly SitemapRow[], crawling: boolean): number {
     0,
     ...rows.map((row) => textWidth(stateWords(row.sitemap, crawling, row.subtree).short, font)),
   );
-  return Math.min(STATE_MAX_WIDTH, Math.max(STATE_WIDTH, Math.ceil(widest + padding + COUNT_SLACK)));
+  return Math.min(STATE_MAX_WIDTH, Math.max(STATE_MIN_WIDTH, Math.ceil(widest + padding + COUNT_SLACK)));
+}
+
+/** The index that lists a sitemap, when the crawl has it: what its Found via cell names. */
+function indexOf(sitemaps: readonly Sitemap[], sitemap: Sitemap): Sitemap | undefined {
+  return sitemap.parentId === null || sitemap.parentId === sitemap.id
+    ? undefined
+    : sitemaps.find((other) => other.id === sitemap.parentId);
 }
 
 /**
- * The Found via column as wide as the longest of its words in this list, measured at the weight of an index's row,
- * the heaviest, with the cells' padding; never narrower than `FOUND_WIDTH`. Only a list with a long one pays for it:
- * the words stay those of the sitemap's facts and the export, and the extra room comes out of what Status would have
- * grown into before the address gives any.
+ * The Found via column as wide as the longest of its words in this list (a sitemap an index lists names the index:
+ * "In /sitemap.xml"), measured at the weight of an index's row, the heaviest, with the cells' padding; never narrower
+ * than `FOUND_WIDTH`, nor wider than `FOUND_MAX_WIDTH` (a long name is cut, whole on hover). Only a list with a long
+ * one pays for it: the extra room comes out of what Status would have grown into before the address gives any.
  */
-function foundWidth(sitemaps: readonly Sitemap[]): number {
-  const font = `${tokenValue('--font-weight-semibold', '600')} ${tokenValue('--grid-font-size', '13px')} ${tokenValue('--font-sans', 'sans-serif')}`;
+function foundWidth(sitemaps: readonly Sitemap[], siteOrigin: string | null): number {
+  const weight = tokenValue('--font-weight-semibold', '600');
+  const size = Number.parseFloat(tokenValue('--grid-font-size', '13px')) || 13;
+  const font = `${weight} ${size}px ${tokenValue('--font-sans', 'sans-serif')}`;
+  // An index's name is set in the monospace face, at its own scale beside the words.
+  const scale = Number.parseFloat(tokenValue('--mono-scale', '0.93em')) || 0.93;
+  const mono = `${weight} ${size * scale}px ${tokenValue('--font-mono', 'monospace')}`;
   const padding = 2 * (Number.parseFloat(tokenValue('--grid-cell-x', '12px')) || 12);
-  const widest = Math.max(0, ...sitemaps.map((sitemap) => textWidth(foundViaWords(sitemap.foundVia).short, font)));
-  return Math.max(FOUND_WIDTH, Math.ceil(widest + padding + COUNT_SLACK));
+  const width = (sitemap: Sitemap) => {
+    const index = indexOf(sitemaps, sitemap);
+    return index
+      ? textWidth('In ', font) + textWidth(foundInWords(index.url, siteOrigin).name, mono)
+      : textWidth(foundViaWords(sitemap.foundVia).short, font);
+  };
+  const widest = Math.max(0, ...sitemaps.map(width));
+  return Math.min(FOUND_MAX_WIDTH, Math.max(FOUND_WIDTH, Math.ceil(widest + padding + COUNT_SLACK)));
 }
 
 /** A sitemap's row is its sitemap, wherever a running crawl moves it in the tree. */
@@ -136,8 +163,10 @@ export interface SitemapTreeProps {
 
 /**
  * The crawl's sitemaps as a treegrid: an index with the sitemaps it lists under it, each with how it was found, what
- * became of it, and its URLs counted. Every count opens exactly its URLs. One Tab stop: the arrows move, Right and
- * Left open and close an index, and Enter opens the sitemap, or the count the cursor is on.
+ * became of it, and its URLs counted. A list of places to go: a sitemap's name is a link that opens it, a click
+ * anywhere else on its row opens it too (every row, one that lists nothing or couldn't be read as well), and every
+ * count opens exactly its URLs. One Tab stop: the arrows move, Right and Left open and close an index, and Enter opens
+ * the sitemap, or the count the cursor is on. A row's menu (right-click, Shift+F10) has the same, and copies its URL.
  */
 export function SitemapTree({
   crawlId,
@@ -162,6 +191,17 @@ export function SitemapTree({
     return at >= 0 ? at : undefined;
   });
   const grouped = rows.some((row) => row.expanded !== undefined);
+  const rowMenu = useRowMenu<SitemapRow>();
+  // The row as it was when the menu opened: rows can move under a running crawl while it is open.
+  const menuRow = rowMenu.state?.menu.row;
+  /** Opens a sitemap's own page, from its name, its row or its menu: the list is left on its row. */
+  const openSitemap = useCallback(
+    (sitemap: Sitemap) => {
+      rememberPlace(place, sitemap.id);
+      onOpen(sitemap, []);
+    },
+    [place, onOpen],
+  );
 
   const tree = useMemo<GridTree>(
     () => ({
@@ -205,11 +245,11 @@ export function SitemapTree({
     [sitemaps, discovery, crawling, fontsIn, metrics],
   );
   // eslint-disable-next-line react-hooks/exhaustive-deps -- the fonts and the density change what's measured
-  const foundViaWidth = useMemo(() => foundWidth(sitemaps), [sitemaps, fontsIn, metrics]);
+  const foundViaWidth = useMemo(() => foundWidth(sitemaps, siteOrigin), [sitemaps, siteOrigin, fontsIn, metrics]);
   const others = foundViaWidth + LIST_COUNTS.reduce((sum, count) => sum + counted[count], 0);
   // The room the address and the Status share; Status takes what the address leaves past `URL_ROOM_FIRST`.
   const shared = (width ?? 960) - others - FRAME_SLACK;
-  const stated = Math.max(STATE_WIDTH, Math.min(stateNeeds, shared - URL_ROOM_FIRST));
+  const stated = Math.max(Math.min(stateNeeds, STATE_WIDTH), Math.min(stateNeeds, shared - URL_ROOM_FIRST));
   const fixed = others + stated;
   const urlWidth = Math.max(MIN_URL_WIDTH, shared - stated);
   // A frame too narrow for every column (200% zoom) scrolls sideways: the counts, which the list is for, then come
@@ -260,7 +300,15 @@ export function SitemapTree({
             <span aria-hidden="true" className="si-tree-spacer" />
           ) : null}
           <span className="min-w-0 flex-1">
-            <Url url={row.sitemap.url} siteOrigin={siteOrigin} copyable={false} tabbable={false} />
+            {/* The name is the link that opens the sitemap, the button that opens it in the browser straight after. */}
+            <Url
+              url={row.sitemap.url}
+              siteOrigin={siteOrigin}
+              onGo={() => openSitemap(row.sitemap)}
+              goHint="Open this sitemap"
+              copyable={false}
+              tabbable={false}
+            />
           </span>
           {row.sitemap.isIndex ? (
             <Badge variant="outline" className="ml-2 shrink-0">
@@ -276,6 +324,27 @@ export function SitemapTree({
       header: 'Found via',
       width: foundViaWidth,
       cell: (row) => {
+        // A sitemap an index lists names the index, as a link to it: "Sitemap index" on every one read as its type.
+        const index = indexOf(sitemaps, row.sitemap);
+        if (index) {
+          const within = foundInWords(index.url, siteOrigin);
+          return (
+            // One line of text, cut at its end where the index's name is long: whole on hover.
+            <span className="block truncate" title={within.sentence}>
+              In{' '}
+              <TextLink
+                to={ROUTE}
+                params={{ crawl: crawlId, sitemap: String(index.id) }}
+                search={{}}
+                // The grid is the one Tab stop.
+                tabIndex={-1}
+                className="font-mono text-(length:--mono-scale)"
+              >
+                {within.name}
+              </TextLink>
+            </span>
+          );
+        }
         const words = foundViaWords(row.sitemap.foundVia);
         return (
           <span title={words.sentence} className={row.sitemap.foundVia === null ? 'text-text-muted' : undefined}>
@@ -283,7 +352,10 @@ export function SitemapTree({
           </span>
         );
       },
-      text: (row) => foundViaWords(row.sitemap.foundVia).short,
+      text: (row) => {
+        const index = indexOf(sitemaps, row.sitemap);
+        return index ? foundInWords(index.url, siteOrigin).short : foundViaWords(row.sitemap.foundVia).short;
+      },
     };
     const state: GridColumn<SitemapRow> = {
       id: 'state',
@@ -305,7 +377,7 @@ export function SitemapTree({
       text: (row) => (countsKnown(row.sitemap, row.subtree) ? String(countOf(row.sitemap, count) ?? '') : ''),
     }));
     return narrow ? [address, ...counts, state, found] : [address, found, state, ...counts];
-  }, [crawlId, siteOrigin, crawling, urlWidth, grouped, narrow, counted, stated, foundViaWidth]);
+  }, [crawlId, sitemaps, siteOrigin, crawling, urlWidth, grouped, narrow, counted, stated, foundViaWidth, openSitemap]);
   // The columns as the user laid them out (resized, moved, pinned), kept for this grid with the preferences.
   const laid = useColumnLayout('sitemaps.list', columns);
 
@@ -315,43 +387,85 @@ export function SitemapTree({
   // own least, `minRows`), and the screen scrolls for the rest of what's on it.
   const short = rows.length <= GRID_SCREEN_MIN_ROWS;
   return (
-    // As tall as its rows, the ones under a closed index not counted, and never more than the room there is.
-    <div
-      ref={measure}
-      className={short ? 'flex shrink-0 flex-col' : 'flex shrink flex-col'}
-      style={{ height: rows.length * rowHeight + headerHeight + 2 }}
-      // A count's link is followed by the router, not the grid: the row it was in is where the list was left.
-      onClickCapture={(event) => {
-        const row = event.target instanceof Element && event.target.closest('a') ? pressedRow(event.target) : null;
-        const left = row === null ? undefined : rows[row];
-        if (left) rememberPlace(place, left.sitemap.id);
-      }}
-    >
-      <GridCore<SitemapRow>
-        label="Sitemaps"
-        columns={laid.columns}
-        columnLayout={laid.columnLayout}
-        rowCount={rows.length}
-        getRow={getRow}
-        rowHeight={rowHeight}
-        headerHeight={headerHeight}
-        tree={tree}
-        startRow={startRow}
-        // A running crawl finds sitemaps under an index above the cursor's row: the cursor stays on its sitemap.
-        rowKey={sitemapOf}
-        minRows={short ? undefined : GRID_SCREEN_MIN_ROWS}
-        onActivateCell={(_index, row, column) => {
-          if (!row) return;
-          rememberPlace(place, row.sitemap.id);
-          const count = LIST_COUNTS.find((candidate) => candidate === column);
-          // A count that's unknown or nothing has no URLs to open: the sitemap itself, then.
-          const counted =
-            count !== undefined && countsKnown(row.sitemap, row.subtree) && (countOf(row.sitemap, count) ?? 0) > 0;
-          onOpen(row.sitemap, counted ? COUNT_FILTERS[count] : []);
+    <>
+      {/* As tall as its rows, the ones under a closed index not counted, and never more than the room there is. The
+          click that opens a row is the pointer's way to what Enter does in the grid, which holds the keys. */}
+      {/* eslint-disable-next-line jsx-a11y-x/click-events-have-key-events, jsx-a11y-x/no-static-element-interactions */}
+      <div
+        ref={measure}
+        className={clsx('si-rows-open flex flex-col', short ? 'shrink-0' : 'shrink')}
+        style={{ height: rows.length * rowHeight + headerHeight + 2 }}
+        // A count's link is followed by the router, not the grid: the row it was in is where the list was left.
+        onClickCapture={(event) => {
+          const row = event.target instanceof Element && event.target.closest('a') ? pressedRow(event.target) : null;
+          const left = row === null ? undefined : rows[row];
+          if (left) rememberPlace(place, left.sitemap.id);
         }}
-        busy={busy}
-        className="si-grid-frame--two-line-head flex-1 rounded-lg border border-border-card"
-      />
-    </div>
+        // A list of places to go: a click on a row, anywhere its own links and buttons aren't, opens its sitemap.
+        onClick={(event) => {
+          const row = opensItsRow(event) ? pressedRow(event.target) : null;
+          const pressed = row === null ? undefined : rows[row];
+          if (pressed) openSitemap(pressed.sitemap);
+        }}
+      >
+        <GridCore<SitemapRow>
+          label="Sitemaps"
+          columns={laid.columns}
+          columnLayout={laid.columnLayout}
+          rowCount={rows.length}
+          getRow={getRow}
+          rowHeight={rowHeight}
+          headerHeight={headerHeight}
+          tree={tree}
+          startRow={startRow}
+          // A running crawl finds sitemaps under an index above the cursor's row: the cursor stays on its sitemap.
+          rowKey={sitemapOf}
+          minRows={short ? undefined : GRID_SCREEN_MIN_ROWS}
+          onActivateCell={(_index, row, column) => {
+            if (!row) return;
+            rememberPlace(place, row.sitemap.id);
+            const count = LIST_COUNTS.find((candidate) => candidate === column);
+            // A count that's unknown or nothing has no URLs to open: the sitemap itself, then.
+            const counted =
+              count !== undefined && countsKnown(row.sitemap, row.subtree) && (countOf(row.sitemap, count) ?? 0) > 0;
+            onOpen(row.sitemap, counted ? COUNT_FILTERS[count] : []);
+          }}
+          // Shift+Enter opens the sitemap's file in the browser, as the button after its name does.
+          openUrlOf={(row) => row.sitemap.url}
+          onContextMenu={rowMenu.onContextMenu}
+          busy={busy}
+          // The row the list was left on is marked, coming back, though the grid hasn't focus.
+          className="si-grid-frame--two-line-head si-mark-cursor flex-1 rounded-lg border border-border-card"
+        />
+      </div>
+      <RowMenu
+        state={rowMenu.state}
+        onOpenChange={rowMenu.onOpenChange}
+        label={rowMenuLabel(
+          rowMenu.state?.menu.indices.length ?? 1,
+          menuRow ? urlDisplay(menuRow.sitemap.url, siteOrigin).shown : undefined,
+          ['sitemap', 'sitemaps'],
+        )}
+      >
+        <MenuItem
+          icon={ArrowRight}
+          shortcut="enter"
+          disabled={!menuRow}
+          onSelect={() => {
+            if (menuRow) openSitemap(menuRow.sitemap);
+          }}
+        >
+          Open this sitemap
+        </MenuItem>
+        <UrlRowItems
+          count={rowMenu.state?.menu.indices.length ?? 1}
+          url={menuRow?.sitemap.url}
+          onCopyUrls={() => {
+            if (rowMenu.state) void copyRowUrls(rowMenu.state.menu, (row) => row.sitemap.url);
+          }}
+          onCopyRows={() => void rowMenu.state?.menu.copy()}
+        />
+      </RowMenu>
+    </>
   );
 }

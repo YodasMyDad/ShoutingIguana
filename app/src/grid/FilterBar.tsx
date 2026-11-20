@@ -127,6 +127,16 @@ export interface FilterBarProps extends FilterChipsProps {
   /** Removes every filter at once. */
   onClear?: (() => void) | undefined;
   /**
+   * The view's search, shown as a chip among the filters ("URL or title contains rattan"): it narrows the list as a
+   * filter does, so it's said where the filters are, and removed there. With it, or a sort (`sorted`), the bar's
+   * button is "Clear all": `onClear` then clears the filters, the search and the sort, and its tooltip says so.
+   */
+  search?: { field: string; text: string; onRemove: () => void } | undefined;
+  /** The view is sorted: "Clear all" puts it back in its own order too. */
+  sorted?: boolean | undefined;
+  /** "Clear all" whatever is set, for a view whose `onClear` always clears the search and the sort with the filters. */
+  clearsAll?: boolean | undefined;
+  /**
    * The most filters the view takes (the contract's 20: a route keeps no more). At the limit "Add filter" says so in
    * place of its editor, so a filter is never typed out only to be dropped.
    */
@@ -138,7 +148,8 @@ export interface FilterBarProps extends FilterChipsProps {
 
 /**
  * The grid's filter bar: its quick filters, the filters in force as chips, "Add filter" where the view says what a
- * filter can be on, and "Clear filters". One group, named "Filters", that wraps onto more lines as it fills.
+ * filter can be on, and "Clear filters" ("Clear all" where the view's search and sort go with them). One group, named
+ * "Filters", that wraps onto more lines as it fills.
  */
 export function FilterBar({
   filters,
@@ -152,6 +163,9 @@ export function FilterBar({
   adding,
   onAddingChange,
   onClear,
+  search,
+  sorted = false,
+  clearsAll = false,
   maxFilters,
   children,
   className,
@@ -177,6 +191,9 @@ export function FilterBar({
         onEditingChange={onEditingChange}
         refused={refused}
       />
+      {search ? (
+        <FilterChip field={search.field} op="contains" value={search.text} truncate onRemove={search.onRemove} />
+      ) : null}
       {editor ? (
         <Popover trigger={<AddFilterChip ref={addRef} />} title="Add a filter" open={isAdding} onOpenChange={setAdding}>
           {maxFilters !== undefined && filters.length >= maxFilters ? (
@@ -193,17 +210,19 @@ export function FilterBar({
           )}
         </Popover>
       ) : null}
-      {onClear && filters.length > 0 ? (
+      {onClear && (filters.length > 0 || (clearsAll && (search !== undefined || sorted))) ? (
         <Button
           variant="ghost"
           size="sm"
+          // What it clears, said before it's pressed: the columns are never part of it.
+          title={clearsAll ? 'Clears the filters, the search and the sort. The columns stay.' : undefined}
           onClick={() => {
             // The button goes with the last filter: the keyboard moves to what's left of the bar.
             focusQuietly(addRef.current);
             onClear();
           }}
         >
-          Clear filters
+          {clearsAll ? 'Clear all' : 'Clear filters'}
         </Button>
       ) : null}
     </div>

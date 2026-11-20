@@ -108,7 +108,8 @@ async function openUrlGrid(page: Page) {
 /** Selects the grid's second row with a click, and moves the pointer off the rows. */
 async function selectRow(page: Page, grid: Locator) {
   const row = grid.locator('[role="row"][aria-rowindex="3"]');
-  await row.getByRole('gridcell').first().click();
+  // The URL's own cell opens the inspector. The next cell only selects the row.
+  await row.getByRole('gridcell').nth(1).click();
   await expect(row).toHaveAttribute('aria-selected', 'true');
   await page.mouse.move(0, 0);
   return row;

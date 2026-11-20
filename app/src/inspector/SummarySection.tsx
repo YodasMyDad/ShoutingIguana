@@ -1,31 +1,52 @@
-import { CircleCheck, CircleDashed, CircleSlash, Check, Minus, X } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { CircleCheck, CircleDashed, CircleSlash, Check, ImageOff, Minus, X } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
+import { api } from '../api/client';
 import type { MeasuredText, UrlDetail } from '../api/inspector';
+import { foundOnQuery, queryKeys } from '../api/queries';
+import { imageFileWords } from '../crawl/evidence';
 import { formatBytes, formatCount, formatCountOf, formatExactTime, formatMilliseconds } from '../lib/format';
 import { Badge } from '../ui/Badge';
 import { Callout } from '../ui/Callout';
 import { Fact, Facts } from '../ui/Facts';
 import { Icon } from '../ui/Icon';
+import { isBrokenImage } from '../ui/imageFacts';
 import { Meter } from '../ui/Meter';
 import { FigureParts, Num } from '../ui/Num';
 import { SeverityMark } from '../ui/SeverityMark';
 import { MiniStat, MiniStats } from '../ui/Stat';
 import { StatusCode } from '../ui/StatusCode';
 import { TextLink } from '../ui/TextLink';
+import { Url } from '../ui/Url';
+import { fileNameOf } from '../ui/urlText';
 import { severityCount, SEVERITIES } from '../ui/severity';
+import { NOT_IN_SITEMAP_CHECK } from '../screens/urls/urlFacets';
 import { fetchState, type FetchState } from './fetchState';
 import { canonicalFact, indexabilityVerdict, type IndexabilityRow, type IndexabilityVerdict } from './indexability';
-import { checkTitle, useChecks, useInspectorContext } from './inspectorContext';
+import { checkTitle, useChecks, useInspectorContext, useNamedBy } from './inspectorContext';
 import { issueLink } from './issueLinks';
-import { Block, IssueCheckLink, IssueList, PageText, SectionBody, StaleIssues, WalkUrl } from './parts';
+import { Block, IssueCheckLink, IssueList, NamedByList, PageText, SectionBody, StaleIssues, WalkUrl } from './parts';
 import { robotsOriginOf } from './placeLinks';
 import { measuresOf, scaleEnd, type Measure } from './scale';
 import { splitHidden, type SectionId } from './sections';
-import { KIND_WORDS, SOURCE_WORDS, TYPE_WORDS, depthWords, protocolWords, reasonPhrase, wordFor } from './words';
+import {
+  KIND_WORDS,
+  SOURCE_WORDS,
+  TYPE_WORDS,
+  depthWords,
+  namedByWords,
+  protocolWords,
+  reasonPhrase,
+  wordFor,
+} from './words';
 import { useHiddenChecks } from '../settings/hiddenChecks';
 
 /** How many of the URL's issues the summary lists before sending the rest to the Issues section. */
 const SUMMARY_ISSUES = 5;
+/** How many of the pages that show an image the summary names before sending the rest to Inlinks. */
+const IMAGE_USES = 1;
+/** How many of the sitemaps that list a URL the summary names before sending the rest to Sitemaps. */
+const SITEMAPS_NAMED = 2;
 
 const SUMMARY_WORDS = {
   crawling: 'Known once the crawl has finished and been analysed.',
@@ -42,7 +63,12 @@ export interface SummarySectionProps {
 
 /**
  * The summary: how it answered, whether it can be indexed and why, its title, description and H1 with each length on
- * the scale the analysis used, its content, timings and size, its issues, and how the crawl found it.
+ * the scale the analysis used, its content, timings and size, its issues, and how the crawl found it. Every count
+ * and name in it that stands for a list is a link to that list: the links to their sections, the issues to theirs,
+ * a check to its page on Issues, a sitemap to its own page, the robots.txt rule to its file.
+ *
+ * An image is shown as an image: its picture, what the file is and the pages that show it. No search engine indexes
+ * it as a page, so the indexability checklist and the note that its content wasn't read are left out.
  */
 export function SummarySection({ detail, onShowSection }: SummarySectionProps) {
   const { crawling, crawlId } = useInspectorContext();
@@ -51,10 +77,14 @@ export function SummarySection({ detail, onShowSection }: SummarySectionProps) {
   const robotsOrigin = state.kind === 'robots' ? robotsOriginOf(detail.url) : null;
   const measures = measuresOf(detail);
   const verdict = indexabilityVerdict(detail);
+  const image = detail.type === 'image';
+  // That an image's content wasn't read, or that it isn't a page, says nothing an image's own block doesn't.
+  const stated = state.title !== null && !(image && (state.kind === 'statusOnly' || state.kind === 'notPage'));
   return (
     <SectionBody>
+      {image ? <ImageHead detail={detail} answered={state.answered} onShowSection={onShowSection} /> : null}
       <TopFigures detail={detail} state={state} response={measures.response} imageSize={measures.imageSize} />
-      {state.title ? (
+      {stated ? (
         <Block>
           <Callout tone="info" title={state.title}>
             {state.why}
@@ -77,7 +107,7 @@ export function SummarySection({ detail, onShowSection }: SummarySectionProps) {
           </Callout>
         </Block>
       ) : null}
-      <Verdict verdict={verdict} />
+      {image ? null : <Verdict verdict={verdict} />}
       {detail.content ? (
         <>
           <Block>
@@ -138,9 +168,115 @@ export function SummarySection({ detail, onShowSection }: SummarySectionProps) {
       ) : null}
       <IssuesSummary detail={detail} onShowSection={onShowSection} />
       <Block title="Links and discovery">
-        <Discovery detail={detail} />
+        <Discovery detail={detail} onShowSection={onShowSection} />
       </Block>
     </SectionBody>
+  );
+}
+
+/**
+ * An image, at the top of its summary: the picture (from the image's own URL, as a thumbnail is: read without a
+ * referrer, and not asked for at all when the crawl knows it's broken), what the file is, and the pages that show it,
+ * the first by name (a hop to its Images, this image first) and the rest in Inlinks.
+ */
+function ImageHead({
+  detail,
+  answered,
+  onShowSection,
+}: SummarySectionProps & {
+  /** The crawl has an answer for it: there may be a picture to show. */
+  answered: boolean;
+}) {
+  const { crawlId, siteOrigin, walk } = useInspectorContext();
+  const uses = useQuery(foundOnQuery(crawlId, detail.id, IMAGE_USES)).data;
+  // The file's own width and height, as the URL grid's row has them: the inspector's read doesn't.
+  const pixels = useQuery({
+    queryKey: [...queryKeys.urlDetail(crawlId, detail.id), 'pixels'],
+    queryFn: async ({ signal }) => {
+      const page = await api.urls(
+        crawlId,
+        {
+          columns: ['pixelWidth', 'pixelHeight'],
+          filters: [{ column: 'id', op: 'eq', value: detail.id }],
+          sort: [],
+          limit: 1,
+        },
+        signal,
+      );
+      const row = page.rows[0];
+      return { pixelWidth: row?.pixelWidth ?? null, pixelHeight: row?.pixelHeight ?? null };
+    },
+    staleTime: Infinity,
+  }).data;
+  const [failed, setFailed] = useState<string | null>(null);
+  const final = detail.redirects.hops.length > 0 ? detail.redirects.final : null;
+  const broken =
+    !answered || isBrokenImage({ statusCode: detail.response?.statusCode, outcome: detail.response?.outcome, final });
+  const file = imageFileWords({
+    sizeBytes: detail.response?.sizeBytes ?? null,
+    contentType: detail.response?.contentType ?? null,
+    pixelWidth: pixels?.pixelWidth ?? null,
+    pixelHeight: pixels?.pixelHeight ?? null,
+  });
+  const named = uses?.sources.slice(0, IMAGE_USES) ?? [];
+  const more = (uses?.pages ?? 0) - named.length;
+  return (
+    <Block>
+      <div className="flex flex-wrap items-start gap-x-5 gap-y-3">
+        <span className="si-inspector-image">
+          {broken || failed === detail.url ? (
+            <span className="flex flex-col items-center gap-1 p-3 text-center text-12 text-text-muted">
+              <Icon icon={ImageOff} size="md" />
+              {broken ? 'No picture: the image didn’t answer' : 'The picture couldn’t be loaded here'}
+            </span>
+          ) : (
+            <img
+              src={detail.url}
+              alt={fileNameOf(detail.url)}
+              className="si-inspector-image__picture"
+              decoding="async"
+              referrerPolicy="no-referrer"
+              draggable={false}
+              onError={() => setFailed(detail.url)}
+            />
+          )}
+        </span>
+        <div className="flex min-w-0 flex-1 basis-(--facts-label-width) flex-col gap-1.5">
+          {file ? <p className="figures text-13 text-text">{file}</p> : null}
+          {uses && uses.pages > 0 ? (
+            <p className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-13">
+              <span className="shrink-0 text-text-secondary">
+                Used on {formatCountOf(uses.pages, 'page')}
+                {uses.pagesExact ? '' : ' or more'}:
+              </span>
+              {named.map((source) => (
+                <Url
+                  key={source.id}
+                  url={source.url}
+                  siteOrigin={siteOrigin}
+                  copyable={false}
+                  // The page that shows it, where it shows it: its Images, this image first. A page that only
+                  // names it (a share image, an icon) has it among its Outlinks, not its Images.
+                  onGo={() =>
+                    walk(source.id, {
+                      show: { section: source.kind === 'image' ? 'images' : 'outlinks', link: detail.id },
+                    })
+                  }
+                  className="min-w-0 text-12"
+                />
+              ))}
+              {more > 0 ? (
+                <button type="button" className="si-link shrink-0" onClick={() => onShowSection('inlinks')}>
+                  and {formatCount(more)} more
+                </button>
+              ) : null}
+            </p>
+          ) : uses ? (
+            <p className="text-13 text-text-secondary">No page the crawl read shows it.</p>
+          ) : null}
+        </div>
+      </div>
+    </Block>
   );
 }
 
@@ -235,6 +371,7 @@ function Verdict({ verdict }: { verdict: IndexabilityVerdict }) {
 }
 
 function TestRow({ row }: { row: IndexabilityRow }) {
+  const { crawlId } = useInspectorContext();
   const failed = row.state === 'fail';
   return (
     <li className="grid grid-cols-(--check-row-columns) gap-x-2.5 text-13">
@@ -257,7 +394,23 @@ function TestRow({ row }: { row: IndexabilityRow }) {
             </Badge>
           ) : null}
         </p>
-        {row.plain ? null : <p className="text-12 text-text-muted">{row.detail}</p>}
+        {row.plain || row.robots ? null : <p className="text-12 text-text-muted">{row.detail}</p>}
+        {row.robots ? (
+          // The rule that refused it, as the file writes it: a link to the file, where every URL it blocks is listed.
+          <p className="text-12 text-text-muted">
+            Blocked by{' '}
+            <TextLink
+              to="/crawls/$crawl/robots/{-$origin}"
+              params={{ crawl: crawlId, origin: row.robots.origin }}
+              search={{}}
+              variant="inline"
+              className="font-mono"
+            >
+              {row.robots.rule}
+            </TextLink>
+            , line {formatCount(row.robots.line)} of its robots.txt
+          </p>
+        ) : null}
         {row.target ? (
           <WalkUrl
             id={row.target.id}
@@ -479,12 +632,23 @@ function IssuesSummary({ detail, onShowSection }: SummarySectionProps) {
   // Checks hidden from the Issues list aren't counted here either; the Issues section lists them, marked.
   const issues = detail.issues === null ? null : splitHidden(detail.issues, hiddenChecks).counted;
   const hidden = (detail.issues?.length ?? 0) - (issues?.length ?? 0);
+  const named = useNamedBy(detail);
   if (issues === null) {
     return (
       <Block title="Issues">
         <p className="text-13 text-text-secondary">
           This crawl hasn’t been analysed yet, so no check has looked at this URL.
         </p>
+      </Block>
+    );
+  }
+  // None of its own, and other URLs' issues name it (an image's are filed on the pages that show it): those, never
+  // "No issues".
+  if (issues.length === 0 && hidden === 0 && named.counted.length > 0) {
+    return (
+      <Block title={namedByWords(detail.type, named.total)}>
+        <StaleIssues detail={detail} className="mb-3" />
+        <NamedByList detail={detail} />
       </Block>
     );
   }
@@ -515,7 +679,12 @@ function IssuesSummary({ detail, onShowSection }: SummarySectionProps) {
   });
   return (
     <Block
-      title={formatCountOf(issues.length, 'issue')}
+      // The count is the way to the list it counts.
+      title={
+        <button type="button" className="si-link" onClick={() => onShowSection('issues')}>
+          {formatCountOf(issues.length, 'issue')}
+        </button>
+      }
       meta={bySeverity.join(', ')}
       actions={
         <button type="button" className="si-link" onClick={() => onShowSection('issues')}>
@@ -529,8 +698,154 @@ function IssuesSummary({ detail, onShowSection }: SummarySectionProps) {
   );
 }
 
-function Discovery({ detail }: { detail: UrlDetail }) {
-  const { crawling, crawlId } = useInspectorContext();
+/** A count that stands for one of the inspector's lists: a link to that section. None is plain words. */
+function ListCount({
+  count,
+  noun,
+  section,
+  onShowSection,
+}: {
+  count: number;
+  noun: string;
+  section: SectionId;
+  onShowSection: (section: SectionId) => void;
+}) {
+  if (count === 0) return <span className="text-text-secondary">No {noun}s</span>;
+  return (
+    <button type="button" className="si-link figures" onClick={() => onShowSection(section)}>
+      {formatCountOf(count, noun)}
+    </button>
+  );
+}
+
+/**
+ * The links to the URL: the Inlinks section's own total (every kind of link) as the way there, then what of it the
+ * analysis counted as hyperlinks, and from how many pages. An engine that doesn't give the total has the hyperlinks
+ * as the link.
+ */
+function InlinksFact({ detail, onShowSection }: SummarySectionProps) {
+  const { links, linkTotals: totals } = detail;
+  const nofollow = links && links.nofollowInlinks > 0 ? `, ${formatCount(links.nofollowInlinks)} nofollow` : '';
+  const fromPages = links ? ` from ${formatCountOf(links.linkingPages, 'page')}${nofollow}` : '';
+  if (!totals) {
+    return links ? (
+      <>
+        <ListCount count={links.inlinks} noun="hyperlink" section="inlinks" onShowSection={onShowSection} />
+        {links.inlinks > 0 ? <span className="text-text-muted">{fromPages}</span> : null}
+      </>
+    ) : null;
+  }
+  const hyperlinks = links?.inlinks ?? 0;
+  return (
+    <>
+      <ListCount count={totals.inlinks} noun="link" section="inlinks" onShowSection={onShowSection} />
+      {totals.inlinks === 0 || !links ? null : (
+        <span className="text-text-muted">
+          {hyperlinks > 0
+            ? `: ${formatCountOf(hyperlinks, 'hyperlink')}${fromPages}`
+            : detail.type === 'image'
+              ? totals.inlinks === 1
+                ? ', an image'
+                : ', each an image'
+              : ', none of them hyperlinks'}
+        </span>
+      )}
+    </>
+  );
+}
+
+/** The links on the URL: the Outlinks section's total as the way there, then the hyperlinks among them. */
+function OutlinksFact({ detail, onShowSection }: SummarySectionProps) {
+  const { links, linkTotals: totals } = detail;
+  const hyperlinks = links?.outlinks ?? null;
+  if (!totals) {
+    return hyperlinks === null ? (
+      <span className="text-text-secondary">Not read</span>
+    ) : (
+      <ListCount count={hyperlinks} noun="hyperlink" section="outlinks" onShowSection={onShowSection} />
+    );
+  }
+  if (totals.outlinks === 0) {
+    return (
+      <span className="text-text-secondary">
+        {detail.type !== 'page' ? 'None: it isn’t a page' : detail.content ? 'No links' : 'Not read'}
+      </span>
+    );
+  }
+  return (
+    <>
+      <ListCount count={totals.outlinks} noun="link" section="outlinks" onShowSection={onShowSection} />
+      {hyperlinks !== null && hyperlinks > 0 ? (
+        <span className="text-text-muted">: {formatCountOf(hyperlinks, 'hyperlink')}</span>
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * Whether a sitemap lists the URL, and which: each by its file's name, a link to that sitemap's own page with this
+ * URL still open (the page lands on its row), then how many more, which leads to the list of them all. An engine
+ * that doesn't say which leads to the list. A page no sitemap lists, that the analysis says should be, leads to the
+ * pages missing from the sitemaps.
+ */
+function SitemapFact({ detail }: { detail: UrlDetail }) {
+  const { crawlId } = useInspectorContext();
+  const listed = detail.listedIn;
+  const all = (words: string) => (
+    <TextLink
+      to="/crawls/$crawl/sitemaps/{-$sitemap}"
+      // The list, even from one sitemap's URLs: left out, the router keeps the sitemap the page is on.
+      params={{ crawl: crawlId, sitemap: undefined }}
+      search={{}}
+      variant="inline"
+    >
+      {words}
+    </TextLink>
+  );
+  if (listed && listed.total > 0) {
+    const named = listed.sitemaps.slice(0, SITEMAPS_NAMED);
+    const more = listed.total - named.length;
+    return (
+      <>
+        Yes:{' '}
+        {named.map((sitemap, index) => (
+          <span key={sitemap.id}>
+            {index > 0 ? ', ' : null}
+            <TextLink
+              to="/crawls/$crawl/sitemaps/{-$sitemap}"
+              params={{ crawl: crawlId, sitemap: String(sitemap.id) }}
+              search={{ inspect: detail.id }}
+              variant="inline"
+              title={sitemap.url}
+            >
+              {fileNameOf(sitemap.url)}
+            </TextLink>
+          </span>
+        ))}
+        {more > 0 ? <> and {all(`${formatCount(more)} more`)}</> : null}
+      </>
+    );
+  }
+  if (detail.links?.inSitemap) return <>Yes. {all('Open Sitemaps')}</>;
+  const shouldBe = detail.issues?.some((issue) => issue.checkId === 'not-in-sitemap') ?? false;
+  if (!shouldBe) return <>No</>;
+  return (
+    <>
+      No, and it should be.{' '}
+      <TextLink
+        to="/crawls/$crawl/urls"
+        params={{ crawl: crawlId }}
+        search={{ filter: [NOT_IN_SITEMAP_CHECK], inspect: detail.id }}
+        variant="inline"
+      >
+        Every page missing from the sitemaps
+      </TextLink>
+    </>
+  );
+}
+
+function Discovery({ detail, onShowSection }: SummarySectionProps) {
+  const { crawling } = useInspectorContext();
   const { discovery, links, summary } = detail;
   const unknown = (
     <span className="text-text-secondary">
@@ -538,48 +853,20 @@ function Discovery({ detail }: { detail: UrlDetail }) {
     </span>
   );
   const foundVia = discovery.foundVia ? KIND_WORDS[discovery.foundVia].toLowerCase() : null;
+  const listed = (detail.listedIn?.total ?? 0) > 0;
   return (
     <Facts>
       <Fact label="Inlinks">
-        {links ? (
-          <>
-            <Num value={links.inlinks} noun="hyperlink" />{' '}
-            <span className="text-text-muted">
-              from {formatCountOf(links.linkingPages, 'page')}
-              {links.nofollowInlinks > 0 ? `, ${formatCount(links.nofollowInlinks)} nofollow` : ''}
-            </span>
-          </>
-        ) : (
-          unknown
-        )}
+        {links || detail.linkTotals ? <InlinksFact detail={detail} onShowSection={onShowSection} /> : unknown}
       </Fact>
-      {links ? (
+      {links || detail.linkTotals ? (
         <Fact label="Outlinks">
-          {links.outlinks === null ? (
-            <span className="text-text-secondary">Not read</span>
-          ) : (
-            <Num value={links.outlinks} noun="hyperlink" />
-          )}
+          <OutlinksFact detail={detail} onShowSection={onShowSection} />
         </Fact>
       ) : null}
-      {links && links.inSitemap !== null ? (
+      {listed || (links && links.inSitemap !== null) ? (
         <Fact label="In a sitemap">
-          {links.inSitemap ? (
-            <>
-              Yes.{' '}
-              <TextLink
-                to="/crawls/$crawl/sitemaps/{-$sitemap}"
-                // The list, even from one sitemap's URLs: left out, the router keeps the sitemap the page is on.
-                params={{ crawl: crawlId, sitemap: undefined }}
-                search={{}}
-                variant="inline"
-              >
-                Open Sitemaps
-              </TextLink>
-            </>
-          ) : (
-            'No'
-          )}
+          <SitemapFact detail={detail} />
         </Fact>
       ) : null}
       <Fact label="Depth">{depthWords(discovery)}</Fact>
@@ -589,7 +876,12 @@ function Discovery({ detail }: { detail: UrlDetail }) {
       </Fact>
       {discovery.foundOn ? (
         <Fact label="Found on">
-          <WalkUrl id={discovery.foundOn.id} url={discovery.foundOn.url} />
+          {/* The page that holds the link the crawl followed here: on its Outlinks, that link first. */}
+          <WalkUrl
+            id={discovery.foundOn.id}
+            url={discovery.foundOn.url}
+            show={{ section: 'outlinks', link: detail.id }}
+          />
         </Fact>
       ) : null}
       <Fact label="Site">{detail.isInternal ? 'This site' : 'Another site'}</Fact>

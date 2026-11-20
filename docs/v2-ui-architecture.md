@@ -342,20 +342,20 @@ and isn't run in CI: it needs a Windows desktop session (a disconnected one will
   removes a param.
 - The inspector reads the current view's checked `inspect`, so it opens only on a view that has one. Its place in
   history is one model every screen uses (`routing/inspector.ts`, `useInspector`), so the inspector's slice inherits
-  it: opened from a grid (Enter, a double-click) and following the grid's cursor while open, it's in place (a
-  replace); walking a link inside it, or the palette's "Go to URL…" while it's open, is a push, each entry counting
-  the steps walked from where it opened (`inspectSteps` in its history state), so back and forward retrace the walk; Esc or Close goes
-  back over those steps to the entry it opened on, then drops `inspect` there in place. So Esc then Alt+Left leaves
-  the screen, and from a walk A, B, C, Alt+Left shows B while Esc from C closes to the screen as it was before A. A
-  browser keeps only so many entries (Chromium 50) and `history.go` past the oldest does nothing, silently: a close
-  goes back no further than history holds, waits a second at most for it, and then closes on the entry it's on, so
-  the inspector always closes (after a walk of 60, on the oldest entry left). One close runs at a time: Esc pressed
-  again before history has gone back joins it, never goes back over the walk a second time. A
+  it: opening it (a click on a URL, Enter, a double-click) is one new place (a push), so the entry behind it is the
+  view exactly as it was and Back closes the inspector; everything after that is in place (a replace): the grid's
+  cursor moving it to another row, a link walked inside it, the palette's "Go to URL…" while it's open. The hops are
+  kept beside the entry (`inspectTrail` in its history state, the last 50, each with the section it was left on) for
+  the inspector's own back (`back`, the "Back to /page/" strip), and what to show on arriving (`inspectShow`: a
+  section, and the link to mark in its list) goes with the navigation. Esc or Close steps back to the entry it
+  opened from where that is still the same view (`inspectOpenedFrom`), and otherwise (a link straight to the
+  inspector, filters changed while it was open, history that can't step back) drops `inspect` in place: it waits a
+  second at most for history, so the inspector always closes. One close runs at a time: Esc pressed again before
+  history has gone back joins it, never goes back twice. A
   screen's own replaces while it's open (Issues' filters and group) keep the history state (`state: true`). The
-  palette's "Go to URL…" is `goToUrl`: on a view that has the inspector (`viewInspects`), a step of the walk when
-  it's open and, when it's closed, opened in place as a grid opens it (a push would leave two entries for the same
-  view once it's closed, and a back between them that shows nothing); from any other view (Overview, the crawl's
-  settings) the crawl's URLs with the inspector open, a place of its own that back leaves.
+  palette's "Go to URL…" is `goToUrl`: on a view that has the inspector (`viewInspects`), a hop when it's open and,
+  when it's closed, opened as a grid opens it; from any other view (Overview, the crawl's settings) the crawl's URLs
+  with the inspector open, a place of its own that back leaves.
 - `/crawls/:crawl` opens the crawl's last view, in the current mode. The app reopens where it was left.
 - A route with a Simple screen renders it in Simple through the one table, `app/simpleScreens.ts`
   ([The routes' table](#the-routes-table-adding-a-simple-screen)).
@@ -941,11 +941,27 @@ is what it shows. What it settled:
   cluster is named after its first page (the page itself, when other pages' issues name it), and is left out for an
   analysis another version made, which may have grouped the older way. `issueLinks.sweep.test.ts` checks every link
   it builds against the real groups of three analyses (`scripts/issue-links-fixture.mjs` makes its fixture).
-- **Walking.** A URL of the crawl inside the inspector is `WalkUrl` (`Url` with `onGo`): a push through
-  `useInspector().walk`. In the link grids Enter, a double-click or a click on the URL walks; the grid stays one Tab
-  stop. A double-click is one step wherever it lands: the second click of one is no go of its own (`Url`), and a
-  double-click counts for a link grid only when both its presses were on that grid, off the URL (the first click on
-  a URL has walked, and the second may land on the next URL's grid).
+- **Walking.** A URL of the crawl inside the inspector is `WalkUrl` (`Url` with `onGo`): a hop in place through
+  `useInspector().walk`, which the inspector's own back retraces (`WalkBack` in `Inspector.tsx`). In the link grids
+  Enter, a double-click or a click on the URL walks; the grid stays one Tab stop. A double-click is one step wherever
+  it lands: the second click of one is no go of its own (`Url`), and a double-click counts for a link grid only when
+  both its presses were on that grid, off the URL (the first click on a URL has walked, and the second may land on
+  the next URL's grid).
+- **The page that holds a link is where the hop lands.** An inlink's page, and the summary's "Found on", are walked
+  to with `show: { section: 'outlinks', link: <the URL left> }`: the page's Outlinks, with its link to the URL left
+  first, marked (`.si-came-for`: the neutral fill and bold text of what's current, no stripe; "The link you came
+  from" for a screen reader, and "is first" over the list). An image's "Used on" page is walked to on its Images the
+  same way. The mark is `marked` in the inspector's context (`inspectorContext.ts`), from `useInspectShow()`.
+- **A link list one read holds is ordered and narrowed in the app.** The lists page 1,000 links at a time, the
+  most `/urls/inlinks` gives (`LINKS_READ_AT_ONCE`), so a list no longer than that comes whole with its first page:
+  `arrangeLinks` (`links.ts`) puts the link come for first, then the broken ones (4xx, 5xx or no answer), then the
+  rest as found, and the Status menu ("Broken", "Redirects") narrows it. A longer list is paged in crawl order with
+  no Status menu: the read takes `kinds` only, so ordering or narrowing it by status needs the sidecar.
+- **The summary's counts are the lists' own.** The Inlinks and Outlinks lines lead with `linkTotals` (every kind of
+  link: the figure on the tab) as a button that shows the section, then the analysis's hyperlinks; "In a sitemap"
+  names `listedIn`'s sitemaps, each linking to `/sitemaps/<id>?inspect=<url id>`. An image's head reads where it's
+  used from `/urls/found-on` and its pixels from the URL grid's row (`pixelWidth`, `pixelHeight`), which
+  `/urls/inspect` doesn't carry.
 - **Focus stays in the inspector when what had it goes**: a link walked from, another URL's content (a walk, back
   or forward), a button that replaces what it sits in ("Open Issues", "Try again", "Show more"). Focus that was in a
   section and is taken away with its element moves to the shown section's panel (`Inspector.tsx` watches for it: a
@@ -954,7 +970,9 @@ is what it shows. What it settled:
   URL inspected. Focus the user puts down themselves stays down. A link grid has a better place for it: the grid
   that comes takes the keyboard (another URL's, or every kind's after "Show every kind"), and starts on the row its
   cursor was left on (`GridCore`'s `startRow`; `links.ts` remembers each grid's row for the session), so back along
-  a walk is where the walk left from. "Go to URL…" asks for a URL by name, so the inspector's panel takes the
+  a walk is where the walk left from. A hop made with the keyboard in a link grid, and the inspector's back to a
+  list of links, promise the keyboard to the grid of the URL arrived on (`promiseKeyboardToLinksOf`), which may be
+  another section's and is shown a render before its URL. "Go to URL…" asks for a URL by name, so the inspector's panel takes the
   keyboard when it shows it (`useGoneToByName`), instead of leaving it on the view or, from Overview, on nothing.
 - **The source** (`SourceViewer.tsx`) is CodeMirror 6, read-only but focusable, with a caret, so the keyboard moves
   through it and selects. It's a chunk of its own (239 kB), loaded while the app is idle once an inspector is open
@@ -1026,7 +1044,8 @@ full grid's pieces, which are any grid's (below). What it settled:
   status: "Blocked by robots.txt", "Timed out", "Not checked", and "Not crawled" ("so far" while the crawl runs) only
   for a URL the crawl has no outcome for, in the URL grid's words for the same URL (`urlStatusWords`, one helper for
   both). Never a guess, and never 0. Each end's URL is asked for whether its column shows or not: a row's menu opens
-  and copies it.
+  and copies it. So are the link's kind, its words and whether those are an image's alt text: the page a link is on
+  opens in the browser at the link (`sourceAtLink`, the fix round's rule 4).
 - **Presets are only filters.** Broken links (`to.statusClass` in 4xx, 5xx), Links to redirects (3xx), Nofollow
   links (`noFollow` is yes), No anchor text (hyperlinks whose `text` is empty) and External links (`to.isInternal`
   is no) put their filters in the route, where they show as chips; a preset reads as chosen exactly while the
@@ -1043,7 +1062,29 @@ full grid's pieces, which are any grid's (below). What it settled:
 - **Each end is a place.** A URL in a row opens the inspector on it; Enter opens the end the cursor's column is of
   (the page the link is on from one of its columns, the target from anywhere else), a double-click likewise. While
   the inspector is open it follows the cursor down the same end, in place, as it follows the URL grid's rows. Which
-  end is the route's (`end`), never the screen's own state.
+  end is the route's (`end`), never the screen's own state. Since the UX round it arrives on the link the row is
+  (`linkPlaces.ts`'s `linkArrival`, passed as `Inspector.open`'s `show`): the page's Outlinks with the target marked,
+  the target's Inlinks with the page marked; the cursor moving an open inspector marks the link and leaves the tab.
+- **The UX round, 2026-11-19** (docs/handoff/2026-11-19, D-02, D-03, D-08, D-16, D-17, D-20):
+  - *Grouped by target*, the page that holds the link is in the target's row: "Linked from", the first page as a
+    `Url` with `onGo` and `openUrl`, then "+N more" (a `data-tree-toggle`). The engine's `/links/groups` doesn't say
+    which page, so each drawn target reads its first link (`['crawl', id, 'linkGroupFirst', …]`: `to.id eq`, limit 1,
+    which the links' index by target walks alone; aborted when its row leaves the window). A click anywhere on a
+    target's row opens or closes it: `LinkGroupsGrid` handles the click on the element that holds the grid and
+    swallows the double-click that would toggle it back. Its widths (`groupColumns.ts`): the target and "Linked from"
+    take what their addresses need and no more, the last column takes the rest, so each column starts where the one
+    before ends; short of room the target comes first, then the page, and no column keeps more than its values take.
+  - *Every item of a row's menu names its end*: Inspect, Open in your browser and Copy, for the source page and for
+    the target, with the keys shown on the end the menu was opened in. The grid's shared `UrlRowItems` isn't used.
+  - *Narrow* (the screen under 1,280 px of its own): kind, position and follow are drawn as one column
+    (`LINK_FACTS_COLUMN`, `foldedLinkColumns`; the route, the chooser and an export keep the three), and the tools
+    beside the views are icon buttons, so the toolbar is one row at 1280 x 720.
+  - *"Ends at"* (`ENDS_AT_COLUMN`, drawn from the target's `redirectChain`, exported as the engine's `finalUrl` and
+    `finalStatusCode`): the Links to redirects preset's own columns have it. An end's "Redirects to" and "Final URL"
+    columns are links too, by the chain's ids; its canonical has no id to open and stays text.
+  - The URL and anchor columns, and Kind, Position, Follow and Target status, take their width from what they hold
+    (`fit` on the column, `grid/columnFit.ts`). "Clear all" clears the filters, the search and the sort (the search
+    is a chip beside the filters); the columns stay. Back to a view starts on the row it was left on.
 - **From the inspector**: Inlinks and Outlinks have "All N in Links" ("Show it in Links" for one link, never "All
   1"), the same links here: `to.id` (or `from.id`) is the URL, the kind chosen stays, and `selfLink` is no, because
   the inspector's lists leave out a page's links to itself and the links grid doesn't. N is the section's own count,
@@ -1172,10 +1213,13 @@ What it settled:
 - **The route holds the view**: `filter`, `q`, `sort` (up to three keys), `cols`, `inspect`. A filter, a search, a
   facet's value and a saved view are each a new place; a sort and the columns replace. `view` stays unused: a preset
   and a saved view are recognised from the route itself, so a link, back and forward always say which.
-- **Column presets** (Overview, the default; Indexability; Content; Performance; Links) are only columns: a preset
+- **Column presets** (Overview, the default; Indexability; Content; Redirects; Performance; Links): a preset
   reads as chosen exactly while the route's columns are its own, in its order, and the default set isn't written to
-  the address. Each leads with the URL; the URL column takes the room the others leave and never less than 240 px, so
-  a preset wider than the window scrolls inside the grid, never the page. The chooser lists every column the engine
+  the address. Three bring filters with their columns (`UrlPreset.filters`, swapped by `presetFilters` as tabs
+  change). Each leads with the URL. Columns take their widths from what the rows read first hold and share the
+  grid's width by need (`grid/columnFit.ts`, applied by `GridCore` to columns with `fit`): words before a URL grows
+  past its longest value, a status or a count never cut, spare width blank at the right, and a column the user sized
+  keeps its width. A preset wider than the window scrolls inside the grid, never the page. The chooser lists every column the engine
   has (a check's own and the id left out) in six groups, with "Show full URLs" under them.
 - **The host named once**: URLs on the crawl's own origin show their path, and the URL column's header says "on
   example.com" (`headerDetail`). "Show full URLs" (a preference, `settings.showFullUrls`, and a palette command) shows
@@ -1221,8 +1265,9 @@ What it settled:
   needs a folded part opens it), Export is an icon in the header, and the header's actions wrap: at 640x360 the grid
   shows 6 rows (0 before), 5 with the inspector open (2 before).
 - **The row menu**: inspect, open in the browser, copy the URL (or the selection's URLs, each once), copy the row (or
-  rows) as Ctrl+C does, and "Show its inlinks in Links" (the inspector's "All N in Links" filters). The same piece on
-  Links (each end: the end the menu was opened in, and Inspect the source page, Inspect the target), Issues' pages
+  rows) as Ctrl+C does, and "Show its inlinks in Links" (the inspector's "All N in Links" filters). Links has its
+  own items instead, each named for its end (Inspect, Open in your browser and Copy, for the source page and for the
+  target; no "Open in the browser" or "Copy the URL" to guess at), Issues' pages
   ("Show the page in URLs": the URL grid filtered to its URL, `url eq`, or by its id for a URL longer than a filter's
   1,000 characters, with the inspector on it) and groups (the group's URLs copied, its row, "Show all N pages in
   URLs"), one sitemap's URLs ("Show the URL in URLs") and an origin's blocked URLs ("List what line N
@@ -1317,6 +1362,19 @@ is two views on one route: a list, and one thing from it, named in the path. Wha
   `onActivate`, which is told the column too since Links, so the two could be made one) and `GridTree.activates`
   (a group's row is a thing of its own, which Enter opens as it opens any row: an index has URLs of its own, those
   of every sitemap under it; Right, Left and the chevron open and close it).
+- **A list of places to go** (the UX round of 19 Nov, D-07): a sitemap's name is a link that opens it (`Url` with
+  `onGo`), and a plain click anywhere else on its row opens it too, as an origin's does on robots.txt: every row is
+  a place, one that lists nothing or couldn't be read as well, and a single click on these rows did nothing before.
+  `opensItsRow` (`screens/listPlace.ts`) says which clicks: the main button, no modifier (Shift and Ctrl clicks
+  still select rows to copy), off the row's own links, buttons and chevron, and not the end of a drag that selected
+  text. The rows have the pointer (`si-rows-open`). A row has a menu (`RowMenu`): open it, open it in the browser,
+  copy its URL, copy the row; Shift+Enter opens it in the browser (`openUrlOf`). The page a row opens drops the
+  second click of a double-click, the way in before (`useStrayClickGuard`): it would land on the filter or the row
+  under the pointer there.
+- **A sitemap an index lists names the index** in Found via: "In /sitemap.xml", the name a link to the index
+  (`foundInWords`). "Sitemap index" on every one of an index's sitemaps read as the row's type.
+- **The row a list was left on is marked, coming back** (`si-mark-cursor`): `startRow` places the grid's cursor,
+  which shows only while the grid has focus, so while nothing is selected the cursor's row has the selection's tint.
 - **Every count is a link to exactly its URLs**: that sitemap's page under the count's filter (`COUNT_FILTERS`).
   The links are in the cells, out of the tab order, and Enter on a cell does what a click on its link does. A count
   of 0 is a plain 0 (nothing to open). A sitemap whose contents the crawl doesn't know (left unread, not read yet,
@@ -1347,7 +1405,8 @@ is two views on one route: a list, and one thing from it, named in the path. Wha
   only once the crawl has them all.
 - **Five counts fit a 1280 px window**: "Blocked by robots.txt" takes two lines over its count, the other columns
   are as wide as their names and a count in the millions need, and an index's badge leaves its count out where the
-  address would have no room (below 260 px).
+  address would have no room (below 260 px). The address takes the room those columns leave, so a name shows whole
+  while the list has room for it.
 - **In a frame too narrow for every column the counts come straight after the address**, with Status and Found via
   after them. The list measures its own frame (never the window): 200% zoom of 1280x720 leaves it 534 px, where
   Listed began at the frame's last 44 px and the other four counts were a sideways scroll away. Listed, Crawled and
@@ -1379,6 +1438,22 @@ is two views on one route: a list, and one thing from it, named in the path. Wha
   (`grid/summaryWords.ts`, `grid/NeedsAnalysis.tsx`): the button is worded by why the analysis can't be read
   ("Analyse again" for a crawl that was analysed before), and while the crawl is being analysed the columns "fill
   in when the analysis that's running is done", with nothing to press.
+- **Its URLs look and act as the URL grid's** (D-02, D-18; `urls/urlGridParts.ts`, `fixedUrlColumns`): a URL is a
+  link that opens the inspector on one click, shown as its path with the host named once in the header ("Show full
+  URLs" shows them whole, as on URLs), a file by its name; a status has its class's mark (`StatusCode`), and a URL
+  with none a dash, its Outcome beside it saying what happened; the URL and the Title take their width from what
+  they hold (`fit`). It's a big grid: a URL's open-in-browser button shows on the row pointed at and the cursor's
+  (`si-open-on-row`). Not the URL grid's yet: the preset tabs, the column chooser and Add filter.
+- **Its heading is the sitemap's whole address**: `Url` with `truncate="wrap"`. Middle truncation measured the text
+  without the heading's letter-spacing, so it cut an address that fit. Open in the browser and copy sit straight
+  after the address (in the header's count slot), not with Export at its far edge.
+- **A link can land on one of its URLs**: `?inspect=<the URL's id>`, nothing else in the search. The inspector stays
+  on that URL, and the grid starts with its cursor on the URL's row (`startRow`, `startKey`), marked and in view.
+  The list is in the crawl's order while nothing sorts it, so the row is as many rows down as the list has URLs with
+  a smaller id: one count (`sitemapCountQuery` under `id < n`, with the view's own filters), and a second
+  (`id = n`) says the sitemap lists the URL at all; one it doesn't list leaves the grid at its top, as does a view
+  that arrives sorted or searched. The grid is made once both are in (its frame alone until then): a grid reads
+  where it starts when it's made.
 - **Its search field is the same field whatever is searched for** (`grid/useSearchText.ts`, which the URL grid uses
   too): controlled by its own text, which follows the route's `q` when that changes from elsewhere. Keyed on `q`,
   as it was, Enter made a new field and the one with focus was gone.
@@ -1418,7 +1493,11 @@ is two views on one route: a list, and one thing from it, named in the path. Wha
   out of the Source section as they stood, as `inspector/SourcePane.tsx`, which both use: Ctrl+F, Enter and
   Shift+Enter, the 10,000-match limit and the caret are the same. The viewer gained a `language` (HTML, or plain),
   marks for lines (`inspector/sourceLines.ts`: a tone, a name, a note, a link) and a chosen line. The engine says
-  what each line is and whether it's part of the group the crawl obeyed: nothing is parsed or matched in the app.
+  what each line is and whether it's part of the group the crawl obeyed: nothing is parsed or matched in the app,
+  but for the address a Sitemap line names (`sitemapLineUrl`), which the engine doesn't give.
+- **A Sitemap line is a link to that sitemap's page** when the crawl has the sitemap (`sitemapOfLine`, by its
+  address, however it's spelled): its mark's link reads "Open this sitemap". The page reads the crawl's sitemaps for
+  it; without them, or for a sitemap the crawl doesn't have, the line is plain.
 - **What the marks mean**: the obeyed group carries the accent's rule at its left edge, the other groups are muted, a
   directive's name is set apart, a line the crawler made nothing of says why after it, and a rule that blocked URLs
   says how many, as a link. A rule that blocked none says nothing (a real file has hundreds). The file's line above
@@ -1427,7 +1506,10 @@ is two views on one route: a list, and one thing from it, named in the path. Wha
   class is on the editor's content, as a theme's rules inside a media query can't name the editor itself.
 - **Choosing either way.** A line is chosen with a press on its link, or Enter with the caret on it: the route takes
   `line`, the list is that line's URLs, and the file marks it. Moving the list's cursor shows each URL's line in the
-  file, focus arriving on the list included. The two cases no line accounts for (`unreachable`, `unknown`) are links
+  file, focus arriving on the list included. The rule in a URL's "Blocked by" is a link that does the same from the
+  pointer, and brings the line back into view if the file was scrolled since: the viewer reveals a line when it
+  becomes the chosen one, so the page tells it no line is chosen for a frame, then the line again. It narrows
+  nothing: the reader keeps the URLs they were reading. The two cases no line accounts for (`unreachable`, `unknown`) are links
   over the list, with the route's `reason`. What narrows the list shows as a chip that removes it: "Line is 2:
   Disallow: /private/", which holds of any line a link can name. With nothing listed the words go by the line: the
   file has no such line, the line isn't a rule, or it's a rule that blocked no URLs. The note over the list has two
@@ -1439,8 +1521,15 @@ is two views on one route: a list, and one thing from it, named in the path. Wha
 - **Copying**: the file as it is, and the blocked URLs the list is narrowed to (Ctrl+Shift+C), read 1,000 at a time
   by the Issues screen's copy, with its progress toast.
 - **The layout**: the file and the list side by side, stacked below the `split` width (a narrow window, or the
-  inspector open beside them). Stacked, the file has a height of its own (360 px) and the blocked URLs at least
-  that: never less than their header, their note and five rows of the list.
+  inspector open beside them). Stacked, the file's box is as tall as its lines (`fileBoxHeight`, given to the styles
+  as `--robots-file-fit`), up to the pane's own height (360 px), past which it scrolls in its box; the blocked URLs
+  have at least that height: never less than their header, their note and five rows of the list. A four-line file
+  held 340 px and left the blocked URLs the last 40 px of a 1280 x 720 window. Side by side, the two are one grid
+  row of `minmax(0, 1fr)` with a least height of its own: an `auto` row took the height of the file's text, so a
+  file of 400 lines made both panes 7,000 px tall and the screen scroll.
+- **Controls sit beside what they act on**: open the robots.txt in the browser straight after the origin in the
+  heading, Copy the file with the file's own controls (`SourcePane`'s `actions`). A blocked URL is a link that
+  opens the inspector, and its grid is a big one (`si-open-on-row`).
 - **Its commands** are the registry's robots.txt group: search the file (Ctrl+F from anywhere on an origin's page:
   the pane's search field is asked to take focus, as the inspector's Source is by its command; with focus in the
   file the pane takes the key itself), show every origin, copy the file, copy the blocked URLs, open the robots.txt
@@ -1449,7 +1538,8 @@ is two views on one route: a list, and one thing from it, named in the path. Wha
 ### From elsewhere
 
 - The inspector's "Blocked by robots.txt" leads to the file on that URL's own origin, and "In a sitemap" to
-  Sitemaps. `/urls/inspect` says neither which line nor which sitemaps, so neither link can be more exact.
+  Sitemaps. `/urls/inspect` doesn't say which line, so that link can't be more exact; a link to a sitemap can land
+  on the URL (`/sitemaps/<id>?inspect=<url id>`, above).
 - The mock answers these endpoints from fixtures of their own (`api/mock/sitemapsRobots.ts`, saved by
   `design/data/extract/sitemaps-robots.mjs`). It counts each sitemap's URLs over the rows its own grid has.
 
@@ -2340,7 +2430,7 @@ What each view shows is in [the IA](v2-ui-ia.md#where-its-found-uifound-on); the
   browser), so no new permission. `GridCore` takes `openUrlOf(row, column)` for Shift+Enter (default: the row's `url`;
   Links: the end the cursor's column is on; Issues: the page or the source under the cursor), listed in the shortcut
   sheet as `grid.openInBrowser`, and shown on the row menus' "Open in the browser". Links' menu has "Open the source
-  page in your browser" and "Open the target in your browser".
+  page in your browser" (at the link's own words, where it has them) and "Open the target in your browser".
 - **Tests:** `api/whereFoundBatch.test.ts` (one request a moment, chunks of 100, a failure to each ask),
   `screens/issues/whereFound.test.ts`, `screens/IssuesScreen.whereFound.test.tsx` (the row's line, Right to open,
   Enter to inspect, Show all to Links, the menu, the targets line and the template's place),

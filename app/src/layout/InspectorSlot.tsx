@@ -50,7 +50,7 @@ export function InspectorSlot() {
 
 /**
  * The panel itself. Until the user resizes it, it takes the layout's size (tokens.css `--inspector-width` and
- * `--inspector-height`, which narrow with the window); once resized, the size they chose, remembered. Either way it
+ * `--inspector-height`, which grow with the window); once resized, the size they chose, remembered. Either way it
  * takes no more than the view beside or above it can spare (layout/inspectorSize.ts): the handle's range is the
  * sizes it can really take, and a size chosen in a bigger window is clamped to it here, where it's read.
  */
@@ -139,6 +139,7 @@ function InspectorPanel({ crawlId, urlId, onClose }: { crawlId: string; urlId: n
         // eslint-disable-next-line jsx-a11y-x/no-noninteractive-tabindex
         tabIndex={0}
         aria-label="Resize the inspector"
+        title="Drag to resize the inspector"
         aria-orientation={dock === 'right' ? 'vertical' : 'horizontal'}
         aria-valuenow={Math.round(size)}
         aria-valuemin={range.min}
@@ -151,7 +152,13 @@ function InspectorPanel({ crawlId, urlId, onClose }: { crawlId: string; urlId: n
           'absolute z-1 hover:bg-accent-subtle',
           dock === 'right' ? 'inset-y-0 -left-1 w-2 cursor-col-resize' : 'inset-x-0 -top-1 h-2 cursor-row-resize',
         )}
-      />
+      >
+        {/* The edge shows where to drag: a short bar at its middle. */}
+        <span
+          aria-hidden="true"
+          className={clsx('si-inspector-grip', dock === 'bottom' && 'si-inspector-grip--bottom')}
+        />
+      </div>
       <Inspector crawlId={crawlId} urlId={urlId} onClose={onClose} />
     </aside>
   );

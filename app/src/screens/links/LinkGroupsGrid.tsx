@@ -1,20 +1,22 @@
-import { useQuery } from '@tanstack/react-query';
-import { ChevronRight, ExternalLink, Layers, List, PanelRight } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ChevronRight, ClipboardList, Copy, ExternalLink, Layers, List, PanelRight } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { api } from '../../api/client';
-import type { GridFilter, GridSort, LinkGroup, LinkRow } from '../../api/grids';
+import type { GridFilter, GridPage, GridSort, LinkGroup, LinkRow } from '../../api/grids';
 import { queryKeys } from '../../api/queries';
 import { pixelsWords } from '../../crawl/evidence';
 import { GridCore, type GridCopyResult } from '../../grid/GridCore';
 import { useGridMetrics } from '../../grid/metrics';
-import { RowMenu, UrlRowItems } from '../../grid/RowMenu';
-import { copyRowUrls, rowMenuLabel, useRowMenu } from '../../grid/rowMenuState';
+import { RowMenu } from '../../grid/RowMenu';
+import { copyRowUrls, rowMenuLabel, rowsWords, useRowMenu } from '../../grid/rowMenuState';
 import type { GridColumn, GridRange, GridTree, RowFetcher } from '../../grid/types';
 import { usePagedRows } from '../../grid/usePagedRows';
 import { useElementWidth } from '../../grid/useElementWidth';
 import { OUTCOME_WORDS, POSITION_WORDS } from '../../inspector/words';
-import { formatBytes, formatCount } from '../../lib/format';
+import { formatBytes, formatCount, formatCountOf } from '../../lib/format';
+import { tokenValue } from '../../lib/textWidth';
 import { useFontsLoaded } from '../../lib/useFontsLoaded';
+import type { InspectShow } from '../../routing/inspector';
 import { openInBrowser } from '../../shell/os';
 import { Badge } from '../../ui/Badge';
 import { Icon } from '../../ui/Icon';
@@ -25,14 +27,17 @@ import { StatusCode } from '../../ui/StatusCode';
 import { Url } from '../../ui/Url';
 import { isResourceType, urlDisplay } from '../../ui/urlText';
 import { treeLayout, type OpenGroup } from '../issues/groupTree';
-import { fittedGroupWidths, groupColumnNeeds } from './groupColumns';
-import { linkFollowWords, linkTextMeasure } from './linkColumns';
+import { rememberPlace, rememberedKey, rememberedPlace } from '../listPlace';
+import { MEASURED_GROUPS, fittedGroupWidths, groupColumnNeeds } from './groupColumns';
+import { OPEN_AT_LINK_HINT, linkFollowWords, linkTextMeasure, sourceAtLink } from './linkColumns';
 import {
   FIRST_TARGET_LINKS,
   GROUP_COLUMN_SORTS,
   groupsAsGridPage,
   groupSortOf,
   groupTextLine,
+  linkedFromLine,
+  morePagesWords,
   nextGroupSort,
   otherTextsWords,
   positionsWords,
@@ -62,15 +67,109 @@ function wrap<K extends object>(cache: WeakMap<K, GroupTreeRow>, key: K, make: (
 }
 
 /** The columns an open target's links are read with: where each is, and what it says. */
-const CHILD_COLUMNS = ['from.id', 'from.url', 'text', 'position', 'kind', 'followed', 'noFollow', 'sponsored', 'ugc'];
+const CHILD_COLUMNS = [
+  'from.id',
+  'from.url',
+  'text',
+  'position',
+  'kind',
+  'imageLink',
+  'followed',
+  'noFollow',
+  'sponsored',
+  'ugc',
+];
+
+/** The columns a target's first link is read with, for its row: the page it's on, and its words to open the page at. */
+const FIRST_LINK_COLUMNS = ['from.id', 'from.url', 'text', 'kind', 'imageLink'];
+
+/** What reads a target's first link among the view's: one link, on the links' index by target. */
+interface FirstLinkContext {
+  crawlId: string;
+  filters: readonly GridFilter[];
+  search: string | undefined;
+  crawling: boolean;
+}
+
+/**
+ * The read of the first of the view's links to a target, in crawl order (the one an open target lists first): the
+ * page that links to it, for the target's own row. The engine walks only that target's links for it.
+ */
+function firstLinkQuery({ crawlId, filters, search, crawling }: FirstLinkContext, targetId: number) {
+  const named = targetLinksFilters(filters, targetId);
+  return {
+    queryKey: ['crawl', crawlId, 'linkGroupFirst', { filters: named, q: search ?? '' }] as const,
+    queryFn: ({ signal }: { signal: AbortSignal }): Promise<GridPage<LinkRow>> =>
+      api.links(
+        crawlId,
+        { columns: FIRST_LINK_COLUMNS, filters: named, sort: [], limit: 1, ...(search ? { search } : {}) },
+        signal,
+      ),
+    // A crawl that stands still links to a target from the same page first, however often its row is drawn.
+    staleTime: crawling ? 0 : Number.POSITIVE_INFINITY,
+  };
+}
+
+/**
+ * A target's "Linked from": the page that holds the link, a link like any other URL (it inspects the page at this
+ * link, and its open-in-browser button opens the page at the link's words), then "+3 more" where more pages link to
+ * it, which opens the target to them in place. The fix round's rule 3: never a count behind a chevron.
+ */
+function LinkedFrom({
+  group,
+  context,
+  siteOrigin,
+  onInspect,
+}: {
+  group: LinkGroup;
+  context: FirstLinkContext;
+  siteOrigin: string | null;
+  onInspect: LinkGroupsGridProps['onInspect'];
+}) {
+  const first = useQuery(firstLinkQuery(context, group.id));
+  const link = first.data?.rows[0];
+  const page = link?.['from.url'];
+  const pageId = link?.['from.id'];
+  const more = morePagesWords(group.pages);
+  const atLink = link ? sourceAtLink(link) : undefined;
+  return (
+    <span className="flex min-w-0 items-center gap-2">
+      {typeof page === 'string' ? (
+        <Url
+          url={page}
+          siteOrigin={siteOrigin}
+          copyable={false}
+          tabbable={false}
+          {...(atLink ? { openUrl: atLink, openHint: OPEN_AT_LINK_HINT } : {})}
+          {...(typeof pageId === 'number'
+            ? { onGo: () => onInspect(pageId, 'from', { section: 'outlinks', link: group.id }) }
+            : {})}
+        />
+      ) : first.isPending ? (
+        <span aria-hidden="true" className="skeleton-static block h-(--skeleton-text) w-3/4" />
+      ) : (
+        // The page couldn't be read: how many there are still can be, and the row still opens to them.
+        <span className="text-text-muted">{formatCountOf(group.pages, 'page')}</span>
+      )}
+      {more ? (
+        <span data-tree-toggle className="si-link shrink-0" title={`Show the ${formatCount(group.pages)} pages`}>
+          {more}
+        </span>
+      ) : null}
+    </span>
+  );
+}
 
 const FRAME_SLACK = 24;
+/** How far the pointer may move between its press and its release and still be a click on a row, px. */
+const DRAG_SLOP = 4;
 const WIDTHS: Record<string, number> = {
+  target: 420,
   status: 128,
   size: 96,
   pixels: 120,
-  pages: 112,
-  links: 96,
+  pages: 280,
+  links: 80,
   text: 216,
   where: 256,
 };
@@ -78,7 +177,7 @@ const WIDTHS: Record<string, number> = {
  * An image view has two columns more (its size and pixels) and a short "Where" (an image sits in the content, mostly):
  * its columns give the image's address the room.
  */
-const IMAGE_WIDTHS: Record<string, number> = { ...WIDTHS, status: 96, pages: 96, links: 80, text: 200, where: 152 };
+const IMAGE_WIDTHS: Record<string, number> = { ...WIDTHS, status: 96, links: 72, text: 200, where: 152 };
 
 const muted = (text: string) => <span className="text-text-muted">{text}</span>;
 
@@ -99,8 +198,11 @@ export interface LinkGroupsGridProps {
   /** The view is of images alone: each row shows its picture, size and pixels, and its text is alt text. */
   images: boolean;
   crawling: boolean;
-  /** Opens the inspector on a link's end. */
-  onInspect: (urlId: number, end: 'from' | 'to') => void;
+  /**
+   * Opens the inspector on a link's end. `show` is what it arrives on: the page's outlinks or the target's inlinks,
+   * with the link's other end marked. Left out where the cursor moves an inspector that's already open.
+   */
+  onInspect: (urlId: number, end: 'from' | 'to', show?: InspectShow) => void;
   /**
    * While the inspector is open, the end it follows the cursor down (as the flat list's does): a target's row is its
    * target; one of its links is that link's page with `from`, else the target again. Left out while it's closed.
@@ -124,9 +226,10 @@ export interface LinkGroupsGridProps {
 
 /**
  * The Links screen grouped by target: one row a target of the view's links, with how many pages and links lead to it,
- * the text they say, where they sit, and whether that's the template; the most linked from pages first. A target opens
- * to its first links (the page each is on, its text, where it sits) and a row that lists them all, one a row. The
- * engine groups (`/links/groups`); the grid reads a page of targets at a time.
+ * the text they say, where they sit, and whether that's the template; the most linked from pages first. The page that
+ * holds the link is in the target's row, a link like any other URL (the first of them, and "+3 more"). A target opens
+ * on a click anywhere on its row to its first links (the page each is on, its text, where it sits) and a row that
+ * lists them all in the flat list. The engine groups (`/links/groups`); the grid reads a page of targets at a time.
  */
 export function LinkGroupsGrid({
   crawlId,
@@ -149,8 +252,21 @@ export function LinkGroupsGrid({
   minRows,
 }: LinkGroupsGridProps) {
   const { rowHeight, headerHeight } = useGridMetrics();
+  const queryClient = useQueryClient();
   const order = groupSortOf(sort);
   const view = `${crawlId}|${JSON.stringify({ filters, q: search ?? '', order })}`;
+  // Where this view was left, for the grid it comes back to (the grid is made again for each view).
+  const placeKey = `links-groups|${view}`;
+  const [place, setPlace] = useState({ key: placeKey, row: rememberedPlace(placeKey), id: rememberedKey(placeKey) });
+  if (place.key !== placeKey) {
+    setPlace({ key: placeKey, row: rememberedPlace(placeKey), id: rememberedKey(placeKey) });
+  }
+  const startRow = place.key === placeKey ? place.row : undefined;
+  const startKey = place.key === placeKey ? place.id : undefined;
+  const firstLinks = useMemo<FirstLinkContext>(
+    () => ({ crawlId, filters, search, crawling }),
+    [crawlId, filters, search, crawling],
+  );
   const queryKey = useMemo(
     () => queryKeys.linkGroupsGrid(crawlId, { filters, q: search ?? '', sort: [order] }),
     [crawlId, filters, search, order],
@@ -297,14 +413,43 @@ export function LinkGroupsGrid({
   // The fonts the widths are measured in may still be on their way (an address measured in a fallback monospace is
   // narrower than it draws): measured again as each arrives.
   const fontsLoaded = useFontsLoaded();
+  // The page that links to each of those targets, as their rows read it (the same reads, by the same keys): measured
+  // once they've all come, so "Linked from" takes its room in one step, not a row at a time.
+  const measured = useMemo(() => (groupsInView ?? []).slice(0, MEASURED_GROUPS), [groupsInView]);
+  const firstPages = useQueries({
+    queries: measured.map((target) => firstLinkQuery(firstLinks, target.id)),
+    combine: (reads) =>
+      reads.every((read) => !read.isPending) ? reads.map((read) => read.data?.rows[0]?.['from.url'] ?? null) : null,
+  });
   const needs = useMemo(
-    () => groupColumnNeeds(groupsInView ?? [], images, siteOrigin, linkTextMeasure()),
+    () => {
+      const pageOf = firstPages ? new Map(measured.map((target, index) => [target.id, firstPages[index]])) : null;
+      return groupColumnNeeds(
+        measured,
+        images,
+        siteOrigin,
+        // A group's row is set a little heavier than a row in it (`.si-grid-row[aria-expanded]`): measured as drawn,
+        // or the widest text in view is cut by its last few px beside room to spare.
+        linkTextMeasure(tokenValue('--font-weight-medium', '500')),
+        pageOf ? (target) => pageOf.get(target.id) : undefined,
+      );
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the fonts arriving change what's measured
-    [groupsInView, images, siteOrigin, fontsLoaded],
+    [measured, firstPages, images, siteOrigin, fontsLoaded],
   );
   const widths = useMemo(
     () => fittedGroupWidths(shownColumns, images ? IMAGE_WIDTHS : WIDTHS, (width ?? 1000) - FRAME_SLACK, needs),
     [shownColumns, images, width, needs],
+  );
+  /** The one page that links to a target, where it has one and it's read: the link the inspector marks on arriving. */
+  const onlyPageOf = useCallback(
+    (group: LinkGroup): { link?: number } => {
+      if (group.pages !== 1) return {};
+      const read = queryClient.getQueryData<GridPage<LinkRow>>(firstLinkQuery(firstLinks, group.id).queryKey);
+      const page = read?.rows[0]?.['from.id'];
+      return typeof page === 'number' ? { link: page } : {};
+    },
+    [queryClient, firstLinks],
   );
   const columns = useMemo<GridColumn<GroupTreeRow>[]>(() => {
     const group = (row: GroupTreeRow) => (row.kind === 'group' ? row.group : null);
@@ -342,8 +487,10 @@ export function LinkGroupsGrid({
               <Url
                 url={value.url}
                 siteOrigin={siteOrigin}
+                copyable={false}
                 tabbable={false}
-                onGo={() => onInspect(value.id, 'to')}
+                // The target arrives on who links to it: its one page marked, where it has only the one.
+                onGo={() => onInspect(value.id, 'to', { section: 'inlinks', ...onlyPageOf(value) })}
                 // An image, a stylesheet, a script: named by its file, never cut in the middle of its name.
                 label={images || isResourceType(value.target.contentType) ? 'file' : 'address'}
                 className="min-w-0 flex-1"
@@ -392,16 +539,23 @@ export function LinkGroupsGrid({
           return value ? (pixelsWords(value.target.pixelWidth, value.target.pixelHeight) ?? '') : '';
         },
       }),
-      pages: sortable('pages', images ? 'Used on' : 'Linking pages', {
-        numeric: true,
+      pages: sortable('pages', images ? 'Used on' : 'Linked from', {
         headerHint: images
-          ? 'The pages that show the image, each once'
-          : 'The pages these links are on, each once: how widely one fix reaches',
+          ? 'The page that shows the image, and how many more do. Sorts by how many pages.'
+          : 'The page the link is on, and how many more link to it: how widely one fix reaches. Sorts by how many pages.',
         cell: (row) => {
           const value = group(row);
-          return value ? formatCount(value.pages) : null;
+          return value ? (
+            <LinkedFrom group={value} context={firstLinks} siteOrigin={siteOrigin} onInspect={onInspect} />
+          ) : null;
         },
-        text: (row) => String(group(row)?.pages ?? ''),
+        // A copy takes the page as far as it's read: the first, and how many more.
+        text: (row) => {
+          const value = group(row);
+          if (!value) return '';
+          const read = queryClient.getQueryData<GridPage<LinkRow>>(firstLinkQuery(firstLinks, value.id).queryKey);
+          return linkedFromLine(read?.rows[0]?.['from.url'], value.pages);
+        },
       }),
       links: sortable('links', images ? 'Uses' : 'Links', {
         numeric: true,
@@ -457,7 +611,7 @@ export function LinkGroupsGrid({
       }),
     };
     return shownColumns.flatMap((id) => all[id] ?? []);
-  }, [shownColumns, images, order, siteOrigin, onInspect, widths]);
+  }, [shownColumns, images, order, siteOrigin, onInspect, widths, firstLinks, queryClient, onlyPageOf]);
 
   // An open target's links span the row: the page each is on, what it says, where it sits, whether it's followed.
   const spanRow = useCallback(
@@ -473,6 +627,8 @@ export function LinkGroupsGrid({
       }
       const { link } = row;
       const follow = linkFollowWords(link);
+      const pageId = link['from.id'];
+      const atLink = sourceAtLink(link);
       return (
         <span className="flex min-w-0 items-center gap-3">
           <span className="shrink-0 text-text-muted">on</span>
@@ -481,7 +637,13 @@ export function LinkGroupsGrid({
             siteOrigin={siteOrigin}
             copyable={false}
             tabbable={false}
-            className="min-w-1/4 flex-1"
+            // The page that holds the link: a link like any other URL, opening at the link itself.
+            {...(atLink ? { openUrl: atLink, openHint: OPEN_AT_LINK_HINT } : {})}
+            {...(typeof pageId === 'number'
+              ? { onGo: () => onInspect(pageId, 'from', { section: 'outlinks', link: row.group.id }) }
+              : {})}
+            // As wide as its address: what the link says comes straight after it, never across the row from it.
+            className="min-w-1/4 shrink"
           />
           <span className="max-w-2/5 min-w-0 shrink truncate" title={link.text ?? ''}>
             {link.text ? `“${link.text}”` : muted(images ? 'No alt text' : 'No text')}
@@ -491,7 +653,7 @@ export function LinkGroupsGrid({
         </span>
       );
     },
-    [siteOrigin, images],
+    [siteOrigin, images, onInspect],
   );
 
   const showAll = (group: LinkGroup) => onShowLinks(targetLinksFilters(filters, group.id));
@@ -499,11 +661,53 @@ export function LinkGroupsGrid({
   const menuRow = rowMenu.state?.menu.row;
   const menuGroup = menuRow?.group;
   const menuCount = rowMenu.state?.menu.indices.length ?? 1;
-  const menuUrl = menuRow?.kind === 'link' ? menuRow.link['from.url'] : menuGroup?.url;
+  // One of an open target's links: the menu has the page it's on too, by name.
+  const menuLink = menuRow?.kind === 'link' ? menuRow.link : undefined;
+  const menuPage = menuLink?.['from.url'];
+  const menuPageId = menuLink?.['from.id'];
+  const menuUrl = menuLink ? menuPage : menuGroup?.url;
+  const targetNoun: [string, string] = images ? ['image', 'images'] : ['target', 'targets'];
+
+  /**
+   * A click anywhere on a target's row opens or closes it (the chevron is where that shows, not the only place to
+   * press). Its links, its buttons and the chevron keep their own press; a click that extends the selection is the
+   * selection's.
+   */
+  const pressedAt = useRef<{ x: number; y: number } | null>(null);
+  const onRowClick = (event: MouseEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || event.detail > 1 || event.shiftKey || event.ctrlKey || event.metaKey) return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target || target.closest('button, a, [data-tree-toggle]')) return;
+    // The end of a drag over the row's text is a selection, not a press.
+    const from = pressedAt.current;
+    if (from && Math.hypot(event.clientX - from.x, event.clientY - from.y) > DRAG_SLOP) return;
+    const cell = target.closest<HTMLElement>('[role="row"][aria-level="1"] [data-row]');
+    if (!cell) return;
+    const index = Number(cell.dataset.row);
+    const expanded = tree.expanded(index);
+    if (expanded !== undefined) tree.onToggle(index, !expanded);
+  };
+  /** The click has opened or closed the row already: a double-click's own toggle would undo it. */
+  const onRowDoubleClick = (event: MouseEvent<HTMLDivElement>) => {
+    if (event.target instanceof Element && event.target.closest('[role="row"][aria-level="1"]')) {
+      event.stopPropagation();
+    }
+  };
 
   if (failed) return <>{errorState(groups.error, groups.refetch)}</>;
   return (
-    <div ref={measure} className="flex min-h-0 flex-1 flex-col">
+    // The handlers are the rows' (a press anywhere on a target's row), on the element that holds the grid: the grid's
+    // own keys do the same from the keyboard (Enter, Right and Left).
+    // eslint-disable-next-line jsx-a11y-x/no-static-element-interactions, jsx-a11y-x/click-events-have-key-events
+    <div
+      ref={measure}
+      className="flex min-h-0 flex-1 flex-col"
+      onPointerDownCapture={(event) => {
+        pressedAt.current = { x: event.clientX, y: event.clientY };
+      }}
+      onClick={onRowClick}
+      onDoubleClickCapture={onRowDoubleClick}
+    >
       {unmeasured ? (
         <p className="mb-2 text-13 text-text-muted">Image dimensions weren’t measured in this crawl.</p>
       ) : null}
@@ -525,17 +729,26 @@ export function LinkGroupsGrid({
         tree={tree}
         spanRow={spanRow}
         onSort={(column) => onSortChange(nextGroupSort(order, GROUP_COLUMN_SORTS[column] ?? column))}
+        startRow={startRow}
+        startKey={startKey}
         // While it's open, the inspector follows the cursor, in place: the target of the row the cursor is on.
         onActiveRowChange={(index) => {
-          const row = following && index !== null ? getRow(index) : undefined;
-          if (!row) return;
+          const row = index === null ? undefined : getRow(index);
+          if (index !== null && row) {
+            const key =
+              row.kind === 'group' ? `g${row.group.id}` : row.kind === 'more' ? `m${row.group.id}` : `l${row.link.id}`;
+            rememberPlace(placeKey, index, key);
+          }
+          if (!following || !row) return;
           const page = row.kind === 'link' ? row.link['from.id'] : undefined;
-          if (following === 'from' && typeof page === 'number') onInspect(page, 'from');
-          else onInspect(row.group.id, 'to');
+          // The link the cursor is on is marked, on the tab the reader has open.
+          if (following === 'from' && typeof page === 'number') onInspect(page, 'from', { link: row.group.id });
+          else onInspect(row.group.id, 'to', typeof page === 'number' ? { link: page } : undefined);
         }}
         onActivate={(_index, row) => {
-          if (row?.kind === 'link' && typeof row.link['from.id'] === 'number') onInspect(row.link['from.id'], 'from');
-          else if (row?.kind === 'more') showAll(row.group);
+          if (row?.kind === 'link' && typeof row.link['from.id'] === 'number') {
+            onInspect(row.link['from.id'], 'from', { section: 'outlinks', link: row.group.id });
+          } else if (row?.kind === 'more') showAll(row.group);
         }}
         openUrlOf={(row) => (row.kind === 'link' ? (row.link['from.url'] ?? null) : row.group.url)}
         rowKey={(row) =>
@@ -545,35 +758,67 @@ export function LinkGroupsGrid({
         busy={groups.isRefreshing && !crawling}
         loadingNote={loadingNote}
         emptyState={emptyState}
-        className="flex-1 rounded-lg border border-border-card"
+        // A big grid: a URL's open-in-browser button shows on the row under the pointer and the cursor's.
+        className="si-open-on-row si-link-groups flex-1 rounded-lg border border-border-card"
       />
       <RowMenu
         state={rowMenu.state}
         onOpenChange={rowMenu.onOpenChange}
-        label={rowMenuLabel(
-          menuCount,
-          menuUrl ? urlDisplay(menuUrl, siteOrigin).shown : undefined,
-          images ? ['image', 'images'] : ['target', 'targets'],
-        )}
+        label={rowMenuLabel(menuCount, menuUrl ? urlDisplay(menuUrl, siteOrigin).shown : undefined, targetNoun)}
       >
-        <UrlRowItems
-          count={menuCount}
-          url={menuUrl}
-          onCopyUrls={() => {
-            if (rowMenu.state)
-              void copyRowUrls(rowMenu.state.menu, (row) =>
-                row.kind === 'link' ? row.link['from.url'] : row.group.url,
-              );
+        {/* Every item names the end it's for: the page a line's link is on, then the target. */}
+        {menuLink ? (
+          <>
+            <MenuItem
+              icon={PanelRight}
+              shortcut="enter"
+              disabled={typeof menuPageId !== 'number'}
+              onSelect={() => {
+                if (typeof menuPageId === 'number' && menuGroup) {
+                  onInspect(menuPageId, 'from', { section: 'outlinks', link: menuGroup.id });
+                }
+              }}
+            >
+              Inspect the source page
+            </MenuItem>
+            <MenuItem
+              icon={ExternalLink}
+              shortcut="shift+enter"
+              disabled={!menuPage || !/^https?:/i.test(menuPage)}
+              onSelect={() => {
+                if (menuPage) void openInBrowser(sourceAtLink(menuLink) ?? menuPage);
+              }}
+            >
+              Open the source page in your browser
+            </MenuItem>
+            <MenuItem
+              icon={Copy}
+              disabled={!menuPage}
+              onSelect={() => {
+                if (rowMenu.state) {
+                  void copyRowUrls(rowMenu.state.menu, (row) => (row.kind === 'link' ? row.link['from.url'] : null));
+                }
+              }}
+            >
+              {`Copy ${rowsWords(menuCount, ['source URL', 'source URLs'])}`}
+            </MenuItem>
+            <MenuSeparator />
+          </>
+        ) : null}
+        <MenuItem
+          icon={PanelRight}
+          disabled={!menuGroup}
+          onSelect={() => {
+            if (!menuGroup) return;
+            const page = typeof menuPageId === 'number' ? { link: menuPageId } : onlyPageOf(menuGroup);
+            onInspect(menuGroup.id, 'to', { section: 'inlinks', ...page });
           }}
-          onCopyRows={() => void rowMenu.state?.menu.copy()}
-          rowNoun={images ? ['image', 'images'] : ['target', 'targets']}
-        />
-        <MenuSeparator />
-        <MenuItem icon={PanelRight} disabled={!menuGroup} onSelect={() => menuGroup && onInspect(menuGroup.id, 'to')}>
+        >
           {images ? 'Inspect the image' : 'Inspect the target'}
         </MenuItem>
         <MenuItem
           icon={ExternalLink}
+          {...(menuLink ? {} : { shortcut: 'shift+enter' })}
           disabled={!menuGroup || !/^https?:/i.test(menuGroup.url)}
           onSelect={() => {
             if (menuGroup) void openInBrowser(menuGroup.url);
@@ -581,6 +826,21 @@ export function LinkGroupsGrid({
         >
           {images ? 'Open the image in your browser' : 'Open the target in your browser'}
         </MenuItem>
+        <MenuItem
+          icon={Copy}
+          disabled={!menuGroup}
+          onSelect={() => {
+            if (rowMenu.state) void copyRowUrls(rowMenu.state.menu, (row) => row.group.url);
+          }}
+        >
+          {`Copy ${rowsWords(menuLink ? 1 : menuCount, images ? ['image URL', 'image URLs'] : ['target URL', 'target URLs'])}`}
+        </MenuItem>
+        {menuLink ? null : (
+          <MenuItem icon={ClipboardList} shortcut="mod+c" onSelect={() => void rowMenu.state?.menu.copy()}>
+            {`Copy ${rowsWords(menuCount, targetNoun)}`}
+          </MenuItem>
+        )}
+        <MenuSeparator />
         <MenuItem icon={List} disabled={!menuGroup} onSelect={() => menuGroup && showAll(menuGroup)}>
           {menuGroup ? showAllLinksWords(menuGroup.links, images) : 'Show its links'}
         </MenuItem>

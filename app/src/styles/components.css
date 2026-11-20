@@ -2109,7 +2109,10 @@
   /* Monospace; the host muted and the path strong; truncated in the middle, so the host and the end stay. */
   .si-url {
     position: relative;
-    display: block;
+    /* The text, then the open-in-browser button straight after it: never at the far edge of a wide cell. */
+    display: flex;
+    align-items: center;
+    column-gap: var(--space-0-5);
     min-width: 0;
     max-width: 100%;
     font-family: var(--font-mono);
@@ -2118,33 +2121,54 @@
   }
 
   .si-url--inline {
-    display: inline-block;
+    display: inline-flex;
     vertical-align: bottom;
   }
 
   .si-url--wrap {
+    align-items: flex-start;
     white-space: normal;
     overflow-wrap: anywhere;
   }
 
+  /* The text: as wide as the URL, and no wider than the room the button leaves it. */
   .si-url__copy {
     display: block;
-    width: 100%;
+    flex: 0 1 auto;
+    min-width: 0;
     max-width: 100%;
     padding: 0;
+    overflow: hidden;
     border: 0;
     border-radius: var(--radius-xs);
     background: none;
     color: inherit;
     font: inherit;
     text-align: start;
+  }
+
+  /* A URL you can press (copy, or open in the app) is a 24 px target, however short the path ("/"). */
+  button.si-url__copy {
+    box-sizing: border-box;
+    min-width: var(--target-min);
+    min-height: var(--target-min);
+    padding-block: max(0px, calc((var(--target-min) - 1lh) / 2));
+  }
+
+  /* The control can't be squeezed under that by a flex parent (`min-w-0` on the URL). */
+  .si-url:has(button.si-url__copy) {
+    min-width: var(--target-min);
+    min-height: var(--target-min);
+  }
+
+  /* Only the URL that copies on a click has the copy cursor: text that does nothing looks like text, and a link (which
+     is a button of this class too) keeps the pointer. */
+  button.si-url__copy:not(.si-url__go) {
     cursor: copy;
   }
 
   /* A URL that goes somewhere in the app (the inspector walks to it): the link's colour, underlined on hover. */
   .si-url__go {
-    /* A pointer target of 24 px, however small the type: links like this stack in lists. */
-    padding-block: max(0px, calc((var(--target-min) - 1lh) / 2));
     cursor: pointer;
   }
 
@@ -2160,15 +2184,35 @@
     text-underline-offset: var(--underline-offset);
   }
 
-  /* The full URL: what screen readers, find-in-page and the layout's width read. It takes no height. */
+  /* The full URL: what screen readers and find-in-page read. It's out of the layout, which is sized by the text shown
+     (a path is narrower than its URL, and the open button follows the path). */
   .si-url__full {
+    display: block;
+    position: absolute;
+    width: 1px;
+    height: 0;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  /* Wrapped, the full URL is the text drawn. */
+  .si-url--wrap .si-url__full {
+    position: static;
+    width: auto;
+    height: auto;
+    white-space: inherit;
+  }
+
+  /* The layout's width: the text as shown, whole, at no height, so a URL cut to fit can grow back when there's room.
+     Drawn from an attribute, so the page's text holds the URL once. A file is laid out by its name and has none. */
+  .si-url__sizer {
     display: block;
     height: 0;
     overflow: hidden;
   }
 
-  .si-url--wrap .si-url__full {
-    height: auto;
+  .si-url__sizer::before {
+    content: attr(data-text);
   }
 
   .si-url__shown {
@@ -2226,58 +2270,87 @@
     color: var(--color-accent-text);
   }
 
-  /* The open-in-browser button has its own room at the end, so it never covers the end of the URL. */
-  .si-url--openable {
-    padding-right: calc(var(--control-height-xs) + var(--space-0-5));
-  }
-
+  /*
+   * The open-in-browser button, straight after the URL's text. In a list of things to fix it always shows, muted until
+   * it's pointed at. In a big grid (`si-open-on-row` on the grid's frame: URLs, Links) it shows on the row under the
+   * pointer, on the cursor's row and on a selected row, where the grid's own Shift+Enter opens the same URL.
+   */
   .si-url__open {
-    position: absolute;
-    top: 50%;
-    right: 0;
-    opacity: 0;
-    transform: translateY(-50%);
+    flex: none;
+    opacity: 0.6;
   }
 
-  .si-url:hover .si-url__open,
-  .si-url:focus-within .si-url__open {
+  .si-url__open:hover,
+  .si-url__open:focus-visible,
+  .si-url:hover > .si-url__open {
     opacity: 1;
   }
 
-  /*
-   * In a grid's row the button shows on the row's hover, on the row under the cursor while the grid has focus, and
-   * always on a selected row: the grid's own Shift+Enter opens the same URL from the keyboard.
-   */
-  .si-grid-row:hover .si-url__open,
-  .si-grid-row[data-selected] .si-url__open,
-  .si-grid:focus .si-grid-row:has(> [data-active]) .si-url__open,
+  .si-open-on-row .si-grid-row .si-url__open {
+    opacity: 0;
+  }
+
+  .si-open-on-row .si-grid-row:hover .si-url__open,
+  .si-open-on-row .si-grid-row[data-selected] .si-url__open,
+  .si-open-on-row .si-grid-row:has(> [data-active]) .si-url__open {
+    opacity: 0.6;
+  }
+
+  .si-open-on-row .si-grid-row .si-url__open:hover,
+  .si-open-on-row .si-grid-row .si-url__open:focus-visible,
+  .si-open-on-row .si-grid-row .si-url:hover > .si-url__open {
+    opacity: 1;
+  }
+
+  /* A list of places to go (the sitemaps, the origins' robots.txt): a click anywhere on a row opens it, so the whole
+     row has the pointer, not only its name. */
+  .si-rows-open .si-grid-row:not(.si-grid-head) {
+    cursor: pointer;
+  }
+
+  /* A grid that starts on a row (the one a list was left on, the URL a link landed on) marks it though the grid hasn't
+     focus: while nothing is selected, the cursor's row has the selection's tint. A selection, once made, is the mark. */
+  .si-mark-cursor:not(:has(.si-grid-row[data-selected])) .si-grid-row:has(> [data-active]) {
+    background: var(--color-surface-selected);
+  }
+
+  /* The same button after a URL shown as plain text in a cell. */
+  .si-url__open--inline {
+    flex-shrink: 0;
+  }
+
+  /* Simple's lists: the button beside an address, always there, muted until it's pointed at. */
+  .si-open-url {
+    opacity: 0.6;
+    vertical-align: middle;
+  }
+
+  .si-open-url:hover,
+  .si-open-url:focus-visible,
   .si-where-table tr:hover .si-open-url,
   .si-where-table tr:focus-within .si-open-url {
     opacity: 1;
   }
 
-  /* A URL shown as plain text in a cell (robots.txt's origins): the button sits after it rather than over its end. */
-  .si-url__open--inline {
-    position: static;
-    flex-shrink: 0;
-    transform: none;
-  }
-
-  /* Simple's lists: the button beside an address, shown on the row's hover or focus. */
-  .si-open-url {
-    opacity: 0;
-    vertical-align: middle;
-  }
-
-  .si-open-url:focus-visible {
-    opacity: 1;
-  }
-
+  /* Forced colours have no "muted": where the button shows, it shows whole, in the link colour. */
   @media (forced-colors: active) {
     .si-url__open,
     .si-open-url {
       color: LinkText;
+      opacity: 1;
     }
+
+    .si-open-on-row .si-grid-row:hover .si-url__open,
+    .si-open-on-row .si-grid-row[data-selected] .si-url__open,
+    .si-open-on-row .si-grid-row:has(> [data-active]) .si-url__open {
+      opacity: 1;
+    }
+  }
+
+  /* ------------------------------------------------- Links, grouped by target */
+  /* A press anywhere on a target's row opens or closes it (the chevron shows which): the row says it can be pressed. */
+  .si-link-groups .si-grid-row[data-level='1'] {
+    cursor: pointer;
   }
 
   /* ------------------------------------------------- Where an issue's URL is found */
@@ -2380,6 +2453,105 @@
   }
 
   /* ----------------------------------------------------------------- Links */
+  /* The inspector's way back after a hop: a strip across its top, naming the URL it came from. */
+  .si-inspector-back {
+    display: flex;
+    flex: none;
+    min-width: 0;
+    padding: var(--space-1) var(--space-3);
+    border-bottom: 1px solid var(--color-border-subtle);
+    background: var(--color-surface-sunken);
+  }
+
+  .si-inspector-back__link {
+    display: flex;
+    gap: var(--space-1-5);
+    align-items: center;
+    min-width: 0;
+    min-height: var(--target-min);
+    padding: 0 var(--space-2);
+    border-radius: var(--radius-sm);
+    color: var(--color-text-secondary);
+    font-size: var(--text-12);
+    cursor: pointer;
+  }
+
+  .si-inspector-back__link:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+  }
+
+  /* The link the reader came for, first in the inspector's list: what's current has the neutral fill and bold text,
+     never a coloured stripe. Its row says so in words to a screen reader, and the list's own line says it's first. */
+  .si-grid-row:not([data-selected]):has(.si-came-for) {
+    background: var(--color-surface-active);
+  }
+
+  .si-grid-row:has(.si-came-for) > .si-grid-cell,
+  .si-grid-row:has(.si-came-for) .si-url__path,
+  .si-grid-row:has(.si-came-for) .si-url__file {
+    font-weight: var(--font-weight-semibold);
+  }
+
+  /* The link blue fails 4.5:1 on the active fill. The row is already bold: the path uses the text colour there. */
+  .si-grid-row:has(.si-came-for) .si-url__path,
+  .si-grid-row:has(.si-came-for) .si-url__file {
+    color: var(--color-text);
+  }
+
+  /* The inspector's resize edge shows where to drag (layout/InspectorSlot.tsx): a short bar at the middle of the edge,
+     upright on the side dock and lying on the bottom one, neutral until the edge is pointed at, focused or dragged. */
+  .si-inspector-grip {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: var(--space-1);
+    height: var(--space-10);
+    border-radius: var(--radius-full);
+    background: var(--color-border-strong);
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+
+  .si-inspector-grip--bottom {
+    width: var(--space-10);
+    height: var(--space-1);
+  }
+
+  [role='separator']:hover > .si-inspector-grip,
+  [role='separator']:focus-visible > .si-inspector-grip,
+  [role='separator']:active > .si-inspector-grip {
+    background: var(--color-text-muted);
+  }
+
+  /* An image, at the top of its own summary: the picture whole, no taller than four of Simple's thumbnails, in the
+     thumbnail's own box (a hairline, the sunken surface behind a picture with no background of its own). */
+  .si-inspector-image {
+    display: inline-grid;
+    flex: none;
+    place-items: center;
+    min-width: var(--thumb-lg);
+    max-width: 100%;
+    min-height: var(--thumb-lg);
+    overflow: hidden;
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-sunken);
+    box-shadow: 0 0 0 var(--hairline) var(--color-border);
+  }
+
+  .si-inspector-image__picture {
+    display: block;
+    max-width: min(100%, calc(var(--thumb-lg) * 6));
+    max-height: calc(var(--thumb-lg) * 4);
+    object-fit: contain;
+  }
+
+  @media (forced-colors: active) {
+    .si-inspector-image {
+      outline: var(--hairline) solid CanvasText;
+    }
+  }
+
   .si-link {
     border-radius: var(--radius-xs);
     color: var(--color-accent-text);
@@ -2388,9 +2560,26 @@
     cursor: pointer;
   }
 
+  /* A link that is its own button ("and 3 more"), beside a 24 px URL: the same target. */
+  button.si-link {
+    box-sizing: border-box;
+    min-height: var(--target-min);
+    padding-block: max(0px, calc((var(--target-min) - 1lh) / 2));
+  }
+
   .si-link:hover {
     text-decoration: underline;
     text-underline-offset: var(--underline-offset);
+  }
+
+  /* A count in a grid's cell that opens the list it stands for (a URL's inlinks, its issues): the link's colour on the
+     cell's own figures, so the column still adds up by eye. */
+  .si-count-link {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-variant-numeric: inherit;
   }
 
   /* A link in running text: underlined, so it isn't told apart by colour alone (WCAG 1.4.1). */
