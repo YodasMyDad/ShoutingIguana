@@ -32,8 +32,6 @@ const PIXELS_WIDTH = 112;
 const ALT_WIDTH = 192;
 const SHOWN_WIDTH = 160;
 const MIN_URL_WIDTH = 260;
-/** Of the width the image's name and its alt text share, the name's part. */
-const URL_SHARE = 0.5;
 /** Room the thumbnail and the open-in-browser button take beside an image's name. */
 const THUMB_AND_BUTTON_WIDTH = 60;
 const FRAME_SLACK = 24;
@@ -68,10 +66,6 @@ export function ImagesSection() {
   const stackedWidth = Math.max(MIN_STACKED_WIDTH, (width ?? 0) - FILE_WIDTH - FRAME_SLACK);
   // A crawl made before images' pixel sizes were read has none: no column of dashes, one line that says so.
   const unmeasured = images.data?.pixelSizes === false;
-  // The image and its alt text share what the short columns leave: neither is cut beside the other's blank space.
-  const shared = (width ?? 0) - SIZE_WIDTH - (unmeasured ? 0 : PIXELS_WIDTH) - SHOWN_WIDTH - FRAME_SLACK;
-  const urlWidth = Math.max(MIN_URL_WIDTH, Math.round(shared * URL_SHARE));
-  const altWidth = Math.max(ALT_WIDTH, shared - urlWidth);
   const listed = useMemo(() => {
     const rows = images.data?.rows ?? [];
     if (marked === undefined) return rows;
@@ -161,7 +155,7 @@ export function ImagesSection() {
       {
         id: 'image',
         header: 'Image',
-        width: urlWidth,
+        width: MIN_URL_WIDTH,
         fit: 'url',
         fitText: (row) => fileNameOf(row.url),
         fitExtra: THUMB_AND_BUTTON_WIDTH,
@@ -203,7 +197,7 @@ export function ImagesSection() {
       {
         id: 'alt',
         header: 'Alt text',
-        width: altWidth,
+        width: ALT_WIDTH,
         fit: 'text',
         cell: (row) =>
           row.text ? <span title={row.text}>{row.text}</span> : <span className="text-text-muted">None</span>,
@@ -218,7 +212,7 @@ export function ImagesSection() {
         text: shownWords,
       },
     ],
-    [urlWidth, altWidth, siteOrigin, walk, marked, sizeCell, sizeText],
+    [siteOrigin, walk, marked, sizeCell, sizeText],
   );
   const visible = useMemo(
     () => (stacked ? stackedColumns : unmeasured ? columns.filter((column) => column.id !== 'pixels') : columns),

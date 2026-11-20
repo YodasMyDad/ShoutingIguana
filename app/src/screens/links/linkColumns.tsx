@@ -252,9 +252,8 @@ const OWN_WIDTHS: Record<string, number> = {
   selfLink: 168,
   imageLink: 112,
 };
-/** A URL column's width where the grid's own isn't known, and the least it's given where it is. */
+/** A URL column's width before the grid sizes it to the rows it holds. */
 const URL_WIDTH = 300;
-const URL_MIN_WIDTH = 160;
 const END_WIDTHS: Record<string, number> = {
   url: URL_WIDTH,
   endsAt: 320,
@@ -294,13 +293,6 @@ export interface LinkColumnContext {
   sort: readonly GridSort[];
   /** The crawl is running: an end not crawled yet may still be. */
   crawling?: boolean | undefined;
-  /** A width for each URL column, when the grid has room to share between them. */
-  urlWidth?: number | undefined;
-  /**
-   * Each column's own width, where the room is shared by what the view's values take (`fittedLinkWidths`): before
-   * `urlWidth`, and the column's default.
-   */
-  widths?: Readonly<Record<string, number>> | undefined;
   /**
    * The view's links are images alone (the Images preset): the target is "Image", shown with a picture of it, its text
    * "Alt text", and the page it's on "Shown on".
@@ -364,7 +356,7 @@ function linkGridColumn(id: string, column: LinkColumn | undefined, context: Lin
   const base = {
     id,
     header: name,
-    width: context.widths?.[id] ?? widthOf(id, type),
+    width: widthOf(id, type),
     ...(column?.sortable
       ? { sortable: true, ...(sorted ? { sort: sorted.desc ? ('descending' as const) : ('ascending' as const) } : {}) }
       : { sortHint: sortHint(name) }),
@@ -381,6 +373,8 @@ function linkGridColumn(id: string, column: LinkColumn | undefined, context: Lin
   if (id === LINK_FACTS_COLUMN) {
     return {
       ...base,
+      // The three short columns, drawn as one: as wide as the line, never cut.
+      fit: 'value',
       headerHint: 'What the link is, where on its page it sits, and whether search engines follow it',
       cell: (row) =>
         linkFactsWords(row) ? <span title={linkFactsWords(row)}>{linkFactsWords(row)}</span> : muted('–'),
@@ -420,6 +414,8 @@ function linkGridColumn(id: string, column: LinkColumn | undefined, context: Lin
   if (id === FOLLOW_COLUMN) {
     return {
       ...base,
+      // A short value: as wide as its words, never cut.
+      fit: 'value',
       // Several flags can be more than the column shows: the whole of it is the tooltip.
       cell: (row) =>
         linkFollowWords(row) ? <span title={linkFollowWords(row)}>{linkFollowWords(row)}</span> : muted('–'),
@@ -434,7 +430,6 @@ function linkGridColumn(id: string, column: LinkColumn | undefined, context: Lin
       (context.images === true || (typeof row.kind === 'string' && RESOURCE_LINK_KINDS.has(row.kind)));
     return {
       ...base,
-      ...(context.widths?.[id] === undefined && context.urlWidth ? { width: context.urlWidth } : {}),
       // As wide as the longest URL among the rows read first, as it shows (grid/columnFit.ts).
       fit: 'url',
       fitText: (row) => {
@@ -484,6 +479,8 @@ function linkGridColumn(id: string, column: LinkColumn | undefined, context: Lin
   if (end?.column === 'statusCode') {
     return {
       ...base,
+      // The target's status is a short value: as wide as its words, never cut.
+      ...(end.end === 'to' ? { fit: 'value' as const } : {}),
       // Words take the room a code doesn't: left with the text, as the inspector's link grids have it.
       cell: (row) => {
         const code = row[`${end.end}.statusCode`];
@@ -524,7 +521,13 @@ function linkGridColumn(id: string, column: LinkColumn | undefined, context: Lin
         if (raw === null || raw === undefined || typeof raw === 'boolean') return '';
         return linkValueName(id, raw) ?? String(raw);
       };
-      return { ...base, cell: (row) => words(row) || muted('–'), text: words };
+      return {
+        ...base,
+        // Kind and position are short values: as wide as their words, never cut.
+        ...(id === 'kind' || id === 'position' ? { fit: 'value' as const } : {}),
+        cell: (row) => words(row) || muted('–'),
+        text: words,
+      };
     }
     case 'object': {
       // An end's redirect chain or robots.txt rule, in one line: whole in its tooltip.
@@ -594,40 +597,6 @@ export function linkGridColumns(
   return shown.map((id) => linkGridColumn(id, byId.get(id), context));
 }
 
-/**
- * The width each URL column gets: the room the other columns leave, shared between them, so the default view fills
- * a 1280 px window with nothing to scroll sideways for, and a wider one gives the URLs the room. Never under
- * URL_MIN_WIDTH: with more columns than fit, the grid scrolls. Undefined while the grid's width isn't known.
- */
-export function sharedUrlWidth(
-  shown: readonly string[],
-  catalogue: readonly LinkColumn[] | undefined,
-  available: number | null,
-  /** The widths the user gave columns (the grid's column layout): the room they take is theirs. */
-  widths: Readonly<Record<string, number>> = {},
-): number | undefined {
-  if (available === null) return undefined;
-  const byId = new Map((catalogue ?? []).map((column) => [column.id, column]));
-  const urls = shown.filter((id) => sharesAsUrl(id) && widths[id] === undefined);
-  if (urls.length === 0) return undefined;
-  const others = shown
-    .filter((id) => !urls.includes(id))
-    .reduce((sum, id) => sum + (widths[id] ?? widthOf(id, byId.get(id)?.type ?? 'text')), 0);
-  return Math.max(URL_MIN_WIDTH, Math.floor((available - others) / urls.length));
-}
-
-/** The columns that share the grid's room as URLs do: each end's URL, and where a target ends. */
-const sharesAsUrl = (id: string): boolean => endColumn(id)?.column === 'url' || id === ENDS_AT_COLUMN;
-
-/** The least the anchor or alt text is given where the room is shared by what the view's values take: its header whole. */
-const TEXT_MIN_WIDTH = 140;
-/** The most a URL column, or the anchor or alt text, asks for: past it, a value is cut, and its tooltip has it. */
-const URL_MAX_NEED = 720;
-const TEXT_MAX_NEED = 360;
-/** A cell's padding on both sides (`--grid-cell-x`), and the room a URL keeps at its end for the open button. */
-const CELL_PADDING = 24;
-const URL_BUTTON_ROOM = 24;
-
 /** Which face a value is drawn in: a URL's monospace, or the cells' text. */
 export type LinkFace = 'url' | 'text';
 
@@ -641,84 +610,6 @@ export function linkTextMeasure(textWeight?: string): (text: string, face: LinkF
   const urlFont = `${(size * 0.93).toFixed(2)}px ${tokenValue('--font-mono', 'monospace')}`;
   const textFont = `${textWeight ? `${textWeight} ` : ''}${size}px ${tokenValue('--font-sans', 'sans-serif')}`;
   return (text, face) => textWidth(text, face === 'url' ? urlFont : textFont);
-}
-
-/**
- * What the URL columns and the anchor or alt text take to show their values in view whole: the widest of them, as
- * `measure` draws it, with the cell's padding (and a URL's room for its open button). A URL is measured as it shows,
- * its path where it's on the crawl's own origin. Columns with nothing in view are left out.
- */
-export function linkColumnNeeds(
-  rows: readonly LinkRow[],
-  shown: readonly string[],
-  siteOrigin: string | null,
-  measure: (text: string, face: LinkFace) => number,
-): Record<string, number> {
-  const needs: Record<string, number> = {};
-  for (const id of shown) {
-    const url = sharesAsUrl(id);
-    if (!url && id !== 'text') continue;
-    let widest = 0;
-    for (const row of rows) {
-      const value = id === ENDS_AT_COLUMN ? endsAtOf(row)?.url : row[id as keyof LinkRow];
-      if (typeof value !== 'string' || value === '') continue;
-      widest = Math.max(widest, measure(url ? urlDisplay(value, siteOrigin).shown : value, url ? 'url' : 'text'));
-    }
-    if (widest > 0) {
-      needs[id] = Math.ceil(
-        widest + CELL_PADDING + (url ? URL_BUTTON_ROOM : 0) + (id === ENDS_AT_COLUMN ? ENDS_AT_ROOM : 0),
-      );
-    }
-  }
-  return needs;
-}
-
-/**
- * The widths of the columns that share the grid's room by what their values take (`linkColumnNeeds`): the URL
- * columns, and the anchor or alt text once its values are known. The other columns keep their own widths, and a
- * column the user sized keeps theirs. With room for every value whole, each takes what it needs and the URLs share
- * the rest, so a path is never cut in the middle while the grid has room to spare; short of room, each gets its least
- * and the rest in proportion to what it wants past that. A URL with nothing in view wants what it always did, so the
- * URLs share the room as `sharedUrlWidth` shares it. Undefined while the grid's width isn't known, or with nothing to share.
- */
-export function fittedLinkWidths(
-  shown: readonly string[],
-  catalogue: readonly LinkColumn[] | undefined,
-  available: number | null,
-  /** The widths the user gave columns (the grid's column layout): the room they take is theirs. */
-  widths: Readonly<Record<string, number>> = {},
-  needs: Readonly<Record<string, number>> = {},
-): Record<string, number> | undefined {
-  if (available === null) return undefined;
-  const byId = new Map((catalogue ?? []).map((column) => [column.id, column]));
-  const isUrl = sharesAsUrl;
-  const flexible = shown.filter(
-    (id) => widths[id] === undefined && (isUrl(id) || (id === 'text' && needs[id] !== undefined)),
-  );
-  if (flexible.length === 0) return undefined;
-  const room =
-    available -
-    shown
-      .filter((id) => !flexible.includes(id))
-      .reduce((sum, id) => sum + (widths[id] ?? widthOf(id, byId.get(id)?.type ?? 'text')), 0);
-  const least = (id: string) => (isUrl(id) ? URL_MIN_WIDTH : TEXT_MIN_WIDTH);
-  const wanted = (id: string) =>
-    Math.max(least(id), Math.min(isUrl(id) ? URL_MAX_NEED : TEXT_MAX_NEED, needs[id] ?? URL_WIDTH));
-  const sum = (part: (id: string) => number) => flexible.reduce((total, id) => total + part(id), 0);
-  let width: (id: string) => number;
-  if (sum(wanted) <= room) {
-    // Room for every value whole: the URLs share what's left, or the anchor takes it where no URL is shown.
-    const takers = flexible.some(isUrl) ? flexible.filter(isUrl) : flexible;
-    const slack = room - sum(wanted);
-    width = (id) => wanted(id) + (takers.includes(id) ? slack / takers.length : 0);
-  } else if (room <= sum(least)) {
-    width = least;
-  } else {
-    const spare = room - sum(least);
-    const over = sum((id) => wanted(id) - least(id));
-    width = (id) => least(id) + (over > 0 ? (spare * (wanted(id) - least(id))) / over : spare / flexible.length);
-  }
-  return Object.fromEntries(flexible.map((id) => [id, Math.floor(width(id))]));
 }
 
 const NEEDS_ANALYSIS = 'needs an analysis';

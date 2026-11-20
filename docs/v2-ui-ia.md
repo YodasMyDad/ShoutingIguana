@@ -278,8 +278,10 @@ found, 265 pages; the 100k crawl 110,251 and 112,577, and 101,106 pages, everywh
   behind a chevron.
 - Quick filters with counts (kind, position, follow, the target's status, the target's site), each count opening
   exactly that many links, counted when their menu opens; a filter bar over any column of the link or of either end
-  (at most 20 filters, as a query takes); search over the anchor text and both URLs. A filter the engine won't run (a
-  pattern it refuses) says so in the engine's own words, with "Change the filter" and "Remove the filter".
+  (at most 20 filters, as a query takes). Search covers the anchor text and both URLs, and shows as a chip. "Clear
+  all" clears the filters, the search and the sort; the columns stay. Coming back to a view starts on the row left.
+  A filter the engine won't run (a pattern it refuses) says so in the engine's own words, with "Change the filter"
+  and "Remove the filter".
 - Either end opens the inspector on that URL, which then follows the cursor down that end; which end is in the
   address. It arrives on the link itself: the page's Outlinks with the link's target first and marked, the target's
   Inlinks with the page first and marked. The open-in-browser button of the page a link is on opens the page at the

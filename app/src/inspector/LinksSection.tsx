@@ -88,8 +88,6 @@ const KIND_WIDTH = 112;
 const POSITION_WIDTH = 104;
 const FOLLOW_WIDTH = 144;
 const MIN_URL_WIDTH = 240;
-/** Of the width the URL and the anchor text share, the URL's part: a path is about as long as the words that link it. */
-const URL_SHARE = 0.55;
 /** Room the open-in-browser button takes after a URL's text. */
 const OPEN_BUTTON_WIDTH = 28;
 const FRAME_SLACK = 24;
@@ -226,10 +224,7 @@ export function LinksSection({ direction }: { direction: LinkDirection }) {
     if (onUrl || presses.current.grid !== gridKey || presses.current.count < 2) event.stopPropagation();
   };
 
-  // The URL and the anchor text share what the short columns leave: neither is cut beside the other's blank space.
-  const shared = (width ?? 0) - STATUS_WIDTH - KIND_WIDTH - POSITION_WIDTH - FOLLOW_WIDTH - FRAME_SLACK;
-  const urlWidth = Math.max(MIN_URL_WIDTH, Math.round(shared * URL_SHARE));
-  const textWidth = Math.max(TEXT_WIDTH, shared - urlWidth);
+  // Narrow, each link is its URL over what it is, beside its status: that column takes the room the status leaves.
   const stackedWidth = Math.max(MIN_STACKED_WIDTH, (width ?? 0) - STATUS_WIDTH - FRAME_SLACK);
   // The page that holds a link to this URL is walked to where the link is: its Outlinks, this link first.
   const go = useCallback(
@@ -303,7 +298,7 @@ export function LinksSection({ direction }: { direction: LinkDirection }) {
             {
               id: 'url',
               header: words.url,
-              width: urlWidth,
+              width: MIN_URL_WIDTH,
               fit: 'url',
               fitText: (row) => urlDisplay(row.url, siteOrigin).shown,
               fitExtra: OPEN_BUTTON_WIDTH,
@@ -344,7 +339,7 @@ export function LinksSection({ direction }: { direction: LinkDirection }) {
             {
               id: 'text',
               header: 'Anchor or alt text',
-              width: textWidth,
+              width: TEXT_WIDTH,
               fit: 'text',
               cell: (row) =>
                 row.text ? <span title={row.text}>{row.text}</span> : <span className="text-text-muted">None</span>,
@@ -372,7 +367,7 @@ export function LinksSection({ direction }: { direction: LinkDirection }) {
               text: followWords,
             },
           ],
-    [words.url, urlWidth, textWidth, stackedWidth, stacked, siteOrigin, go, atLink, direction, marked],
+    [words.url, stackedWidth, stacked, siteOrigin, go, atLink, direction, marked],
   );
   // The columns as the user laid them out (resized, moved, pinned), kept for this grid with the preferences: the
   // stacked grid's apart, as its columns are others.

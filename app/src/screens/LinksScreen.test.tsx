@@ -25,6 +25,7 @@ import {
 import { createQueryClientWithoutBackoff } from '../test/queryClient';
 import { wholeText } from '../test/text';
 import { LINK_PRESETS } from './links/presets';
+import { resetPlaces } from './listPlace';
 
 const LINKS = `/crawls/${TEST_CRAWL_ID}/links`;
 
@@ -62,6 +63,7 @@ beforeEach(() => {
 afterEach(() => {
   stopListening();
   setTransport(fakeSidecar([]));
+  resetPlaces();
 });
 
 describe('the Links grid', () => {
@@ -318,7 +320,7 @@ describe('the Links filter bar', () => {
     await counted('3 of 13 links');
     expect(filtersOf(router)).toEqual([{ column: 'kind', op: 'in', values: ['image', 'canonical'] }]);
     expect(within(bar).getByRole('button', { name: 'Kind is Image or Canonical' })).toBeVisible();
-    await user.click(within(bar).getByRole('button', { name: 'Clear filters' }));
+    await user.click(within(bar).getByRole('button', { name: 'Clear all' }));
     await counted('13 links');
     expect(filtersOf(router)).toBeUndefined();
     expect(within(bar).getByRole('button', { name: 'Add filter' })).toHaveFocus();
@@ -350,6 +352,12 @@ describe('searching the links', () => {
     await counted('2 of 13 links');
     expect(router.state.location.search).toMatchObject({ q: 'gone' });
     expect(linkRequests(transport).at(-1)).toMatchObject({ search: 'gone' });
+    // The search narrows the list as a filter does, so it sits with the filters.
+    expect(
+      within(screen.getByRole('group', { name: 'Filters' })).getByRole('button', {
+        name: /Remove the filter Anchor text or URL contains gone/,
+      }),
+    ).toBeVisible();
     // The field kept the keyboard: nothing was taken away under it.
     expect(field).toHaveFocus();
     await waitFor(() => expect(said).toContain('2 of 13 links'));
@@ -366,6 +374,42 @@ describe('searching the links', () => {
     expect(commands.get('links.search')?.keys).toEqual(['mod+f']);
     act(() => void commands.run('links.search'));
     expect(screen.getByRole('searchbox', { name: 'Search anchor text and URLs' })).toHaveFocus();
+  });
+
+  it('clears the search and the sort with Clear all, and says so', async () => {
+    sidecar();
+    const { router, user } = await open(`${LINKS}?q=gone&sort=-to.statusCode`);
+    await counted('2 of 13 links');
+    const bar = screen.getByRole('group', { name: 'Filters' });
+    const clear = within(bar).getByRole('button', { name: 'Clear all' });
+    await user.hover(clear);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'Clears the filters, the search and the sort. The columns stay.',
+    );
+    await user.click(clear);
+    await counted('13 links');
+    expect(router.state.location.search).toEqual({});
+  });
+
+  it('comes back to the link it was left on', async () => {
+    sidecar();
+    const { router, user } = await open(LINKS);
+    await counted('13 links');
+    const table = await grid();
+    act(() => table.focus());
+    fireEvent.keyDown(table, { key: 'ArrowDown' });
+    fireEvent.keyDown(table, { key: 'ArrowDown' });
+    const left = document.getElementById(table.getAttribute('aria-activedescendant') ?? '')?.textContent;
+    expect(left).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Broken links' }));
+    await counted('3 of 13 links');
+    act(() => router.history.back());
+    await counted('13 links');
+    const back = await grid();
+    await waitFor(() => {
+      const cell = document.getElementById(back.getAttribute('aria-activedescendant') ?? '');
+      expect(cell?.textContent).toBe(left);
+    });
   });
 });
 
@@ -870,7 +914,7 @@ describe('the Links grid’s states', () => {
     await open(LINKS);
     expect(await screen.findByText('No links')).toBeVisible();
     expect(screen.getByText('The crawl stored none: it read no page with a link on it.')).toBeVisible();
-    expect(screen.queryByRole('button', { name: 'Clear filters' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Clear all' })).toBeNull();
   });
 
   it('says nothing matches, shows the filters, and clears them in one press', async () => {

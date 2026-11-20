@@ -13,6 +13,7 @@ import { LINKS_URLS, linksRoutes, testLinkRows } from '../test/linksSidecar';
 import { LINKS_FACTS } from '../test/linksSidecar';
 import { wholeText } from '../test/text';
 import { IMAGE_COLUMNS } from './links/presets';
+import { resetPlaces } from './listPlace';
 
 const LINKS = `/crawls/${TEST_CRAWL_ID}/links`;
 
@@ -54,7 +55,10 @@ const cellOf = (row: HTMLElement) => row.querySelector<HTMLElement>('[role="grid
 const level2 = (grid: HTMLElement) => [...grid.querySelectorAll<HTMLElement>('[role="row"][aria-level="2"]')];
 const filterOf = (filters: GridFilter[]) => encodeURIComponent(JSON.stringify(filters));
 
-afterEach(() => setTransport(fakeSidecar([])));
+afterEach(() => {
+  setTransport(fakeSidecar([]));
+  resetPlaces();
+});
 
 describe('the Links grid grouped by target', () => {
   it('lists each target once, the most linked from pages first, with its pages, links, text and status', async () => {

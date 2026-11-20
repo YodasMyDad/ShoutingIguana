@@ -39,7 +39,7 @@ import { useSearchApplyHint } from '../grid/SearchApplyHint';
 import { ToolsToggle } from '../grid/ToolsToggle';
 import { useShortScreen } from '../grid/useShortScreen';
 import { queryRefusalWords } from '../grid/queryRefusal';
-import { useColumnLayout, useStoredColumnLayout } from '../grid/useColumnLayout';
+import { useColumnLayout } from '../grid/useColumnLayout';
 import { usePagedRows } from '../grid/usePagedRows';
 import { useCheckWords } from '../grid/useCheckWords';
 import { useUrlWords } from '../grid/useUrlWords';
@@ -61,6 +61,7 @@ import { GridHeader, ResultCount } from '../ui/PageHeader';
 import { SearchField } from '../ui/SearchField';
 import { Tooltip } from '../ui/Tooltip';
 import { siteOriginOf, urlDisplay } from '../ui/urlText';
+import { rememberPlace, rememberedKey, rememberedPlace } from './listPlace';
 import { FACET_TITLES, LINK_FACET_IDS, buildFacets, withFacetValue, type FacetValue } from './links/facets';
 import {
   DEFAULT_LINK_COLUMNS,
@@ -71,14 +72,10 @@ import {
   linkFilterColumns,
   linkGridColumns,
   linkQueryColumns,
-  sharedUrlWidth,
   shownLinkColumns,
   isLinkColumn,
   linkExportShown,
-  fittedLinkWidths,
   foldedLinkColumns,
-  linkColumnNeeds,
-  linkTextMeasure,
   sourceAtLink,
   unfoldedLinkColumns,
 } from './links/linkColumns';
@@ -108,9 +105,6 @@ import { analysisNote, noLinksWords, noMatchWords } from './links/states';
 import { copiedPartOfEnds, copiesPart, copyColumnTitle, copyEndsTitle } from './links/copyWords';
 
 const ROUTE = '/crawls/$crawl/links';
-
-/** The room the grid's frame takes beside its columns: its border and the scrollbar over its right edge. */
-const FRAME_SLACK = 24;
 
 /**
  * The screen is narrow under this many px of its own (a 1280 px window beside the sidebar has about 1,000): a link's
@@ -319,8 +313,15 @@ export function LinksScreen() {
   }, [hiddenSort, navigate, shown]);
 
   const handoff = useHeaderHandoff(sort);
+  // Where this view was left, for the grid it comes back to (the grid is made again for each view).
+  const placeKey = `links|${view}`;
+  const [place, setPlace] = useState({ key: placeKey, row: rememberedPlace(placeKey), id: rememberedKey(placeKey) });
+  if (place.key !== placeKey) {
+    setPlace({ key: placeKey, row: rememberedPlace(placeKey), id: rememberedKey(placeKey) });
+  }
+  const startRow = place.key === placeKey ? place.row : undefined;
+  const startKey = place.key === placeKey && place.id !== undefined ? Number(place.id) : undefined;
   const [measure, width] = useElementWidth();
-  const layoutWidths = useStoredColumnLayout('links').widths;
   // A crawl made before images' pixel sizes were read has none to show: the column is left out, and the screen says
   // so once, rather than a column of dashes.
   const unmeasured = !grouped && first?.pixelSizes === false && shown.includes(PIXELS_COLUMN);
@@ -329,28 +330,16 @@ export function LinksScreen() {
   // the three.
   const narrow = width !== null && width > 0 && width < NARROW_BELOW;
   const folded = useMemo(() => foldedLinkColumns(drawn, narrow), [drawn, narrow]);
-  const urlWidth = sharedUrlWidth(folded, catalogue.data, width === null ? null : width - FRAME_SLACK, layoutWidths);
-  // The room shared by what the first page's URLs and anchors take: read once a view, so scrolling never moves a column.
-  const needs = useMemo(
-    () => linkColumnNeeds(first?.rows ?? [], folded, siteOrigin, linkTextMeasure()),
-    [first, folded, siteOrigin],
-  );
-  const widths = useMemo(
-    () => fittedLinkWidths(folded, catalogue.data, width === null ? null : width - FRAME_SLACK, layoutWidths, needs),
-    [folded, catalogue.data, width, layoutWidths, needs],
-  );
   const columns = useMemo(
     () =>
       linkGridColumns(folded, catalogue.data, {
         siteOrigin,
         onOpen: openEnd,
         sort,
-        urlWidth,
-        widths,
         crawling,
         images,
       }),
-    [folded, catalogue.data, siteOrigin, openEnd, sort, urlWidth, widths, crawling, images],
+    [folded, catalogue.data, siteOrigin, openEnd, sort, crawling, images],
   );
   // The columns as the user laid them out: widths and pins kept with the preferences, the order the route's. Put
   // back, a set that's the default's in another order takes the default's order again.
@@ -918,7 +907,11 @@ export function LinksScreen() {
             onEditingChange={setEditingFilter}
             refused={refused}
             maxFilters={MAX_FILTERS}
-            onClear={() => setFilters([])}
+            // "Clear all": the filters, the search and the sort go; the columns and the grouping stay.
+            onClear={clearView}
+            clearsAll
+            sorted={sort.length > 0}
+            search={q ? { field: 'Anchor text or URL', text: q, onRemove: () => applySearch('') } : undefined}
             className="flex flex-wrap items-center gap-2 px-6 pb-3"
           >
             {LINK_FACET_IDS.map((id) => (
@@ -1074,6 +1067,11 @@ export function LinksScreen() {
             onScrollOffset={rows.onScrollOffset}
             fetchRows={rows.fetchRows}
             onCopy={onCopy}
+            // The cursor is on a link, not at a row number: a running crawl's refresh that moves rows keeps it there.
+            rowKey={(row) => row.id}
+            // Back to this view starts on the link it was left on.
+            startRow={startRow}
+            startKey={startKey}
             onSort={(column, focused) => {
               const next = nextSort(sort, column);
               handoff.sorted(column, focused, next);
@@ -1090,12 +1088,12 @@ export function LinksScreen() {
             }
             // While it's open, the inspector follows the cursor, in place, down the end it's on.
             onActiveRowChange={(index) => {
-              if (inspecting && index !== null) openRow(rows.getRow(index), inspectedEnd, true);
+              const at = index === null ? undefined : rows.getRow(index);
+              if (index !== null && at) rememberPlace(placeKey, index, String(at.id));
+              if (inspecting && index !== null) openRow(at, inspectedEnd, true);
             }}
             onActiveColumnChange={setCursorColumn}
             onContextMenu={rowMenu.onContextMenu}
-            // The cursor is on a link, not at a row number: a running crawl's refresh that moves rows keeps it there.
-            rowKey={(row) => row.id}
             // Live refreshes update in place: the progress line is for a refresh the user asked for.
             busy={rows.isRefreshing && !crawling}
             loadingNote={waiting ? slowWords : undefined}

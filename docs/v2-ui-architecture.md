@@ -1081,8 +1081,9 @@ full grid's pieces, which are any grid's (below). What it settled:
   - *"Ends at"* (`ENDS_AT_COLUMN`, drawn from the target's `redirectChain`, exported as the engine's `finalUrl` and
     `finalStatusCode`): the Links to redirects preset's own columns have it. An end's "Redirects to" and "Final URL"
     columns are links too, by the chain's ids; its canonical has no id to open and stays text.
-  - The URL and anchor columns are marked `fit` for the grid's own sizing (`grid/columnFit.ts`); until that sizes
-    them, `fittedLinkWidths` still does.
+  - The URL and anchor columns, and Kind, Position, Follow and Target status, take their width from what they hold
+    (`fit` on the column, `grid/columnFit.ts`). "Clear all" clears the filters, the search and the sort (the search
+    is a chip beside the filters); the columns stay. Back to a view starts on the row it was left on.
 - **From the inspector**: Inlinks and Outlinks have "All N in Links" ("Show it in Links" for one link, never "All
   1"), the same links here: `to.id` (or `from.id`) is the URL, the kind chosen stays, and `selfLink` is no, because
   the inspector's lists leave out a page's links to itself and the links grid doesn't. N is the section's own count,
@@ -1403,7 +1404,8 @@ is two views on one route: a list, and one thing from it, named in the path. Wha
   only once the crawl has them all.
 - **Five counts fit a 1280 px window**: "Blocked by robots.txt" takes two lines over its count, the other columns
   are as wide as their names and a count in the millions need, and an index's badge leaves its count out where the
-  address would have no room (below 260 px).
+  address would have no room (below 260 px). The address takes the room those columns leave, so a name shows whole
+  while the list has room for it.
 - **In a frame too narrow for every column the counts come straight after the address**, with Status and Found via
   after them. The list measures its own frame (never the window): 200% zoom of 1280x720 leaves it 534 px, where
   Listed began at the frame's last 44 px and the other four counts were a sideways scroll away. Listed, Crawled and

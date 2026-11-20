@@ -27,6 +27,7 @@ import { StatusCode } from '../../ui/StatusCode';
 import { Url } from '../../ui/Url';
 import { isResourceType, urlDisplay } from '../../ui/urlText';
 import { treeLayout, type OpenGroup } from '../issues/groupTree';
+import { rememberPlace, rememberedKey, rememberedPlace } from '../listPlace';
 import { MEASURED_GROUPS, fittedGroupWidths, groupColumnNeeds } from './groupColumns';
 import { OPEN_AT_LINK_HINT, linkFollowWords, linkTextMeasure, sourceAtLink } from './linkColumns';
 import {
@@ -254,6 +255,14 @@ export function LinkGroupsGrid({
   const queryClient = useQueryClient();
   const order = groupSortOf(sort);
   const view = `${crawlId}|${JSON.stringify({ filters, q: search ?? '', order })}`;
+  // Where this view was left, for the grid it comes back to (the grid is made again for each view).
+  const placeKey = `links-groups|${view}`;
+  const [place, setPlace] = useState({ key: placeKey, row: rememberedPlace(placeKey), id: rememberedKey(placeKey) });
+  if (place.key !== placeKey) {
+    setPlace({ key: placeKey, row: rememberedPlace(placeKey), id: rememberedKey(placeKey) });
+  }
+  const startRow = place.key === placeKey ? place.row : undefined;
+  const startKey = place.key === placeKey ? place.id : undefined;
   const firstLinks = useMemo<FirstLinkContext>(
     () => ({ crawlId, filters, search, crawling }),
     [crawlId, filters, search, crawling],
@@ -720,10 +729,17 @@ export function LinkGroupsGrid({
         tree={tree}
         spanRow={spanRow}
         onSort={(column) => onSortChange(nextGroupSort(order, GROUP_COLUMN_SORTS[column] ?? column))}
+        startRow={startRow}
+        startKey={startKey}
         // While it's open, the inspector follows the cursor, in place: the target of the row the cursor is on.
         onActiveRowChange={(index) => {
-          const row = following && index !== null ? getRow(index) : undefined;
-          if (!row) return;
+          const row = index === null ? undefined : getRow(index);
+          if (index !== null && row) {
+            const key =
+              row.kind === 'group' ? `g${row.group.id}` : row.kind === 'more' ? `m${row.group.id}` : `l${row.link.id}`;
+            rememberPlace(placeKey, index, key);
+          }
+          if (!following || !row) return;
           const page = row.kind === 'link' ? row.link['from.id'] : undefined;
           // The link the cursor is on is marked, on the tab the reader has open.
           if (following === 'from' && typeof page === 'number') onInspect(page, 'from', { link: row.group.id });
