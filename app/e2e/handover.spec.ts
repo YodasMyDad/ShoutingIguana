@@ -73,8 +73,9 @@ test('a limit changed turns the crawl’s analysis out of date in the library, a
   await page.goto('/settings/analysis');
   const field = page.getByRole('textbox', { name: 'Widest title' });
   await expect(field).toHaveValue('580');
-  // A width says the characters it holds, from what's typed.
-  await expect(field).toHaveAccessibleDescription(/About 60 characters of ordinary text\.$/);
+  // At the engine's own width the range already says the characters, so the field doesn't say them twice.
+  await expect(field).toHaveAccessibleDescription(/The engine’s is 580 px \(about 60 characters\)\.$/);
+  await expect(field).not.toHaveAccessibleDescription(/ordinary text/);
 
   // Refused as it's typed, beside the limit.
   await field.fill('100');

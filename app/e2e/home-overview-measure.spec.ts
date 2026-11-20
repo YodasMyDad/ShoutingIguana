@@ -19,10 +19,10 @@ test('Overview shows its totals within the budget, opened from URLs', async ({ p
     const totals = page.getByRole('region', { name: 'Totals' });
     const started = await page.evaluate(() => performance.now());
     await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Overview' }).click();
-    await expect(totals.getByRole('link').first().locator('.si-stat__value')).toHaveText(/\d/, { timeout: 30_000 });
+    await expect(totals.getByRole('link').first().locator('.si-totals__value')).toHaveText(/\d/, { timeout: 30_000 });
     await expect(page.getByRole('region', { name: 'Issues by severity' })).toBeVisible();
     const ms = (await page.evaluate(() => performance.now())) - started;
-    expect(countOf(await totals.getByRole('link').first().locator('.si-stat__value').innerText())).toBe(crawled);
+    expect(countOf(await totals.getByRole('link').first().locator('.si-totals__value').innerText())).toBe(crawled);
     times.push(Math.round(ms));
   }
   const slowest = Math.max(...times);

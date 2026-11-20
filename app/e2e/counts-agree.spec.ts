@@ -51,7 +51,7 @@ async function figure(page: Page, region: string, label: string) {
     .getByRole('region', { name: region })
     .getByRole('link')
     .filter({ hasText: new RegExp(`^${label}`) });
-  return countOf(await link.locator('.si-stat__value').innerText());
+  return countOf(await link.locator('.si-totals__value').innerText());
 }
 
 /** The URL grid's header count, once it has settled on its number. */
@@ -89,7 +89,7 @@ async function expectOneCount(page: Page, id: string, hidden: readonly string[] 
   // Overview's totals and its line about the crawl.
   await page.goto(`/crawls/${id}/overview`);
   const totals = page.getByRole('region', { name: 'Totals' });
-  await expect(totals.locator('.si-stat__value').first()).toHaveText(/\d/, { timeout: 60_000 });
+  await expect(totals.locator('.si-totals__value').first()).toHaveText(/\d/, { timeout: 60_000 });
   await expect.poll(() => figure(page, 'Totals', 'Crawled'), { timeout: 30_000 }).toBe(crawled);
   expect(await figure(page, 'Totals', 'Pages')).toBe(pages);
   expect(await figure(page, 'Totals', 'Found')).toBe(found);
