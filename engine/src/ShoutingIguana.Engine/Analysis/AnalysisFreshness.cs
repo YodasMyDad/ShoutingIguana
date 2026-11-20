@@ -71,8 +71,11 @@ public static class AnalysisFreshness
     /// with its repeats joined by commas, as browsers do (<c>X-Content-Type-Options: nosniff, nosniff</c> is nosniff, and
     /// frame-ancestors in any Content-Security-Policy line stands in for X-Frame-Options), and groups
     /// <c>canonical-loop</c> by the loop (<see cref="IssueFaults.CanonicalLoop"/>), so the pages of one loop are one group.
+    /// 21 doesn't run the checks of what the sitemaps list on a crawl file that lost a sitemap's entries (its row counts
+    /// URLs and the file holds none: a recheck by the engine of 18 November 2026 deleted them, then failed), where 20 read
+    /// the empty list and reported every page as missing from the sitemaps (<see cref="SkippedCheckReasons.SITEMAP_LIST_LOST"/>).
     /// </summary>
-    public const int VERSION = 20;
+    public const int VERSION = 21;
 
     /// <summary>
     /// The catalog's check ids with their categories and severities, hashed. Titles, descriptions, fixes, why and

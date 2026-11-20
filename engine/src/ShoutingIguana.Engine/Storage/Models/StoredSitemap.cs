@@ -12,6 +12,13 @@ internal sealed record StoredSitemap(string Url, int? StatusCode, bool IsIndex, 
     /// <summary>The file's size as read, uncompressed; null as <see cref="ListedSitemaps"/> is.</summary>
     public long? SizeBytes { get; init; }
 
+    /// <summary>
+    /// The crawl counted URLs in it (<see cref="UrlCount"/>) and the file holds none of its entries: a recheck by an
+    /// earlier engine deleted them, then failed. A crawl stores an entry for every URL it counts, so nothing else leaves a
+    /// count without one. What it lists isn't known.
+    /// </summary>
+    public bool ListLost { get; init; }
+
     /// <summary>It answered 2xx and was read without an error.</summary>
     public bool IsRead => Error is null && StatusCode is >= 200 and < 300;
 

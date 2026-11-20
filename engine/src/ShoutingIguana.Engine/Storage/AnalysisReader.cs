@@ -404,7 +404,11 @@ internal sealed class AnalysisReader : IDisposable
         var listed = HasColumn("sitemaps", "listed_sitemaps") ? "listed_sitemaps" : "NULL";
         var size = HasColumn("sitemaps", "size_bytes") ? "size_bytes" : "NULL";
         List<StoredSitemap> sitemaps = [];
-        Rows($"SELECT url, status_code, is_index, url_count, error, is_probe, {listed}, {size} FROM sitemaps ORDER BY id", reader => sitemaps.Add(new StoredSitemap(
+        Rows($"""
+            SELECT url, status_code, is_index, url_count, error, is_probe, {listed}, {size},
+                   url_count > 0 AND NOT EXISTS (SELECT 1 FROM sitemap_urls m WHERE m.sitemap_id = sitemaps.id)
+            FROM sitemaps ORDER BY id
+            """, reader => sitemaps.Add(new StoredSitemap(
             reader.GetString(0),
             reader.IsDBNull(1) ? null : reader.GetInt32(1),
             reader.GetBoolean(2),
@@ -413,7 +417,8 @@ internal sealed class AnalysisReader : IDisposable
             reader.GetBoolean(5))
         {
             ListedSitemaps = reader.IsDBNull(6) ? null : reader.GetInt32(6),
-            SizeBytes = reader.IsDBNull(7) ? null : reader.GetInt64(7)
+            SizeBytes = reader.IsDBNull(7) ? null : reader.GetInt64(7),
+            ListLost = reader.GetBoolean(8)
         }));
         return sitemaps;
     }

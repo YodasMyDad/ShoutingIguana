@@ -2609,6 +2609,10 @@
       "plainText": "This site check was made with an older version of Shouting Iguana, which didn't save what this check compares.",
       "plainAction": "Check the site again to include it."
     },
+    "sitemap-list-lost": {
+      "plainText": "An earlier version of Shouting Iguana lost the list of pages your sitemap names, so it can't be compared with your pages.",
+      "plainAction": "Check the site again to get the list back."
+    },
     "newer-than-analysis": {
       "plainText": "This check was added to Shouting Iguana after these results were worked out.",
       "plainAction": "Update the results to include it."

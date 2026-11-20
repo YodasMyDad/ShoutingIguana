@@ -148,7 +148,7 @@ export function SitemapList({ crawlId, list, crawl, wanted }: SitemapListProps) 
           busy={list.isFetching && !crawl.crawling}
           onOpen={open}
         />
-        {tally?.read === 0 && data.discovery !== 'running' ? (
+        {tally?.read === 0 && tally.listLost === 0 && data.discovery !== 'running' ? (
           <Callout tone="info" title="No sitemap was read">
             {WHERE_THE_CRAWL_LOOKS}
           </Callout>
@@ -198,7 +198,8 @@ export function SitemapList({ crawlId, list, crawl, wanted }: SitemapListProps) 
         </Banner>
       ) : null}
       {body}
-      {data && sitemaps && tally && tally.read > 0 ? <NotInAnySitemap crawlId={crawlId} /> : null}
+      {/* A sitemap that was read and lost its list still has the line: it says the pages can't be compared. */}
+      {data && sitemaps && tally && tally.read + tally.listLost > 0 ? <NotInAnySitemap crawlId={crawlId} /> : null}
       {data && sitemaps && sitemaps.length > 0 && !crawl.crawling ? <SitemapChecks crawlId={crawlId} /> : null}
     </GridScreen>
   );

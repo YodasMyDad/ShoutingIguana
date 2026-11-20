@@ -32,6 +32,17 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
     /// <summary>Checks besides the orphans' that need every page that could link to a page, sitemaps aside: skipped as orphans are when the crawl didn't read them all.</summary>
     private static readonly IssueDefinition[] LinkingPageChecks = [IssueCatalog.CANONICAL_UNLINKED, IssueCatalog.NON_INDEXABLE_INLINKS_ONLY, IssueCatalog.HREFLANG_UNLINKED];
 
+    /// <summary>
+    /// The checks that read which URLs the sitemaps list: what is in them and shouldn't be, what isn't and should, and the
+    /// pages only a sitemap (or nothing but a canonical or an hreflang link) leads to. Skipped when a sitemap lost its list
+    /// (<see cref="SkippedCheckReasons.SITEMAP_LIST_LOST"/>). The checks of the files themselves still run.
+    /// </summary>
+    private static readonly IssueDefinition[] SitemapListChecks =
+    [
+        IssueCatalog.NOT_IN_SITEMAP, IssueCatalog.ORPHAN_PAGE, IssueCatalog.SITEMAP_NON_INDEXABLE, IssueCatalog.SITEMAP_URL_OTHER_HOST, IssueCatalog.SITEMAP_URL_REPEATED,
+        IssueCatalog.SITEMAP_LASTMOD_INVALID, IssueCatalog.CANONICAL_UNLINKED, IssueCatalog.HREFLANG_UNLINKED
+    ];
+
     /// <summary>The orphan check is skipped once 1 in this many of the pages the crawl tried to read couldn't be read (<see cref="SkippedCheckReasons.PAGES_UNREAD"/>).</summary>
     private const int UNREAD_PAGES_ONE_IN = 20;
 
@@ -118,6 +129,21 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             {
                 SkipForEarlierVersion(notes, skipped, earlierVersion, "this crawl was made by an earlier version", IssueCatalog.SITEMAP_LASTMOD_INVALID);
             }
+
+            // A sitemap that counted URLs and holds none of them lost its list. Read as it stands, every page would be
+            // missing from the sitemaps and nothing in them wrong: what they list can't be compared with the crawl at all.
+            if (sitemaps.Where(sitemap => sitemap.ListLost).ToList() is { Count: > 0 } lost)
+            {
+                var which = lost.Count == 1
+                    ? $"the {RuleText.Count(lost[0].UrlCount, "URL", "URLs")} {lost[0].Url} listed"
+                    : $"the URLs {lost.Count} sitemaps listed ({lost[0].Url} and {lost.Count - 1} more)";
+                Skip(notes, skipped,
+                    $"The checks that compare the site's pages with its sitemaps weren't run: this crawl no longer holds {which} (a recheck by an earlier version of the app lost them). Crawl the site again to run them.",
+                    SkippedCheckReasons.SITEMAP_LIST_LOST,
+                    $"This crawl no longer holds {which}: a recheck by an earlier version of the app lost them. Crawl the site again to check this.",
+                    SitemapListChecks);
+            }
+
             if (!options.DiscoverSitemaps)
             {
                 Skip(notes, skipped, "Sitemaps weren't read in this crawl, so orphan pages and the sitemap checks weren't run.",

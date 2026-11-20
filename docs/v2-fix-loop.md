@@ -557,6 +557,20 @@ goes in the count column's second line:
 - **The button's words** follow the check's `subject`: "Recheck these 9 addresses". On a group: "Recheck this one (264
   pages)". Past the cap: "Recheck the 1,000 most important pages (about 9 minutes)", with "or check the whole site
   again (about 37 minutes)".
+- **One unit to a number** (2026-11-19; `changes/recheckWords.ts`, `planCounts`). The button counts the check's own
+  URLs, never the fetches: those it reads are `judged` less `notRechecked`. The cap of 1,000 is on fetches, and a
+  `targets` check fetches what its issues name too (`phase1` less the URLs it reads), so 240 pages with 1,442 images
+  between them read "Recheck the 150 most important pages", then "It rechecks the 150 most important of the 240: a
+  recheck reads at most 1,000 addresses, and the 850 these pages link to count too. The other 90 stay as the check
+  found them." Advanced: "Recheck 150 of 240 URLs", and under it "Fetches 150 URLs again, and the 850 URLs they refer
+  to (about 8 minutes). The other 90 of the 240 are past the cap of 1,000 fetches. Other URLs stay as crawled."; a
+  `sources` check, "Fetches 1 URL again, then up to 1 page linking to it if it still fails". A check a recheck reads
+  only by its files names them and counts no URL: "Recheck robots.txt and the sitemaps" (Simple: "the rules file and
+  the sitemaps"), "Reads robots.txt and the sitemaps again". It had read "Recheck 1,000 of 240 URLs" and "Fetches 1
+  URLs again, and up to 2 with the pages linking to them".
+- **A recheck recorded as failed** (only a file an earlier version rechecked has one) says "The recheck didn’t finish,
+  so it has no result. Try again." (Advanced: "Failed 18 Nov 06:33: it didn’t finish, so it has no result."), with no
+  counts and no score: the reader gives it no score after. Two URLs are "both" and "neither".
 - **The time** comes from the crawl's own pace (URLs crawled over time spent crawling), at least the slow start's,
   plus the last analysis's time. It is rounded: "about 20 seconds", "about 2 minutes".
 - **Every result:**
@@ -957,6 +971,17 @@ exact (33,156 rows compared in 24.8 s), memory flat.
   and the start URL's: never another site's. `siteVersions` asks
   every probe again (the plan adds them as named). A check read only by these kinds has its judged URLs settled as
   rechecked when the recheck completed.
+- **Turned away is not an answer** (2026-11-19, `RecheckTurnedAwayTests`). What the crawl read is replaced only by what
+  the site says of it now. A sitemap that gets no answer, answers 429 at every try or is answered by a firewall's
+  challenge keeps its row and its entries (put aside while it's read, by negating `sitemap_id`, and put back). So does
+  one whose body breaks off part-way (the connection broke, or the time ran out, after the status came): the part
+  that came is not the site's list. A file that ends early with the connection closed in order can't be told from one
+  whose XML is broken, and is stored as that, as a crawl stores it. A
+  robots.txt that gets no answer, a 429 or a server error keeps the crawl's, unless the check is whether robots.txt can
+  be read; while it can't be read the sitemaps aren't read again either, as the ones it declares can't be known. A page
+  the crawler may not fetch only because robots.txt couldn't be read is "no answer", and stays as the crawl read it,
+  with its links. Each is settled not checked, never fixed. A recheck stopped while a sitemap is being read puts that
+  sitemap's entries back. A recheck that fails is rolled back whole (B2).
 - **Labels.** The URL grid gains a `skipReason` column ("Why not read"): every skip reason, with "Found by a recheck,
   not followed" and "No longer linked (a recheck let it go)". The stats leave a URL let go out of the URLs found; the
   report names the URLs a recheck found and didn't follow.

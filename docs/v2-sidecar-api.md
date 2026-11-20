@@ -1061,6 +1061,7 @@ one moment is never set against a total from another, and the app, the report an
 | `no-sitemap` | No sitemap could be read |
 | `sitemap-unreadable` | A declared sitemap failed for a reason that says nothing about what it lists (a 5xx, a timeout, bad XML) |
 | `sitemaps-not-read` | Sitemaps were left unread at the crawler's limits |
+| `sitemap-list-lost` | A sitemap's row counts URLs and the crawl file holds none of them (a recheck by the engine of 18 Nov 2026 deleted them, then failed): the checks of what the sitemaps list aren't run, and `text` says to crawl again |
 | `depth-limit`, `url-limit` | The limit kept internal URLs out of the crawl, so pages linked only from them would look orphaned |
 | `start-folder` | The crawl stayed in its start folder, so links from the rest of the site weren't read |
 | `pages-unread` | 1 in 20 or more of the site's pages the crawl tried to read refused it (a firewall, a bot challenge, a rate limit) or didn't answer, so their links are unknown and pages linked only from them would look orphaned (`orphan-page`) |
@@ -2261,8 +2262,11 @@ runs (a crawl that fetched a page again has gaps in its link ids: without a link
   had changed).
 - **`state`** is `read`; `failed` (it couldn't be read, or not to its end: `error` says why, "404 Not Found", "Timed out",
   the XML parser's message, and the URLs read before the failure are still listed); `notRead` (left unread at the
-  crawler's limits of 1,000 sitemaps and 3 levels of index: `error` says which, and there may be more like it); or
-  `pending` (found, not read yet: the crawl is running, or stopped first).
+  crawler's limits of 1,000 sitemaps and 3 levels of index: `error` says which, and there may be more like it);
+  `pending` (found, not read yet: the crawl is running, or stopped first); or `listLost` (the crawl read it and counted
+  `entries` URLs, and the file holds none of them any more: a recheck by an earlier version deleted them, then failed.
+  Its `urls` are all 0 and mean nothing: show no counts, and say to crawl again. The analysis skips the checks of what
+  the sitemaps list with `sitemap-list-lost`, and answers `inSitemap` null for the URLs no sitemap is known to list).
 - **`entries`** is the URL entries the crawl read in the file, as it counted them: every `<loc>`, repeats included.
   **`sitemaps`** is the sitemaps an index lists that the crawl has.
 - **`listedSitemaps`** (E6) is how many sitemaps the file itself lists, as the crawl read it: every `<sitemap>` entry,
@@ -3275,6 +3279,14 @@ every address). It is the catalog's, as `references` is: not stored, not in the 
   after phase 1. Neither counts what pages now link to that the crawl doesn't have yet, fetched one step, nor robots.txt.
 - **`capped`** is true when that would pass `limit` (1,000): the recheck then takes the most important first (the
   check's rows in their default order) and leaves `notRechecked` of them as the crawl found them.
+- **The units.** `judged` and `notRechecked` count the check's own URLs; `phase1`, `phase2Max` and `limit` count
+  fetches. The URLs of the check a recheck reads are `judged - notRechecked`, never `limit`: a `targets` check over 240
+  pages naming 1,442 images gives `judged` 240, `phase1` 1,000, `notRechecked` 90 (150 pages and their 850 images
+  fill the cap). `capped` with `notRechecked` 0 means only the referring pages of phase 2 were cut. For a check read
+  only by `robotsTxt`, `sitemaps` or `siteVersions` (no `urls` in `kinds`), `phase1` counts the URLs it records and
+  none is fetched.
+- A recheck whose `status` is `failed` (only files an earlier version rechecked hold one) has `scoreAfter` null: it
+  has no result, and the score the analysis after it stored isn't its doing.
 - **`estimateMs`** comes from the crawl's own pace (its URLs crawled over its time spent crawling, no faster than the
   slow start's), plus robots.txt and the analysis after (the last analysis's `durationMs`). **`suggestFullCheck`** is
   true when the recheck would fetch more than half the crawl's URLs: a full crawl would take about as long and settle

@@ -641,8 +641,12 @@ export type SitemapDiscovery = 'off' | 'running' | 'unfinished' | 'done';
 /** How the crawl came by a sitemap. */
 export type SitemapSource = 'robotsTxt' | 'options' | 'defaultLocation' | 'index';
 
-/** `failed`: `error` says why. `notRead`: left unread at the crawler's limits. `pending`: found, not read yet. */
-export type SitemapState = 'read' | 'failed' | 'notRead' | 'pending';
+/**
+ * `failed`: `error` says why. `notRead`: left unread at the crawler's limits. `pending`: found, not read yet. `listLost`:
+ * read, and `entries` counted, but the crawl file no longer holds the URLs it listed (a recheck by an earlier version lost
+ * them): its `urls` counts mean nothing, and only a new crawl restores it.
+ */
+export type SitemapState = 'read' | 'failed' | 'notRead' | 'pending' | 'listLost';
 
 export interface Sitemap {
   id: number;

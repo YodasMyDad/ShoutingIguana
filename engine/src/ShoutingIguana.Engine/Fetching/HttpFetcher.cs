@@ -433,7 +433,7 @@ internal sealed class HttpFetcher : IDisposable
             _ => raw
         };
 
-    private static List<ResponseHeader> CollectHeaders(HttpResponseMessage response)
+    internal static List<ResponseHeader> CollectHeaders(HttpResponseMessage response)
     {
         List<ResponseHeader> headers = [];
         foreach (var (name, values) in response.Headers.NonValidated.Concat(response.Content.Headers.NonValidated))

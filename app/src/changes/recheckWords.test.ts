@@ -81,9 +81,128 @@ describe('the recheck’s button', () => {
       'Recheck this group (264 URLs)',
     );
     expect(recheckButtonWords(plan({ judged: 6 }), undefined, 'urls', 'advanced')).toBe('Recheck 6 selected URLs');
-    expect(recheckButtonWords(plan({ judged: 4_000, capped: true }), 'page', 'check', 'advanced')).toBe(
-      'Recheck 1,000 of 4,000 URLs',
-    );
+    expect(recheckButtonWords(plan({ judged: 1 }), undefined, 'urls', 'advanced')).toBe('Recheck 1 selected URL');
+    expect(
+      recheckButtonWords(plan({ judged: 4_000, capped: true, notRechecked: 3_000 }), 'page', 'check', 'advanced'),
+    ).toBe('Recheck 1,000 of 4,000 URLs');
+  });
+
+  // The shapes the garden furniture crawl's plans had on 19 Nov, where the button read "Recheck 1,000 of 240 URLs".
+  describe('on the plans real checks gave', () => {
+    // Image in an older format: 240 pages flagged, 1,442 images named. The cap of 1,000 fetches holds 150 of the pages
+    // and the 850 images on them; the other 90 pages are past it.
+    const manyImages = plan({
+      checkId: 'image-legacy-format',
+      judged: 240,
+      phase1: 1_000,
+      capped: true,
+      notRechecked: 90,
+      estimateMs: 496_000,
+    });
+    // Images without width and height: 225 pages, 4,151 images named: 59 pages and their 940 images fit.
+    const moreImages = plan({
+      checkId: 'image-missing-dimensions',
+      judged: 225,
+      phase1: 999,
+      capped: true,
+      notRechecked: 166,
+      estimateMs: 496_000,
+    });
+    // One URL flagged, one page linking to it.
+    const oneUrl = plan({ checkId: 'url-parameters', judged: 1, phase1: 1, phase2Max: 1, estimateMs: 4_000 });
+    // Eight 404s, four pages linking to them.
+    const eight = plan({ checkId: 'internal-client-error', judged: 8, phase1: 8, phase2Max: 4, estimateMs: 6_000 });
+    // robots.txt doesn't name the sitemap: nothing of the home page is fetched, only the two files.
+    const files = plan({
+      checkId: 'robots-txt-no-sitemap',
+      kinds: ['robotsTxt', 'sitemaps'],
+      judged: 1,
+      phase1: 1,
+      estimateMs: 1_000,
+    });
+
+    it('counts the check’s own URLs on the button, never the fetches: 150 of 240, not 1,000 of 240', () => {
+      expect(recheckButtonWords(manyImages, 'page', 'check', 'advanced')).toBe('Recheck 150 of 240 URLs');
+      expect(recheckButtonWords(moreImages, 'page', 'check', 'advanced')).toBe('Recheck 59 of 225 URLs');
+      expect(recheckButtonWords(manyImages, 'page', 'check', 'simple')).toBe('Recheck the 150 most important pages');
+      expect(recheckButtonWords(moreImages, 'page', 'check', 'simple')).toBe('Recheck the 59 most important pages');
+      expect(recheckButtonWords(oneUrl, 'url', 'check', 'advanced')).toBe('Recheck 1 URL');
+      expect(recheckButtonWords(oneUrl, 'url', 'check', 'simple')).toBe('Recheck this address');
+    });
+
+    it('names the files on the button when the recheck reads only robots.txt or the sitemaps', () => {
+      expect(recheckButtonWords(files, 'page', 'check', 'advanced')).toBe('Recheck robots.txt and the sitemaps');
+      expect(recheckButtonWords(files, 'page', 'check', 'simple')).toBe('Recheck the rules file and the sitemaps');
+      expect(recheckButtonWords(plan({ kinds: ['sitemaps'], judged: 1 }), 'page', 'check', 'advanced')).toBe(
+        'Recheck the sitemaps',
+      );
+      expect(recheckButtonWords(plan({ kinds: ['siteVersions'], judged: 1 }), 'page', 'check', 'simple')).toBe(
+        'Recheck the site’s other versions',
+      );
+    });
+
+    it('says under Advanced’s button what is fetched, each number in its own unit, and what the cap leaves', () => {
+      expect(recheckPlanLine(manyImages)).toBe(
+        'Fetches 150 URLs again, and the 850 URLs they refer to (about 8 minutes). The other 90 of the 240 are past the cap of 1,000 fetches. Other URLs stay as crawled.',
+      );
+      expect(recheckPlanLine(moreImages)).toBe(
+        'Fetches 59 URLs again, and the 940 URLs they refer to (about 8 minutes). The other 166 of the 225 are past the cap of 1,000 fetches. Other URLs stay as crawled.',
+      );
+      expect(recheckPlanLine(oneUrl)).toBe(
+        'Fetches 1 URL again, then up to 1 page linking to it if it still fails (a few seconds). Other URLs stay as crawled.',
+      );
+      expect(recheckPlanLine(eight)).toBe(
+        'Fetches 8 URLs again, then up to 4 pages linking to those that still fail (a few seconds). Other URLs stay as crawled.',
+      );
+      expect(recheckPlanLine(plan({ judged: 1, phase1: 4 }))).toBe(
+        'Fetches 1 URL again, and the 3 URLs it refers to (about 20 seconds). Other URLs stay as crawled.',
+      );
+      expect(recheckPlanLine(plan({ judged: 3, phase1: 3, estimateMs: 4_000 }))).toBe(
+        'Fetches 3 URLs again (a few seconds). Other URLs stay as crawled.',
+      );
+      expect(recheckPlanLine(files)).toBe(
+        'Reads robots.txt and the sitemaps again (a few seconds). Every URL stays as crawled.',
+      );
+      // Pages and the sitemaps: "Indexable page not in a sitemap".
+      expect(recheckPlanLine(plan({ kinds: ['urls', 'sitemaps'], judged: 18, phase1: 18, estimateMs: 30_000 }))).toBe(
+        'Fetches 18 URLs again, and reads the sitemaps again (about 30 seconds). Other URLs stay as crawled.',
+      );
+      // More pages link to the flagged URLs than the cap has room for: none of the flagged URLs is left out.
+      expect(
+        recheckPlanLine(plan({ judged: 600, phase1: 600, phase2Max: 400, capped: true, estimateMs: 496_000 })),
+      ).toBe(
+        'Fetches 600 URLs again, then up to 400 pages linking to those that still fail (about 8 minutes). The cap of 1,000 fetches leaves out some of the pages linking to them. Other URLs stay as crawled.',
+      );
+    });
+
+    it('says in Simple’s card how many pages, of how many, and why not all: 150 + 90 = 240', () => {
+      const intro = (
+        which: RecheckPlan,
+        references: 'targets' | 'sources' | 'none',
+        subject: 'page' | 'url' = 'page',
+      ) => recheckIntroWords({ plan: which, subject, references, crawledAt: '2026-11-17T09:12:00Z', scope: 'check' });
+      expect(intro(manyImages, 'targets')).toEqual([
+        'Recheck the 150 most important pages to see whether it’s gone. It reads only them and the addresses they link to: about 8 minutes. Other pages stay as the check found them on 17 Nov.',
+        'It rechecks the 150 most important of the 240: a recheck reads at most 1,000 addresses, and the 850 these pages link to count too. The other 90 stay as the check found them.',
+      ]);
+      expect(intro(moreImages, 'targets')[1]).toBe(
+        'It rechecks the 59 most important of the 225: a recheck reads at most 1,000 addresses, and the 940 these pages link to count too. The other 166 stay as the check found them.',
+      );
+      expect(intro(oneUrl, 'sources', 'url')).toEqual([
+        'Recheck this address to see whether it’s gone. It reads only it and the pages that link to it: a few seconds. Other pages stay as the check found them on 17 Nov.',
+      ]);
+      expect(intro(files, 'none')).toEqual([
+        'Recheck to see whether it’s gone. It reads only the site’s rules file (robots.txt) and its sitemaps again: a few seconds. Every page stays as the check found it on 17 Nov.',
+      ]);
+      expect(intro(plan({ kinds: ['urls', 'sitemaps'], judged: 18, phase1: 18, estimateMs: 30_000 }), 'none')[0]).toBe(
+        'Recheck these 18 pages to see whether it’s gone. It reads only them, and the site’s sitemaps again: about 30 seconds. Other pages stay as the check found them on 17 Nov.',
+      );
+      expect(
+        intro(plan({ judged: 1_001, phase1: 1_000, capped: true, notRechecked: 1, estimateMs: 496_000 }), 'none')[1],
+      ).toBe(
+        'It rechecks the 1,000 most important of the 1,001: a recheck reads at most 1,000 addresses. The other one stays as the check found it.',
+      );
+    });
   });
 
   it('says in the card what it reads and how long, and that the rest stays as it was', () => {
@@ -125,10 +244,13 @@ describe('the recheck’s button', () => {
       }),
     ).toEqual([
       'Recheck the 1,000 most important pages to see whether it’s gone. It reads only them: about 9 minutes. Other pages stay as the check found them on 3 Nov.',
-      'It rechecks the 1,000 most important of 4,000. The other 3,000 stay as the check found them.',
+      'It rechecks the 1,000 most important of the 4,000: a recheck reads at most 1,000 addresses. The other 3,000 stay as the check found them.',
       'That’s most of the site: checking the whole site again takes about as long, and checks everything.',
     ]);
-    expect(recheckPlanLine(plan())).toBe('Fetches 8 URLs again (about 20 seconds). Other URLs stay as crawled.');
+    // Five pages, and the three URLs their issues name.
+    expect(recheckPlanLine(plan())).toBe(
+      'Fetches 5 URLs again, and the 3 URLs they refer to (about 20 seconds). Other URLs stay as crawled.',
+    );
   });
 
   it('says why it can’t run, in each mode’s words', () => {
@@ -160,6 +282,8 @@ describe('a recheck running', () => {
       'Rechecking: 3 of 8 URLs fetched (the pages linking to them)',
     );
     expect(recheckProgressWords({ done: 3, total: 8, phase: 1 }, 'advanced', true)).toBe('Analysing…');
+    expect(recheckProgressWords({ done: 0, total: 1, phase: 1 }, 'advanced')).toBe('Rechecking: 0 of 1 URL fetched');
+    expect(recheckProgressWords({ done: 0, total: 1, phase: 1 }, 'simple')).toBe('Rechecking… 0 of 1 address read');
   });
 });
 
@@ -363,6 +487,38 @@ describe('what a recheck found', () => {
     expect(recheckToastTitle('completed', 5, result())).toBe('Recheck done: 4 of 5 fixed');
     expect(recheckToastTitle('completed', 5, result({ fixed: 5, still: 0 }))).toBe('Recheck done: all 5 fixed');
     expect(recheckToastTitle('stopped', 5, result({ fixed: 2 }))).toBe('Recheck stopped: 2 of 5 fixed');
+  });
+
+  it('says "both" and "neither" of two', () => {
+    const words = (patch: Partial<RecheckResult>) =>
+      simpleResultWords({ status: 'completed', judged: 2, result: result(patch), subject: 'page' })[0];
+    expect(words({ fixed: 2, still: 0 })).toBe('Both fixed.');
+    expect(words({ fixed: 0, still: 2 })).toBe(
+      'Neither is fixed yet. If you changed it in the last few minutes, your site may be showing a saved copy (a cache): try again in a few minutes.',
+    );
+    expect(words({ fixed: 0, still: 0, notChecked: 2 })).toBe('Neither could be rechecked.');
+    expect(recheckToastTitle('completed', 2, result({ fixed: 2, still: 0 }))).toBe('Recheck done: both fixed');
+  });
+
+  // The garden crawl's third recheck: it failed, judged nothing, and the analysis after it moved the score.
+  it('says of a recheck that failed only that it has no result: no counts, no score', () => {
+    const failed = result({ fixed: 0, still: 0, notChecked: 0, notRechecked: 1, scoreBefore: 83, scoreAfter: null });
+    expect(simpleResultWords({ status: 'failed', judged: 1, result: failed, subject: 'page' })).toEqual([
+      'The recheck didn’t finish, so it has no result. Try again.',
+    ]);
+    expect(
+      simpleResultWords({ status: 'failed', judged: 8, result: result({ fixed: 3, still: 1 }), subject: 'page' }),
+    ).toEqual(['The recheck didn’t finish, so it has no result. Try again.']);
+    expect(recheckScoreWords(failed)).toBeNull();
+    expect(
+      advancedResultWords({
+        endedAt: new Date(2026, 10, 18, 6, 33).toISOString(),
+        status: 'failed',
+        judged: 1,
+        result: failed,
+      }),
+    ).toBe('Failed 18 Nov 06:33: it didn’t finish, so it has no result.');
+    expect(recheckToastTitle('failed', 1, failed)).toBe('Recheck couldn’t finish');
   });
 
   it('says a crawl’s rechecks in a line', () => {

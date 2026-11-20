@@ -40,26 +40,72 @@ export function aboutWords(ms: number): string {
 export type RecheckScope = 'check' | 'group' | 'urls';
 
 /**
- * The button: Simple's "Recheck these 5 pages", "Recheck this page", "Recheck this one (264 pages)" for a cause, "Recheck
- * the 1,000 most important pages" past the cap; Advanced's "Recheck 5 URLs", "Recheck this group (264 URLs)", "Recheck
- * 1,000 of 4,000 URLs".
+ * The plan's numbers, each in its own unit. A plan counts three different things, and the words must never mix them:
+ * - `judged`: the check's own URLs (its pages), all of them, past the cap too;
+ * - `taken`: those of them this recheck reads, `judged` less the `notRechecked` the cap leaves out;
+ * - `named`: the other URLs fetched with them in phase 1 (the images or link targets a `targets` check's issues name):
+ *   `phase1` less `taken`. The cap (`limit`, 1,000) is on fetches, so 150 pages with 850 images between them fill it.
+ * "Recheck 1,000 of 240 URLs" came of reading the cap as a count of the check's URLs.
+ */
+function planCounts(plan: Pick<RecheckPlan, 'judged'> & Partial<Pick<RecheckPlan, 'notRechecked' | 'phase1'>>) {
+  const left = Math.min(plan.judged, Math.max(0, plan.notRechecked ?? 0));
+  const taken = plan.judged - left;
+  return { taken, left, named: Math.max(0, (plan.phase1 ?? taken) - taken) };
+}
+
+/** A recheck that fetches none of the check's URLs: it reads only robots.txt, the sitemaps or the site's other versions. */
+function readsOnlyFiles(plan: Partial<Pick<RecheckPlan, 'kinds'>>): boolean {
+  return plan.kinds !== undefined && plan.kinds.length > 0 && !plan.kinds.includes('urls');
+}
+
+/** What a recheck reads besides URLs, in a mode's words: "robots.txt and the sitemaps". */
+function fileKindsWords(plan: Partial<Pick<RecheckPlan, 'kinds'>>, mode: ChangeMode, owned = false): string {
+  const names = (plan.kinds ?? [])
+    .filter((kind) => kind !== 'urls')
+    .map((kind) =>
+      kind === 'robotsTxt'
+        ? mode === 'advanced'
+          ? 'robots.txt'
+          : owned
+            ? 'the site’s rules file (robots.txt)'
+            : 'the rules file'
+        : kind === 'sitemaps'
+          ? owned
+            ? (plan.kinds ?? []).includes('robotsTxt')
+              ? 'its sitemaps'
+              : 'the site’s sitemaps'
+            : 'the sitemaps'
+          : 'the site’s other versions',
+    );
+  return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1) ?? ''}` : (names[0] ?? '');
+}
+
+/**
+ * The button, counting the check's own URLs and never the fetches: Simple's "Recheck these 5 pages", "Recheck this
+ * page", "Recheck this one (264 pages)" for a cause, "Recheck the 150 most important pages" when the cap leaves some
+ * out; Advanced's "Recheck 5 URLs", "Recheck 1 URL", "Recheck this group (264 URLs)", "Recheck 150 of 240 URLs". A
+ * recheck that reads only files names them: "Recheck robots.txt and the sitemaps".
  */
 export function recheckButtonWords(
-  plan: Pick<RecheckPlan, 'judged' | 'capped' | 'limit'>,
+  plan: Pick<RecheckPlan, 'judged'> & Partial<Pick<RecheckPlan, 'notRechecked' | 'kinds' | 'capped' | 'limit'>>,
   subject: CheckSubject | undefined,
   scope: RecheckScope,
   mode: ChangeMode,
 ): string {
   const judged = plan.judged;
-  const taken = plan.capped ? plan.limit : judged;
+  const { taken, left } = planCounts(plan);
+  if (readsOnlyFiles(plan)) return `Recheck ${fileKindsWords(plan, mode)}`;
   if (mode === 'advanced') {
-    if (plan.capped) return `Recheck ${formatCount(taken)} of ${formatCountOf(judged, 'URL')}`;
+    if (left > 0) return `Recheck ${formatCount(taken)} of ${formatCountOf(judged, 'URL')}`;
     if (scope === 'group') return `Recheck this group (${formatCountOf(judged, 'URL')})`;
     if (scope === 'urls') return `Recheck ${formatCount(judged)} selected ${judged === 1 ? 'URL' : 'URLs'}`;
     return `Recheck ${formatCountOf(judged, 'URL')}`;
   }
   const noun = subjectNoun(subject, taken);
-  if (plan.capped) return `Recheck the ${formatCount(taken)} most important ${noun}`;
+  if (left > 0)
+    return taken === 1
+      ? `Recheck the most important ${noun}`
+      : `Recheck the ${formatCount(taken)} most important ${noun}`;
   if (scope === 'group') return `Recheck this one (${formatCount(judged)} ${noun})`;
   if (judged === 1) return `Recheck this ${noun}`;
   return `Recheck these ${formatCount(judged)} ${noun}`;
@@ -71,7 +117,8 @@ export function recheckButtonWords(
  * references: the pages that link to them (a 404), the addresses they name (a broken link), or nothing more.
  */
 export function recheckIntroWords(args: {
-  plan: Pick<RecheckPlan, 'judged' | 'capped' | 'limit' | 'notRechecked' | 'estimateMs' | 'suggestFullCheck'>;
+  plan: Pick<RecheckPlan, 'judged' | 'capped' | 'limit' | 'notRechecked' | 'estimateMs' | 'suggestFullCheck'> &
+    Partial<Pick<RecheckPlan, 'phase1' | 'kinds'>>;
   subject: CheckSubject | undefined;
   references: CheckReferences | undefined;
   /** When the crawl was: "Other pages stay as the check found them on 3 Nov". */
@@ -79,30 +126,50 @@ export function recheckIntroWords(args: {
   scope: RecheckScope;
 }): string[] {
   const { plan, subject, references, crawledAt, scope } = args;
-  const taken = plan.capped ? plan.limit : plan.judged;
-  const noun = subjectNoun(subject, taken);
-  const these =
-    scope === 'group'
-      ? `Recheck the ${formatCount(plan.judged)} ${subjectNoun(subject, plan.judged)} it's on`
-      : plan.capped
-        ? `Recheck the ${formatCount(taken)} most important ${noun}`
-        : plan.judged === 1
-          ? `Recheck this ${noun}`
-          : `Recheck these ${formatCount(plan.judged)} ${noun}`;
-  const them = taken === 1 ? 'it' : 'them';
-  const also =
-    references === 'sources'
-      ? `${them} and the pages that link to ${them}`
-      : references === 'targets'
-        ? `${them} and the addresses ${taken === 1 ? 'it links' : 'they link'} to`
-        : them;
-  const lines = [
-    `${these} to see whether it’s gone. It reads only ${also}: ${aboutWords(plan.estimateMs)}. Other pages stay as the check found them ${onWords(crawledAt)}.`,
-  ];
-  if (plan.capped) {
+  const lines: string[] = [];
+  if (readsOnlyFiles(plan)) {
+    // Nothing of the check's own page is fetched: only the files it is about.
     lines.push(
-      `It rechecks the ${formatCount(taken)} most important of ${formatCount(plan.judged)}. The other ${formatCount(plan.notRechecked)} stay as the check found them.`,
+      `Recheck to see whether it’s gone. It reads only ${fileKindsWords(plan, 'simple', true)} again: ${aboutWords(plan.estimateMs)}. Every page stays as the check found it ${onWords(crawledAt)}.`,
     );
+  } else {
+    const { taken, left, named } = planCounts(plan);
+    const noun = subjectNoun(subject, taken);
+    const these =
+      scope === 'group'
+        ? `Recheck the ${formatCount(plan.judged)} ${subjectNoun(subject, plan.judged)} it's on`
+        : left > 0
+          ? taken === 1
+            ? `Recheck the most important ${noun}`
+            : `Recheck the ${formatCount(taken)} most important ${noun}`
+          : plan.judged === 1
+            ? `Recheck this ${noun}`
+            : `Recheck these ${formatCount(plan.judged)} ${noun}`;
+    const them = taken === 1 ? 'it' : 'them';
+    const also =
+      references === 'sources'
+        ? `${them} and the pages that link to ${them}`
+        : references === 'targets'
+          ? `${them} and the addresses ${taken === 1 ? 'it links' : 'they link'} to`
+          : them;
+    const files = fileKindsWords(plan, 'simple', true);
+    lines.push(
+      `${these} to see whether it’s gone. It reads only ${also}${files ? `, and ${files} again` : ''}: ${aboutWords(plan.estimateMs)}. Other pages stay as the check found them ${onWords(crawledAt)}.`,
+    );
+    if (left > 0) {
+      // Why not all of them: the cap is on what a recheck reads, and what the pages link to is read too.
+      const why =
+        named > 0
+          ? `a recheck reads at most ${formatCount(plan.limit)} addresses, and the ${formatCount(named)} these ${subjectNoun(subject, taken)} link to count too`
+          : `a recheck reads at most ${formatCount(plan.limit)} addresses`;
+      lines.push(
+        `It rechecks the ${formatCount(taken)} most important of the ${formatCount(plan.judged)}: ${why}. ${
+          left === 1
+            ? 'The other one stays as the check found it.'
+            : `The other ${formatCount(left)} stay as the check found them.`
+        }`,
+      );
+    }
   }
   if (plan.suggestFullCheck) {
     lines.push('That’s most of the site: checking the whole site again takes about as long, and checks everything.');
@@ -110,17 +177,40 @@ export function recheckIntroWords(args: {
   return lines;
 }
 
-/** Advanced's line under the head's Recheck: "Fetches 8 URLs again (about 20 seconds). Other URLs stay as crawled." */
+/**
+ * Advanced's line under the head's Recheck, each number in its own unit: "Fetches 8 URLs again (about 20 seconds). Other
+ * URLs stay as crawled."; with what a `targets` check's issues name, "Fetches 150 URLs again, and the 850 URLs they
+ * refer to"; with a `sources` check's second phase, "then up to 4 pages linking to those that still fail"; and what the
+ * cap leaves, "The other 90 of the 240 are past the cap of 1,000 fetches." A recheck of files only: "Reads robots.txt
+ * and the sitemaps again".
+ */
 export function recheckPlanLine(
-  plan: Pick<RecheckPlan, 'phase1' | 'phase2Max' | 'estimateMs' | 'capped' | 'notRechecked'>,
+  plan: Pick<RecheckPlan, 'phase1' | 'phase2Max' | 'estimateMs' | 'capped' | 'notRechecked'> &
+    Partial<Pick<RecheckPlan, 'judged' | 'limit' | 'kinds'>>,
 ): string {
-  const most = plan.phase1 + plan.phase2Max;
-  const fetches =
-    plan.phase2Max > 0
-      ? `Fetches ${formatCount(plan.phase1)} URLs again, and up to ${formatCount(most)} with the pages linking to them`
-      : `Fetches ${formatCountOf(plan.phase1, 'URL')} again`;
-  const capped = plan.capped ? ` ${formatCount(plan.notRechecked)} past the cap stay as crawled.` : '';
-  return `${fetches} (${aboutWords(plan.estimateMs)}). Other URLs stay as crawled.${capped}`;
+  const about = aboutWords(plan.estimateMs);
+  if (readsOnlyFiles(plan)) {
+    return `Reads ${fileKindsWords(plan, 'advanced')} again (${about}). Every URL stays as crawled.`;
+  }
+  // Without the check's own count (an older caller), phase 1 is all there is to count.
+  const judged = plan.judged ?? plan.phase1 + plan.notRechecked;
+  const { taken, left, named } = planCounts({ judged, notRechecked: plan.notRechecked, phase1: plan.phase1 });
+  const one = taken === 1;
+  let fetches = `Fetches ${formatCountOf(taken, 'URL')} again`;
+  if (named > 0) fetches += `, and the ${formatCountOf(named, 'URL')} ${one ? 'it refers' : 'they refer'} to`;
+  if (plan.phase2Max > 0) {
+    fetches += `, then up to ${formatCountOf(plan.phase2Max, 'page')} linking to ${one ? 'it if it still fails' : 'those that still fail'}`;
+  }
+  const files = fileKindsWords(plan, 'advanced');
+  if (files) fetches += `, and reads ${files} again`;
+  const cap = formatCount(plan.limit ?? 1_000);
+  const capped =
+    left > 0
+      ? ` The other ${formatCount(left)} of the ${formatCount(judged)} ${left === 1 ? 'is' : 'are'} past the cap of ${cap} fetches.`
+      : plan.capped
+        ? ` The cap of ${cap} fetches leaves out some of the pages linking to them.`
+        : '';
+  return `${fetches} (${about}).${capped} Other URLs stay as crawled.`;
 }
 
 /**
@@ -167,7 +257,7 @@ export function recheckProgressWords(
     return `Rechecking… ${formatCount(progress.done)} of ${formatCount(progress.total)} ${progress.total === 1 ? 'address' : 'addresses'} read`;
   }
   const phase = progress.phase === 2 ? ' (the pages linking to them)' : '';
-  return `Rechecking: ${formatCount(progress.done)} of ${formatCount(progress.total)} URLs fetched${phase}`;
+  return `Rechecking: ${formatCount(progress.done)} of ${formatCountOf(progress.total, 'URL')} fetched${phase}`;
 }
 
 /** The sidebar's "Checking now" entry, and the status announced: "Rechecking gardenfurnituresets.co.uk". */
@@ -230,6 +320,8 @@ export function simpleResultWords(args: {
   notCheckedWhy?: string | null;
 }): string[] {
   const { status, judged, result, subject, cleared = false, listed = false, notCheckedWhy = null } = args;
+  // One that failed judged nothing it can stand by: whatever counts its row holds, it has no result (and no score).
+  if (status === 'failed') return ['The recheck didn’t finish, so it has no result. Try again.'];
   const lines: string[] = [];
   const rechecked = judged - result.notRechecked;
   const couldnt =
@@ -237,8 +329,8 @@ export function simpleResultWords(args: {
       ? `${formatCount(result.notChecked)} couldn’t be rechecked${notCheckedWhy ? `: ${notCheckedWhy}` : ''}.`
       : '';
   const stays = result.notChecked > 0 ? staysWords(result.notChecked) : '';
-  if (status === 'stopped' || status === 'interrupted' || (status === 'failed' && result.notRechecked > 0)) {
-    const lead = status === 'stopped' ? 'Stopped' : status === 'failed' ? 'It couldn’t finish' : 'Cut short';
+  if (status === 'stopped' || status === 'interrupted') {
+    const lead = status === 'stopped' ? 'Stopped' : 'Cut short';
     const parts = [`${formatCount(result.fixed)} fixed`];
     if (result.still > 0) parts.push(stillWords(result.still));
     lines.push(
@@ -249,23 +341,23 @@ export function simpleResultWords(args: {
     switch (recheckResultKind(result, judged)) {
       case 'allFixed':
         lines.push(
-          judged === 1
-            ? `Fixed.${cleared ? ' This problem is gone from the list.' : ''}`
-            : `All ${formatCount(judged)} fixed.${cleared ? ' This problem is gone from the list.' : ''}`,
+          `${judged === 1 ? 'Fixed' : judged === 2 ? 'Both fixed' : `All ${formatCount(judged)} fixed`}.${
+            cleared ? ' This problem is gone from the list.' : ''
+          }`,
         );
         break;
       case 'noneFixed':
         lines.push(
           result.notChecked > 0 && result.still === 0
             ? couldnt
-            : `${judged === 1 ? 'It isn’t' : `None of the ${formatCount(judged)} is`} fixed yet. If you changed it in the last few minutes, your site may be showing a saved copy (a cache): try again in a few minutes.`,
+            : `${judged === 1 ? 'It isn’t' : judged === 2 ? 'Neither is' : `None of the ${formatCount(judged)} is`} fixed yet. If you changed it in the last few minutes, your site may be showing a saved copy (a cache): try again in a few minutes.`,
         );
         if (result.notChecked > 0 && result.still > 0) lines.push(couldnt);
         if (result.notChecked > 0) lines.push(stays);
         break;
       case 'noneChecked':
         lines.push(
-          `${judged === 1 ? 'It couldn’t' : `None of the ${formatCount(judged)} could`} be rechecked${notCheckedWhy ? `: ${notCheckedWhy}` : ''}.`,
+          `${judged === 1 ? 'It couldn’t' : judged === 2 ? 'Neither could' : `None of the ${formatCount(judged)} could`} be rechecked${notCheckedWhy ? `: ${notCheckedWhy}` : ''}.`,
           stays,
         );
         break;
@@ -351,6 +443,8 @@ export function advancedResultWords(args: {
 }): string {
   const { endedAt, status, judged, result, stillPaths = [], answers = null } = args;
   const when = endedAt ? `${changeDate(endedAt)} ${clockWords(endedAt)}`.trim() : '';
+  // One that failed has no result to count, and the score after it isn't its doing.
+  if (status === 'failed') return `Failed${when ? ` ${when}` : ''}: it didn’t finish, so it has no result.`;
   const lead = status === 'stopped' ? 'Stopped' : status === 'interrupted' ? 'Cut short' : 'Rechecked';
   const paths = result.still > 0 && stillPaths.length > 0 ? ` (${stillPaths.join(', ')})` : '';
   const parts = [
@@ -387,9 +481,9 @@ export function advancedEndedWords(status: RecheckStatus | null, error: string |
 export function recheckToastTitle(status: RecheckStatus, judged: number, result: RecheckResult | null): string {
   const lead =
     status === 'stopped' ? 'Recheck stopped' : status === 'failed' ? 'Recheck couldn’t finish' : 'Recheck done';
-  if (!result) return lead;
+  if (!result || status === 'failed') return lead;
   if (result.fixed === judged && judged > 0)
-    return `${lead}: ${judged === 1 ? 'fixed' : `all ${formatCount(judged)} fixed`}`;
+    return `${lead}: ${judged === 1 ? 'fixed' : judged === 2 ? 'both fixed' : `all ${formatCount(judged)} fixed`}`;
   return `${lead}: ${formatCount(result.fixed)} of ${formatCount(judged)} fixed`;
 }
 

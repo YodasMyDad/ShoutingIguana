@@ -476,13 +476,14 @@ internal sealed partial class CrawlWriter
     }
 
     /// <summary>
-    /// A robots.txt the recheck reads again: stored over the crawl's when the site answered. One it gave no answer to (the
-    /// connection failed, or it timed out) says nothing new of the file, so the crawl's stays; unless the check is whether
-    /// robots.txt can be read, which that is the answer to.
+    /// A robots.txt the recheck reads again: stored over the crawl's when the site served it, or said it has none. One it
+    /// couldn't serve (no answer: the connection failed, or it timed out; a 429; a server error) says nothing new of the
+    /// file, so the crawl's stays; unless the check is whether robots.txt can be read, which that is the answer to.
     /// </summary>
     private void ApplyRecheckRobots(RobotsRecord record)
     {
-        if (record.StatusCode is null && !Analysis.Rules.RobotsTxtRules.TooManyRedirects(record) && !_recheck!.JudgesRobotsReach)
+        var unreadable = record.StatusCode is null ? !Analysis.Rules.RobotsTxtRules.TooManyRedirects(record) : record.StatusCode is 429 or >= 500;
+        if (unreadable && !_recheck!.JudgesRobotsReach)
         {
             _recheck.Unanswered++;
             return;
@@ -515,13 +516,15 @@ internal sealed partial class CrawlWriter
 
     /// <summary>
     /// A sitemap read again came back. Answered, its entries as read now stand and those put aside go. Given no answer (the
-    /// connection failed, or it timed out), it says nothing new: it is as the crawl read it.
+    /// connection failed, or it timed out), turned away (429 at every try, or a firewall's challenge in its place), or cut
+    /// short (the connection broke, or the time ran out, part-way through its body), it says nothing new: it is as the
+    /// crawl read it, and the part that came goes.
     /// </summary>
     private void ApplyRecheckSitemap(SitemapRecord record)
     {
         var recheck = _recheck!;
         recheck.SitemapsDone.Add(record.Id);
-        if (record.StatusCode is null)
+        if (record.StatusCode is null || record.TurnedAway || record.BrokeOff)
         {
             recheck.Unanswered++;
             KeepSitemapAsItWas(record.Id);

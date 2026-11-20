@@ -189,7 +189,14 @@ describe('what became of a sitemap', () => {
 
 describe('the answer in a sentence', () => {
   it('counts the sitemaps by what became of them', () => {
-    expect(tallyOf(TEST_SITEMAP_LIST.sitemaps)).toEqual({ total: 6, read: 5, failed: 1, notRead: 0, pending: 0 });
+    expect(tallyOf(TEST_SITEMAP_LIST.sitemaps)).toEqual({
+      total: 6,
+      read: 5,
+      failed: 1,
+      notRead: 0,
+      pending: 0,
+      listLost: 0,
+    });
     expect(answerSentence(TEST_SITEMAP_LIST, false)).toBe(
       'The crawl found 6 sitemaps: 5 were read and 1 couldn’t be read.',
     );
@@ -435,5 +442,31 @@ describe('what the checks found in the sitemaps', () => {
       { id: 'not-in-sitemap', title: 'Indexable page not in a sitemap', count: 23 },
     ]);
     expect(sitemapChecksOf(checks, [])).toEqual([]);
+  });
+});
+
+describe('a sitemap whose list of URLs the crawl file lost', () => {
+  // The crawl read it and counted 240 URLs; a recheck by an earlier version deleted its entries, then failed.
+  const none = { listed: 0, fetched: 0, indexable: 0, nonIndexable: 0, robotsDisallowed: 0, redirectingOrBroken: 0 };
+  const lost = testSitemap({ id: 1, state: 'listLost', entries: 240, urls: none, foundVia: 'defaultLocation' });
+
+  it('never reads "Read" beside zeros: it says how many it listed, that the list is gone, and to crawl again', () => {
+    const words = stateWords(lost, false);
+    expect(words.tone).toBe('failed');
+    expect(words.short).toBe('Read, but its 240 URLs are lost');
+    expect(words.sentence).toBe(
+      'The crawl read it and it listed 240 URLs, but this crawl no longer has the list: a recheck by an earlier version of Shouting Iguana lost it. Crawl the site again to restore it.',
+    );
+    expect(stateWords({ ...lost, entries: 1 }, false).short).toBe('Read, but its 1 URL is lost');
+  });
+
+  it('is counted apart, and the answer says so for one sitemap and for several', () => {
+    expect(tallyOf([lost])).toMatchObject({ total: 1, read: 0, listLost: 1 });
+    expect(answerSentence(list([lost]), false)).toBe(
+      'The crawl found 1 sitemap and read it, but this crawl no longer has its list of URLs. Crawl the site again to restore it.',
+    );
+    expect(answerSentence(list([testSitemap({ id: 2 }), lost, { ...lost, id: 3 }]), false)).toBe(
+      'The crawl found 3 sitemaps: 1 was read and 2 were read, but this crawl no longer has their lists of URLs.',
+    );
   });
 });

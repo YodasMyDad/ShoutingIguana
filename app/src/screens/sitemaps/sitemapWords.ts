@@ -244,6 +244,16 @@ function wordsOf(
       return crawling
         ? { tone: 'waiting', short: 'Not read yet', sentence: 'The crawl has found it and hasn’t read it yet.' }
         : { tone: 'waiting', short: 'Never read', sentence: 'The crawl stopped before it read this sitemap.' };
+    case 'listLost': {
+      // Read, and its URLs counted, but the crawl file holds none of them: never "Read" beside counts of 0.
+      const listed = formatCountOf(sitemap.entries, 'URL');
+      return {
+        tone: 'failed',
+        // Short enough for the status cell: the sentence, a hover away, says how and what to do.
+        short: `Read, but its ${listed} ${sitemap.entries === 1 ? 'is' : 'are'} lost`,
+        sentence: `The crawl read it and it listed ${listed}, but this crawl no longer has the list: a recheck by an earlier version of Shouting Iguana lost it. Crawl the site again to restore it.`,
+      };
+    }
     default:
       return {
         tone: 'waiting',
@@ -263,6 +273,8 @@ interface Tally {
   failed: number;
   notRead: number;
   pending: number;
+  /** Read, but the crawl file no longer holds the URLs they listed. */
+  listLost: number;
 }
 
 export function tallyOf(sitemaps: readonly Pick<Sitemap, 'state'>[]): Tally {
@@ -273,6 +285,7 @@ export function tallyOf(sitemaps: readonly Pick<Sitemap, 'state'>[]): Tally {
     failed: count('failed'),
     notRead: count('notRead'),
     pending: count('pending'),
+    listLost: count('listLost'),
   };
 }
 
@@ -308,6 +321,9 @@ export function answerSentence(list: Pick<SitemapList, 'discovery' | 'sitemaps'>
         ? `${NOTHING_AT_DEFAULT_LOCATION}${more}`
         : `Nothing declared a sitemap, and /sitemap.xml couldn’t be read${why}.${more}`;
     }
+    if (only?.state === 'listLost') {
+      return `The crawl found 1 sitemap and read it, but this crawl no longer has its list of URLs. Crawl the site again to restore it.${more}`;
+    }
     const what = !only
       ? ''
       : only.state === 'failed'
@@ -321,6 +337,11 @@ export function answerSentence(list: Pick<SitemapList, 'discovery' | 'sitemaps'>
   }
   const parts = [
     tally.read > 0 ? `${formatCount(tally.read)} ${wasWere(tally.read)} read` : null,
+    tally.listLost > 0
+      ? `${formatCount(tally.listLost)} ${wasWere(tally.listLost)} read, but this crawl no longer has ${
+          tally.listLost === 1 ? 'its list' : 'their lists'
+        } of URLs`
+      : null,
     tally.failed > 0 ? `${formatCount(tally.failed)} couldn’t be read` : null,
     tally.notRead > 0 ? `${formatCount(tally.notRead)} ${wasWere(tally.notRead)} left unread` : null,
     tally.pending > 0
