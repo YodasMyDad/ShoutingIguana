@@ -2147,6 +2147,20 @@
     text-align: start;
   }
 
+  /* A URL you can press (copy, or open in the app) is a 24 px target, however short the path ("/"). */
+  button.si-url__copy {
+    box-sizing: border-box;
+    min-width: var(--target-min);
+    min-height: var(--target-min);
+    padding-block: max(0px, calc((var(--target-min) - 1lh) / 2));
+  }
+
+  /* The control can't be squeezed under that by a flex parent (`min-w-0` on the URL). */
+  .si-url:has(button.si-url__copy) {
+    min-width: var(--target-min);
+    min-height: var(--target-min);
+  }
+
   /* Only the URL that copies on a click has the copy cursor: text that does nothing looks like text, and a link (which
      is a button of this class too) keeps the pointer. */
   button.si-url__copy:not(.si-url__go) {
@@ -2155,8 +2169,6 @@
 
   /* A URL that goes somewhere in the app (the inspector walks to it): the link's colour, underlined on hover. */
   .si-url__go {
-    /* A pointer target of 24 px, however small the type: links like this stack in lists. */
-    padding-block: max(0px, calc((var(--target-min) - 1lh) / 2));
     cursor: pointer;
   }
 
@@ -2481,6 +2493,12 @@
     font-weight: var(--font-weight-semibold);
   }
 
+  /* The link blue fails 4.5:1 on the active fill. The row is already bold: the path uses the text colour there. */
+  .si-grid-row:has(.si-came-for) .si-url__path,
+  .si-grid-row:has(.si-came-for) .si-url__file {
+    color: var(--color-text);
+  }
+
   /* The inspector's resize edge shows where to drag (layout/InspectorSlot.tsx): a short bar at the middle of the edge,
      upright on the side dock and lying on the bottom one, neutral until the edge is pointed at, focused or dragged. */
   .si-inspector-grip {
@@ -2540,6 +2558,13 @@
     font-weight: var(--font-weight-medium);
     text-decoration: none;
     cursor: pointer;
+  }
+
+  /* A link that is its own button ("and 3 more"), beside a 24 px URL: the same target. */
+  button.si-link {
+    box-sizing: border-box;
+    min-height: var(--target-min);
+    padding-block: max(0px, calc((var(--target-min) - 1lh) / 2));
   }
 
   .si-link:hover {
