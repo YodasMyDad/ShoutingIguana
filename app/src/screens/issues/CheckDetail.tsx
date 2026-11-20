@@ -29,7 +29,6 @@ import { IssueRowsGrid } from './IssueRowsGrid';
 import { IssueUrl } from './IssueUrl';
 import { defaultView, groupedLabel } from './checkView';
 import { checkPlace, keepCheckPlace, type CheckView } from './issuesPlace';
-import { usePreferredFixCase } from './usePreferredFixCase';
 import { useShortWindow } from './useShortWindow';
 import type { CheckChange } from '../../api/fixLoop';
 import { Tabs } from '../../ui/Tabs';
@@ -188,22 +187,19 @@ export function CheckDetail({
   const [explained, setExplained] = useState(false);
   const short = useShortWindow();
   const hasWhy = check.why.trim() !== '';
-  const hasCode = (check.fixExamples?.length ?? 0) > 0;
-  const hasFix = check.fix.trim() !== '' || hasCode;
+  const hasFix = check.fix.trim() !== '';
   const explains = hasWhy || hasFix;
   // A short window (1280 × 720) keeps the rows in view: where the pane is narrow too, what's wrong folds away with
   // why and how, behind the one button that names all it opens.
   const foldsWrong = short && explains && check.description.trim() !== '';
-  // Opened there, the explanation has the pane and the rows wait behind "Show the rows": a fix with its code is taller
-  // than a 1280 × 720 pane has beside its rows, and two half-height scrollers would show neither.
+  // Opened there, the explanation has the pane and the rows wait behind "Show the rows": the words are taller than a
+  // 1280 × 720 pane has beside its rows, and two half-height scrollers would show neither.
   const reading = short && explained;
   const foldWords = foldedWords([
     foldsWrong ? 'what’s wrong' : null,
     hasWhy ? 'why it matters' : null,
     hasFix ? 'how to fix it' : null,
   ]);
-  // The case of its fix the crawl points to, from the links its rows have read: "On this site".
-  const preferredCase = usePreferredFixCase(crawlId, check);
   const marked = compare?.marksRows ? { compareWith: compare.compareWith, period: compare.period } : null;
 
   return (
@@ -322,26 +318,13 @@ export function CheckDetail({
         {found && related ? <RelatedLines crawlId={crawlId} related={related} /> : null}
         {check.description.trim() !== '' || explains ? (
           // What's wrong in a readable measure; why it matters and how to fix it beside it where the pane is wide, and
-          // folded behind their own button where it isn't (rule 7): never a jump link to a block further down. A fix
-          // with code takes the wider column, what's wrong and why it matters one over the other beside it: the code
-          // wants up to 100 characters, the words about 46.
+          // folded behind their own button where it isn't (rule 7): never a jump link to a block further down.
           <div
-            className={clsx(
-              'mt-3 grid grid-cols-1 gap-x-10 gap-y-2',
-              hasCode
-                ? '@min-checks-beside:grid-cols-(--how-to-fix-columns)'
-                : '@min-checks-beside:grid-cols-(--explain-columns)',
-            )}
+            className="mt-3 grid grid-cols-1 gap-x-10 gap-y-2 @min-checks-beside:grid-cols-(--explain-columns)"
             data-explain
           >
             {/* Stacked (a narrow pane), its parts are the grid's own, so the fix comes before why it matters. */}
-            <div
-              className={
-                hasCode
-                  ? 'contents @min-checks-beside:flex @min-checks-beside:min-w-0 @min-checks-beside:flex-col @min-checks-beside:gap-y-2'
-                  : 'contents'
-              }
-            >
+            <div className="contents">
               {check.description.trim() !== '' ? (
                 <div
                   className={clsx(
@@ -396,7 +379,7 @@ export function CheckDetail({
                 )}
                 data-explain-part
               >
-                <HowToFix check={check} preferredCase={preferredCase} />
+                <HowToFix check={check} />
                 {check.learnMore ? (
                   <div className="mt-1">
                     <LearnMore onClick={onLearnMore} />

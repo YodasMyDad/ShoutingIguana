@@ -765,18 +765,30 @@ export function IssueRowsGrid({
               : []),
           ]
         : []),
-      ...drawn.map((column): GridColumn<ListRow> => ({
-        ...column,
-        width: widthOf(column.id, column.width),
-        cell: (row: ListRow) => {
-          const own = issue(row);
-          return own ? column.cell(own) : null;
-        },
-        text: (row: ListRow) => {
-          const own = issue(row);
-          return own ? column.text(own) : '';
-        },
-      })),
+      ...drawn.map((column): GridColumn<ListRow> => {
+        // fitText is typed for an issue row. A list row is an issue or a reference under it, so measure the issue.
+        const { fitText, ...rest } = column;
+        return {
+          ...rest,
+          width: widthOf(column.id, column.width),
+          cell: (row: ListRow) => {
+            const own = issue(row);
+            return own ? column.cell(own) : null;
+          },
+          text: (row: ListRow) => {
+            const own = issue(row);
+            return own ? column.text(own) : '';
+          },
+          ...(fitText
+            ? {
+                fitText: (row: ListRow) => {
+                  const own = issue(row);
+                  return own ? fitText(own) : '';
+                },
+              }
+            : {}),
+        };
+      }),
       ...(files?.[0] ? [openFileColumn(crawlId, files[0])] : []),
       // The fix loop: how the row stood in the crawl compared with (Still, New, New URL, Not compared).
       ...(compare

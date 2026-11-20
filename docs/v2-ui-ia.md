@@ -246,10 +246,8 @@ found, 265 pages; the 100k crawl 110,251 and 112,577, and 101,106 pages, everywh
   count opens them in URLs, the change opens the check on the crawl compared with), its actions, what a fix of it also
   clears and which fix clears its pages, each a link to that check ("Fixing this also clears Links to broken internal
   URLs: all 3 pages it flags (+4 to the score)"), then what's wrong, why it matters and how to fix it, ahead of the
-  rows. The fix is never under the rows or a jump away: where the check has its fix as code (`fixExamples`), "How to
-  fix it" takes the wider column with the code now and fixed, the case the crawl's own links point to first and marked
-  "On this site" (from the links the rows have read, never a request of its own), and what's wrong and why it matters
-  sit one over the other beside it. In a pane too narrow for that, why and how fold behind one button in the head; in
+  rows. The fix is never under the rows or a jump away: "How to fix it" is the catalog's words, beside what's wrong
+  and why it matters where the pane is wide. In a pane too narrow for that, why and how fold behind one button in the head; in
   a short window (1280 x 720) what's wrong folds with them, and opened there the explanation has the pane, the fix
   first, with the rows behind "Show the rows".
 - One scroller per pane (A-10): the head gives way and the rows keep a least height and take the rest, so the card

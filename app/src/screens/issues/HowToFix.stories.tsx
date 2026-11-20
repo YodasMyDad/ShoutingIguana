@@ -17,69 +17,19 @@ const check = (id: string): Check => {
   return found;
 };
 
-/**
- * The owner's case: "Internal links without anchor text", their logo an inline SVG in a link on every page. Three
- * cases, the one the crawl points to showing first and marked "On this site".
- */
-export const EmptyAnchorText: Story = {
+/** The words, for a check whose fix used to be shown as code and for one that was always words. */
+export const Words: Story = {
   render: () => (
     <StoryFrame sheet>
-      <HowToFix check={check('empty-anchor-text')} preferredCase="icon-link" />
-    </StoryFrame>
-  ),
-};
-
-/** The same check where the crawl found the links around images: that case shows first. */
-export const EmptyAnchorTextImageLinks: Story = {
-  render: () => (
-    <StoryFrame sheet>
-      <HowToFix check={check('empty-anchor-text')} preferredCase="image-link" />
-    </StoryFrame>
-  ),
-};
-
-/** One example: the code under the words, nothing to choose. */
-export const OneExample: Story = {
-  render: () => (
-    <StoryFrame sheet>
-      <HowToFix check={check('description-missing')} />
-      <HowToFix check={check('image-missing-dimensions')} />
-    </StoryFrame>
-  ),
-};
-
-/** A lone example whose fix is conditional leads with its condition. */
-export const OneConditionalExample: Story = {
-  render: () => (
-    <StoryFrame sheet>
-      <HowToFix check={check('redirect-temporary-cached')} />
-      <HowToFix check={check('blocked-by-robots')} />
-    </StoryFrame>
-  ),
-};
-
-/** Cases with nothing to say which the site has: the first shows, none is marked. Headers, and JSON-LD. */
-export const CasesWithoutAPreference: Story = {
-  render: () => (
-    <StoryFrame sheet>
-      <HowToFix check={check('security-headers-weak')} />
-      <HowToFix check={check('structured-data-schema-errors')} />
-    </StoryFrame>
-  ),
-};
-
-/** An editorial fix: the words alone, as before. */
-export const ProseOnly: Story = {
-  render: () => (
-    <StoryFrame sheet>
+      <HowToFix check={check('empty-anchor-text')} />
       <HowToFix check={check('title-too-long')} />
     </StoryFrame>
   ),
 };
 
 /**
- * Where it will live: in a check's pane, beside "What's wrong" and "Why it matters" where there's room and under them
- * where there isn't. (The pane itself mounts it once the Issues lane has landed; this is the block in that setting.)
+ * Where it lives: in a check's head, beside what's wrong and why it matters where there's room, and under them where
+ * there isn't.
  */
 export const InACheck: Story = {
   render: () => {
@@ -93,7 +43,7 @@ export const InACheck: Story = {
             meta={<SeverityBadge severity={emptyLink.severity} />}
           />
           <CardBody>
-            <div className="grid gap-x-10 gap-y-6 wide:grid-cols-(--how-to-fix-columns)">
+            <div className="grid gap-x-10 gap-y-6 wide:grid-cols-(--explain-columns)">
               <div className="flex flex-col gap-5">
                 <div>
                   <h3 className="mb-1.5 text-13 font-semibold">What’s wrong</h3>
@@ -106,7 +56,7 @@ export const InACheck: Story = {
                   <p className="max-w-(--measure-text) text-14 leading-body text-text-secondary">{emptyLink.why}</p>
                 </div>
               </div>
-              <HowToFix check={emptyLink} preferredCase="icon-link" />
+              <HowToFix check={emptyLink} />
             </div>
           </CardBody>
         </Card>

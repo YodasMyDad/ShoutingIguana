@@ -21,7 +21,6 @@ import {
   ISSUES_CHECKS,
   ISSUES_CHECKS_WITHOUT_SUBJECTS,
   ISSUE_GROUPS,
-  ISSUE_TARGETS,
   issuesRoutes,
   type IssuesSidecarOptions,
 } from '../test/issuesSidecar';
@@ -486,7 +485,7 @@ describe('the Issues screen', () => {
     ).not.toBeNull();
   });
 
-  it('shows a check’s fix as code in its head, beside what’s wrong, a case at a time, and words alone where it has none', async () => {
+  it('shows how to fix the check in its head, beside what’s wrong, in words', async () => {
     sidecar();
     await open(`${ISSUES}/empty-anchor-text`);
     const how = await screen.findByRole('heading', { name: 'How to fix it', level: 3 });
@@ -496,61 +495,15 @@ describe('the Issues screen', () => {
     expect(explain.closest('header')).not.toBeNull();
     const affected = screen.getByRole('heading', { name: 'Affected pages', level: 3 });
     expect(explain.compareDocumentPosition(affected) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // The code takes the wider column where the pane is wide; what's wrong and why it matters share the other.
-    expect(explain).toHaveClass('@min-checks-beside:grid-cols-(--how-to-fix-columns)');
+    expect(explain).toHaveClass('@min-checks-beside:grid-cols-(--explain-columns)');
     expect(within(explain).getByText('How to fix Internal links without anchor text.')).toBeTruthy();
-    expect(
-      within(explain).getByRole('tab', { name: 'The link wraps an icon or an inline SVG', selected: true }),
-    ).toBeTruthy();
-    expect(within(explain).getByRole('figure', { name: 'The fix as code' }).textContent).toContain(
-      'aria-label="Example Furniture"',
-    );
-    // Where the pane is narrow the fix is behind the head's own button, whole: its words, its cases and its code.
+    expect(within(explain).queryByRole('tablist')).toBeNull();
+    expect(within(explain).queryByRole('figure')).toBeNull();
+    // Where the pane is narrow the fix is behind the head's own button, whole.
     const fix = how.closest<HTMLElement>('[data-explain-part]');
     expect(fix).toHaveClass('@max-checks-beside:hidden');
-    expect(fix).toContainElement(within(explain).getByRole('figure', { name: 'The fix as code' }));
     fireEvent.click(screen.getByRole('button', { name: 'Why it matters and how to fix it' }));
     expect(fix).not.toHaveClass('@max-checks-beside:hidden');
-    cleanup();
-    sidecar();
-    await open(`${ISSUES}/title-too-long`);
-    await screen.findByRole('heading', { name: 'How to fix it', level: 3 });
-    expect(screen.queryByRole('figure', { name: 'The fix as code' })).toBeNull();
-    // Words alone go three across, as they did.
-    expect(document.querySelector('[data-explain]')).toHaveClass('@min-checks-beside:grid-cols-(--explain-columns)');
-  });
-
-  it('shows the case of the fix the site’s own links point to first, marked “On this site”', async () => {
-    // Every link the check named wraps an image: the fix is the image's alt text, not an aria-label on the link.
-    const targets = Object.fromEntries(
-      Object.entries(ISSUE_TARGETS['empty-anchor-text'] ?? {}).map(([id, of]) => [
-        id,
-        { ...of, targets: of.targets.map((target) => ({ ...target, flags: ['imageLink' as const] })) },
-      ]),
-    );
-    const { requests } = sidecar({ targets: { 'empty-anchor-text': targets } });
-    await open(`${ISSUES}/empty-anchor-text`);
-    const image = await screen.findByRole('tab', { name: /^The link wraps an image/, selected: true });
-    expect(image).toHaveTextContent('On this site');
-    expect(screen.getByRole('figure', { name: 'The fix as code' }).textContent).toContain('alt="Example Furniture"');
-    const icon = screen.getByRole('tab', { name: /^The link wraps an icon/ });
-    expect(icon).not.toHaveTextContent('On this site');
-    // From the links the rows had read: the targets were asked for once, by the rows.
-    expect(requests.filter((request) => request.path.includes('/issues/empty-anchor-text/targets'))).toHaveLength(1);
-  });
-
-  it('marks no case “On this site” until some of the check’s links are read, and the icon case when they aren’t images', async () => {
-    sidecar();
-    await open(`${ISSUES}/empty-anchor-text`);
-    const icon = await screen.findByRole('tab', { name: /^The link wraps an icon/, selected: true });
-    await waitFor(() => expect(icon).toHaveTextContent('On this site'));
-    cleanup();
-    // Nothing read of what the pages name: the first case shows, unmarked.
-    sidecar({ targets: {} });
-    await open(`${ISSUES}/empty-anchor-text`);
-    await screen.findByRole('tab', { name: /^The link wraps an icon/, selected: true });
-    await screen.findByRole('treegrid');
-    expect(screen.queryByText('On this site')).toBeNull();
   });
 
   it('moves the selection with the arrow keys, replacing the address, and a click is a new place', async () => {
