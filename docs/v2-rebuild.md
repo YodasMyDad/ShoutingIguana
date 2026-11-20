@@ -132,23 +132,21 @@ the three audit sites above.
 
 ## Where step 3 stands (2026-11-15)
 
-**2026-11-20, C and D are done on `master`.** Local only. `master` is the v2 product. It was `ui/step-3` at
+**2026-11-20, the v2 beta is on `master`.** `master` is the v2 product. It was `ui/step-3` at
 `8769f4d3`; C deleted the WPF app and set the version to `2.0.0-beta.1` (`1dc0d851`); D is the README and the shots
 in `docs/readme/`. The WPF tree that was `master` is the tag `legacy-v1` (`23820739`). Do not move or delete that
-tag. Nothing has been pushed.
+tag. `master` and `app-v2.0.0-beta.1` are on GitHub. The never-push rule is back in force for ordinary work.
 
 - **C. Done.** Deleted `src/`, `ShoutingIguana.sln`, `Installer.iss`, `migrations.ps1`, `cleanplaywright.ps1`,
   `build-installer.ps1` and `.github/workflows/release.yml`. `engine/`, `app/` and `docs/` stayed. `CLAUDE.md` is the
   v2 layout. The version is `2.0.0-beta.1`.
 - **D. Done.** `README.md` is for someone deciding whether to download the app. Light and dark shots are in
   `docs/readme/`.
-
-**Left, in this order:**
-
-- **E.** The one push of `master` and the tag `app-v2.0.0-beta.1`. Already authorised, not done. The release
-  workflow runs on that tag only.
-- **F.** Download every installer and its checksum from that release into one folder and tell the owner where it is,
-  with the unsigned-build instructions.
+- **E. Done.** `master` was pushed without a rewrite (a merge kept the two v1 commits in history). The tag
+  `app-v2.0.0-beta.1` is `19dbb4d8`. The release run succeeded: Windows, macOS arm64, macOS x64 and Linux. A
+  GitHub-hosted Windows job has no interactive desktop, so the installer smoke there does not require a window.
+- **F. Done.** The installers and checksums are in `%USERPROFILE%\Downloads\ShoutingIguana-2.0.0-beta.1`, with
+  `FOR-TESTERS.txt`. Every checksum matched.
 
 **Before that, the round was on `ui/step-3`.** History, not the resume. The round landed at `2bbeef65` (fast-forward
 from `ui/ux-integrate`). The tip before the move to `master` was `8769f4d3`. Nothing was pushed.
