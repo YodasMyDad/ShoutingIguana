@@ -133,7 +133,8 @@ the three audit sites above.
 
 Work on branch `ui/step-3`, worktree `.claude/worktrees/ui-step-3`. Since 2026-11-15 commits stay local (no push until
 the owner says deploy); `origin/ui/step-3` is behind. `v2` and `master` were not moved. This section is the place to
-resume. Merging to `master` or releasing still needs an explicit yes.
+resume. The owner gave the yes for `master` and the first release on 2026-11-20, for the one push described in
+"The v2 beta: everything left, in order" below.
 
 **PAUSED 2026-11-19, about 09:15, for usage, mid-way through a UX round (session `da833503`). Resume here.**
 Nothing is running: every agent stopped, every sidecar, Vite server and test site is down, every worktree is clean.
@@ -170,63 +171,63 @@ to 6 of the resume list are not started. Each lane's state, finding by finding, 
    "This crawl's settings"; data made a click on a URL grid's first cell open the inspector and renamed the facet
    button "Filter by status class", so other lanes' specs need the same edits; simple's `c1b7c50d` touches
    `Sidebar.tsx`, `TopBar.tsx`, `goToSection.ts`; capture `engine-checks.json` once from the merged sidecar.
-4. **Then tester builds for Windows, macOS and Linux** (the owner, 2026-11-20: "I need a build for Mac, Linux and
-   Windows so I can send to testers"), **built by GitHub, not by hand** (the owner, 2026-11-20: "I want all the
-   releases to work automatically on Github, so when next batch is done, you update everything and commit to github
-   and that creates the releases for each"). That sentence is the owner's go-ahead for **one push when this round is
-   merged, gated and walked**; until then the never-push rule stands, and it stands again afterwards for ordinary
-   work. To build: extend `app-release.yml` (today Windows only, run by hand, draft release optional) into a matrix
-   of Windows, macOS (arm64 and x64) and Linux (`.deb`, `.AppImage`) that builds the sidecar and the shell on each
-   and attaches every installer and a checksum to one GitHub release. Trigger it from a version tag (`app-v*`), not
-   from every push, so ordinary pushes still cost no minutes (orchestrator's choice: confirm with the owner). Keep
-   `app.yml` and `engine.yml` manual. Before the push: check whether the self-contained sidecar needs the system's
-   `libicu` on Linux (no `InvariantGlobalization` was found in the engine's project files) and run the Linux build
-   once locally in Docker. Still the owner's to decide: certificates (unsigned builds warn on Windows and are
-   blocked by Gatekeeper on macOS unless signed and notarised), and how testers get the files if the repository is
-   private. No Mac or Linux build of the app has ever been installed and run, and the Mac one cannot be tried here.
-5. **Before that push, v2 becomes the product on `master`** (the owner, 2026-11-20: "This also needs to become the
-   main branch product, as we are retiring the old code, also we need to revamp the readme with screenshots and make
-   it a modern looking readme"). So the order is: this round merged into `ui/step-3`, then this step, then the push
-   and the tag of step 4 from `master`. What it takes: keep the old WPF app reachable (a `legacy-v1` tag or branch
-   at today's `master`) and take `src/`, `ShoutingIguana.sln`, the Inno Setup scripts, `migrations.ps1` and the
-   legacy `release.yml` (it runs **on push**: it must go or be made manual before anything is pushed) off `master`;
-   bring `ui/step-3` onto `master`; rewrite `CLAUDE.md` for the v2 layout (most of it describes the WPF app) and
-   retire its "Current work" pointers to `v2` and `ui/step-3`. **Decided by the owner, 2026-11-20:** delete the old
-   code from `master` (the `legacy-v1` tag is the only copy kept); the `ShoutingIguana.PluginSdk` NuGet package
-   stays published but the README says it is no longer used and v2 has no plugin system; the first tester release
-   is `2.0.0-beta.1` (tag `app-v2.0.0-beta.1`). Still open: signing certificates, and how testers get the files if
-   the repository is private.
-6. **A new `README.md`**, modern, with screenshots: taken from the merged build at the owner's window size, both
-   modes (Simple's Home and "Where to fix it", Issues with a fix as code, the URL inspector, the report), light and
-   dark; what it is, download links per OS pointing at the latest release, a short "first crawl", what it checks,
-   building from source, licence. Images live in the repo (`docs/readme/`), not on a host that can vanish. Written
-   for someone deciding whether to download it, not for contributors.
 
-*More of the owner's decisions, 2026-11-20:*
+**The v2 beta: everything left, in order (the owner's decisions of 2026-11-20; nothing here is open).** The beta is
+this UX round, the move to `master`, a new README and a release workflow. Nothing else goes in.
 
-- The repository **stays private**. The owner sends testers OneDrive links, so after each release download every
-  installer and its checksum into one folder and tell the owner where it is.
-- The beta is **unsigned**; the README and the release notes say how to get past SmartScreen and Gatekeeper. To
-  discuss with the owner later: the cheapest way to sign, and one that also covers other apps they may build.
-- Releases are triggered by **tags**.
-- `image-legacy-format`: the rule **passes** an image whose `<picture>` offers a modern source (fix-as-code item 10).
-- **Step 4 comes after the v2 beta**, and so do URL include/exclude patterns, a per-URL new/gone comparison between
-  crawls, and a "worst pages" list in Simple (the owner first wanted these three in the beta, then moved them:
-  "add those bigger items to after v2 beta"). None is designed yet. The beta is this round, the move to `master`,
-  the README and the release workflow, nothing more.
-- Fix-as-code item 8 (the site's own markup): **not to be built** ("No don't show snippets just text how to fix").
-  Item 9 (the code in Simple): **no**, Simple stays text only ("As above").
-- **The sample before/after code block comes out of Advanced too** (the owner, 2026-11-20: "just remove code
-  completely and make the explanation clear in the text of how to fix"). This reverses the fix-as-code direction of
-  2026-11-19. Do it in this round, on the integration branch after the lanes are merged (the issues lane moved the
-  block into the check's head): remove `CodeExample` from the check pane, its stories and tests, and `fixExamples`
-  from what the app shows (whether the catalog and the API keep the field is the builder's call; if it goes,
-  `AnalysisFreshness.VERSION` and `engine-checks.json` follow). Keep what the round got right in words: the fix at
-  the top of the check, "On this site" naming the case the rows show, "1 link, to /, in the header, repeated on 260
-  pages: one fix clears them". Then read every check that had an example and make its fix text say, without code,
-  what to change and where, e.g. "Give the logo link in your header a label (an `aria-label`, or alt text on the
-  image inside it)". Fix-as-code items 6 and 7 become a review of the fix text of every check that fires on the
-  three real crawl copies.
+- **A. Finish the round**: steps 1 to 3 above, ending with the round merged into `ui/step-3`, gated and walked as
+  the owner, the gallery, the Windows installer and the owner's install upgraded while the app is closed.
+- **B. Take the code out of fixes** (in the round, on the integration branch after the lanes are merged, before the
+  gates and the walk). The owner: "just remove code completely and make the explanation clear in the text of how to
+  fix". This reverses the fix-as-code direction of 2026-11-19, in both modes.
+  - Remove `CodeExample` from the check pane, with its stories and tests, and `fixExamples` from what the app
+    shows. Whether the catalog and the API keep the field is the builder's call; if it goes,
+    `AnalysisFreshness.VERSION` and `engine-checks.json` follow.
+  - Keep the words the round got right: the fix at the top of the check, "On this site" naming the case the rows
+    show, "1 link, to /, in the header, repeated on 260 pages: one fix clears them".
+  - Read every check that had an example and make its fix text say, without code, what to change and where, e.g.
+    "Give the logo link in your header a label (an `aria-label`, or alt text on the image inside it)". Then review
+    the fix text of every check that fires on the three real crawl copies, in both modes.
+  - Simple stays text only. The site's own markup is not stored or shown.
+  - `image-legacy-format`: the rule passes an image whose `<picture>` offers a modern source (`ImageFact.InPicture`);
+    planted case and expected count on the synthetic site change with it.
+- **C. v2 becomes the product on `master`** (the owner: "This also needs to become the main branch product, as we
+  are retiring the old code"). All local until step E.
+  - Tag today's `master` as `legacy-v1`: the only copy of the WPF app that is kept.
+  - Bring `ui/step-3` onto `master` and delete the old code there: `src/`, `ShoutingIguana.sln`, the Inno Setup
+    scripts, `migrations.ps1`, `cleanplaywright.ps1`, `build-installer.ps1` and the legacy `release.yml`. That
+    workflow runs **on push**: it must be gone before anything is pushed.
+  - Rewrite `CLAUDE.md` for the v2 layout (most of it describes the WPF app) and retire its pointers to `v2` and
+    `ui/step-3`. Do not rename anything in the engine or the app.
+  - The app's version becomes `2.0.0-beta.1` everywhere it is stated.
+- **D. A new `README.md`** (the owner: "revamp the readme with screenshots and make it a modern looking readme").
+  Written for someone deciding whether to download it, not for contributors.
+  - Screenshots from the merged build at the owner's window size, light and dark: Simple's Home and "Where to fix
+    it", an issue with its fix text, the URL inspector, the report. Images live in the repo (`docs/readme/`).
+  - What it is; downloads per OS; how to open an unsigned build past SmartScreen (Windows) and Gatekeeper (macOS);
+    a short first crawl; what it checks; building from source; licence.
+  - It says the `ShoutingIguana.PluginSdk` NuGet package is no longer used and v2 has no plugin system. The package
+    stays published.
+- **E. The release workflow, then the one push.**
+  - Extend `app-release.yml` (today Windows only, run by hand) into a matrix of Windows, macOS (arm64 and x64) and
+    Linux (`.deb`, `.AppImage`): each builds the sidecar and the shell and attaches its installer and a checksum to
+    one GitHub release. It runs **on a tag `app-v*` only**, never on a branch push. `app.yml` and `engine.yml` stay
+    manual. Unsigned for the beta: the signing steps skip, saying so.
+  - Before the push: check whether the self-contained sidecar needs the system's `libicu` on Linux (no
+    `InvariantGlobalization` was found in the engine's project files) and build and run the Linux bundle once
+    locally in Docker. The macOS build cannot be tried on this machine: say so to the owner when it ships.
+  - Then push `master` and the tag `app-v2.0.0-beta.1`. The owner's go-ahead (2026-11-20): "when next batch is
+    done, you update everything and commit to github and that creates the releases for each". It covers **this one
+    push, once A to D are done**; the never-push rule stands until then and again afterwards for ordinary work.
+  - Watch the run; fix and re-tag if a platform fails (each run costs minutes: the repository is private and macOS
+    runners bill at ten times the Linux rate, so get it right locally first).
+- **F. Hand over.** The repository stays private and the owner sends testers OneDrive links: download every
+  installer and its checksum from the release into one folder and tell the owner where it is, with the
+  unsigned-build instructions for testers.
+
+*After the beta, not before:* step 4 (JavaScript rendering, list mode, custom extraction); URL include/exclude
+patterns; a per-URL new/gone comparison between crawls; a "worst pages" list in Simple (none designed yet); and a
+talk with the owner about the cheapest way to sign, in a way that also covers other apps they may build.
 
 *What the owner asked (2026-11-19, on the installed app and their own garden crawl):* "The UI looks nice in most cases
 but the UX really falls short." In Issues > "Internal URL returns 4xx" the page that holds each broken link was plain
@@ -363,7 +364,7 @@ doing".
 7. **The other 103 checks have words only.** The lane judged their fixes editorial or structural. Nobody has reviewed
    that list. Go through the checks that fire on the three real crawl copies and have no example, and decide each:
    an example, better words, or right as it is.
-8. **The code shown is a sample, not the site's own markup** ("Example Furniture", not the owner's logo link). The
+8. **DECIDED 2026-11-20: not to be built, and the code block itself comes out (see "The v2 beta", B).** The code shown is a sample, not the site's own markup ("Example Furniture", not the owner's logo link). The
    crawl stores no HTML of the element a check names (`links` holds `from_id, to_id, kind, flags, position, text,
    fragment`; `response_html` is kept only with `StoreHtml`, off by default). To show the real element as "Now": the
    parser (`Parsing/PageWalker.cs`, where a link without a name is found) keeps the element's opening tag and a
@@ -373,9 +374,9 @@ doing".
    The 100k bench must stay flat, the crawl file's schema version and `AnalysisFreshness.VERSION` go up, and existing
    crawls show the sample until crawled again. **Not agreed with the owner: ask before building.** `v2-ui-design.md`
    lists it as "Later; needs stored HTML".
-9. **Simple doesn't show the code.** `simple/ProblemScreen.tsx` shows `plainFix` steps only. `CodeExample` is in `ui/`
+9. **DECIDED 2026-11-20: Simple stays text only.** Simple doesn't show the code. `simple/ProblemScreen.tsx` shows `plainFix` steps only. `CodeExample` is in `ui/`
    so it can sit under the steps, perhaps only where the fixer is a developer. Not agreed with the owner: ask.
-10. **`image-legacy-format` says one thing and checks another** (`fix-lane.md`, "Found on the way"): the words offer a
+10. **DECIDED 2026-11-20: the rule passes those images.** `image-legacy-format` says one thing and checks another (`fix-lane.md`, "Found on the way"): the words offer a
     `<picture>` fallback, the rule still flags the `<img>` inside one. Either the rule passes an image whose
     `<picture>` offers a modern source (`ImageFact.InPicture`) or the words stop offering it. The owner's to decide.
 11. `app/src/test/simple/engine-checks.json` on `ui/step-3` is now the capture with `fixExamples`. Capture it again
