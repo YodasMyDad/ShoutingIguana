@@ -191,9 +191,11 @@ to 6 of the resume list are not started. Each lane's state, finding by finding, 
    at today's `master`) and take `src/`, `ShoutingIguana.sln`, the Inno Setup scripts, `migrations.ps1` and the
    legacy `release.yml` (it runs **on push**: it must go or be made manual before anything is pushed) off `master`;
    bring `ui/step-3` onto `master`; rewrite `CLAUDE.md` for the v2 layout (most of it describes the WPF app) and
-   retire its "Current work" pointers to `v2` and `ui/step-3`. To ask the owner, not assume: delete the old code
-   from `master` or only archive it; what happens to the published `ShoutingIguana.PluginSdk` NuGet package and
-   anyone's plugins (v2 has no plugin SDK); the version number of the first release.
+   retire its "Current work" pointers to `v2` and `ui/step-3`. **Decided by the owner, 2026-11-20:** delete the old
+   code from `master` (the `legacy-v1` tag is the only copy kept); the `ShoutingIguana.PluginSdk` NuGet package
+   stays published but the README says it is no longer used and v2 has no plugin system; the first tester release
+   is `2.0.0-beta.1` (tag `app-v2.0.0-beta.1`). Still open: signing certificates, and how testers get the files if
+   the repository is private.
 6. **A new `README.md`**, modern, with screenshots: taken from the merged build at the owner's window size, both
    modes (Simple's Home and "Where to fix it", Issues with a fix as code, the URL inspector, the report), light and
    dark; what it is, download links per OS pointing at the latest release, a short "first crawl", what it checks,
