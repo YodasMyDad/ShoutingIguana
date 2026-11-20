@@ -106,7 +106,8 @@ public sealed class ImageCheckTests
     {
         var site = new RuleHarness();
         var wide = site.Fetched($"{site.Site}/wide.jpg", FetchOutcome.Success, 200, size: 30 * 1024, contentType: "image/jpeg", pixelWidth: 2_400);
-        var picture = site.Fetched($"{site.Site}/picture.jpg", FetchOutcome.Success, 200, size: 30 * 1024, contentType: "image/jpeg", pixelWidth: 2_000);
+        // Over the legacy threshold, and inside a picture that offers a WebP source: the file isn't this check.
+        var picture = site.Fetched($"{site.Site}/picture.jpg", FetchOutcome.Success, 200, size: 120 * 1024, contentType: "image/jpeg", pixelWidth: 2_000);
         var narrow = site.Fetched($"{site.Site}/narrow.png", FetchOutcome.Success, 200, size: 120 * 1024, contentType: "image/png", pixelWidth: 640);
         var modern = site.Fetched($"{site.Site}/modern.webp", FetchOutcome.Success, 200, size: 120 * 1024, contentType: "image/webp", pixelWidth: 1_000);
         var page = site.Page($"{site.Site}/", RuleHarness.Html(body:

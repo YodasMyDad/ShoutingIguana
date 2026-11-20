@@ -49,7 +49,7 @@ public sealed class AnalysisFreshnessTests
     [Fact]
     public void AnAnalysisFromBeforeTheNewChecksIsOutOfDate()
     {
-        Assert.Equal(21, AnalysisFreshness.VERSION);
+        Assert.Equal(22, AnalysisFreshness.VERSION);
         Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 12 }, CRAWLED, new AnalysisSettings()));
     }
 
@@ -139,7 +139,17 @@ public sealed class AnalysisFreshnessTests
     public void AnAnalysisFromBeforeALostSitemapListWasSaidIsOutOfDate()
     {
         Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 20 }, CRAWLED, new AnalysisSettings()));
-        Assert.Empty(AnalysisFreshness.Check(Current() with { AnalysisVersion = 21 }, CRAWLED, new AnalysisSettings()));
+    }
+
+    /// <summary>
+    /// Version 22 drops the fix as code, rewrites how to fix the checks that had one, and passes a legacy image whose
+    /// picture element offers another source. An analysis 21 stored names those checks and flagged those images.
+    /// </summary>
+    [Fact]
+    public void AnAnalysisFromBeforeTheFixTextsIsOutOfDate()
+    {
+        Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 21 }, CRAWLED, new AnalysisSettings()));
+        Assert.Empty(AnalysisFreshness.Check(Current(), CRAWLED, new AnalysisSettings()));
     }
 
     [Fact]

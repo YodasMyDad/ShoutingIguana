@@ -253,7 +253,7 @@ Built in stages:
   `plainTitle` (the score) is the category in Simple's words, such as "Search descriptions";
 - `checks: [{ id, category, severity, title, description, fix, why, learnMore, grouping, subject, siteWide,
   reportedOnce, plainTitle, plainWhat, plainFix, fixer, plainPassed, plainOneFix, plainLooksFor, evidence,
-  targetFacts, clears, fixExamples }]`, in catalog order.
+  targetFacts, clears }]`, in catalog order.
   `description` is what is wrong, `why` is why it matters and `fix` is what to do. `learnMore` is an absolute URL, or
   null when no authoritative page exists. `grouping` (E3a) is how
   the check's issues group: see [Issue groups](#issue-groups-e3a).
@@ -266,18 +266,6 @@ Built in stages:
   **(evidence)** 16 are `sources` and 20 `targets`: `http-page`, `url-uppercase` and `url-underscores` become
   `sources` (the links to update), and `image-missing-alt`, `image-alt-too-long` and `image-missing-dimensions`
   become `targets` (the images at fault: see [Issue groups](#issue-groups-e3a)).
-- **`fixExamples`** (the UX round of 2026-11-19) is the fix as code, for a check whose fix is an obvious, small piece
-  of code or configuration: `[{ language, after, before, when, where, case }]`. `language` is `html`, `httpHeader`,
-  `robotsTxt`, `xml` or `json`. `after` is the corrected code, one to four lines, with elided content written `…`;
-  `before` is the code as it is now, or null when the fix adds something that isn't there at all (a missing meta
-  description). `when` says which case this is, as a sentence without its full stop ("The link wraps an icon or an
-  inline SVG"): every example of a check with several has one, and a `case` (a stable key, such as `icon-link`, so a
-  view can show first the case a crawl's evidence points to); a check with one example has no `case`, and a `when`
-  only where the fix is conditional. `where` says where the code goes when that isn't obvious, written to follow a
-  label ("in the page's <head>"). The examples come likeliest first. 67 of the 170 checks have them
-  (`empty-anchor-text` three: `icon-link`, `image-link`, `empty-link`); the rest, whose fix is editorial or
-  structural, send `[]`. Each is held to its rule by a test where the rule reads only the page
-  (`FixExampleTests`). Only how a check is shown: not stored with an analysis, nor in the checks' fingerprint.
 - **`clears`** (step 3b, related checks) is the checks a fix of this one also clears, by id, as the catalog declares
   them: this check's `references` is `sources` (it flags URLs others refer to) and each check named is a `targets` check
   of pages, grouped by `relatedUrl` (it flags the pages that refer to them). `internal-client-error`,

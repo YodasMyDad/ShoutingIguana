@@ -131,7 +131,7 @@ internal sealed partial class ImageRules(AnalysisSettings settings, UrlTable url
             yield return new IssueHit(IssueCatalog.IMAGE_INLINE_LARGE, page.UrlId, Identity(largestInline) is { } identity ? RuleText.Fit($"{size}, {identity.Text}") : size);
         }
 
-        TargetSet broken = new(), large = new(), legacy = new(), hotlinked = new();
+        TargetSet broken = new(), large = new(), hotlinked = new();
         HashSet<string> hotlinkSites = new(StringComparer.OrdinalIgnoreCase);
         foreach (var link in page.Links)
         {
@@ -146,17 +146,9 @@ internal sealed partial class ImageRules(AnalysisSettings settings, UrlTable url
             {
                 broken.Add(link.ToId);
             }
-            else
+            else if (file.SizeBytes > settings.LargeImageBytes)
             {
-                if (file.SizeBytes > settings.LargeImageBytes)
-                {
-                    large.Add(link.ToId);
-                }
-
-                if (file is { IsLegacyImage: true, SizeBytes: { } size } && size >= settings.LegacyImageMinBytes)
-                {
-                    legacy.Add(link.ToId);
-                }
+                large.Add(link.ToId);
             }
 
             if (OtherSite(link.ToId) is { } site)
@@ -179,6 +171,7 @@ internal sealed partial class ImageRules(AnalysisSettings settings, UrlTable url
                 large.Count == 1 ? $"{over}: {RuleText.Size(largest)}" : $"{over}, the largest {RuleText.Size(largest)}", large.First) { Targets = large.Ids };
         }
 
+        var legacy = LegacyOutsidePicture(page);
         if (legacy.Count > 0)
         {
             var largest = legacy.Ids.Max(id => urls[urls.TraceRedirects(id).FinalId].SizeBytes ?? 0);
@@ -223,6 +216,40 @@ internal sealed partial class ImageRules(AnalysisSettings settings, UrlTable url
         LinkPosition.Head => "head",
         _ => "main content"
     };
+
+    /// <summary>
+    /// The page's legacy images that aren't inside a picture element offering another source. Pairing matches
+    /// <see cref="WideWithoutSrcset"/>: each image with a URL is the image link of the same place, and with the counts
+    /// apart, the image's URL is looked up instead. A broken file isn't an older format to convert.
+    /// </summary>
+    private TargetSet LegacyOutsidePicture(AnalyzedPage page)
+    {
+        TargetSet legacy = new();
+        var images = page.Facts.Images.Where(image => image.Url is not null).ToList();
+        var links = page.Links.Where(link => link.Kind == LinkKind.Image).Select(link => link.ToId).ToList();
+        for (var index = 0; index < images.Count; index++)
+        {
+            var image = images[index];
+            if (image.InPicture)
+            {
+                continue;
+            }
+
+            var id = links.Count == images.Count ? links[index] : readUrlId(image.Url!);
+            if (id <= 0 || urls.IsBrokenThroughRedirects(id))
+            {
+                continue;
+            }
+
+            var file = urls[urls.TraceRedirects(id).FinalId];
+            if (file is { IsLegacyImage: true, SizeBytes: { } size } && size >= settings.LegacyImageMinBytes)
+            {
+                legacy.Add(id);
+            }
+        }
+
+        return legacy;
+    }
 
     /// <summary>
     /// The page's images whose file is at least the limit wide with no srcset and no picture's sources. Each &lt;img&gt;

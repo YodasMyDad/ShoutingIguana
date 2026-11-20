@@ -59,14 +59,6 @@ public sealed record IssueDefinition(
     public IReadOnlyList<string> TargetFacts { get; init; } = [];
 
     /// <summary>
-    /// The fix as code, for a check whose fix is an obvious, small piece of code or configuration (a tag, an attribute, a
-    /// header, a file line): one example, or one for each case the check has, the likeliest first. Empty for a check whose
-    /// fix is editorial or structural, which <see cref="Fix"/> says in prose alone. Only how the check is shown: it isn't
-    /// stored with an analysis, nor part of <see cref="AnalysisFreshness.ChecksFingerprint"/>.
-    /// </summary>
-    public IReadOnlyList<FixExample> FixExamples { get; init; } = [];
-
-    /// <summary>
     /// The checks a fix of this one also clears, by id: this check flags the URLs others refer to (<see cref="References"/>
     /// is <see cref="IssueReferences.Sources"/>: a 404, a redirect chain), and each of those flags the pages that refer to
     /// them (<see cref="IssueReferences.Targets"/>: links to broken URLs, links to redirects), or flags the URL itself for

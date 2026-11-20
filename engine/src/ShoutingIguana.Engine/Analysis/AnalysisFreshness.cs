@@ -74,8 +74,11 @@ public static class AnalysisFreshness
     /// 21 doesn't run the checks of what the sitemaps list on a crawl file that lost a sitemap's entries (its row counts
     /// URLs and the file holds none: a recheck by the engine of 18 November 2026 deleted them, then failed), where 20 read
     /// the empty list and reported every page as missing from the sitemaps (<see cref="SkippedCheckReasons.SITEMAP_LIST_LOST"/>).
+    /// 22 drops the fix as code and says, in words, how to fix the checks that had one, and passes a legacy image whose
+    /// picture element offers another source. An analysis 21 stored names checks whose texts have changed, and flagged
+    /// those images, so it's out of date.
     /// </summary>
-    public const int VERSION = 21;
+    public const int VERSION = 22;
 
     /// <summary>
     /// The catalog's check ids with their categories and severities, hashed. Titles, descriptions, fixes, why and

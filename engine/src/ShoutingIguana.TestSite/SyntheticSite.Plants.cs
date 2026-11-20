@@ -213,6 +213,17 @@ public sealed partial class SyntheticSite
         });
         plants.Add(new Plant(PLANTS_PATH + "legacy.png", 200, Linked: false, InSitemap: false, [],
             () => new SyntheticResponse(200, "image/png", null, LEGACY_PNG, null), IsPage: false));
+
+        // The same older file, inside a picture that offers a WebP source: not image-legacy-format. The bare image above still is.
+        Page("image-legacy-picture", "Modern picture", [], page => page with
+        {
+            Content = page.Content + $"<picture><source srcset=\"{PLANTS_PATH}legacy.webp\" type=\"image/webp\">" +
+                      $"<img src=\"{PLANTS_PATH}legacy-fallback.png\" alt=\"A photo offered as WebP, with the older file as a fallback\" width=\"640\" height=\"480\"></picture>"
+        });
+        plants.Add(new Plant(PLANTS_PATH + "legacy-fallback.png", 200, Linked: false, InSitemap: false, [],
+            () => new SyntheticResponse(200, "image/png", null, LEGACY_PNG, null), IsPage: false));
+        plants.Add(new Plant(PLANTS_PATH + "legacy.webp", 200, Linked: false, InSitemap: false, [],
+            () => new SyntheticResponse(200, "image/webp", null, LEGACY_PNG, null), IsPage: false));
         Page("image-alt-file-name", "Alt text that's a file name", ["image-alt-unhelpful"], page => page with
         {
             Content = page.Content + "<img src=\"/img/3.jpg\" alt=\"IMG_0423.jpg\" width=\"400\" height=\"300\">"
