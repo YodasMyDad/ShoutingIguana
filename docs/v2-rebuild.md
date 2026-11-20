@@ -210,10 +210,13 @@ to 6 of the resume list are not started. Each lane's state, finding by finding, 
   discuss with the owner later: the cheapest way to sign, and one that also covers other apps they may build.
 - Releases are triggered by **tags**.
 - `image-legacy-format`: the rule **passes** an image whose `<picture>` offers a modern source (fix-as-code item 10).
-- **Step 4 comes after the v2 beta.** But **URL include/exclude patterns, a per-URL new/gone comparison between
-  crawls, and a "worst pages" list in Simple must be in the beta**: build them after this round is merged and gated
-  and before the move to `master`. None is designed yet.
-- Fix-as-code items 8 (the site's own markup) and 9 (the code in Simple): explained to the owner, not yet decided.
+- **Step 4 comes after the v2 beta**, and so do URL include/exclude patterns, a per-URL new/gone comparison between
+  crawls, and a "worst pages" list in Simple (the owner first wanted these three in the beta, then moved them:
+  "add those bigger items to after v2 beta"). None is designed yet. The beta is this round, the move to `master`,
+  the README and the release workflow, nothing more.
+- Fix-as-code item 8 (the site's own markup): **not to be built** ("No don't show snippets just text how to fix").
+  Item 9 (the code in Simple): **no**, Simple stays text only ("As above"). Not yet clear, asked 2026-11-20: whether
+  the sample before/after code block already in Advanced stays or goes too. Until the owner answers, leave it.
 
 *What the owner asked (2026-11-19, on the installed app and their own garden crawl):* "The UI looks nice in most cases
 but the UX really falls short." In Issues > "Internal URL returns 4xx" the page that holds each broken link was plain
