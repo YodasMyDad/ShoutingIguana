@@ -380,7 +380,7 @@ function PageName({
 /** Where a link leads: the address as a link that opens it, its open button after it, then what's wrong there. */
 function Leads({ target, origin }: { target: FixTarget; origin: string | null }) {
   return (
-    <span className="si-fix-leads">
+    <>
       <OpenLink
         url={target.url}
         hint="Open this address in your browser"
@@ -393,7 +393,7 @@ function Leads({ target, origin }: { target: FixTarget; origin: string | null })
       <OpenUrlButton url={target.url} className="ml-1" />
       {target.wrong ? <span className="si-fix-leads__wrong">{target.wrong}</span> : null}
       {target.isNew ? <span className="si-fix-new">New since the last check</span> : null}
-    </span>
+    </>
   );
 }
 

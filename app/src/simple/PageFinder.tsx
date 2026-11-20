@@ -63,7 +63,7 @@ export function PageFinder({ crawlId, item }: { crawlId: string; item: CrawlList
         <h2 id="page-finder" className="text-14 font-semibold">
           What’s wrong with one page?
         </h2>
-        <div className="basis-80 min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-(--simple-words-min)">
           <SearchField
             label="Find a page by its address or title"
             placeholder="Type part of a page’s address or title"
