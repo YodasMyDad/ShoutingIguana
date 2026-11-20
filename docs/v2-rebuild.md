@@ -148,9 +148,13 @@ sample. The release workflow is on this branch (`93e36e25`, tag `app-v*` only). 
 in Docker; a real sidecar start needs system `libicu` (the `.deb` gets it through WebKit, the AppImage carries it).
 macOS was not built here.
 
-Still left, in order: a gallery shot at 2560×1380, the Windows installer, upgrade the owner's install while the app is
-closed, then C (this branch onto `master`, delete the WPF app, version `2.0.0-beta.1`), D (the README), E (the one
-push of `master` and `app-v2.0.0-beta.1`), F (installers and checksums for the owner).
+Still left, in order: C (this branch onto `master`, delete the WPF app, version `2.0.0-beta.1`), D (the README),
+E (the one push of `master` and `app-v2.0.0-beta.1`), F (installers and checksums for the owner).
+
+Gallery version 8 is in `.claude/worktrees/_gallery/site/` (outside the repo, as before): 69 views, light and dark,
+shot at 2560×1380 CSS. The Windows installer `Shouting Iguana_2.0.0-alpha.1_x64-setup.exe` was built unsigned and
+the owner's install was upgraded with `/S` while the app was closed (exe in `%LOCALAPPDATA%\Shouting Iguana`,
+written 2026-11-20 15:52). The version string on that install is still `2.0.0-alpha.1`; `2.0.0-beta.1` is step C.
 
 **PAUSED 2026-11-19, about 09:15, for usage, mid-way through a UX round (session `da833503`). History, not the resume.**
 Nothing is running: every agent stopped, every sidecar, Vite server and test site is down, every worktree is clean.
