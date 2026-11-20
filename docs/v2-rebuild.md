@@ -5,7 +5,8 @@ rules for working in the code in [CLAUDE.md](../CLAUDE.md). Update the status an
 step. For step 3, **Where step 3 stands** below is the only status. `v2`'s copy of this doc only points here. Update
 this section before you stop, then commit it. **Never push** until the owner says it is time to deploy (2026-11-15:
 pushes ran CI and used up their GitHub minutes); every check runs locally, and the app and engine workflows are
-manual-only.
+manual-only. This beta's one push is the exception already authorised and not yet done: `master` and the tag
+`app-v2.0.0-beta.1` (step E). After that push, the rule stands again.
 
 ## Why
 
@@ -25,7 +26,7 @@ v2 is a fresh solution that ports the useful logic.
 | --- | --- | --- |
 | 1 | Headless engine, storage and CLI (`si`), proven on a generated 100k-page site, with the benchmark in CI | Done: `3e556be` |
 | 2 | SEO rules and issue catalog (84 checks), `si analyze` / `si issues`, exact-match proof on the synthetic site | Done: `1489adb`, then a real-site crawl and two full reviews ([Status](#status)) |
-| 3 | Desktop UI: React + TypeScript in a Tauri 2 shell, with the engine as a sidecar behind a token-protected localhost API. Enterprise-grade UX: the bar is in [the UI brief](v2-ui-brief.md). Since 2026-11-10 it opens in Simple, with Advanced one switch away, and ends in a report: [Simple first](#simple-first-advanced-on-a-switch-2026-11-10) | In progress on `ui/step-3`. Pick up at [Where step 3 stands](#where-step-3-stands-2026-11-15) |
+| 3 | Desktop UI: React + TypeScript in a Tauri 2 shell, with the engine as a sidecar behind a token-protected localhost API. Enterprise-grade UX: the bar is in [the UI brief](v2-ui-brief.md). Since 2026-11-10 it opens in Simple, with Advanced one switch away, and ends in a report: [Simple first](#simple-first-advanced-on-a-switch-2026-11-10) | C and D are done on `master`. E and F are left. Pick up at [Where step 3 stands](#where-step-3-stands-2026-11-15) |
 | 3b | The check audit: every check proven against real sites and worded for a non-expert, then the old app's checks worth keeping and those a comparison with Screaming Frog shows are missing | Planned on 2026-11-10: [Simple first](#simple-first-advanced-on-a-switch-2026-11-10) |
 | 4 | Missing basics: JavaScript rendering, a browser fallback for blocked sites, include/exclude rules, auth and cookies, list mode, custom extraction | Later |
 | 5 | Integrations: Search Console, then GA4, Bing Webmaster, Google Ads and Microsoft Advertising | Later |
@@ -131,13 +132,26 @@ the three audit sites above.
 
 ## Where step 3 stands (2026-11-15)
 
-Work on branch `ui/step-3`, worktree `.claude/worktrees/ui-step-3`. Since 2026-11-15 commits stay local (no push until
-the owner says deploy); `origin/ui/step-3` is behind. `v2` and `master` were not moved. This section is the place to
-resume. The owner gave the yes for `master` and the first release on 2026-11-20, for the one push described in
-"The v2 beta: everything left, in order" below.
+**2026-11-20, C and D are done on `master`.** Local only. `master` is the v2 product. It was `ui/step-3` at
+`8769f4d3`; C deleted the WPF app and set the version to `2.0.0-beta.1` (`1dc0d851`); D is the README and the shots
+in `docs/readme/`. The WPF tree that was `master` is the tag `legacy-v1` (`23820739`). Do not move or delete that
+tag. Nothing has been pushed.
 
-**2026-11-20, the round is on `ui/step-3` at `2bbeef65` (fast-forward from `ui/ux-integrate`).** Local only. `master`
-was not moved. Nothing pushed.
+- **C. Done.** Deleted `src/`, `ShoutingIguana.sln`, `Installer.iss`, `migrations.ps1`, `cleanplaywright.ps1`,
+  `build-installer.ps1` and `.github/workflows/release.yml`. `engine/`, `app/` and `docs/` stayed. `CLAUDE.md` is the
+  v2 layout. The version is `2.0.0-beta.1`.
+- **D. Done.** `README.md` is for someone deciding whether to download the app. Light and dark shots are in
+  `docs/readme/`.
+
+**Left, in this order:**
+
+- **E.** The one push of `master` and the tag `app-v2.0.0-beta.1`. Already authorised, not done. The release
+  workflow runs on that tag only.
+- **F.** Download every installer and its checksum from that release into one folder and tell the owner where it is,
+  with the unsigned-build instructions.
+
+**Before that, the round was on `ui/step-3`.** History, not the resume. The round landed at `2bbeef65` (fast-forward
+from `ui/ux-integrate`). The tip before the move to `master` was `8769f4d3`. Nothing was pushed.
 
 The five UX lanes are merged. Code samples are out of the fixes (`AnalysisFreshness.VERSION` 22). A legacy image inside
 a `<picture>` that offers a modern source is not `image-legacy-format`. Engine gate passed (100k bench correct, memory
@@ -148,13 +162,13 @@ sample. The release workflow is on this branch (`93e36e25`, tag `app-v*` only). 
 in Docker; a real sidecar start needs system `libicu` (the `.deb` gets it through WebKit, the AppImage carries it).
 macOS was not built here.
 
-Still left, in order: C (this branch onto `master`, delete the WPF app, version `2.0.0-beta.1`), D (the README),
-E (the one push of `master` and `app-v2.0.0-beta.1`), F (installers and checksums for the owner).
+At that point C, D, E and F were still left. C and D are done; the current block above is the resume. E and F are
+what is left.
 
 Gallery version 8 is in `.claude/worktrees/_gallery/site/` (outside the repo, as before): 69 views, light and dark,
 shot at 2560×1380 CSS. The Windows installer `Shouting Iguana_2.0.0-alpha.1_x64-setup.exe` was built unsigned and
 the owner's install was upgraded with `/S` while the app was closed (exe in `%LOCALAPPDATA%\Shouting Iguana`,
-written 2026-11-20 15:52). The version string on that install is still `2.0.0-alpha.1`; `2.0.0-beta.1` is step C.
+written 2026-11-20 15:52). That installed copy is still `2.0.0-alpha.1`. The source version is `2.0.0-beta.1`.
 
 **PAUSED 2026-11-19, about 09:15, for usage, mid-way through a UX round (session `da833503`). History, not the resume.**
 Nothing is running: every agent stopped, every sidecar, Vite server and test site is down, every worktree is clean.
