@@ -215,8 +215,18 @@ to 6 of the resume list are not started. Each lane's state, finding by finding, 
   "add those bigger items to after v2 beta"). None is designed yet. The beta is this round, the move to `master`,
   the README and the release workflow, nothing more.
 - Fix-as-code item 8 (the site's own markup): **not to be built** ("No don't show snippets just text how to fix").
-  Item 9 (the code in Simple): **no**, Simple stays text only ("As above"). Not yet clear, asked 2026-11-20: whether
-  the sample before/after code block already in Advanced stays or goes too. Until the owner answers, leave it.
+  Item 9 (the code in Simple): **no**, Simple stays text only ("As above").
+- **The sample before/after code block comes out of Advanced too** (the owner, 2026-11-20: "just remove code
+  completely and make the explanation clear in the text of how to fix"). This reverses the fix-as-code direction of
+  2026-11-19. Do it in this round, on the integration branch after the lanes are merged (the issues lane moved the
+  block into the check's head): remove `CodeExample` from the check pane, its stories and tests, and `fixExamples`
+  from what the app shows (whether the catalog and the API keep the field is the builder's call; if it goes,
+  `AnalysisFreshness.VERSION` and `engine-checks.json` follow). Keep what the round got right in words: the fix at
+  the top of the check, "On this site" naming the case the rows show, "1 link, to /, in the header, repeated on 260
+  pages: one fix clears them". Then read every check that had an example and make its fix text say, without code,
+  what to change and where, e.g. "Give the logo link in your header a label (an `aria-label`, or alt text on the
+  image inside it)". Fix-as-code items 6 and 7 become a review of the fix text of every check that fires on the
+  three real crawl copies.
 
 *What the owner asked (2026-11-19, on the installed app and their own garden crawl):* "The UI looks nice in most cases
 but the UX really falls short." In Issues > "Internal URL returns 4xx" the page that holds each broken link was plain
