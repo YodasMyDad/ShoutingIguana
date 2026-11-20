@@ -92,7 +92,9 @@ test('every number opens its URLs: a status class, the indexable pages and a dep
   const name = (await part.getAttribute('aria-label')) ?? '';
   await expectLandsOn(page, part, count(name.split(':')[1] ?? ''));
   // The chips read as sentences, never as the engine's ids.
-  await expect(page.getByText('Status class', { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('group', { name: 'Filters' }).getByRole('button', { name: /^Status class is / }),
+  ).toBeVisible();
   await expect(page.getByText('Outcome', { exact: true })).toBeVisible();
   await expect(page.getByText('statusClass')).toHaveCount(0);
   await page.goBack();

@@ -504,7 +504,8 @@ test('six-digit counts keep their room at 1280x720, beside the inspector, and at
   // Beside the inspector the checks stack above the check, whose panel is the narrower for it.
   const rows = detail.getByRole('grid');
   await expect(rows.getByRole('row').nth(1)).toBeVisible();
-  await rows.getByRole('gridcell').first().click();
+  // This grid's URL is not a link: the cell selects the row, Enter opens the inspector.
+  await rows.getByRole('row').nth(1).getByRole('gridcell').first().click();
   await page.keyboard.press('Enter');
   await expect(inspector).toBeVisible();
   await expect(figure(page, 'Share of pages')).toHaveText(/of the 987,654 pages analysed$/);

@@ -650,8 +650,8 @@ test('at 1440 px the strip shows Outlinks beside its "N more" button, whole, on 
   await page.setViewportSize({ width: 1440, height: 900 });
   await openSection(page, /^URLs/);
   const grid = page.getByRole('grid', { name: 'URLs' });
-  await grid.getByRole('row').nth(1).getByRole('gridcell').first().click();
-  await page.keyboard.press('Enter');
+  // A click on the URL's text opens the inspector.
+  await grid.getByRole('row').nth(1).locator('.si-url__go').click();
   const inspector = inspectorOf(page);
   await expect(inspector.getByRole('heading', { level: 2 })).toHaveText(/\/$/);
   const strip = inspector.getByRole('tablist', { name: 'About this URL' });
