@@ -170,6 +170,14 @@ to 6 of the resume list are not started. Each lane's state, finding by finding, 
    "This crawl's settings"; data made a click on a URL grid's first cell open the inspector and renamed the facet
    button "Filter by status class", so other lanes' specs need the same edits; simple's `c1b7c50d` touches
    `Sidebar.tsx`, `TopBar.tsx`, `goToSection.ts`; capture `engine-checks.json` once from the merged sidecar.
+4. **Then tester builds for Windows, macOS and Linux** (the owner, 2026-11-20: "I need a build for Mac, Linux and
+   Windows so I can send to testers"). Windows: the installer from step 3. Linux: build locally in Docker or WSL
+   (`.deb`, `.AppImage`); check first whether the self-contained sidecar needs the system's `libicu` (no
+   `InvariantGlobalization` was found in the engine's project files) and run the app once on a clean image. macOS:
+   cannot be built on this machine; it needs a Mac or the manual `app-release.yml` workflow on a macOS runner, and
+   that means a push, so **ask the owner first**. Unsigned builds warn on Windows (SmartScreen) and are blocked on
+   macOS (Gatekeeper) unless signed and notarised: the owner decides on certificates. No Mac or Linux build of the
+   app has ever been installed and run.
 
 *What the owner asked (2026-11-19, on the installed app and their own garden crawl):* "The UI looks nice in most cases
 but the UX really falls short." In Issues > "Internal URL returns 4xx" the page that holds each broken link was plain
