@@ -202,6 +202,19 @@ to 6 of the resume list are not started. Each lane's state, finding by finding, 
    building from source, licence. Images live in the repo (`docs/readme/`), not on a host that can vanish. Written
    for someone deciding whether to download it, not for contributors.
 
+*More of the owner's decisions, 2026-11-20:*
+
+- The repository **stays private**. The owner sends testers OneDrive links, so after each release download every
+  installer and its checksum into one folder and tell the owner where it is.
+- The beta is **unsigned**; the README and the release notes say how to get past SmartScreen and Gatekeeper. To
+  discuss with the owner later: the cheapest way to sign, and one that also covers other apps they may build.
+- Releases are triggered by **tags**.
+- `image-legacy-format`: the rule **passes** an image whose `<picture>` offers a modern source (fix-as-code item 10).
+- **Step 4 comes after the v2 beta.** But **URL include/exclude patterns, a per-URL new/gone comparison between
+  crawls, and a "worst pages" list in Simple must be in the beta**: build them after this round is merged and gated
+  and before the move to `master`. None is designed yet.
+- Fix-as-code items 8 (the site's own markup) and 9 (the code in Simple): explained to the owner, not yet decided.
+
 *What the owner asked (2026-11-19, on the installed app and their own garden crawl):* "The UI looks nice in most cases
 but the UX really falls short." In Issues > "Internal URL returns 4xx" the page that holds each broken link was plain
 text; reaching it took an expand, a "Show the link in Links" and another screen. They asked for a high-level UX audit
