@@ -34,7 +34,8 @@ v2 is a fresh solution that ports the useful logic.
 ## Where step 4 stands (2026-11-20)
 
 The owner asked for the first slice only, on a branch off `master`: JavaScript rendering, with include and exclude
-patterns beside it. Custom extraction and list mode are next and are not started. Nothing here is pushed.
+patterns beside it. Custom extraction and list mode are next and are not started. On 2026-11-20 they asked for it on
+`master` as `2.0.0-beta.2`, published by the tag `app-v2.0.0-beta.2`. There is no `main` branch.
 
 **Built, on `step4/js-rendering` (local only):**
 
