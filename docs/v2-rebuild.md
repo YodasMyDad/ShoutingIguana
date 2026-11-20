@@ -184,6 +184,21 @@ to 6 of the resume list are not started. Each lane's state, finding by finding, 
    once locally in Docker. Still the owner's to decide: certificates (unsigned builds warn on Windows and are
    blocked by Gatekeeper on macOS unless signed and notarised), and how testers get the files if the repository is
    private. No Mac or Linux build of the app has ever been installed and run, and the Mac one cannot be tried here.
+5. **Before that push, v2 becomes the product on `master`** (the owner, 2026-11-20: "This also needs to become the
+   main branch product, as we are retiring the old code, also we need to revamp the readme with screenshots and make
+   it a modern looking readme"). So the order is: this round merged into `ui/step-3`, then this step, then the push
+   and the tag of step 4 from `master`. What it takes: keep the old WPF app reachable (a `legacy-v1` tag or branch
+   at today's `master`) and take `src/`, `ShoutingIguana.sln`, the Inno Setup scripts, `migrations.ps1` and the
+   legacy `release.yml` (it runs **on push**: it must go or be made manual before anything is pushed) off `master`;
+   bring `ui/step-3` onto `master`; rewrite `CLAUDE.md` for the v2 layout (most of it describes the WPF app) and
+   retire its "Current work" pointers to `v2` and `ui/step-3`. To ask the owner, not assume: delete the old code
+   from `master` or only archive it; what happens to the published `ShoutingIguana.PluginSdk` NuGet package and
+   anyone's plugins (v2 has no plugin SDK); the version number of the first release.
+6. **A new `README.md`**, modern, with screenshots: taken from the merged build at the owner's window size, both
+   modes (Simple's Home and "Where to fix it", Issues with a fix as code, the URL inspector, the report), light and
+   dark; what it is, download links per OS pointing at the latest release, a short "first crawl", what it checks,
+   building from source, licence. Images live in the repo (`docs/readme/`), not on a host that can vanish. Written
+   for someone deciding whether to download it, not for contributors.
 
 *What the owner asked (2026-11-19, on the installed app and their own garden crawl):* "The UI looks nice in most cases
 but the UX really falls short." In Issues > "Internal URL returns 4xx" the page that holds each broken link was plain
