@@ -2,8 +2,8 @@
 // link to it, the first few and how many more, in plain words; the one page linking to most of them; and, for a fault
 // every page shares, where on the pages the shared link is.
 import { createMemoryHistory } from '@tanstack/react-router';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setTransport } from '../api/transport';
 import { App } from '../app/App';
 import { createAppRouter } from '../app/router';
@@ -70,31 +70,67 @@ afterEach(() => {
 });
 
 describe.skipIf(TABLE_STUBBED)('where to fix a broken address, in Simple', () => {
-  it('says under each broken address which pages link to it, the first few then how many more', async () => {
+  // The UX audit of 2026-11-19 (S-02 to S-04, and its section 4): this pinned the dead address leading, with "Linked
+  // from /garden-furniture/ (in the footer: “Our range”) and /sofas/" as words under it and the page unopenable. The
+  // card now leads with the page to edit.
+  it('lists a dead address by the page to edit: each page once, its links under it, and what nothing links to apart', async () => {
     const sidecar = await open(`${FIX}/internal-client-error`);
-    const where = within(main().getByRole('region', { name: 'Where it is' }));
-    // The first page with where on it the link is and what it says: the place to fix it.
-    expect(await where.findByText('Linked from /garden-furniture/ (in the footer: “Our range”)')).toBeVisible();
+    const where = within(await main().findByRole('region', { name: 'Where to fix it' }));
+    expect(await where.findByText('6 links to change on 3 pages · 1 address no page links to')).toBeVisible();
+    const pages = within(where.getByRole('list', { name: 'Pages to edit' })).getAllByRole('listitem');
+    // The page with the most links to change comes first: it clears the most.
+    const [first, second, third] = pages.map((page) => within(page));
+    expect(first!.getByRole('link', { name: /Garden Furniture/ })).toHaveAttribute(
+      'href',
+      'https://www.gardenfurnituresets.co.uk/garden-furniture/#:~:text=Our%20range',
+    );
+    expect(first!.getByText('3 links to change')).toBeVisible();
+    expect(first!.getByRole('button', { name: 'Open page: Garden Furniture' })).toBeVisible();
+    // Each link: what it says, where on the page, where it leads and what's wrong there.
     expect(
-      await where.findByText('Linked from /garden-furniture/ (in the footer: “Our range”) and /sofas/'),
+      first!.getByRole('row', { name: /“Our range” footer .*\/monaco-corner-sofa\/ missing \(404 Not Found\)/ }),
     ).toBeVisible();
-    expect(
-      await where.findByText('Linked from /garden-furniture/ (in the footer: “Our range”), /sofas/ and /blog/'),
-    ).toBeVisible();
-    expect(where.getByText(/And 1 more\./)).toBeVisible();
-    // The addresses shown, and the first ones the One fix looks at, in as few reads as the moment allows: never one an address.
+    expect(first!.getAllByRole('link', { name: '“Our range”' })).toHaveLength(3);
+    expect(second!.getByRole('link', { name: /Sofas/ })).toBeVisible();
+    expect(second!.getByText('2 links to change')).toBeVisible();
+    // A page without a title is named by its address; a link without words says so.
+    expect(third!.getByRole('link', { name: /\/blog\/$/ })).toBeVisible();
+    expect(third!.getByText('A link with no words')).toBeVisible();
+    // What no page links to isn't lost: it says where it came from, with the file to take it out of.
+    const unlinked = within(where.getByRole('region', { name: 'Not linked from any page, and still in your sitemap' }));
+    expect(unlinked.getByRole('link', { name: /\/gone-for-good\/$/ })).toBeVisible();
+    expect(unlinked.getByText(/No page links to it\. It’s listed in your sitemap/)).toBeVisible();
+    expect(unlinked.getByRole('link', { name: '/sitemap.xml' })).toHaveAttribute(
+      'href',
+      'https://www.gardenfurnituresets.co.uk/sitemap.xml',
+    );
+    // The addresses shown in as few reads as the moment allows: never one an address.
     const reads = sidecar.requests.filter((request) => request.path.endsWith('/urls/found-on'));
     expect(reads.length).toBeLessThanOrEqual(2);
+    expect(sidecar.requests.filter((request) => request.path.endsWith('/links'))).toHaveLength(1);
   });
 
-  it('names the one page linking to most of them, and where on it the links are', async () => {
+  it('opens the page at the link’s words from Open page and from the link, and the dead address from its own', async () => {
+    const opened: string[] = [];
+    vi.stubGlobal('open', (url: string) => (opened.push(url), null));
     await open(`${FIX}/internal-client-error`);
-    expect(await main().findByText('One page links to 3 of these 4 addresses')).toBeVisible();
-    expect(
-      main().getByText(/links to most of them, from its footer\. Fix or remove the links there first\./),
-    ).toHaveTextContent(
-      '/garden-furniture/ links to most of them, from its footer. Fix or remove the links there first.',
-    );
+    const where = within(await main().findByRole('region', { name: 'Where to fix it' }));
+    fireEvent.click(await where.findByRole('button', { name: 'Open page: Garden Furniture' }));
+    fireEvent.click(where.getAllByRole('link', { name: '“Our range”' })[0]!);
+    fireEvent.click(where.getAllByRole('link', { name: /\/monaco-corner-sofa\/$/ })[0]!);
+    expect(opened).toEqual([
+      'https://www.gardenfurnituresets.co.uk/garden-furniture/#:~:text=Our%20range',
+      'https://www.gardenfurnituresets.co.uk/garden-furniture/#:~:text=Our%20range',
+      'https://www.gardenfurnituresets.co.uk/monaco-corner-sofa/',
+    ]);
+  });
+
+  // It pinned a callout, "One page links to 3 of these 4 addresses": the page that links to most of them now leads
+  // the list, with its links under it, so the callout says nothing the list doesn't.
+  it('has no callout for the one page linking to most of them: that page leads the list', async () => {
+    await open(`${FIX}/internal-client-error`);
+    await main().findByRole('list', { name: 'Pages to edit' });
+    expect(main().queryByText(/One page links to/)).toBeNull();
   });
 
   // The fixit index audit's X2: it told Jitsunami's owner to remove the Checkout and Cart links for blocked-by-robots.
@@ -104,6 +140,11 @@ describe.skipIf(TABLE_STUBBED)('where to fix a broken address, in Simple', () =>
     expect((await where.findAllByText('/old-range/', { exact: false }))[0]).toBeVisible();
     // Where each is linked from is still said, row by row; only the callout's advice goes.
     expect((await where.findAllByText(/^Linked from /))[0]).toBeVisible();
+    // The page that links to it is a link that opens it, at the link's words (S-02).
+    expect((await where.findAllByRole('link', { name: /\/garden-furniture\/$/ }))[0]).toHaveAttribute(
+      'href',
+      'https://www.gardenfurnituresets.co.uk/garden-furniture/#:~:text=Our%20range',
+    );
     expect(main().queryByText(/One page links to/)).toBeNull();
     expect(main().queryByText(/Fix or remove the links/)).toBeNull();
   });

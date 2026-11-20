@@ -1,0 +1,2039 @@
+{
+  "about": "What the app's Simple screens say (app/src/simple), which the engine's report mirrors. Written by app/src/screens/report/plainRows.test.ts (SI_WRITE_PLAIN_ROWS=1) and read by it and by the engine's PlainRowsTests: add a case by its inputs, with said null, and write.",
+  "details": [
+    {
+      "check": "blocked-by-robots",
+      "detail": "Disallow: /private/, line 2",
+      "said": "The rules file says “Disallow: /private/”, on line 2"
+    },
+    {
+      "check": "blocked-by-robots",
+      "detail": "Disallow: /cart/, line 12",
+      "said": "The rules file says “Disallow: /cart/”, on line 12"
+    },
+    {
+      "check": "blocked-by-robots",
+      "detail": "robots.txt unreachable: 503 Service Unavailable",
+      "said": "The rules file couldn’t be read (503 Service Unavailable), so search engines stay out"
+    },
+    {
+      "check": "boilerplate-heavy",
+      "detail": "213 of 1,009 words are the page's own (21%)",
+      "said": "Only 213 of its 1,009 words are its own (21%); the rest is shared with other pages"
+    },
+    {
+      "check": "broken-external-links",
+      "detail": "1 broken URL (it redirects to a URL that returns 404 Not Found)",
+      "said": "1 broken link; it forwards to an address that is missing (404 Not Found)"
+    },
+    {
+      "check": "broken-external-links",
+      "detail": "1 broken URL",
+      "said": "1 broken link"
+    },
+    {
+      "check": "broken-fragment-links",
+      "detail": "2 links to missing sections: #nowhere, /plants/fragment-target#missing",
+      "said": "2 links to parts of pages that aren’t there: #nowhere, /plants/fragment-target#missing"
+    },
+    {
+      "check": "broken-internal-links",
+      "detail": "1 broken URL",
+      "said": "1 broken link"
+    },
+    {
+      "check": "broken-internal-links",
+      "detail": "1 broken URL (it redirects to a URL that returns 404 Not Found)",
+      "said": "1 broken link; it forwards to an address that is missing (404 Not Found)"
+    },
+    {
+      "check": "broken-internal-links",
+      "detail": "4 broken URLs",
+      "said": "4 broken links"
+    },
+    {
+      "check": "broken-internal-links",
+      "detail": "3 broken URLs",
+      "said": "3 broken links"
+    },
+    {
+      "check": "broken-internal-links",
+      "detail": "2 broken URLs (the first redirects to a URL that returns 404 Not Found)",
+      "said": "2 broken links; the first forwards to an address that is missing (404 Not Found)"
+    },
+    {
+      "check": "broken-resources",
+      "detail": "1 broken file",
+      "said": "1 file the page loads is broken"
+    },
+    {
+      "check": "canonical-broken",
+      "detail": "The canonical URL returns 404 Not Found",
+      "said": "The main address it gives is missing (404 Not Found)"
+    },
+    {
+      "check": "canonical-broken",
+      "detail": "The canonical URL redirects (301 Moved Permanently) to https://example.com/b, which returns 404 Not Found",
+      "said": "The main address it gives forwards (301 Moved Permanently) to https://example.com/b, which is missing (404 Not Found)"
+    },
+    {
+      "check": "canonical-fragment",
+      "detail": "#top",
+      "said": "The main address it gives points to part of a page: #top"
+    },
+    {
+      "check": "canonical-on-redirect",
+      "detail": "Redirects to https://example.com/plants/thin; its canonical header names https://example.com/plants/trailing/",
+      "said": "It forwards to https://example.com/plants/thin, but the server names https://example.com/plants/trailing/ as its main address"
+    },
+    {
+      "check": "canonical-other-domain",
+      "detail": "On another host: 127.0.0.1:54385",
+      "said": "The main address it gives is on another website: 127.0.0.1:54385"
+    },
+    {
+      "check": "canonical-to-first-page",
+      "detail": "Page 2 names page 1 as its canonical",
+      "said": "Page 2 names page 1 as its main address"
+    },
+    {
+      "check": "canonical-to-first-page",
+      "detail": "A later page names page 1 as its canonical",
+      "said": "A later page names page 1 as its main address"
+    },
+    {
+      "check": "canonical-to-non-indexable",
+      "detail": "The canonical URL is noindex",
+      "said": "The main address it gives asks not to appear in search results"
+    },
+    {
+      "check": "canonical-to-redirect",
+      "detail": "The canonical URL redirects (301 Moved Permanently) and, after 2 redirects, ends at https://example.com/plants/thin",
+      "said": "The main address it gives forwards (301 Moved Permanently) and, after 2 steps, ends at https://example.com/plants/thin"
+    },
+    {
+      "check": "canonical-to-redirect",
+      "detail": "The canonical URL redirects (301 Moved Permanently) to https://example.com/plants/thin",
+      "said": "The main address it gives forwards (301 Moved Permanently) to https://example.com/plants/thin"
+    },
+    {
+      "check": "canonical-to-redirect",
+      "detail": "The canonical URL redirects back to this page",
+      "said": "The main address it gives forwards back to this page"
+    },
+    {
+      "check": "canonical-unlinked",
+      "detail": "Only canonicals lead here",
+      "said": "Other pages name it as their main address, but none links to it"
+    },
+    {
+      "check": "charset-missing",
+      "detail": "A meta tag declares it, but ends at byte 6,158, past the first 1,024 bytes browsers read",
+      "said": "The page names its text encoding too far down its code, past where browsers look"
+    },
+    {
+      "check": "content-type-mismatch",
+      "detail": "Used as a script, sent as text/plain",
+      "said": "Pages use it as a script, but the server says it’s plain text"
+    },
+    {
+      "check": "cookies-insecure",
+      "detail": "sessionid: no HttpOnly",
+      "said": "The page’s scripts can read the cookie “sessionid”, which looks like a login"
+    },
+    {
+      "check": "cookies-insecure",
+      "detail": "session_id: no Secure",
+      "said": "The cookie “session_id” can be sent without the secure connection"
+    },
+    {
+      "check": "cookies-insecure",
+      "detail": "session_id: no Secure; cart: no Secure, no HttpOnly",
+      "said": "The cookies “session_id” and “cart” can be sent without the secure connection; the page’s scripts can read the cookie “cart”, which looks like a login"
+    },
+    {
+      "check": "cookies-insecure",
+      "detail": "sid: SameSite=None without Secure",
+      "said": "Browsers will refuse the cookie “sid”: shared with other sites, but not kept to the secure connection"
+    },
+    {
+      "check": "deep-page",
+      "detail": "5 clicks from the start, over 4",
+      "said": "5 clicks from the home page; at most 4 is advised"
+    },
+    {
+      "check": "description-duplicate",
+      "detail": "1 other page",
+      "said": "Another page has the same search description"
+    },
+    {
+      "check": "description-multiple",
+      "detail": "2 meta descriptions: \"Two descriptions: a planted test page w…\" · \"A second meta description on the same p…\"",
+      "said": "The page has 2 search descriptions: “Two descriptions: a planted test page w…” · “A second meta description on the same p…”"
+    },
+    {
+      "check": "description-too-long",
+      "detail": "1,054 px, over 985 (132 characters)",
+      "said": "Too long to show in full in search results (132 characters)"
+    },
+    {
+      "check": "description-too-long",
+      "detail": "1,004 px, over 990 (163 characters)",
+      "said": "Too long to show in full in search results (163 characters)"
+    },
+    {
+      "check": "description-too-short",
+      "detail": "63 px, under 400 (10 characters)",
+      "said": "Only 10 characters long"
+    },
+    {
+      "check": "description-too-short",
+      "detail": "300 px, under 400 (50 characters)",
+      "said": "Only 50 characters long"
+    },
+    {
+      "check": "duplicate-content",
+      "detail": "1 other page",
+      "said": "Another page has the same text"
+    },
+    {
+      "check": "empty-anchor-text",
+      "detail": "Links to 1 URL",
+      "said": "Links to 1 address with no words to click"
+    },
+    {
+      "check": "empty-anchor-text",
+      "detail": "Links to 5 URLs",
+      "said": "Links to 5 addresses with no words to click"
+    },
+    {
+      "check": "few-internal-outlinks",
+      "detail": "No links to other pages",
+      "said": "It links to none of your other pages"
+    },
+    {
+      "check": "generic-anchor-text",
+      "detail": "2 links: \"Click here\", \"Read more…\"",
+      "said": "2 links whose words don’t say where they go: “Click here”, “Read more…”"
+    },
+    {
+      "check": "h1-duplicate",
+      "detail": "1 other page",
+      "said": "Another page has the same main heading"
+    },
+    {
+      "check": "h1-image-only",
+      "detail": "The H1 is an image: \"Synthetic Store logo\"",
+      "said": "The main heading is a picture: “Synthetic Store logo”"
+    },
+    {
+      "check": "h1-multiple",
+      "detail": "2 H1s: \"Two H1s\" · \"A second H1 on the page\"",
+      "said": "The page has 2 main headings: “Two H1s” · “A second H1 on the page”"
+    },
+    {
+      "check": "h2-missing",
+      "detail": "604 words, no H2",
+      "said": "604 words with no subheadings"
+    },
+    {
+      "check": "heading-levels-skipped",
+      "detail": "H1 → H3: \"Straight to the third level\"",
+      "said": "It goes from the main heading to a level-3 heading, “Straight to the third level”, skipping level 2"
+    },
+    {
+      "check": "heading-levels-skipped",
+      "detail": "H1 → H4: \"Rattan Patio Sets\"",
+      "said": "It goes from the main heading to a level-4 heading, “Rattan Patio Sets”, skipping levels 2 and 3"
+    },
+    {
+      "check": "heading-levels-skipped",
+      "detail": "H1 → H3",
+      "said": "It goes from the main heading to a level-3 heading, skipping level 2"
+    },
+    {
+      "check": "heading-levels-skipped",
+      "detail": "An H2 before the H1",
+      "said": "A section heading comes before the main heading"
+    },
+    {
+      "check": "heading-levels-skipped",
+      "detail": "H2 → H5: \"More to read\"",
+      "said": "It goes from a section heading to a level-5 heading, “More to read”, skipping levels 3 and 4"
+    },
+    {
+      "check": "heading-too-long",
+      "detail": "H1 of 77 characters, over 70: \"A very long main heading that goes on and on well past the seventy characters\"",
+      "said": "The main heading is 77 characters long, more than 70: “A very long main heading that goes on and on well past the seventy characters”"
+    },
+    {
+      "check": "heading-too-long",
+      "detail": "H1 of 87 characters, over 70: \"Oxford Fabric Outdoor Single Chair Cover\"",
+      "said": "The main heading is 87 characters long, more than 70: “Oxford Fabric Outdoor Single Chair Cover”"
+    },
+    {
+      "check": "heading-too-long",
+      "detail": "H2 of 84 characters, over 70",
+      "said": "A section heading is 84 characters long, more than 70"
+    },
+    {
+      "check": "hreflang-broken-target",
+      "detail": "1 URL",
+      "said": "1 language version is broken"
+    },
+    {
+      "check": "hreflang-invalid-code",
+      "detail": "en-UK",
+      "said": "It uses a language code that doesn’t exist: “en-UK”"
+    },
+    {
+      "check": "hreflang-lang-mismatch",
+      "detail": "hreflang en, lang fr",
+      "said": "Listed as “en”, but the page says its language is “fr”"
+    },
+    {
+      "check": "hreflang-missing-return",
+      "detail": "1 alternate doesn't link back",
+      "said": "1 language version doesn’t name this page back"
+    },
+    {
+      "check": "hreflang-to-non-indexable",
+      "detail": "1 URL",
+      "said": "1 language version can’t appear in search results"
+    },
+    {
+      "check": "hreflang-unlinked",
+      "detail": "No link or sitemap entry leads here",
+      "said": "Other pages name it as a language version, but no link or sitemap leads here"
+    },
+    {
+      "check": "html-past-crawl-limit",
+      "detail": "2.1 MB, past the 2 MB Google reads",
+      "said": "The page is 2.1 MB; Google reads only the first 2 MB"
+    },
+    {
+      "check": "image-alt-too-long",
+      "detail": "1 image",
+      "said": "1 image with very long alt text"
+    },
+    {
+      "check": "image-alt-unhelpful",
+      "detail": "1 image",
+      "said": "1 image whose alt text doesn’t describe it"
+    },
+    {
+      "check": "image-broken",
+      "detail": "1 image",
+      "said": "1 broken image"
+    },
+    {
+      "check": "image-broken",
+      "detail": "1 image (it redirects to a URL that returns 404 Not Found)",
+      "said": "1 broken image; it forwards to an address that is missing (404 Not Found)"
+    },
+    {
+      "check": "image-hotlinked",
+      "detail": "1 image from 1 site",
+      "said": "1 image shown straight from another website"
+    },
+    {
+      "check": "image-hotlinked",
+      "detail": "4 images from 2 sites",
+      "said": "4 images shown straight from 2 other websites"
+    },
+    {
+      "check": "image-legacy-format",
+      "detail": "1 image: 100 KB",
+      "said": "1 image in an older, heavier file type: 100 KB"
+    },
+    {
+      "check": "image-legacy-format",
+      "detail": "5 images, the largest 141 KB",
+      "said": "5 images in older, heavier file types, the largest 141 KB"
+    },
+    {
+      "check": "image-legacy-format",
+      "detail": "1 image: 73 KB",
+      "said": "1 image in an older, heavier file type: 73 KB"
+    },
+    {
+      "check": "image-legacy-format",
+      "detail": "4 images, the largest 1.2 MB",
+      "said": "4 images in older, heavier file types, the largest 1.2 MB"
+    },
+    {
+      "check": "image-missing-alt",
+      "detail": "1 image",
+      "said": "1 image with no alt text"
+    },
+    {
+      "check": "image-missing-dimensions",
+      "detail": "1 image",
+      "said": "1 image with no size set"
+    },
+    {
+      "check": "image-missing-dimensions",
+      "detail": "20 images",
+      "said": "20 images with no size set"
+    },
+    {
+      "check": "image-no-srcset",
+      "detail": "1 image, 1,200 px wide",
+      "said": "1 image with one size for every screen, 1,200 pixels wide"
+    },
+    {
+      "check": "image-too-large",
+      "detail": "1 image over 200 KB: 300 KB",
+      "said": "1 image bigger than 200 KB: 300 KB"
+    },
+    {
+      "check": "image-too-large",
+      "detail": "1 image over 200 KB: 1.3 MB",
+      "said": "1 image bigger than 200 KB: 1.3 MB"
+    },
+    {
+      "check": "image-too-large",
+      "detail": "3 images over 200 KB, the largest 1.3 MB",
+      "said": "3 images bigger than 200 KB, the largest 1.3 MB"
+    },
+    {
+      "check": "image-too-large",
+      "detail": "2 images over 200 KB, the largest 214 KB",
+      "said": "2 images bigger than 200 KB, the largest 214 KB"
+    },
+    {
+      "check": "internal-blocked",
+      "detail": "Cloudflare challenge",
+      "said": "The site’s protection turned the check away: Cloudflare challenge"
+    },
+    {
+      "check": "internal-client-error",
+      "detail": "404 Not Found",
+      "said": "It is missing (404 Not Found)"
+    },
+    {
+      "check": "internal-client-error",
+      "detail": "410 Gone",
+      "said": "It is missing (410 Gone)"
+    },
+    {
+      "check": "internal-client-error",
+      "detail": "403 Forbidden",
+      "said": "It can’t be opened (403 Forbidden)"
+    },
+    {
+      "check": "internal-client-error",
+      "detail": "HTTP 499",
+      "said": "It can’t be opened (HTTP 499)"
+    },
+    {
+      "check": "internal-nofollow-links",
+      "detail": "Links to 1 URL",
+      "said": "Links to 1 address, telling search engines not to follow it"
+    },
+    {
+      "check": "internal-server-error",
+      "detail": "500 Internal Server Error",
+      "said": "It has a server error (500 Internal Server Error)"
+    },
+    {
+      "check": "internal-server-error",
+      "detail": "503 Service Unavailable",
+      "said": "It has a server error (503 Service Unavailable)"
+    },
+    {
+      "check": "internal-unreachable",
+      "detail": "Connection failed",
+      "said": "It couldn’t be reached"
+    },
+    {
+      "check": "internal-unreachable",
+      "detail": "Timed out",
+      "said": "It didn’t answer in time"
+    },
+    {
+      "check": "internal-unreachable",
+      "detail": "DNS lookup failed",
+      "said": "It is on a site that couldn’t be found"
+    },
+    {
+      "check": "lang-invalid",
+      "detail": "english",
+      "said": "It gives its language as “english”, which isn’t a language code such as “en”"
+    },
+    {
+      "check": "large-page",
+      "detail": "1.1 MB, over 1 MB",
+      "said": "The page is 1.1 MB, more than 1 MB"
+    },
+    {
+      "check": "links-to-redirects",
+      "detail": "6 redirecting URLs",
+      "said": "Links to 6 old addresses that forward elsewhere"
+    },
+    {
+      "check": "links-to-redirects",
+      "detail": "1 redirecting URL",
+      "said": "Links to 1 old address that forwards elsewhere"
+    },
+    {
+      "check": "links-to-redirects",
+      "detail": "4 redirecting URLs",
+      "said": "Links to 4 old addresses that forward elsewhere"
+    },
+    {
+      "check": "low-word-count",
+      "detail": "155 words, under 200",
+      "said": "Only 155 words, fewer than 200"
+    },
+    {
+      "check": "low-word-count",
+      "detail": "121 words, under 200",
+      "said": "Only 121 words, fewer than 200"
+    },
+    {
+      "check": "low-word-count",
+      "detail": "1 word, under 200",
+      "said": "Only 1 word, fewer than 200"
+    },
+    {
+      "check": "mobile-alternate",
+      "detail": "Mobile version: https://example.com/m/plants/mobile-alternate",
+      "said": "It has a separate mobile version: https://example.com/m/plants/mobile-alternate"
+    },
+    {
+      "check": "near-duplicate-content",
+      "detail": "1 similar page",
+      "said": "Another page has almost the same text"
+    },
+    {
+      "check": "non-indexable-inlinks-only",
+      "detail": "Linked from 1 page, which isn't indexable",
+      "said": "Only 1 page links here, and it can’t appear in search results"
+    },
+    {
+      "check": "non-indexable-inlinks-only",
+      "detail": "Linked from 3 pages, none of them indexable",
+      "said": "Only 3 pages link here, and none of them can appear in search results"
+    },
+    {
+      "check": "not-a-check",
+      "detail": "Anything at all",
+      "said": null
+    },
+    {
+      "check": "og-description-duplicate",
+      "detail": "1 other page",
+      "said": "Another page has the same share description"
+    },
+    {
+      "check": "og-description-duplicate",
+      "detail": "2 other pages",
+      "said": "2 other pages have the same share description"
+    },
+    {
+      "check": "og-title-duplicate",
+      "detail": "1 other page",
+      "said": "Another page has the same share title"
+    },
+    {
+      "check": "og-url-not-canonical",
+      "detail": "og:url is https://example.com/",
+      "said": "The address it gives for sharing is https://example.com/, not its main address"
+    },
+    {
+      "check": "open-graph-missing",
+      "detail": "Missing og:title, og:description, og:image",
+      "said": "For sharing, it has no title, description or image"
+    },
+    {
+      "check": "open-graph-missing",
+      "detail": "Empty og:title, og:description",
+      "said": "For sharing, its title and description are empty"
+    },
+    {
+      "check": "open-graph-missing",
+      "detail": "Empty og:description",
+      "said": "For sharing, its description is empty"
+    },
+    {
+      "check": "open-graph-missing",
+      "detail": "Missing og:image; empty og:title",
+      "said": "For sharing, it has no image, and its title is empty"
+    },
+    {
+      "check": "open-graph-missing",
+      "detail": "Missing og:title, og:image",
+      "said": "For sharing, it has no title or image"
+    },
+    {
+      "check": "orphan-page",
+      "detail": "Only found in a sitemap",
+      "said": "No page links here: it’s only in your sitemap"
+    },
+    {
+      "check": "orphan-page",
+      "detail": "Only nofollow links lead here",
+      "said": "The only links here tell search engines not to follow them"
+    },
+    {
+      "check": "pagination-broken",
+      "detail": "rel=\"next\" returns 404 Not Found",
+      "said": "Its next page is missing (404 Not Found)"
+    },
+    {
+      "check": "pagination-to-non-indexable",
+      "detail": "rel=\"next\" is noindex",
+      "said": "Its next page asks not to appear in search results"
+    },
+    {
+      "check": "placeholder-text",
+      "detail": "\"Lorem ipsum ember ochre kernel ribbon orchard anchor pillow…\"",
+      "said": "Placeholder text: “Lorem ipsum ember ochre kernel ribbon orchard anchor pillow…”"
+    },
+    {
+      "check": "protocol-relative-links",
+      "detail": "1 URL, such as //127.0.0.1:54384/static/app.js",
+      "said": "1 address that leaves out “https:”, such as //127.0.0.1:54384/static/app.js"
+    },
+    {
+      "check": "readability-low",
+      "detail": "Reading ease -171, under 30 (very difficult)",
+      "said": "Very hard to read: it scores -171 for reading ease, where under 30 is very hard"
+    },
+    {
+      "check": "redirect-broken",
+      "detail": "Ends at a URL that returns 404 Not Found",
+      "said": "It forwards to an address that is missing (404 Not Found)"
+    },
+    {
+      "check": "redirect-chain",
+      "detail": "2 redirects",
+      "said": "It forwards 2 times in a row"
+    },
+    {
+      "check": "redirect-chain",
+      "detail": "More than 20 redirects, which browsers don't follow",
+      "said": "It forwards more than 20 times in a row, more than browsers follow"
+    },
+    {
+      "check": "redirect-chain",
+      "detail": "3 redirects",
+      "said": "It forwards 3 times in a row"
+    },
+    {
+      "check": "redirect-chain",
+      "detail": "6 redirects, more than the 5 Googlebot follows",
+      "said": "It forwards 6 times in a row, more than the 5 Google follows"
+    },
+    {
+      "check": "redirect-temporary",
+      "detail": "302 Found",
+      "said": "It says the move is only for now (302 Found)"
+    },
+    {
+      "check": "redirect-temporary-cached",
+      "detail": "302 Found, cached for 30 days",
+      "said": "It says the move is only for now (302 Found), but tells browsers to remember it for 30 days"
+    },
+    {
+      "check": "resource-past-crawl-limit",
+      "detail": "2.1 MB, past the 2 MB Google reads",
+      "said": "The file is 2.1 MB; Google reads only the first 2 MB"
+    },
+    {
+      "check": "robots-directives-conflict",
+      "detail": "The HTML says \"index, follow\"; the X-Robots-Tag header says \"noindex\"",
+      "said": "The page says “index, follow”, but the server says “noindex”"
+    },
+    {
+      "check": "robots-txt-no-sitemap",
+      "detail": "https://example.com/robots.txt has no Sitemap: line; the sitemap was found at https://example.com/sitemap.xml",
+      "said": "The rules file https://example.com/robots.txt doesn’t say where your sitemap is; it was found at https://example.com/sitemap.xml"
+    },
+    {
+      "check": "robots-txt-no-sitemap",
+      "detail": "https://example.com/robots.txt is empty, so it has no Sitemap: line; the sitemap was found at https://example.com/sitemap.xml",
+      "said": null
+    },
+    {
+      "check": "security-headers-missing",
+      "detail": "Missing Content-Security-Policy, Referrer-Policy",
+      "said": "Your site doesn’t send the security settings that limit what the pages may load and limit what other sites learn of where visitors came from"
+    },
+    {
+      "check": "security-headers-missing",
+      "detail": "Missing Referrer-Policy",
+      "said": "Your site doesn’t send the security settings that limit what other sites learn of where visitors came from"
+    },
+    {
+      "check": "security-headers-missing",
+      "detail": "Missing Strict-Transport-Security, X-Content-Type-Options, X-Frame-Options",
+      "said": "Your site doesn’t send the security settings that keep browsers on the secure connection, stop browsers guessing file types and stop other sites showing your pages inside theirs"
+    },
+    {
+      "check": "security-headers-weak",
+      "detail": "HSTS max-age 10886400 (126 days), under a year",
+      "said": "It tells browsers to use the secure connection for 4 months; a year is advised"
+    },
+    {
+      "check": "security-headers-weak",
+      "detail": "HSTS without max-age",
+      "said": "It asks browsers to keep to the secure connection, but doesn’t say for how long"
+    },
+    {
+      "check": "security-headers-weak",
+      "detail": "HSTS max-age 3600 (1 hour), under a year; X-Content-Type-Options \"sniff\"",
+      "said": "It tells browsers to use the secure connection for 1 hour; a year is advised; the setting that stops browsers guessing file types is set wrongly (“sniff”)"
+    },
+    {
+      "check": "sitemap-empty",
+      "detail": "https://example.com/sitemaps/empty.xml",
+      "said": "The sitemap https://example.com/sitemaps/empty.xml lists no pages"
+    },
+    {
+      "check": "sitemap-non-indexable",
+      "detail": "The URL is blocked by robots.txt",
+      "said": "It is kept out by the rules file"
+    },
+    {
+      "check": "sitemap-non-indexable",
+      "detail": "The URL returns 404 Not Found",
+      "said": "It is missing (404 Not Found)"
+    },
+    {
+      "check": "sitemap-non-indexable",
+      "detail": "The URL is noindex",
+      "said": "It asks not to appear in search results"
+    },
+    {
+      "check": "sitemap-non-indexable",
+      "detail": "The URL redirects (301 Moved Permanently)",
+      "said": "It forwards (301 Moved Permanently)"
+    },
+    {
+      "check": "sitemap-url-other-host",
+      "detail": "The URL redirects (301 Moved Permanently)",
+      "said": "It forwards (301 Moved Permanently)"
+    },
+    {
+      "check": "sitemap-url-other-host",
+      "detail": "The URL returns 404 Not Found",
+      "said": "It is missing (404 Not Found)"
+    },
+    {
+      "check": "sitemap-url-repeated",
+      "detail": "In 2 sitemaps: https://example.com/sitemaps/pages-0.xml and https://example.com/sitemaps/extra.xml",
+      "said": null
+    },
+    {
+      "check": "slow-external-links",
+      "detail": "1 slow link, the slowest 3.2 s",
+      "said": "1 link to a slow page on other sites; the slowest took 3.2 seconds"
+    },
+    {
+      "check": "slow-response",
+      "detail": "1,200 ms, over 1,000 ms (first byte after 1,200 ms)",
+      "said": "It took 1.2 seconds to open, more than 1 second"
+    },
+    {
+      "check": "slow-response",
+      "detail": "1,200 ms, over 1,000 ms",
+      "said": "It took 1.2 seconds to open, more than 1 second"
+    },
+    {
+      "check": "slow-response",
+      "detail": "5,476 ms, over 1,000 ms (first byte after 4,900 ms)",
+      "said": "It took 5.5 seconds to open, more than 1 second; it began to answer after 4.9 seconds"
+    },
+    {
+      "check": "slow-response",
+      "detail": "1,036 ms",
+      "said": "It took 1 second to open"
+    },
+    {
+      "check": "snippet-blocked",
+      "detail": "nosnippet",
+      "said": "The page tells search engines not to show a text preview of it (“nosnippet”)"
+    },
+    {
+      "check": "structured-data-on-noindex",
+      "detail": "Product",
+      "said": "It describes “Product” for search results, but asks not to appear in them"
+    },
+    {
+      "check": "title-duplicate",
+      "detail": "1 other page",
+      "said": "Another page has the same title"
+    },
+    {
+      "check": "title-duplicate",
+      "detail": "12 other pages",
+      "said": "12 other pages have the same title"
+    },
+    {
+      "check": "title-multiple",
+      "detail": "2 titles: \"Two titles | Synthetic Store planted pa…\" · \"A second title for the same planted page\"",
+      "said": "The page has 2 titles: “Two titles | Synthetic Store planted pa…” · “A second title for the same planted page”"
+    },
+    {
+      "check": "title-too-long",
+      "detail": "736 px, over 580 (59 characters)",
+      "said": "Too long to show in full in search results (59 characters)"
+    },
+    {
+      "check": "title-too-long",
+      "detail": "612 px, over 580 (64 characters)",
+      "said": "Too long to show in full in search results (64 characters)"
+    },
+    {
+      "check": "title-too-short",
+      "detail": "125 px, under 200 (14 characters)",
+      "said": "Only 14 characters long"
+    },
+    {
+      "check": "title-too-short",
+      "detail": "157 px, under 200 (16 characters)",
+      "said": "Only 16 characters long"
+    },
+    {
+      "check": "too-many-links",
+      "detail": "1,026 internal links, over 1,000",
+      "said": "1,026 links to your own pages, more than 1,000"
+    },
+    {
+      "check": "url-internal-search",
+      "detail": "q",
+      "said": "It’s a page of results from your site’s own search (“q”)"
+    },
+    {
+      "check": "url-parameters",
+      "detail": "sort",
+      "said": "The address has extra settings after a “?”: “sort”"
+    },
+    {
+      "check": "url-parameters",
+      "detail": "register",
+      "said": "The address has extra settings after a “?”: “register”"
+    },
+    {
+      "check": "url-parameters",
+      "detail": "colour, size",
+      "said": "The address has extra settings after a “?”: “colour” and “size”"
+    },
+    {
+      "check": "url-too-long",
+      "detail": "129 characters, over 115",
+      "said": "The address is 129 characters long, more than 115"
+    },
+    {
+      "check": "url-tracking-parameters",
+      "detail": "utm_source",
+      "said": "The address carries a tracking code: “utm_source”"
+    }
+  ],
+  "evidence": [
+    {
+      "column": "wordCount",
+      "value": 1,
+      "origin": "https://example.com",
+      "url": null,
+      "said": "1 word"
+    },
+    {
+      "column": "wordCount",
+      "value": 1210,
+      "origin": "https://example.com",
+      "url": null,
+      "said": "1,210 words"
+    },
+    {
+      "column": "inlinks",
+      "value": 0,
+      "origin": "https://example.com",
+      "url": null,
+      "said": "No pages link here"
+    },
+    {
+      "column": "inlinks",
+      "value": 1,
+      "origin": "https://example.com",
+      "url": null,
+      "said": "1 link to it"
+    },
+    {
+      "column": "inlinks",
+      "value": 1234,
+      "origin": "https://example.com",
+      "url": null,
+      "said": "1,234 links to it"
+    },
+    {
+      "column": "linkingPages",
+      "value": 0,
+      "origin": "https://example.com",
+      "url": null,
+      "said": "No pages link here"
+    },
+    {
+      "column": "linkingPages",
+      "value": 1,
+      "origin": "https://example.com",
+      "url": null,
+      "said": "1 page links here"
+    },
+    {
+      "column": "linkingPages",
+      "value": 12,
+      "origin": "https://example.com",
+      "url": null,
+      "said": "12 pages link here"
+    },
+    {
+      "column": "outlinks",
+      "value": 0,
+      "origin": "https://example.com",
+      "url": null,
+      "said": "No links on the page"
+    },
+    {
+      "column": "outlinks",
+      "value": 1,
+      "origin": "https://example.com",
+      "url": null,
+      "said": "1 link on the page"
+    },
+    {
+      "column": "outlinks",
+      "value": 40,
+      "origin": "https://example.com",
+      "url": null,
+      "said": "40 links on the page"
+    },
+    {
+      "column": "depth",
+      "value": 0,
+      "origin": "https://example.com",
+      "url": null,
+      "said": "It’s the page the check started from"
+    },
+    {
+      "column": "depth",
+      "value": 1,
+      "origin": "https://example.com",
+      "url": null,
+      "said": "1 click from the home page"
+    },
+    {
+      "column": "depth",
+      "value": 4,
+      "origin": "https://example.com",
+      "url": null,
+      "said": "4 clicks from the home page"
+    },
+    {
+      "column": "usedOn",
+      "value": 1,
+      "origin": "https://example.com",
+      "url": null,
+      "said": "Used on 1 page"
+    },
+    {
+      "column": "usedOn",
+      "value": 2100,
+      "origin": "https://example.com",
+      "url": null,
+      "said": "Used on 2,100 pages"
+    },
+    {
+      "column": "responseMs",
+      "value": 0,
+      "origin": "https://example.com",
+      "url": null,
+      "said": null
+    },
+    {
+      "column": "responseMs",
+      "value": 491,
+      "origin": "https://example.com",
+      "url": null,
+      "said": "Checking it took 0.5 seconds"
+    },
+    {
+      "column": "responseMs",
+      "value": 1000,
+      "origin": "https://example.com",
+      "url": null,
+      "said": "Checking it took 1 second"
+    },
+    {
+      "column": "responseMs",
+      "value": 5476,
+      "origin": "https://example.com",
+      "url": null,
+      "said": "Checking it took 5.5 seconds"
+    },
+    {
+      "column": "sizeBytes",
+      "value": 512,
+      "origin": "https://example.com",
+      "url": null,
+      "said": "The file is under 1 KB"
+    },
+    {
+      "column": "sizeBytes",
+      "value": 218000,
+      "origin": "https://example.com",
+      "url": null,
+      "said": "The file is 212.9 KB"
+    },
+    {
+      "column": "sizeBytes",
+      "value": 1887436,
+      "origin": "https://example.com",
+      "url": null,
+      "said": "The file is 1.8 MB"
+    },
+    {
+      "column": "statusCode",
+      "value": 404,
+      "origin": "https://example.com",
+      "url": null,
+      "said": null
+    },
+    {
+      "column": "h1",
+      "value": "Garden   sofas for every season",
+      "origin": "https://example.com",
+      "url": null,
+      "said": "Main heading: “Garden sofas for every season”"
+    },
+    {
+      "column": "description",
+      "value": "A description that runs on and on past seventy characters so that it is cut short here",
+      "origin": "https://example.com",
+      "url": null,
+      "said": "Search description: “A description that runs on and on past seventy characters so that it…”"
+    },
+    {
+      "column": "metaRobots",
+      "value": "noindex, follow",
+      "origin": "https://example.com",
+      "url": null,
+      "said": "The page says “noindex, follow”"
+    },
+    {
+      "column": "xRobotsTag",
+      "value": "noindex",
+      "origin": "https://example.com",
+      "url": null,
+      "said": "The server says “noindex”"
+    },
+    {
+      "column": "language",
+      "value": "en-GB",
+      "origin": "https://example.com",
+      "url": null,
+      "said": "The page gives its language as “en-GB”"
+    },
+    {
+      "column": "redirectKind",
+      "value": "httpToHttps",
+      "origin": "https://example.com",
+      "url": null,
+      "said": "It forwards from http to https"
+    },
+    {
+      "column": "redirectKind",
+      "value": "httpToHttps,addsWww",
+      "origin": "https://example.com",
+      "url": null,
+      "said": "It forwards from http to https, and adds “www”"
+    },
+    {
+      "column": "redirectKind",
+      "value": "addsSlash,changesCase,other",
+      "origin": "https://example.com",
+      "url": null,
+      "said": "It forwards adds a slash at the end, changes capital letters, and to another page"
+    },
+    {
+      "column": "canonicalUrl",
+      "value": "https://example.com/sofas/",
+      "origin": "https://example.com",
+      "url": "https://example.com/sofas/?page=2",
+      "said": "Main address: /sofas/"
+    },
+    {
+      "column": "canonicalUrl",
+      "value": "https://example.com/sofas/",
+      "origin": "https://example.com",
+      "url": "https://example.com/sofas/",
+      "said": null
+    },
+    {
+      "column": "canonicalUrl",
+      "value": "https://other.example/x",
+      "origin": "https://example.com",
+      "url": null,
+      "said": "Main address: https://other.example/x"
+    },
+    {
+      "column": "finalUrl",
+      "value": "https://example.com/new/",
+      "origin": "https://example.com",
+      "url": "https://example.com/old",
+      "said": "Forwards to /new/"
+    },
+    {
+      "column": "finalUrl",
+      "value": "https://example.com",
+      "origin": "https://example.com",
+      "url": "https://example.com/old",
+      "said": "Forwards to /"
+    },
+    {
+      "column": "indexability",
+      "value": "none",
+      "origin": "https://example.com",
+      "url": null,
+      "said": "Can appear in search results"
+    },
+    {
+      "column": "indexability",
+      "value": "noindex",
+      "origin": "https://example.com",
+      "url": null,
+      "said": "It can’t appear in search results: it says not to show it (noindex)"
+    },
+    {
+      "column": "indexability",
+      "value": "canonicalised",
+      "origin": "https://example.com",
+      "url": null,
+      "said": "It can’t appear in search results: it names another address as its main address"
+    },
+    {
+      "column": "indexability",
+      "value": "redirected",
+      "origin": "https://example.com",
+      "url": null,
+      "said": "It can’t appear in search results: it forwards to another address"
+    },
+    {
+      "column": "indexability",
+      "value": "clientError",
+      "origin": "https://example.com",
+      "url": null,
+      "said": "It can’t appear in search results: it’s missing"
+    },
+    {
+      "column": "indexability",
+      "value": "serverError",
+      "origin": "https://example.com",
+      "url": null,
+      "said": "It can’t appear in search results: it has a server error"
+    },
+    {
+      "column": "indexability",
+      "value": "blockedByRobots",
+      "origin": "https://example.com",
+      "url": null,
+      "said": "It can’t appear in search results: the rules file keeps search engines out"
+    },
+    {
+      "column": "indexability",
+      "value": "blocked",
+      "origin": "https://example.com",
+      "url": null,
+      "said": "It can’t appear in search results: it turned the check away"
+    },
+    {
+      "column": "indexability",
+      "value": "unreachable",
+      "origin": "https://example.com",
+      "url": null,
+      "said": "It can’t appear in search results: it didn’t answer"
+    },
+    {
+      "column": "fetchError",
+      "value": "DNS lookup failed",
+      "origin": "https://example.com",
+      "url": null,
+      "said": "Its site couldn’t be found"
+    },
+    {
+      "column": "fetchError",
+      "value": "No response within 30 seconds",
+      "origin": "https://example.com",
+      "url": null,
+      "said": "It didn’t answer in time"
+    },
+    {
+      "column": "type",
+      "value": "page",
+      "origin": "https://example.com",
+      "url": null,
+      "said": "It’s a page"
+    },
+    {
+      "column": "type",
+      "value": "image",
+      "origin": "https://example.com",
+      "url": null,
+      "said": "It’s an image"
+    },
+    {
+      "column": "type",
+      "value": "script",
+      "origin": "https://example.com",
+      "url": null,
+      "said": "It’s a script, code the pages run"
+    },
+    {
+      "column": "type",
+      "value": "stylesheet",
+      "origin": "https://example.com",
+      "url": null,
+      "said": "It’s a style sheet, which sets how the pages look"
+    },
+    {
+      "column": "type",
+      "value": "font",
+      "origin": "https://example.com",
+      "url": null,
+      "said": "It’s a font"
+    },
+    {
+      "column": "type",
+      "value": "media",
+      "origin": "https://example.com",
+      "url": null,
+      "said": "It’s a sound or video file"
+    },
+    {
+      "column": "type",
+      "value": "pdf",
+      "origin": "https://example.com",
+      "url": null,
+      "said": "It’s a PDF"
+    },
+    {
+      "column": "type",
+      "value": "other",
+      "origin": "https://example.com",
+      "url": null,
+      "said": null
+    },
+    {
+      "column": "contentType",
+      "value": "text/html; charset=utf-8",
+      "origin": "https://example.com",
+      "url": null,
+      "said": "The server says it’s a web page"
+    },
+    {
+      "column": "contentType",
+      "value": "image/png",
+      "origin": "https://example.com",
+      "url": null,
+      "said": "The server says it’s an image"
+    },
+    {
+      "column": "title",
+      "value": "Never said: the page is named by it",
+      "origin": "https://example.com",
+      "url": null,
+      "said": null
+    },
+    {
+      "column": "titleLength",
+      "value": 64,
+      "origin": "https://example.com",
+      "url": null,
+      "said": null
+    },
+    {
+      "column": "somethingElse",
+      "value": "As it is",
+      "origin": "https://example.com",
+      "url": null,
+      "said": "As it is"
+    }
+  ],
+  "chains": [
+    {
+      "hops": [
+        {
+          "url": "https://example.com/b/",
+          "statusCode": 301,
+          "outcome": "redirect"
+        },
+        {
+          "url": "https://example.com/new/",
+          "statusCode": 200,
+          "outcome": "success"
+        }
+      ],
+      "loop": false,
+      "tooLong": false,
+      "origin": "https://example.com",
+      "said": "Forwards to /b/, then /new/, which works"
+    },
+    {
+      "hops": [
+        {
+          "url": "https://example.com/gone",
+          "statusCode": 404,
+          "outcome": "clientError"
+        }
+      ],
+      "loop": false,
+      "tooLong": false,
+      "origin": "https://example.com",
+      "said": "Forwards to /gone, which is missing (404 Not Found)"
+    },
+    {
+      "hops": [
+        {
+          "url": "https://example.com/a",
+          "statusCode": 302,
+          "outcome": "redirect"
+        },
+        {
+          "url": "https://example.com/b",
+          "statusCode": 302,
+          "outcome": "redirect"
+        }
+      ],
+      "loop": true,
+      "tooLong": false,
+      "origin": "https://example.com",
+      "said": "Forwards to /a, then /b, and round again in a loop"
+    },
+    {
+      "hops": [
+        {
+          "url": "https://example.com/a",
+          "statusCode": 301,
+          "outcome": "redirect"
+        }
+      ],
+      "loop": false,
+      "tooLong": true,
+      "origin": "https://example.com",
+      "said": "Forwards to /a, and on past 20 steps"
+    },
+    {
+      "hops": [
+        {
+          "url": "https://other.example/x",
+          "statusCode": null,
+          "outcome": "timeout"
+        }
+      ],
+      "loop": false,
+      "tooLong": false,
+      "origin": "https://example.com",
+      "said": "Forwards to https://other.example/x, which didn’t answer"
+    }
+  ],
+  "rules": [
+    {
+      "reason": "rule",
+      "rule": "Disallow: /cart/",
+      "line": 12,
+      "said": "The rules file says “Disallow: /cart/”, on line 12"
+    },
+    {
+      "reason": "rule",
+      "rule": "Disallow: /cart/",
+      "line": null,
+      "said": "The rules file says “Disallow: /cart/”"
+    },
+    {
+      "reason": "unreachable",
+      "rule": null,
+      "line": null,
+      "said": "The rules file couldn’t be read, so search engines stay out"
+    },
+    {
+      "reason": "unknown",
+      "rule": null,
+      "line": null,
+      "said": "The rules file kept the check out then, but doesn’t now. Check the site again to be sure"
+    }
+  ],
+  "statuses": [
+    {
+      "statusCode": 200,
+      "outcome": "success",
+      "error": null,
+      "said": "works"
+    },
+    {
+      "statusCode": 204,
+      "outcome": null,
+      "error": null,
+      "said": "works"
+    },
+    {
+      "statusCode": 301,
+      "outcome": "redirect",
+      "error": null,
+      "said": "forwards (301 Moved Permanently)"
+    },
+    {
+      "statusCode": 302,
+      "outcome": null,
+      "error": null,
+      "said": "forwards (302 Found)"
+    },
+    {
+      "statusCode": 404,
+      "outcome": "clientError",
+      "error": null,
+      "said": "is missing (404 Not Found)"
+    },
+    {
+      "statusCode": 410,
+      "outcome": null,
+      "error": null,
+      "said": "is missing (410 Gone)"
+    },
+    {
+      "statusCode": 403,
+      "outcome": null,
+      "error": null,
+      "said": "can’t be opened (403 Forbidden)"
+    },
+    {
+      "statusCode": 429,
+      "outcome": null,
+      "error": null,
+      "said": "can’t be opened (429 Too Many Requests)"
+    },
+    {
+      "statusCode": 500,
+      "outcome": "serverError",
+      "error": null,
+      "said": "has a server error (500 Internal Server Error)"
+    },
+    {
+      "statusCode": 503,
+      "outcome": null,
+      "error": null,
+      "said": "has a server error (503 Service Unavailable)"
+    },
+    {
+      "statusCode": 599,
+      "outcome": null,
+      "error": null,
+      "said": "has a server error (599)"
+    },
+    {
+      "statusCode": null,
+      "outcome": "timeout",
+      "error": null,
+      "said": "didn’t answer"
+    },
+    {
+      "statusCode": null,
+      "outcome": "timeout",
+      "error": "No response within 30 seconds",
+      "said": "didn’t answer"
+    },
+    {
+      "statusCode": null,
+      "outcome": "networkError",
+      "error": null,
+      "said": "couldn’t be reached"
+    },
+    {
+      "statusCode": null,
+      "outcome": "networkError",
+      "error": "DNS lookup failed",
+      "said": "is on a site that couldn’t be found"
+    },
+    {
+      "statusCode": null,
+      "outcome": "networkError",
+      "error": "Could not connect: No connection could be made because the target machine actively refused it.",
+      "said": "refused the connection"
+    },
+    {
+      "statusCode": null,
+      "outcome": "networkError",
+      "error": "TLS handshake failed: Cannot determine the frame size",
+      "said": "couldn’t be opened securely"
+    },
+    {
+      "statusCode": null,
+      "outcome": "networkError",
+      "error": "Something else went wrong",
+      "said": "couldn’t be reached"
+    },
+    {
+      "statusCode": null,
+      "outcome": "robotsDisallowed",
+      "error": null,
+      "said": "is kept out by the rules file"
+    },
+    {
+      "statusCode": null,
+      "outcome": "blocked",
+      "error": null,
+      "said": "turned the check away"
+    },
+    {
+      "statusCode": null,
+      "outcome": "notChecked",
+      "error": null,
+      "said": "wasn’t checked"
+    },
+    {
+      "statusCode": null,
+      "outcome": null,
+      "error": null,
+      "said": "wasn’t checked"
+    }
+  ],
+  "positions": [
+    {
+      "position": "content",
+      "said": "in the main content"
+    },
+    {
+      "position": "navigation",
+      "said": "in the menu"
+    },
+    {
+      "position": "header",
+      "said": "in the header"
+    },
+    {
+      "position": "footer",
+      "said": "in the footer"
+    },
+    {
+      "position": "sidebar",
+      "said": "in the sidebar"
+    },
+    {
+      "position": "head",
+      "said": "in the page’s code"
+    },
+    {
+      "position": null,
+      "said": null
+    }
+  ],
+  "notInSearch": [
+    {
+      "reason": "none",
+      "said": null
+    },
+    {
+      "reason": "noindex",
+      "said": "It can’t appear in search results: it says not to show it (noindex)"
+    },
+    {
+      "reason": "canonicalised",
+      "said": "It can’t appear in search results: it names another address as its main address"
+    },
+    {
+      "reason": "redirected",
+      "said": "It can’t appear in search results: it forwards to another address"
+    },
+    {
+      "reason": "clientError",
+      "said": "It can’t appear in search results: it’s missing"
+    },
+    {
+      "reason": "serverError",
+      "said": "It can’t appear in search results: it has a server error"
+    },
+    {
+      "reason": "blockedByRobots",
+      "said": "It can’t appear in search results: the rules file keeps search engines out"
+    },
+    {
+      "reason": "blocked",
+      "said": "It can’t appear in search results: it turned the check away"
+    },
+    {
+      "reason": "unreachable",
+      "said": "It can’t appear in search results: it didn’t answer"
+    },
+    {
+      "reason": null,
+      "said": null
+    }
+  ],
+  "redirectKinds": [
+    {
+      "kinds": "httpToHttps",
+      "said": "It forwards from http to https"
+    },
+    {
+      "kinds": "httpsToHttp",
+      "said": "It forwards from https to http"
+    },
+    {
+      "kinds": "addsWww",
+      "said": "It forwards adds “www”"
+    },
+    {
+      "kinds": "removesWww",
+      "said": "It forwards drops “www”"
+    },
+    {
+      "kinds": "otherHost",
+      "said": "It forwards to another website"
+    },
+    {
+      "kinds": "addsSlash",
+      "said": "It forwards adds a slash at the end"
+    },
+    {
+      "kinds": "removesSlash",
+      "said": "It forwards drops the slash at the end"
+    },
+    {
+      "kinds": "changesCase",
+      "said": "It forwards changes capital letters"
+    },
+    {
+      "kinds": "other",
+      "said": "It forwards to another page"
+    },
+    {
+      "kinds": "httpToHttps,addsWww",
+      "said": "It forwards from http to https, and adds “www”"
+    },
+    {
+      "kinds": "httpToHttps,removesWww,addsSlash",
+      "said": "It forwards from http to https, drops “www”, and adds a slash at the end"
+    }
+  ],
+  "fileKinds": [
+    {
+      "contentType": "",
+      "said": "a file of no stated kind"
+    },
+    {
+      "contentType": "text/html",
+      "said": "a web page"
+    },
+    {
+      "contentType": "application/xhtml+xml",
+      "said": "a web page"
+    },
+    {
+      "contentType": "text/plain; charset=utf-8",
+      "said": "plain text"
+    },
+    {
+      "contentType": "text/css",
+      "said": "a style sheet"
+    },
+    {
+      "contentType": "application/javascript",
+      "said": "a script"
+    },
+    {
+      "contentType": "text/ecmascript",
+      "said": "a script"
+    },
+    {
+      "contentType": "image/svg+xml",
+      "said": "an image"
+    },
+    {
+      "contentType": "font/woff2",
+      "said": "a font"
+    },
+    {
+      "contentType": "application/font-woff",
+      "said": "a font"
+    },
+    {
+      "contentType": "audio/mpeg",
+      "said": "a sound or video file"
+    },
+    {
+      "contentType": "video/mp4",
+      "said": "a sound or video file"
+    },
+    {
+      "contentType": "application/pdf",
+      "said": "a PDF"
+    },
+    {
+      "contentType": "application/json",
+      "said": "a data file"
+    },
+    {
+      "contentType": "text/xml",
+      "said": "a data file"
+    },
+    {
+      "contentType": "application/octet-stream",
+      "said": "a file of no particular kind"
+    },
+    {
+      "contentType": "application/zip",
+      "said": "another kind of file"
+    }
+  ],
+  "seconds": [
+    {
+      "ms": 0,
+      "said": "0.1 seconds"
+    },
+    {
+      "ms": 40,
+      "said": "0.1 seconds"
+    },
+    {
+      "ms": 491,
+      "said": "0.5 seconds"
+    },
+    {
+      "ms": 950,
+      "said": "1 second"
+    },
+    {
+      "ms": 1000,
+      "said": "1 second"
+    },
+    {
+      "ms": 1049,
+      "said": "1 second"
+    },
+    {
+      "ms": 1050,
+      "said": "1.1 seconds"
+    },
+    {
+      "ms": 1200,
+      "said": "1.2 seconds"
+    },
+    {
+      "ms": 5476,
+      "said": "5.5 seconds"
+    },
+    {
+      "ms": 20000,
+      "said": "20 seconds"
+    },
+    {
+      "ms": 1234567,
+      "said": "1234.6 seconds"
+    }
+  ],
+  "lengths": [
+    {
+      "seconds": 30,
+      "said": "30 seconds"
+    },
+    {
+      "seconds": 60,
+      "said": "1 minute"
+    },
+    {
+      "seconds": 90,
+      "said": "1 minute"
+    },
+    {
+      "seconds": 3600,
+      "said": "1 hour"
+    },
+    {
+      "seconds": 7300,
+      "said": "2 hours"
+    },
+    {
+      "seconds": 86400,
+      "said": "1 day"
+    },
+    {
+      "seconds": 10886400,
+      "said": "4 months"
+    },
+    {
+      "seconds": 31536000,
+      "said": "1 year"
+    },
+    {
+      "seconds": 63072000,
+      "said": "2 years"
+    },
+    {
+      "seconds": 5184000,
+      "said": "2 months"
+    },
+    {
+      "seconds": 1,
+      "said": "1 second"
+    }
+  ],
+  "failures": [
+    {
+      "error": "HTTP 503",
+      "words": "503 Service Unavailable",
+      "sentence": "It answered 503 Service Unavailable"
+    },
+    {
+      "error": "503 Service Unavailable",
+      "words": "503 Service Unavailable",
+      "sentence": "It answered 503 Service Unavailable"
+    },
+    {
+      "error": "HTTP 520",
+      "words": "HTTP 520",
+      "sentence": "It answered HTTP 520"
+    },
+    {
+      "error": "DNS lookup failed",
+      "words": "the site couldn’t be found",
+      "sentence": "Its site couldn’t be found"
+    },
+    {
+      "error": "No response within 30 seconds",
+      "words": "it didn’t answer in time",
+      "sentence": "It didn’t answer in time"
+    },
+    {
+      "error": "Could not connect: No connection could be made because the target machine actively refused it.",
+      "words": "the connection was refused",
+      "sentence": "Its server refused the connection"
+    },
+    {
+      "error": "TLS handshake failed: a corrupted frame was received.",
+      "words": "a secure connection couldn’t be made",
+      "sentence": "A secure connection to it couldn’t be made"
+    },
+    {
+      "error": "Something else went wrong",
+      "words": "it couldn’t be reached",
+      "sentence": "It couldn’t be reached"
+    },
+    {
+      "error": "Timed out",
+      "words": "it didn’t answer in time",
+      "sentence": "It didn’t answer in time"
+    }
+  ],
+  "imageFiles": [
+    {
+      "sizeBytes": 1887436,
+      "pixelWidth": 4000,
+      "pixelHeight": 3000,
+      "said": "The image file is 1.8 MB, 4000×3000 pixels"
+    },
+    {
+      "sizeBytes": 218000,
+      "pixelWidth": null,
+      "pixelHeight": null,
+      "said": "The image file is 212.9 KB"
+    },
+    {
+      "sizeBytes": null,
+      "pixelWidth": 896,
+      "pixelHeight": 504,
+      "said": "The image file is 896×504 pixels"
+    },
+    {
+      "sizeBytes": null,
+      "pixelWidth": null,
+      "pixelHeight": null,
+      "said": null
+    },
+    {
+      "sizeBytes": 812,
+      "pixelWidth": 16,
+      "pixelHeight": 16,
+      "said": "The image file is 812 bytes, 16×16 pixels"
+    },
+    {
+      "sizeBytes": 1363148,
+      "pixelWidth": null,
+      "pixelHeight": 300,
+      "said": "The image file is 1.3 MB"
+    }
+  ],
+  "shownAt": [
+    {
+      "width": "400",
+      "height": "300",
+      "said": "Shown at 400×300 pixels"
+    },
+    {
+      "width": "100%",
+      "height": "auto",
+      "said": "Shown at 100% wide, auto high"
+    },
+    {
+      "width": "400",
+      "height": null,
+      "said": "Shown 400 pixels wide, with no height set"
+    },
+    {
+      "width": null,
+      "height": "300",
+      "said": "Shown 300 pixels high, with no width set"
+    },
+    {
+      "width": null,
+      "height": null,
+      "said": "No width or height set"
+    },
+    {
+      "width": " ",
+      "height": "",
+      "said": "No width or height set"
+    },
+    {
+      "width": "50%",
+      "height": null,
+      "said": "Shown 50% wide, with no height set"
+    },
+    {
+      "width": "400",
+      "height": "auto",
+      "said": "Shown at 400 pixels wide, auto high"
+    }
+  ],
+  "alts": [
+    {
+      "alt": null,
+      "hasAlt": false,
+      "altLength": null,
+      "withLength": false,
+      "said": "No alt text"
+    },
+    {
+      "alt": "",
+      "hasAlt": true,
+      "altLength": 0,
+      "withLength": false,
+      "said": "Empty alt text"
+    },
+    {
+      "alt": "  ",
+      "hasAlt": true,
+      "altLength": 2,
+      "withLength": false,
+      "said": "Empty alt text"
+    },
+    {
+      "alt": "Rattan corner sofa",
+      "hasAlt": true,
+      "altLength": 18,
+      "withLength": false,
+      "said": "Alt text: “Rattan corner sofa”"
+    },
+    {
+      "alt": "Rattan corner sofa",
+      "hasAlt": true,
+      "altLength": 18,
+      "withLength": true,
+      "said": "Alt text: “Rattan corner sofa” (18 characters)"
+    },
+    {
+      "alt": "A very long alt text that goes on past sixty characters, describing every cushion in turn",
+      "hasAlt": true,
+      "altLength": 1140,
+      "withLength": true,
+      "said": "Alt text: “A very long alt text that goes on past sixty characters, de…” (1,140 characters)"
+    }
+  ],
+  "others": [
+    {
+      "check": "image-too-large",
+      "count": 1,
+      "said": "and 1 other large image on this page"
+    },
+    {
+      "check": "image-too-large",
+      "count": 3,
+      "said": "and 3 other large images on this page"
+    },
+    {
+      "check": "image-missing-alt",
+      "count": 2,
+      "said": "and 2 other images without alt text on this page"
+    },
+    {
+      "check": "image-alt-too-long",
+      "count": 2,
+      "said": "and 2 other images with long alt text on this page"
+    },
+    {
+      "check": "image-missing-dimensions",
+      "count": 2,
+      "said": "and 2 other images without a size on this page"
+    },
+    {
+      "check": "image-broken",
+      "count": 2,
+      "said": "and 2 other broken images on this page"
+    },
+    {
+      "check": "broken-internal-links",
+      "count": 1,
+      "said": "and 1 other broken link on this page"
+    },
+    {
+      "check": "broken-internal-links",
+      "count": 3,
+      "said": "and 3 other broken links on this page"
+    },
+    {
+      "check": "broken-external-links",
+      "count": 2,
+      "said": "and 2 other broken links on this page"
+    },
+    {
+      "check": "links-to-redirects",
+      "count": 2,
+      "said": "and 2 other links to old addresses on this page"
+    },
+    {
+      "check": "empty-anchor-text",
+      "count": 2,
+      "said": "and 2 other links with no text on this page"
+    },
+    {
+      "check": "internal-nofollow-links",
+      "count": 2,
+      "said": "and 2 other links search engines are told not to follow on this page"
+    },
+    {
+      "check": "broken-fragment-links",
+      "count": 2,
+      "said": "and 2 other links to missing sections on this page"
+    },
+    {
+      "check": "mixed-content",
+      "count": 2,
+      "said": "and 2 other files loaded without https on this page"
+    },
+    {
+      "check": "canonical-broken",
+      "count": 1,
+      "said": "and 1 other problem like it on this page"
+    },
+    {
+      "check": "canonical-broken",
+      "count": 3,
+      "said": "and 3 other problems like it on this page"
+    },
+    {
+      "check": "image-legacy-format",
+      "count": 1204,
+      "said": "and 1,204 other problems like it on this page"
+    }
+  ]
+}

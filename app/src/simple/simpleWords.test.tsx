@@ -111,7 +111,7 @@ async function expectSimpleEverywhere(exempt: Element | null = null) {
 
 const REPORT_ROUTE: FakeRoute = [
   'GET',
-  /^\/api\/crawls\/[0-9a-f]{16}\/report(?:\?cut=\w+)?$/,
+  /^\/api\/crawls\/[0-9a-f]{16}\/report(?:\?[\w=&]+)?$/,
   () =>
     new Response('<!doctype html><title>Website check</title><h1>Website check</h1>', {
       headers: { 'Content-Type': 'text/html; charset=utf-8' },

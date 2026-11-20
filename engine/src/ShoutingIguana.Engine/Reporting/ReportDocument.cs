@@ -6,6 +6,7 @@ using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Engine.Export;
+using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Reporting.Models;
 using ShoutingIguana.Engine.Storage.Models;
 using static ShoutingIguana.Engine.Reporting.ReportWords;
@@ -40,7 +41,7 @@ internal static class ReportDocument
     private static readonly string[] COUNT_WORDS = ["none", "one", "two", "three", "four", "five"];
 
     private const string CSS_SOURCE = """
-          :root { --text: #18181B; --secondary: #46464D; --muted: #68686F; --rule: #E3E3E7; --rule-soft: #EEEEF1; --sunken: #FAFAFB; --accent: #0B6BD3; --accent-subtle: #EBF4FF; --accent-border: #A8CFFF; }
+          :root { --text: #18181B; --secondary: #46464D; --muted: #68686F; --rule: #E3E3E7; --rule-soft: #EEEEF1; --sunken: #FAFAFB; --accent: #0B6BD3; --accent-subtle: #EBF4FF; --accent-border: #A8CFFF; --link: #0A58B0; }
           * { box-sizing: border-box; }
           html { -webkit-text-size-adjust: 100%; }
           body { margin: 0; background: #fff; color: var(--text); font: 10pt/1.45 Inter, "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif; -webkit-font-smoothing: antialiased; }
@@ -48,7 +49,12 @@ internal static class ReportDocument
           h1, h2, h3, h4, p, ul, ol, dl, dd, figure, table { margin: 0; }
           ul, ol { padding: 0; list-style: none; }
           a { color: inherit; text-decoration: none; }
-          a:hover { text-decoration: underline; }
+          @media screen {
+            a { color: var(--link); text-decoration: underline; text-decoration-color: var(--accent-border); text-underline-offset: 2px; }
+            a:hover, a:focus-visible { text-decoration-color: currentColor; }
+            a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+          }
+          [id] { scroll-margin-top: 16px; }
           .mono { font-family: "JetBrains Mono", "Cascadia Mono", Consolas, monospace; font-size: 0.88em; overflow-wrap: anywhere; }
           .muted { color: var(--muted); }
           .num { font-variant-numeric: tabular-nums; }
@@ -59,6 +65,11 @@ internal static class ReportDocument
           h1 { margin-top: 4px; font-size: 24pt; line-height: 1.15; font-weight: 600; letter-spacing: -0.02em; overflow-wrap: anywhere; }
           .meta { margin-top: 8px; color: var(--secondary); }
           .note { margin-top: 10px; padding: 8px 12px; border: 1px solid var(--rule); border-radius: 8px; background: var(--sunken); font-size: 9.5pt; color: var(--secondary); }
+          .contents { margin-top: 14px; padding: 8px 12px; border: 1px solid var(--rule); border-radius: 8px; font-size: 9.5pt; line-height: 1.7; color: var(--secondary); }
+          .contents b { margin-right: 8px; font-weight: 600; color: var(--text); }
+          .contents ol, .contents li { display: inline; }
+          .contents li + li::before { content: " · "; color: var(--muted); }
+          .contents a { white-space: nowrap; }
           h2 { margin: 20px 0 4px; font-size: 14pt; line-height: 1.25; font-weight: 600; letter-spacing: -0.01em; }
           h2 + .lead { margin-bottom: 12px; color: var(--secondary); }
           .lead { max-width: 62ch; }
@@ -117,6 +128,14 @@ internal static class ReportDocument
           .examples td:first-child { width: 56%; }
           .examples--where td:first-child { width: 34%; }
           .examples--where td:last-child { width: 40%; }
+          .examples--link td:first-child { width: 44%; }
+          .examples--link td:last-child { width: 24%; }
+          .where { display: block; }
+          .where + .where { margin-top: 4px; }
+          .where__what { display: block; color: var(--secondary); }
+          .names { margin-top: 8px; font-size: 9pt; }
+          .names caption { caption-side: top; padding: 0 0 2px; text-align: left; font-size: 9pt; font-weight: 600; }
+          .names td, .names th { padding: 3px 8px; }
           .problem__split { display: grid; grid-template-columns: 1.2fr 1fr; gap: 22px; }
           .problem__split .examples { margin-top: 8px; }
           .examples--one td:first-child { width: auto; }
@@ -147,7 +166,7 @@ internal static class ReportDocument
             .new-page { break-before: page; }
             .new-page > h2:first-child { margin-top: 0; padding-top: 2px; }
             .score-table tfoot { display: table-row-group; }
-            a:hover { text-decoration: none; }
+            .contents { break-inside: avoid; }
           }
 
         """;
@@ -181,12 +200,17 @@ internal static class ReportDocument
             .Append("<style>").Append(CSS).Append("</style>\n</head>\n<body>\n").Append(full ? "<main class=\"sheet\">\n" : "<main class=\"sheet sheet--summary\">\n");
 
         Head(html, model, checkedOn);
+        if (full)
+        {
+            Contents(html, model);
+        }
+
         Summary(html, model, full);
         SinceLastCheck(html, model, full);
         FixFirst(html, model, full);
         if (model.Score is not null)
         {
-            HowTheScoreIsWorkedOut(html, model);
+            HowTheScoreIsWorkedOut(html, model, full);
         }
 
         if (full)
@@ -194,7 +218,7 @@ internal static class ReportDocument
             WhatToFix(html, model, options);
             CouldNotBeChecked(html, model);
             FoundNothingWrong(html, model);
-            AboutThisCheck(html, model);
+            AboutThisCheck(html, model, options.Wording);
         }
 
         html.Append("  <footer class=\"foot\"><span>Made with Shouting Iguana ").AppendText(model.EngineVersion).Append(" on ").Append(Date(model.MadeAt, model.TimeZone))
@@ -225,6 +249,72 @@ internal static class ReportDocument
         html.Append("  </header>\n\n");
     }
 
+    // ---- 1a. In this report.
+
+    /// <summary>Where a problem's section is: the "Fix these first" list, the score's table and the app's own links lead to it.</summary>
+    internal static string SectionId(IssueDefinition check) => $"problem-{check.Id}";
+
+    private static string GroupId(IssueSeverity severity) => severity switch
+    {
+        IssueSeverity.Error => "serious",
+        IssueSeverity.Warning => "worth-fixing",
+        _ => "worth-a-look"
+    };
+
+    /// <summary>Whether "Fix these first" (or "Nothing to fix") is in the document: not for a crawl with no score and nothing to fix.</summary>
+    private static bool HasFixFirst(ReportModel model) => model.Score is not null || model.Problems.Any(problem => problem.Check.Severity != IssueSeverity.Notice);
+
+    /// <summary>
+    /// The full report's parts as links, under its head: the document runs to many screens, and a reader who wants the
+    /// things worth a look, or how the check was made, shouldn't have to scroll for them. Each part's link is there only
+    /// when the part is. On paper the links are plain text, and a PDF keeps them.
+    /// </summary>
+    private static void Contents(StringBuilder html, ReportModel model)
+    {
+        html.Append("  <nav class=\"contents\" aria-label=\"In this report\"><b>In this report</b><ol>");
+        void Part(string id, string title) => html.Append("<li><a href=\"#").Append(id).Append("\">").Append(title).Append("</a></li>");
+        Part("summary", "Summary");
+        if (model.Comparison is not null)
+        {
+            Part("since-last-check", "Since your last check");
+        }
+
+        if (HasFixFirst(model))
+        {
+            Part("fix-first", model.Problems.Any(problem => problem.Check.Severity != IssueSeverity.Notice) ? "Fix these first" : "Nothing to fix");
+        }
+
+        if (model.Score is not null)
+        {
+            Part("score", "How the score is worked out");
+        }
+
+        if (model.Problems.Count > 0)
+        {
+            Part("what-to-fix", "What to fix");
+            foreach (var severity in new[] { IssueSeverity.Error, IssueSeverity.Warning, IssueSeverity.Notice })
+            {
+                if (model.ChecksOf(severity) is > 0 and var count)
+                {
+                    Part(GroupId(severity), $"{Severity(severity)} ({count})");
+                }
+            }
+        }
+
+        if (model.Skipped.Count > 0)
+        {
+            Part("not-checked", "What couldn’t be checked");
+        }
+
+        if (model.Passed.Count > 0)
+        {
+            Part("passed", "What was checked and found nothing wrong");
+        }
+
+        Part("about", "About this check");
+        html.Append("</ol></nav>\n\n");
+    }
+
     /// <summary>How a crawl that didn't read everything stands: stopped early, at its limit, still running, or failed.</summary>
     private static string Unfinished(ReportModel model)
     {
@@ -247,7 +337,7 @@ internal static class ReportDocument
     private static void Summary(StringBuilder html, ReportModel model, bool full)
     {
         var (errors, warnings, notices) = (model.ChecksOf(IssueSeverity.Error), model.ChecksOf(IssueSeverity.Warning), model.ChecksOf(IssueSeverity.Notice));
-        html.Append("  <section class=\"summary\" aria-label=\"Summary\">\n    <div class=\"summary__main\">\n      ");
+        html.Append("  <section class=\"summary\" id=\"summary\" aria-label=\"Summary\">\n    <div class=\"summary__main\">\n      ");
         Ring(html, model.Score);
         html.Append("\n      <div>\n");
         if (model.Score is { } score)
@@ -368,32 +458,19 @@ internal static class ReportDocument
         var caution = Caution(since.Comparison);
         if (!full)
         {
-            List<string> counts = [];
-            void Count(int count, string words)
-            {
-                if (count > 0)
-                {
-                    counts.Add($"{Number(count)} {words}");
-                }
-            }
-
-            Count(fixedChecks.Count, fixedChecks.Count == 1 ? "problem fixed" : "problems fixed");
-            Count(newChecks.Count, "new");
-            Count(fewer.Count, "on fewer pages");
-            Count(more.Count, "on more");
             html.Append("  <p class=\"note\"><b>Since your last check on ").Append(on).Append(":</b> ").AppendText(ScoreSince(since.Comparison.Score, on))
-                .Append(counts.Count == 0 ? "No problem was fixed, and none is new." : Sentence(string.Join(", ", counts)) + ".")
+                .Append(ChangeCounts(fixedChecks.Count, newChecks.Count, fewer.Count, more.Count))
                 .Append(caution is null ? string.Empty : " ").AppendText(caution ?? string.Empty).Append("</p>\n\n");
             return;
         }
 
-        html.Append("  <h2>Since your last check on ").Append(on).Append("</h2>\n  <p class=\"lead\">").AppendText(ScoreSince(since.Comparison.Score, on))
+        html.Append("  <h2 id=\"since-last-check\">Since your last check on ").Append(on).Append("</h2>\n  <p class=\"lead\">").AppendText(ScoreSince(since.Comparison.Score, on))
             .Append(fixedChecks.Count + newChecks.Count + fewer.Count + more.Count == 0 ? "The same problems were found as then, on as many pages." : string.Empty)
             .Append(caution is null ? string.Empty : " ").AppendText(caution ?? string.Empty).Append("</p>\n");
         SinceGroup(html, "Fixed", fixedChecks, change => $"{CountOf(change.Then!.Value, change.Check)} on {on}; none now.", _ => "passed");
         SinceGroup(html, "New", newChecks, change => $"{CountOf(change.Now!.Value, change.Check)} now; none on {on}.", change => MarkOf(change.Check.Severity));
-        SinceGroup(html, "Fewer", fewer, change => $"{CountOf(change.Now!.Value, change.Check)} now; {Number(change.Then!.Value)} on {on}.", change => MarkOf(change.Check.Severity));
-        SinceGroup(html, "More", more, change => $"{CountOf(change.Now!.Value, change.Check)} now; {Number(change.Then!.Value)} on {on}.", change => MarkOf(change.Check.Severity));
+        SinceGroup(html, "Got better", fewer, change => $"{CountOf(change.Now!.Value, change.Check)} now; {Number(change.Then!.Value)} on {on}.", change => MarkOf(change.Check.Severity));
+        SinceGroup(html, "Got worse", more, change => $"{CountOf(change.Now!.Value, change.Check)} now; {Number(change.Then!.Value)} on {on}.", change => MarkOf(change.Check.Severity));
         Rechecked(html, model);
         html.Append('\n');
     }
@@ -502,9 +579,6 @@ internal static class ReportDocument
         return $"The two checks didn’t read the site alike ({string.Join(", ", what)}), so a page only one of them read isn’t compared.";
     }
 
-    /// <summary>A sentence's first letter as a capital.</summary>
-    private static string Sentence(string text) => text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text[1..];
-
     // ---- 3. Fix these first.
 
     private static void FixFirst(StringBuilder html, ReportModel model, bool full)
@@ -523,7 +597,7 @@ internal static class ReportDocument
         if (first.Count == 0)
         {
             var notices = model.ChecksOf(IssueSeverity.Notice);
-            html.Append("  <h2>Nothing to fix</h2>\n  <p class=\"lead\">No serious problem was found, and nothing worth fixing.");
+            html.Append("  <h2 id=\"fix-first\">Nothing to fix</h2>\n  <p class=\"lead\">No serious problem was found, and nothing worth fixing.");
             if (notices > 0)
             {
                 html.Append(notices == 1 ? " 1 thing is worth a look: it is" : $" {notices} things are worth a look: they are")
@@ -536,7 +610,8 @@ internal static class ReportDocument
         }
 
         // As jobs, as Simple's Summary has them: one a fix of another clears entirely is under that one, unnumbered.
-        html.Append("  <h2>Fix these first</h2>\n  <ol class=\"first\">\n");
+        // In the full report each leads to its section; the summary page has no sections to lead to.
+        html.Append("  <h2 id=\"fix-first\">Fix these first</h2>\n  <ol class=\"first\">\n");
         foreach (var problem in first)
         {
             var folded = problem.Along is not null;
@@ -551,7 +626,8 @@ internal static class ReportDocument
                 Mark(html, MarkOf(problem.Check.Severity), 14);
             }
 
-            html.Append("<span class=\"first__title\">").AppendText(problem.Words.Title).Append("</span><span class=\"first__count\">")
+            html.Append(full ? $"<a class=\"first__title\" href=\"#{SectionId(problem.Check)}\">" : "<span class=\"first__title\">").AppendText(problem.Words.Title)
+                .Append(full ? "</a>" : "</span>").Append("<span class=\"first__count\">")
                 .Append(problem.Line is { } line ? CountOf(line, problem.Check) : CountOf(problem.Count, problem.Check)).Append("</span>")
                 .Append(!folded ? string.Empty
                     : five.Contains(problem.Along!) ? "<span class=\"first__along\">Fixed along with the problem above</span>"
@@ -579,12 +655,12 @@ internal static class ReportDocument
 
     // ---- 4. How the score is worked out.
 
-    private static void HowTheScoreIsWorkedOut(StringBuilder html, ReportModel model)
+    private static void HowTheScoreIsWorkedOut(StringBuilder html, ReportModel model, bool full)
     {
         var score = model.Score!;
         // The whole-site figure is said where a fault of the whole site is on the list: its 60 would otherwise have no explanation.
         var siteWide = score.Lines.Any(line => line.Unit == ScoreUnit.Site && line.Severity == IssueSeverity.Error);
-        html.Append("  <h2>How the score is worked out</h2>\n  <p class=\"lead\">The score starts at 100, and each check that found a problem takes points off: up to 10 for a serious problem ")
+        html.Append("  <h2 id=\"score\">How the score is worked out</h2>\n  <p class=\"lead\">The score starts at 100, and each check that found a problem takes points off: up to 10 for a serious problem ")
             .Append(siteWide ? "(60 if it is a fault of the whole site) " : string.Empty)
             .Append("and up to 4 for one worth fixing, by how much of the site it affects. Things worth a look take nothing off.</p>\n")
             .Append("  <table class=\"score-table\">\n    <thead><tr><th scope=\"col\">What took points off</th><th scope=\"col\">How much of the site</th><th scope=\"col\" class=\"num\">Points</th></tr></thead>\n    <tbody>\n");
@@ -597,7 +673,8 @@ internal static class ReportDocument
 
             html.Append("      <tr><td>");
             Mark(html, MarkOf(problem.Check.Severity), 12);
-            html.Append(' ').AppendText(problem.Words.Title).Append("</td><td>").Append(HowMuch(line, problem.Check))
+            html.Append(' ').Append(full ? $"<a href=\"#{SectionId(problem.Check)}\">" : string.Empty).AppendText(problem.Words.Title).Append(full ? "</a>" : string.Empty)
+                .Append("</td><td>").Append(HowMuch(line, problem.Check))
                 .Append("</td><td class=\"num\">−").Append(line.Points).Append("</td></tr>\n");
         }
 
@@ -668,8 +745,8 @@ internal static class ReportDocument
             return;
         }
 
-        html.Append("  <div class=\"new-page\">\n  <h2>What to fix</h2>\n  <p class=\"lead\">Every check that found something: what’s wrong, why it matters, how to fix it, and the first pages ")
-            .Append("it’s on. The full lists are in the spreadsheet that goes with this report, on the sheet with the same number.</p>\n");
+        html.Append("  <div class=\"new-page\">\n  <h2 id=\"what-to-fix\">What to fix</h2>\n  <p class=\"lead\">Every check that found something: what’s wrong, why it matters, how to fix it, and where ")
+            .Append("to fix it. A long list shows its first pages here, and all of them in the spreadsheet that goes with this report, on the sheet with the same number.</p>\n");
         Group(html, model, options, IssueSeverity.Error, "These stop pages working or being found. Fix them first.");
         Group(html, model, options, IssueSeverity.Warning, "These hold pages back. Fix them when the serious ones are done.");
         Group(html, model, options, IssueSeverity.Notice, "Often fine as they are. They don’t change the score: read each one and decide.");
@@ -684,29 +761,37 @@ internal static class ReportDocument
             return;
         }
 
-        html.Append("    <h3 class=\"group-title\">");
+        html.Append("    <h3 class=\"group-title\" id=\"").Append(GroupId(severity)).Append("\">");
         Mark(html, MarkOf(severity), 16);
         html.Append(Severity(severity)).Append(" <span>").Append(problems.Count).Append("</span></h3>\n    <p class=\"lead lead--group muted\">").Append(lead).Append("</p>\n");
         foreach (var problem in problems)
         {
-            Problem(html, model, problem, severity == IssueSeverity.Notice ? options.LookExamples : options.Examples);
+            Problem(html, model, problem, severity == IssueSeverity.Notice ? options.LookExamples : options.Examples, options.Wording);
         }
     }
 
     /// <summary>A problem's section: one folded under its job (<see cref="ReportProblem.Along"/>) follows it, unnumbered, and says so.</summary>
-    private static void Problem(StringBuilder html, ReportModel model, ReportProblem problem, int listed)
+    private static void Problem(StringBuilder html, ReportModel model, ReportProblem problem, int listed, ReportWording wording)
     {
         // Things worth a look set their text beside their examples, to save paper.
         var compact = problem.Check.Severity == IssueSeverity.Notice;
         var line = problem.Line;
         var along = problem.Along is not null;
         html.Append("    <article class=\"problem").Append(compact ? " problem--compact" : string.Empty).Append(along ? " problem--along" : string.Empty)
+            .Append("\" id=\"").Append(SectionId(problem.Check)).Append("\" data-check=\"").Append(problem.Check.Id)
             .Append(compact ? "\">\n      " : "\">\n      <div class=\"keep\">");
 
         html.Append("<h3>");
         Mark(html, MarkOf(problem.Check.Severity), 14);
-        html.Append("<span>").Append(along ? string.Empty : $"{problem.Number}. ").AppendText(problem.Words.Title).Append("</span><span class=\"problem__tech\">").AppendText(problem.Check.Title)
-            .Append(" · ").Append(Technical(problem.Check.Severity)).Append("</span></h3>\n      <p class=\"problem__meta\"><b>")
+        // The comment is where the app's preview puts its own way into the problem ("Open in What to fix"): a saved file
+        // and paper have no control that leads nowhere. A check's id is the catalog's, never a site's text.
+        html.Append("<span>").Append(along ? string.Empty : $"{problem.Number}. ").AppendText(problem.Words.Title).Append("</span><!--").Append(OPEN_MARK).Append(problem.Check.Id).Append("-->");
+        if (wording == ReportWording.Technical)
+        {
+            html.Append("<span class=\"problem__tech\">").AppendText(problem.Check.Title).Append(" · ").Append(Technical(problem.Check.Severity)).Append("</span>");
+        }
+
+        html.Append("</h3>\n      <p class=\"problem__meta\"><b>")
             .Append(line is null ? CountOf(problem.Count, problem.Check) : CountOf(line, problem.Check)).Append("</b>");
         if (line is not null)
         {
@@ -761,9 +846,12 @@ internal static class ReportDocument
 
         OneFix(html, model, problem);
         html.Append(compact ? "</div><div>" : "</div>\n      <div class=\"keep\">");
-        Examples(html, model, problem, listed, compact);
+        Examples(html, model, problem, listed, compact, wording);
         html.Append(compact ? "</div></div>\n    </article>\n" : "</div>\n    </article>\n");
     }
+
+    /// <summary>What opens the comment in a problem's heading that the app's preview replaces with its link into the problem, before the check's id.</summary>
+    internal const string OPEN_MARK = "si:open ";
 
     /// <summary>
     /// "One fix clears 264 of these 265 pages", with what they share. A check of addresses counts addresses, which lead
@@ -816,7 +904,7 @@ internal static class ReportDocument
         html.Append("</p>");
     }
 
-    private static void Examples(StringBuilder html, ReportModel model, ReportProblem problem, int listed, bool compact)
+    private static void Examples(StringBuilder html, ReportModel model, ReportProblem problem, int listed, bool compact, ReportWording wording)
     {
         var rows = problem.Examples.Take(listed).ToList();
         var more = problem.Count - rows.Count;
@@ -826,79 +914,112 @@ internal static class ReportDocument
             return;
         }
 
+        var plain = wording == ReportWording.Plain;
+        var check = problem.Check;
         var caption = more > 0 ? $"The first {rows.Count} of {Number(problem.Count)}" : problem.Count == 1 ? "Where it is" : $"All {problem.Count}";
-        var isUrl = problem.Check.Subject == IssueSubject.Url;
-        var whereFound = problem.Check.References is IssueReferences.Sources or IssueReferences.Targets;
+        var sources = check.References == IssueReferences.Sources;
+        var targets = check.References == IssueReferences.Targets;
+        var linkFirst = sources && !compact && WhereFoundColumns.FixedAtTheLink(check);
+        if (linkFirst)
+        {
+            // The links on one page together, the pages in the order the list first has them: one page is one visit to the editor.
+            rows = [.. rows.GroupBy(row => row.FoundOn?.Sources.FirstOrDefault()?.Url ?? row.Url, StringComparer.Ordinal).SelectMany(page => page)];
+        }
 
         // A check of the site's own files names them where its row would name the home page it's reported on.
         var files = problem.Files;
-        html.Append(compact ? "<table class=\"examples examples--one\">" : whereFound ? "<table class=\"examples examples--where\">" : "<table class=\"examples\">")
+        var subject = files is not null ? "File" : check.Subject == IssueSubject.Url ? "Address" : targets && plain ? "Page to edit" : "Page";
+        html.Append(compact ? "<table class=\"examples examples--one\">"
+                : linkFirst ? "<table class=\"examples examples--link\">"
+                : sources || targets ? "<table class=\"examples examples--where\">"
+                : "<table class=\"examples\">")
             .Append("\n          <caption>").Append(caption).Append("</caption>\n");
         if (!compact)
         {
-            html.Append("          <thead><tr><th scope=\"col\">").Append(files is not null ? "File" : isUrl ? "Address" : "Page").Append("</th><th scope=\"col\">What was found</th>")
-                .Append(whereFound ? $"<th scope=\"col\">{WhereTitle(problem.Check)}</th>" : string.Empty).Append("</tr></thead>\n");
+            string[] headings = linkFirst ? plain ? ["Page to edit", "It leads to", "What’s wrong"] : ["Where to fix it", subject, "What was found"]
+                : sources ? [subject, "What was found", plain ? "Where it’s linked from" : "Where to fix it"]
+                : targets ? [subject, "What was found", WhereTitle(check, plain)]
+                : [subject, "What was found"];
+            html.Append("          <thead><tr>");
+            foreach (var heading in headings)
+            {
+                html.Append("<th scope=\"col\">").Append(heading).Append("</th>");
+            }
+
+            html.Append("</tr></thead>\n");
         }
 
         html.Append("          <tbody>");
         foreach (var row in rows)
         {
-            html.Append("<tr><td>");
-            if (files is not null)
+            void Subject()
             {
+                if (files is null)
+                {
+                    Url(html, model, row.Url);
+                    return;
+                }
+
                 for (var index = 0; index < files.Count; index++)
                 {
                     html.Append(index == 0 ? string.Empty : "<br>");
                     Url(html, model, files[index]);
                 }
             }
-            else
-            {
-                Url(html, model, row.Url);
-            }
-            if (compact)
-            {
-                if (row.Detail is not null || row.RelatedUrl is not null)
-                {
-                    html.Append("<span class=\"found\">");
-                    Found(html, model, row);
-                    html.Append("</span>");
-                }
 
+            // Where to fix it: the pages that hold the links to an address, or what a page's issue names on it.
+            var where = sources ? row.FoundOn is not null : targets && row.Named.Count > 0;
+            void Where()
+            {
                 if (row.FoundOn is { } foundOn)
                 {
-                    html.Append("<span class=\"found\">");
-                    WhereFound(html, model, foundOn);
-                    html.Append("</span>");
+                    WhereFound(html, model, foundOn, plain, linkFirst, lead: compact);
                 }
                 else if (row.Named.Count > 0)
                 {
+                    Named(html, model, check, row, plain);
+                }
+            }
+
+            html.Append("<tr><td>");
+            if (compact)
+            {
+                Subject();
+                if (row.Detail is not null || row.RelatedUrl is not null)
+                {
                     html.Append("<span class=\"found\">");
-                    Named(html, model, problem.Check, row);
+                    Found(html, model, check, row, plain);
                     html.Append("</span>");
                 }
 
-                html.Append("</td></tr>");
+                if (where)
+                {
+                    html.Append("<span class=\"found\">");
+                    Where();
+                    html.Append("</span>");
+                }
+            }
+            else if (linkFirst)
+            {
+                Where();
+                html.Append("</td><td>");
+                Subject();
+                html.Append("</td><td>");
+                Found(html, model, check, row, plain);
             }
             else
             {
+                Subject();
                 html.Append("</td><td>");
-                Found(html, model, row);
-                if (whereFound)
+                Found(html, model, check, row, plain);
+                if (sources || targets)
                 {
                     html.Append("</td><td>");
-                    if (row.FoundOn is { } foundOn)
-                    {
-                        WhereFound(html, model, foundOn);
-                    }
-                    else if (row.Named.Count > 0)
-                    {
-                        Named(html, model, problem.Check, row);
-                    }
+                    Where();
                 }
-
-                html.Append("</td></tr>");
             }
+
+            html.Append("</td></tr>");
         }
 
         html.Append("</tbody>\n        </table>");
@@ -909,120 +1030,291 @@ internal static class ReportDocument
     }
 
     /// <summary>
-    /// The heading of the column that says where to fix it: the pages linking to an address; but for a page's canonical or
+    /// The heading of the column that says where to fix it: what to change on the page; but for a page's canonical or
     /// hreflang, what it names, as the fix is the page's own tag, not that URL.
     /// </summary>
-    private static string WhereTitle(IssueDefinition check) => (check.References, check.Category) switch
+    private static string WhereTitle(IssueDefinition check, bool plain) => (check.References, check.Category) switch
     {
         (IssueReferences.Targets, IssueCategory.Canonicals) => "Main address it names",
         (IssueReferences.Targets, IssueCategory.Hreflang) => "Language versions it names",
-        _ => "Where to fix it"
+        _ => plain ? "What to change on it" : "Where to fix it"
     };
 
-    /// <summary>What was found on a page, the check's evidence for it, and the other URL it's about (where the URLs it names aren't listed beside it).</summary>
-    private static void Found(StringBuilder html, ReportModel model, ReportExample row)
+    /// <summary>
+    /// What was found on a page, the check's evidence for it, and the other URL it's about (where the URLs it names aren't
+    /// listed beside it). In plain words the other URL is named for what it is; a chain of forwards says where it ends itself.
+    /// </summary>
+    private static void Found(StringBuilder html, ReportModel model, IssueDefinition check, ReportExample row, bool plain)
     {
+        var said = false;
+        void Next()
+        {
+            html.Append(said ? " · " : string.Empty);
+            said = true;
+        }
+
         if (row.Detail is { } detail)
         {
+            Next();
             html.AppendText(HtmlText.Cut(detail, SHOWN_DETAIL));
         }
 
-        for (var index = 0; index < row.Evidence.Count; index++)
+        foreach (var evidence in row.Evidence)
         {
-            html.Append(row.Detail is null && index == 0 ? string.Empty : " · ").AppendText(HtmlText.Cut(row.Evidence[index], SHOWN_DETAIL));
+            Next();
+            html.AppendText(HtmlText.Cut(evidence, SHOWN_DETAIL));
         }
 
-        if (row.RelatedUrl is { } related && row.Named.Count == 0)
+        if (row.RelatedUrl is not { } related || row.Named.Count > 0 || (plain && (check.Category == IssueCategory.Redirects || check == IssueCatalog.CANONICAL_ON_REDIRECT)))
         {
-            html.Append(row.Detail is null ? "→ " : " → ");
-            Url(html, model, related);
-            if (row.Targets is > 1 and var targets)
-            {
-                html.Append(" and ").Append(Number(targets - 1)).Append(targets == 2 ? " other" : " others");
-            }
+            return;
+        }
+
+        if (plain)
+        {
+            Next();
+            html.Append(check.Subject == IssueSubject.Page ? "The other page: " : "The other address: ");
+        }
+        else
+        {
+            html.Append(said ? " → " : "→ ");
+        }
+
+        Url(html, model, related);
+        if (row.Targets is > 1 and var targets)
+        {
+            html.Append(" and ").Append(Number(targets - 1)).Append(targets == 2 ? " other" : " others");
         }
     }
 
     /// <summary>
-    /// What a page's issue names, so a reader knows what to change on it: each of the first few URLs with what it is and how
-    /// the page links to it ("/img/hero.jpg (200; 1.8 MB, image/jpeg, 4000×3000 px, shown at 400×300; content, alt “Sofa”)"),
-    /// then how many more.
+    /// What a page's issue names, so a reader knows what to change on it: each of the first few URLs on a line of its own,
+    /// then how many more. In plain words the element on the page leads (the link's words and where on the page it is),
+    /// then where it leads and what's wrong there (<see cref="PlainTarget"/>); in technical ones the URL with what it is and
+    /// how the page links to it ("/img/hero.jpg (200; 1.8 MB, image/jpeg, 4000×3000 px, shown at 400×300; content, alt “Sofa”)").
     /// </summary>
-    private static void Named(StringBuilder html, ReportModel model, IssueDefinition check, ReportExample row)
+    private static void Named(StringBuilder html, ReportModel model, IssueDefinition check, ReportExample row, bool plain)
     {
-        for (var index = 0; index < row.Named.Count; index++)
+        foreach (var target in row.Named)
         {
-            var target = row.Named[index];
-            html.Append(index == 0 ? string.Empty : ", ");
-            Url(html, model, WhereFoundColumns.TargetUrl(check, target));
-            if (WhereFoundColumns.TargetFacts(check, target) is { Length: > 0 } facts)
+            html.Append("<span class=\"where\">");
+            if (plain)
             {
-                html.Append(" (").AppendText(HtmlText.Cut(facts, SHOWN_DETAIL)).Append(')');
+                PlainTarget(html, model, check, target, target.Url == row.Url);
             }
+            else
+            {
+                Url(html, model, WhereFoundColumns.TargetUrl(check, target));
+                if (WhereFoundColumns.TargetFacts(check, target) is { Length: > 0 } facts)
+                {
+                    html.Append(" (").AppendText(HtmlText.Cut(facts, SHOWN_DETAIL)).Append(')');
+                }
+            }
+
+            html.Append("</span>");
         }
 
         if (row.Targets is { } total && total > row.Named.Count)
         {
             var more = total - row.Named.Count;
-            html.Append(" and ").Append(Number(more)).Append(more == 1 ? " other" : " others");
+            html.Append("<span class=\"where muted\">").Append(plain ? ReportPlainWords.Sentence(ReportPlainWords.Others(check.Id, more)) : $"and {Number(more)} {(more == 1 ? "other" : "others")}").Append("</span>");
         }
     }
 
     /// <summary>
-    /// Where a URL other pages refer to is found, so a reader knows what to change: the pages linking to it (the first few,
-    /// then how many more, each with where on it the link is and its text), the sitemaps listing it, or that it's the
-    /// address the check started from.
+    /// One URL a page's issue names, as a site owner needs it to make the fix: the thing on the page first ("The link that
+    /// says “Buy Now”, in the main content"), then where it leads and what's wrong there ("It leads to /old/, which is
+    /// missing (404 Not Found)"). An image is named by its alt text, then its file with what the check measured. A
+    /// canonical, a language version or a share image is the address itself, with how it answered.
     /// </summary>
-    private static void WhereFound(StringBuilder html, ReportModel model, UrlFoundOn foundOn)
+    private static void PlainTarget(StringBuilder html, ReportModel model, IssueDefinition check, IssueTarget target, bool itself)
+    {
+        var facts = check.TargetFacts;
+        var url = WhereFoundColumns.TargetUrl(check, target);
+        var position = target.Position;
+        var loaded = target.Kind is LinkKind.Script or LinkKind.Stylesheet or LinkKind.Iframe or LinkKind.Media or LinkKind.Icon;
+        if (target.Kind == LinkKind.Image || (check.Category == IssueCategory.Images && target.Kind is null or LinkKind.Image))
+        {
+            html.AppendText(ReportPlainWords.PictureWords(target, position, withLength: check == IssueCatalog.IMAGE_ALT_TOO_LONG)).Append("<span class=\"where__what\">");
+            Url(html, model, url);
+            List<string> file = [];
+            if (ReportPlainWords.ImageFile(facts.Contains("sizeBytes") ? target.Facts?.SizeBytes : null, facts.Contains("pixelWidth") ? target.Facts?.PixelWidth : null,
+                    facts.Contains("pixelHeight") ? target.Facts?.PixelHeight : null) is { } said)
+            {
+                file.Add(said);
+            }
+
+            var aboutAlt = check == IssueCatalog.IMAGE_MISSING_ALT || check == IssueCatalog.IMAGE_ALT_TOO_LONG || check == IssueCatalog.IMAGE_ALT_UNHELPFUL;
+            if (facts.Contains("img") && target.Img is { } img && !aboutAlt && (check == IssueCatalog.IMAGE_MISSING_DIMENSIONS || !string.IsNullOrWhiteSpace(img.Width) || !string.IsNullOrWhiteSpace(img.Height)))
+            {
+                file.Add(ReportPlainWords.ShownAt(img.Width, img.Height));
+            }
+
+            foreach (var fact in file)
+            {
+                html.Append(" · ").AppendText(fact);
+            }
+
+            Answer(html, model, check, target);
+            html.Append("</span>");
+            return;
+        }
+
+        if (target.Kind is null or LinkKind.Hyperlink)
+        {
+            html.AppendText(ReportPlainWords.LinkWords(target.Kind, target.Text, position, target.Flags) ?? "A link").Append("<span class=\"where__what\">It leads to ");
+            if (itself)
+            {
+                html.Append("this same page");
+            }
+            else
+            {
+                Url(html, model, url);
+            }
+
+            Answer(html, model, check, target);
+            html.Append("</span>");
+            return;
+        }
+
+        html.Append(loaded ? "It loads " : target.Kind == LinkKind.SocialImage ? "Its share image is " : "It names ");
+        Url(html, model, url);
+        if (loaded)
+        {
+            html.Append(" (").Append(ReportPlainWords.LoadedKind(target.Kind)).Append(')').Append(ReportPlainWords.Position(position) is { } place ? $", {place}" : string.Empty);
+        }
+        else if (target.Kind == LinkKind.Hreflang && facts.Contains("text") && !string.IsNullOrWhiteSpace(target.Text))
+        {
+            html.Append(", as ").AppendText(ReportPlainWords.Quote(target.Text, 20));
+        }
+
+        if (ReportPlainWords.ImageFile(facts.Contains("sizeBytes") ? target.Facts?.SizeBytes : null, facts.Contains("pixelWidth") ? target.Facts?.PixelWidth : null,
+                facts.Contains("pixelHeight") ? target.Facts?.PixelHeight : null) is { } image)
+        {
+            html.Append(" · ").AppendText(image);
+        }
+
+        Answer(html, model, check, target);
+    }
+
+    /// <summary>
+    /// What an address a page names is, after it: how it answered when that isn't "works" (", which is missing (404 Not
+    /// Found)"), where a forwarding address ends, why it can't appear in search results, how long it took. Only what the
+    /// check is about (its <see cref="IssueDefinition.TargetFacts"/>).
+    /// </summary>
+    private static void Answer(StringBuilder html, ReportModel model, IssueDefinition check, IssueTarget target)
+    {
+        var facts = check.TargetFacts;
+        if (facts.Contains("final") && target.Facts?.Final is { } final)
+        {
+            if (final.Loop)
+            {
+                html.Append(", which forwards round in a loop");
+            }
+            else
+            {
+                html.Append(", which forwards to ");
+                Url(html, model, final.Url);
+                html.Append(final.Hops > 1 ? $" in {Number(final.Hops)} steps" : string.Empty).Append(", which ").AppendText(ReportPlainWords.Status(final.StatusCode, final.Outcome));
+            }
+        }
+        else if (facts.Contains("statusCode") && target.StatusCode is null or >= 300)
+        {
+            html.Append(", which ").AppendText(ReportPlainWords.Status(target.StatusCode, target.Outcome));
+        }
+
+        if (facts.Contains("redirectKind") && target.Facts?.RedirectKind is { } kinds)
+        {
+            html.Append(". ").AppendText(ReportPlainWords.RedirectKind(kinds));
+        }
+
+        if (facts.Contains("indexability") && target.Facts?.Indexability is { } reason and not IndexabilityReason.Redirected && ReportPlainWords.NotInSearch(reason) is { } why)
+        {
+            html.Append(". ").AppendText(why);
+        }
+
+        if (facts.Contains("canonical") && target.Facts?.Canonical is { } canonical)
+        {
+            html.Append(". Its main address is ");
+            Url(html, model, canonical.Url);
+        }
+
+        if (facts.Contains("responseMs") && target.Facts?.ResponseMs is { } responseMs)
+        {
+            html.Append(". It took ").Append((responseMs / 1000d).ToString("0.0", CultureInfo.InvariantCulture)).Append(" seconds to open when it was checked");
+        }
+
+        if (facts.Contains("links") && target.Links > 1)
+        {
+            html.Append(" · ").Append(Number(target.Links)).Append(" links");
+        }
+    }
+
+    /// <summary>
+    /// Where a URL other pages refer to is found, so a reader knows what to change: each of the first pages that link to
+    /// it on a line of its own, as a link, with the link's words and where on the page it is under it; then how many more
+    /// pages, the sitemaps listing it, or that it's the address the check started from.
+    /// </summary>
+    /// <param name="pageToEdit">The pages lead the row, as where the fix is made: an address no page links to says so before where else it is found.</param>
+    /// <param name="lead">The pages are said to be where it's linked from ("Linked from /a/"): for a row with no column heading to say so.</param>
+    private static void WhereFound(StringBuilder html, ReportModel model, UrlFoundOn foundOn, bool plain, bool pageToEdit, bool lead = false)
     {
         List<LinkRow> pages = [.. foundOn.Sources.DistinctBy(source => source.Url, StringComparer.Ordinal)];
-        List<Action> parts = [];
+        var lines = 0;
+        void Line(Action write, bool muted = false)
+        {
+            html.Append(muted ? "<span class=\"where muted\">" : "<span class=\"where\">");
+            write();
+            html.Append("</span>");
+            lines++;
+        }
+
         if (foundOn.Pages > 0)
         {
-            parts.Add(() =>
+            foreach (var page in pages)
             {
-                html.Append("Linked from ").Append(foundOn.Pages == 1 ? "1 page" : $"{Number(foundOn.Pages)}{(foundOn.PagesExact ? string.Empty : "+")} pages").Append(": ");
-                for (var index = 0; index < pages.Count; index++)
+                Line(() =>
                 {
-                    html.Append(index == 0 ? string.Empty : ", ");
-                    Url(html, model, pages[index].Url);
-                    if (WhereFoundColumns.Place(pages[index]) is { } place)
+                    html.Append(lead ? "Linked from " : string.Empty);
+                    Url(html, model, page.Url);
+                    if ((plain ? ReportPlainWords.LinkWords(page.Kind, page.Text, page.Position, page.Flags) : WhereFoundColumns.Place(page)) is { } place)
                     {
-                        html.Append(" (").AppendText(HtmlText.Cut(place, SHOWN_DETAIL)).Append(')');
+                        html.Append("<span class=\"where__what\">").AppendText(HtmlText.Cut(place, SHOWN_DETAIL)).Append("</span>");
                     }
-                }
+                });
+            }
 
-                if (foundOn.Pages > pages.Count)
-                {
-                    html.Append(" and ").Append(Number(foundOn.Pages - pages.Count)).Append(" more");
-                }
-            });
+            if (foundOn.Pages > pages.Count)
+            {
+                var more = $"{Number(foundOn.Pages - pages.Count)}{(foundOn.PagesExact ? string.Empty : "+")}";
+                var one = foundOn.Pages - pages.Count == 1 && foundOn.PagesExact;
+                Line(() => html.Append(plain ? one ? "And 1 more page links to it" : $"And {more} more pages link to it" : one ? "and 1 more page" : $"and {more} more pages"), muted: true);
+            }
+        }
+        else if (plain && pageToEdit && (foundOn.Sitemaps.Total > 0 || foundOn.Start))
+        {
+            Line(() => html.Append("No page links to it"));
         }
 
         if (foundOn.Sitemaps.Total > 0)
         {
-            parts.Add(() =>
+            Line(() =>
             {
-                html.Append(foundOn.Sitemaps.Total == 1 ? "Listed in the sitemap " : $"Listed in {Number(foundOn.Sitemaps.Total)} sitemaps, first ");
+                html.Append(plain
+                    ? foundOn.Sitemaps.Total == 1 ? "Listed in your sitemap " : $"Listed in {Number(foundOn.Sitemaps.Total)} of your sitemaps, first "
+                    : foundOn.Sitemaps.Total == 1 ? "Listed in the sitemap " : $"Listed in {Number(foundOn.Sitemaps.Total)} sitemaps, first ");
                 Url(html, model, foundOn.Sitemaps.Sitemaps[0].Url);
             });
         }
 
         if (foundOn.Start)
         {
-            parts.Add(() => html.Append("The address the check started from"));
+            Line(() => html.Append(plain ? "It’s the address the check started from" : "The address the check started from"));
         }
 
-        if (parts.Count == 0)
+        if (lines == 0)
         {
-            html.Append("No page read links to it");
-            return;
-        }
-
-        for (var index = 0; index < parts.Count; index++)
-        {
-            html.Append(index == 0 ? string.Empty : ". ");
-            parts[index]();
+            html.Append(plain ? "No page links to it" : "No page read links to it");
         }
     }
 
@@ -1057,7 +1349,7 @@ internal static class ReportDocument
             return;
         }
 
-        html.Append("  <h2>What couldn’t be checked</h2>\n  <p class=\"lead\">").Append(model.Skipped.Count == 1 ? "This check didn’t run" : "These checks didn’t run")
+        html.Append("  <h2 id=\"not-checked\">What couldn’t be checked</h2>\n  <p class=\"lead\">").Append(model.Skipped.Count == 1 ? "This check didn’t run" : "These checks didn’t run")
             .Append(", so the site may have problems ").Append(model.Skipped.Count == 1 ? "it" : "they").Append(" would have found.</p>\n  <ul class=\"plain-list\">\n");
         foreach (var skipped in model.Skipped)
         {
@@ -1084,7 +1376,7 @@ internal static class ReportDocument
             return;
         }
 
-        html.Append("  <h2>What was checked and found nothing wrong</h2>\n  <p class=\"lead\">")
+        html.Append("  <h2 id=\"passed\">What was checked and found nothing wrong</h2>\n  <p class=\"lead\">")
             .Append(model.Passed.Count == 1 ? "1 check ran and found nothing wrong." : $"{model.Passed.Count} checks ran and found nothing wrong.").Append("</p>\n");
 
         // Two columns of categories, a pair to a row, so a page can break between rows.
@@ -1113,10 +1405,10 @@ internal static class ReportDocument
 
     // ---- 8. About this check.
 
-    private static void AboutThisCheck(StringBuilder html, ReportModel model)
+    private static void AboutThisCheck(StringBuilder html, ReportModel model, ReportWording wording)
     {
         var zone = model.TimeZone;
-        html.Append("  <h2>About this check</h2>\n  <dl class=\"facts\">\n    <dt>Started from</dt><dd class=\"mono\">").AppendText(HtmlText.Cut(model.StartUrl, SHOWN_URL)).Append("</dd>\n");
+        html.Append("  <h2 id=\"about\">About this check</h2>\n  <dl class=\"facts\">\n    <dt>Started from</dt><dd class=\"mono\">").AppendText(HtmlText.Cut(model.StartUrl, SHOWN_URL)).Append("</dd>\n");
 
         html.Append("    <dt>When</dt><dd>").Append(Date(model.StartedAt, zone)).Append(", ");
         if (model.FinishedAt is { } finished)
@@ -1176,9 +1468,34 @@ internal static class ReportDocument
                 .Append(". Other pages are as the check found them on ").Append(Date(model.StartedAt, zone)).Append(".</dd>\n");
         }
 
+        var named = wording == ReportWording.Plain && model.Problems.Count > 0;
         html
-            .Append("    <dt>The words in this report</dt><dd>Serious is the checks’ “Error”, Worth fixing is “Warning” and Worth a look is “Notice”. An address is a URL.</dd>\n")
-            .Append("  </dl>\n\n");
+            .Append("    <dt>The words in this report</dt><dd>Serious is the checks’ “Error”, Worth fixing is “Warning” and Worth a look is “Notice”. An address is a URL.")
+            .Append(named ? " A developer or an SEO tool knows each problem by another name: they are listed below." : string.Empty)
+            .Append("</dd>\n  </dl>\n");
+        if (named)
+        {
+            TechnicalNames(html, model);
+        }
+
+        html.Append('\n');
+    }
+
+    /// <summary>
+    /// Each problem's technical name, once, for the developer the report is sent to: in the plain report it isn't beside
+    /// each title, where it was in a client's way ("Internal URL returns 4xx · Error").
+    /// </summary>
+    private static void TechnicalNames(StringBuilder html, ReportModel model)
+    {
+        html.Append("  <table class=\"names\">\n    <caption>What a developer or an SEO tool calls each problem</caption>\n")
+            .Append("    <thead><tr><th scope=\"col\">In this report</th><th scope=\"col\">Technical name</th><th scope=\"col\">Level</th></tr></thead>\n    <tbody>\n");
+        foreach (var problem in model.Problems)
+        {
+            html.Append("      <tr><td>").Append(problem.Along is null ? $"{problem.Number}. " : string.Empty).Append("<a href=\"#").Append(SectionId(problem.Check)).Append("\">")
+                .AppendText(problem.Words.Title).Append("</a></td><td>").AppendText(problem.Check.Title).Append("</td><td>").Append(Technical(problem.Check.Severity)).Append("</td></tr>\n");
+        }
+
+        html.Append("    </tbody>\n  </table>\n");
     }
 
     /// <summary>What a crawl that didn't finish needs, after how it stands.</summary>

@@ -94,7 +94,11 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
             var plain = PlainLimits.Fill(check.Plain!, settings);
             var line = score.Lines.Single(each => each.CheckId == check.Id);
             Assert.Equal(inReport[index].Folded ? plain.Title : $"{inReport[index].Number}. {plain.Title}", problems[index].QuerySelector("h3 > span")!.TextContent);
-            Assert.Equal($"{check.Title} · {check.Severity}", problems[index].QuerySelector(".problem__tech")!.TextContent);
+
+            // In plain words (the default) the check's technical name isn't beside the title, in a client's way: it is listed
+            // once under About this check. Its section says which check it is, for the "Fix these first" list and the app.
+            Assert.Null(problems[index].QuerySelector(".problem__tech"));
+            Assert.Equal(($"problem-{check.Id}", check.Id), (problems[index].Id, problems[index].GetAttribute("data-check")));
 
             // A check reported once for the whole site says so: "1 of 240 pages" would say the fault is one page's.
             var share = check.ReportedOnce
@@ -115,15 +119,23 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
 
             // They are the check's first rows, in the order its list has them (by importance), each linked to its own address;
             // a check of the site's files (reported once, on the home page) names its first file instead.
+            // A missing address leads with the page that holds the link to it (the page to edit), and keeps one page's links
+            // together: its own address is the second cell's, and the rows are the list's first, whatever their order.
             var files = check.About is null ? null : IssueFileReader.Read(crawl.Path)!.Checks.GetValueOrDefault(check.Id);
-            Assert.Equal(
-                files is { Count: > 0 } ? [files[0].Url] : FirstRows(check.Id, most).Select(row => (string)row.Values[1]!),
-                problems[index].QuerySelectorAll(".examples tbody tr").Select(row => row.QuerySelector("td .mono a")!.GetAttribute("href")));
+            var linkFirst = check == IssueCatalog.INTERNAL_CLIENT_ERROR;
+            var addresses = problems[index].QuerySelectorAll(".examples tbody tr").Select(row => row.QuerySelector(linkFirst ? "td:nth-child(2) .mono a" : "td .mono a")!.GetAttribute("href")!).ToList();
+            IEnumerable<string> expected = files is { Count: > 0 } ? [files[0].Url] : FirstRows(check.Id, most).Select(row => (string)row.Values[1]!);
+            Assert.Equal(linkFirst ? expected.Order(StringComparer.Ordinal) : expected, linkFirst ? addresses.Order(StringComparer.Ordinal) : addresses);
             if (results.Counts[check.Id] > most)
             {
                 Assert.Equal($"And {results.Counts[check.Id] - most:N0} more: the full list is on sheet {inReport[index].Sheet} of the spreadsheet.", problems[index].QuerySelector(".more")!.TextContent);
             }
         }
+
+        // The technical names, once: each problem's plain title, linked to its section, with what a developer calls it.
+        Assert.Equal(
+            inReport.Select(listed => (PlainLimits.Fill(IssueCatalog.Find(listed.Id)!.Plain!, settings).Title, $"#problem-{listed.Id}", IssueCatalog.Find(listed.Id)!.Title, IssueCatalog.Find(listed.Id)!.Severity.ToString())),
+            document.QuerySelectorAll("table.names tbody tr").Select(row => (row.QuerySelector("a")!.TextContent, row.QuerySelector("a")!.GetAttribute("href")!, row.Children[1].TextContent, row.Children[2].TextContent)));
 
         // The first list is the first five problems to fix, under the same numbers: the ones the score says it would be without.
         var first = document.QuerySelectorAll("ol.first li").ToList();
@@ -254,7 +266,7 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
         var whole = Parse(ReportExport.Build(crawl.Path, settings: SETTINGS));
         var document = Parse(ReportExport.Build(crawl.Path, new ReportOptions { HiddenChecks = hidden }, SETTINGS));
 
-        var titles = document.QuerySelectorAll("article.problem .problem__tech").Select(tech => tech.TextContent).ToList();
+        var titles = document.QuerySelectorAll("article.problem").Select(problem => IssueCatalog.Find(problem.GetAttribute("data-check")!)!.Title + " ·").ToList();
         Assert.Equal(order.Count - 2, titles.Count);
         Assert.DoesNotContain(titles, title => title.StartsWith(IssueCatalog.Find(order[1])!.Title + " ·", StringComparison.Ordinal));
         Assert.Equal(whole.QuerySelectorAll(".passed li").Length - 1, document.QuerySelectorAll(".passed li").Length);
@@ -846,7 +858,7 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
         Assert.True(count >= 12, $"{count} flagged.");
 
         var document = Parse(ReportExport.Build(copy, settings: SETTINGS));
-        var problem = document.QuerySelectorAll("article.problem").Single(article => article.QuerySelector(".problem__tech")!.TextContent.StartsWith(IssueCatalog.Find("redirect-chain")!.Title + " ·", StringComparison.Ordinal));
+        var problem = document.QuerySelector("article.problem[data-check=redirect-chain]")!;
         var oneFix = problem.QuerySelector(".onefix")!.TextContent;
         Assert.True(oneFix.StartsWith($"One fix clears {count} of these {count} addresses. They all lead to the same address, /, so ", StringComparison.Ordinal), oneFix);
 
@@ -858,82 +870,264 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
     /// <summary>
     /// The "can I fix it from this?" pass: a check of the site's sitemaps or robots.txt names the file, not the home page it's
     /// reported on; and a check of the canonicals or hreflang a page names says what its column holds, the URL it names,
-    /// as the fix is the page's own tag, not a change to that URL.
+    /// as the fix is the page's own tag, not a change to that URL. The page is "Page to edit" in a site owner's words.
     /// </summary>
     [Fact]
     public void AFileCheckNamesItsFileAndACanonicalsColumnSaysWhatItNames()
     {
-        var document = Parse(ReportExport.Build(crawl.Path, new ReportOptions { Examples = 10, LookExamples = 10 }, SETTINGS));
-        AngleSharp.Dom.IElement Problem(string checkId) => document.QuerySelectorAll("article.problem")
-            .Single(article => article.QuerySelector(".problem__tech")!.TextContent.StartsWith(IssueCatalog.Find(checkId)!.Title + " ·", StringComparison.Ordinal));
+        foreach (var wording in new[] { ReportWording.Plain, ReportWording.Technical })
+        {
+            var document = Parse(ReportExport.Build(crawl.Path, new ReportOptions { Examples = 10, LookExamples = 10, Wording = wording }, SETTINGS));
+            IElement Problem(string checkId) => document.QuerySelector($"article.problem[data-check={checkId}]")!;
+            var page = wording == ReportWording.Plain ? "Page to edit" : "Page";
 
-        var error = Problem("sitemap-error");
-        Assert.Equal(["File", "What was found"], error.QuerySelectorAll(".examples thead th").Select(cell => cell.TextContent));
-        Assert.Equal("/sitemaps/missing.xml", Assert.Single(error.QuerySelectorAll(".examples tbody tr")).QuerySelector("td .mono")!.TextContent);
-        Assert.Equal("/sitemaps/empty.xml", Assert.Single(Problem("sitemap-empty").QuerySelectorAll(".examples tbody tr")).QuerySelector("td .mono")!.TextContent);
+            var error = Problem("sitemap-error");
+            Assert.Equal(["File", "What was found"], error.QuerySelectorAll(".examples thead th").Select(cell => cell.TextContent));
+            Assert.Equal("/sitemaps/missing.xml", Assert.Single(error.QuerySelectorAll(".examples tbody tr")).QuerySelector("td .mono")!.TextContent);
+            Assert.Equal("/sitemaps/empty.xml", Assert.Single(Problem("sitemap-empty").QuerySelectorAll(".examples tbody tr")).QuerySelector("td .mono")!.TextContent);
 
-        Assert.Equal(["Page", "What was found", "Main address it names"], Problem("canonical-broken").QuerySelectorAll(".examples thead th").Select(cell => cell.TextContent));
-        Assert.Equal(["Page", "What was found", "Language versions it names"],
-            Problem("hreflang-broken-target").QuerySelectorAll(".examples thead th").Select(cell => cell.TextContent));
+            Assert.Equal([page, "What was found", "Main address it names"], Problem("canonical-broken").QuerySelectorAll(".examples thead th").Select(cell => cell.TextContent));
+            Assert.Equal([page, "What was found", "Language versions it names"], Problem("hreflang-broken-target").QuerySelectorAll(".examples thead th").Select(cell => cell.TextContent));
+        }
     }
 
     /// <summary>
-    /// A report handed to a developer says where to fix what it lists: each broken address with the pages linking to it
-    /// (the first few, then how many more) and the sitemaps listing it, in a column of its own; and a page linking to
-    /// several broken addresses says how many others there are beside the first.
+    /// The owner's complaint, in the report (the UX audit's S-02, S-11): "people are going to be more interested as to
+    /// where the broken link is". A missing address leads its row with the page that holds the link to it, as a link, then
+    /// the link's words and where on the page it is; then where the link leads, and what's wrong there. One page's links are
+    /// together. In a site owner's words in the plain report, a working SEO's in the technical one.
     /// </summary>
     [Fact]
-    public void AnAddressOtherPagesReferToSaysWhereItIsFound()
+    public void AMissingAddressLeadsWithThePageToEditAndTheLinkOnIt()
     {
-        var document = Parse(ReportExport.Build(crawl.Path, new ReportOptions { Examples = 10, LookExamples = 10 }, SETTINGS));
         var origin = crawl.Server.BaseUri.GetLeftPart(UriPartial.Authority);
-        AngleSharp.Dom.IElement Problem(string checkId) => document.QuerySelectorAll("article.problem")
-            .Single(article => article.QuerySelector(".problem__tech")!.TextContent.StartsWith(IssueCatalog.Find(checkId)!.Title + " ·", StringComparison.Ordinal));
+        var ids = FirstRows("internal-client-error", 10).ToDictionary(row => (string)row.Values[1]!, row => row.Id);
+        var found = FoundOnReader.ReadFoundOn(crawl.Path, [.. ids.Values], ReportReader.LISTED_SOURCES).ToDictionary(url => url.UrlId);
+        Assert.Contains(found.Values, url => url.Pages > 0 && !string.IsNullOrWhiteSpace(url.Sources[0].Text));
 
-        var broken = Problem("internal-client-error");
-        Assert.Equal(["Address", "What was found", "Where to fix it"], broken.QuerySelectorAll(".examples thead th").Select(cell => cell.TextContent));
-        var rows = broken.QuerySelectorAll(".examples tbody tr").ToList();
-        Assert.NotEmpty(rows);
-        var ids = FirstRows("internal-client-error", rows.Count).Select(row => row.Id).ToList();
-        var found = FoundOnReader.ReadFoundOn(crawl.Path, ids, ReportReader.LISTED_SOURCES);
-        Assert.Equal(ids, found.Select(url => url.UrlId));
-        foreach (var (row, url) in rows.Zip(found))
+        foreach (var wording in new[] { ReportWording.Plain, ReportWording.Technical })
         {
-            var where = row.QuerySelectorAll("td")[2];
-            var text = where.TextContent;
-            if (url.Pages > 0)
+            var plain = wording == ReportWording.Plain;
+            var document = Parse(ReportExport.Build(crawl.Path, new ReportOptions { Examples = 10, LookExamples = 10, Wording = wording }, SETTINGS));
+            var broken = document.QuerySelector("article.problem[data-check=internal-client-error]")!;
+            Assert.Equal(plain ? ["Page to edit", "It leads to", "What’s wrong"] : ["Where to fix it", "Address", "What was found"],
+                broken.QuerySelectorAll(".examples thead th").Select(cell => cell.TextContent));
+            var rows = broken.QuerySelectorAll(".examples tbody tr").ToList();
+            Assert.Equal(ids.Count, rows.Count);
+            List<string?> firstPages = [];
+            foreach (var row in rows)
             {
-                Assert.StartsWith(url.Pages == 1 ? "Linked from 1 page: " : $"Linked from {url.Pages} pages: ", text, StringComparison.Ordinal);
-                Assert.Equal(url.Sources[0].Url, where.QuerySelector("a")!.GetAttribute("href"));
-                Assert.Contains(url.Sources[0].Url[origin.Length..], text, StringComparison.Ordinal);
-                var shown = url.Sources.Select(source => source.Url).Distinct().Count();
-                Assert.Equal(url.Pages > shown, text.Contains($" and {url.Pages - shown} more", StringComparison.Ordinal));
+                var cells = row.QuerySelectorAll("td");
+                var url = found[ids[cells[1].QuerySelector("a")!.GetAttribute("href")!]];
+                var lines = cells[0].QuerySelectorAll(".where").ToList();
+                firstPages.Add(url.Pages > 0 ? url.Sources[0].Url : null);
 
-                // Each page with where on it the link is and its text, so the link can be found on a long page.
-                if (WhereFoundColumns.Place(url.Sources[0]) is { } place)
+                // What's wrong, in the row's last cell: how the address answered.
+                Assert.Matches(plain ? "^It (is missing|can’t be opened) \\(4[0-9]{2}" : "^4[0-9]{2} ", cells[2].TextContent);
+                if (url.Pages == 0)
                 {
-                    Assert.Contains($"({place})", text, StringComparison.Ordinal);
+                    Assert.Equal(url.Sitemaps.Total > 0, cells[0].TextContent.Contains("Listed in", StringComparison.Ordinal));
+                    Assert.False(string.IsNullOrWhiteSpace(cells[0].TextContent));
+                    continue;
+                }
+
+                // Each page that holds a link to it is a link itself, the first of them first, and under it the link's words and place.
+                var pages = url.Sources.DistinctBy(source => source.Url).ToList();
+                Assert.Equal(pages.Select(source => source.Url), lines.Take(pages.Count).Select(line => line.QuerySelector("a")!.GetAttribute("href")));
+                Assert.Equal(pages[0].Url[origin.Length..], lines[0].QuerySelector("a")!.TextContent);
+                var said = plain ? ReportPlainWords.LinkWords(pages[0].Kind, pages[0].Text, pages[0].Position, pages[0].Flags) : WhereFoundColumns.Place(pages[0]);
+                Assert.Equal(said, lines[0].QuerySelector(".where__what")?.TextContent);
+                Assert.Equal(url.Pages > pages.Count, cells[0].TextContent.Contains($"{url.Pages - pages.Count} more page", StringComparison.Ordinal));
+                if (plain)
+                {
+                    Assert.DoesNotContain("(content", cells[0].TextContent, StringComparison.Ordinal);
                 }
             }
 
-            Assert.Equal(url.Sitemaps.Total > 0, text.Contains("Listed in", StringComparison.Ordinal));
-            Assert.False(string.IsNullOrWhiteSpace(text));
+            // One page's links are together: a page, once left, doesn't come back.
+            var runs = firstPages.Where((page, index) => index == 0 || page != firstPages[index - 1]).ToList();
+            Assert.Equal(runs.Distinct().Count(), runs.Count);
         }
 
-        // A check of pages holding the bad links says what each page names (evidence): the first few, each with what it is and
-        // how the page links to it, then how many more.
+        // In a site owner's words: "The link that says “…”, in the main content", never "content, “…”".
+        var words = Parse(ReportExport.Build(crawl.Path, settings: SETTINGS)).QuerySelector("article.problem[data-check=internal-client-error] .examples")!.TextContent;
+        Assert.Matches("The link that says “[^”]+”, in the (main content|menu|header|footer|sidebar)", words);
+    }
+
+    /// <summary>
+    /// A check of pages holding the bad links says what to change on each (the first few, each on a line of its own, then
+    /// how many more): in plain words the link by what it says and where on the page it is, then where it leads and how
+    /// that answered; in technical ones the URL with what it is and how the page links to it. Any other check of addresses
+    /// (a server error, a chain of forwards) leads with the address, the pages that link to it after.
+    /// </summary>
+    [Fact]
+    public void APageHoldingBadLinksSaysWhatToChangeOnIt()
+    {
         var check = IssueCatalog.BROKEN_INTERNAL_LINKS;
-        var pages = Problem(check.Id);
+        var named = FoundOnReader.ReadTargets(crawl.Path, check.Id, [.. FirstRows(check.Id, 10).Select(row => row.Id)], ReportReader.LISTED_TARGETS)!;
+
+        var technical = Parse(ReportExport.Build(crawl.Path, new ReportOptions { Examples = 10, LookExamples = 10, Wording = ReportWording.Technical }, SETTINGS));
+        var pages = technical.QuerySelector($"article.problem[data-check={check.Id}]")!;
         Assert.Equal(["Page", "What was found", "Where to fix it"], pages.QuerySelectorAll(".examples thead th").Select(cell => cell.TextContent));
-        var named = FoundOnReader.ReadTargets(crawl.Path, check.Id, [.. FirstRows(check.Id, 10).Select(row => row.Id)], ReportReader.LISTED_SOURCES)!;
         foreach (var (row, page) in pages.QuerySelectorAll(".examples tbody tr").Zip(named))
         {
-            var where = row.QuerySelectorAll("td")[2].TextContent;
+            var cells = row.QuerySelectorAll("td");
+            Assert.Matches("^[0-9,]+ broken URLs?", cells[1].TextContent);
+            var lines = cells[2].QuerySelectorAll(".where").ToList();
             var more = page.Total - page.Targets.Count;
-            Assert.Equal(more > 0, where.Contains($" and {more} other", StringComparison.Ordinal));
-            Assert.Contains($"({WhereFoundColumns.TargetFacts(check, page.Targets[0])})", where, StringComparison.Ordinal);
+            Assert.Equal(page.Targets.Count + (more > 0 ? 1 : 0), lines.Count);
+            Assert.Equal($"{lines[0].QuerySelector("a")!.TextContent} ({WhereFoundColumns.TargetFacts(check, page.Targets[0])})", lines[0].TextContent);
+            Assert.Equal(more > 0, lines[^1].TextContent == $"and {more} {(more == 1 ? "other" : "others")}");
+        }
+
+        var plain = Parse(ReportExport.Build(crawl.Path, new ReportOptions { Examples = 10, LookExamples = 10 }, SETTINGS));
+        pages = plain.QuerySelector($"article.problem[data-check={check.Id}]")!;
+        Assert.Equal(["Page to edit", "What was found", "What to change on it"], pages.QuerySelectorAll(".examples thead th").Select(cell => cell.TextContent));
+        foreach (var (row, page) in pages.QuerySelectorAll(".examples tbody tr").Zip(named))
+        {
+            var cells = row.QuerySelectorAll("td");
+            Assert.Matches("^[0-9,]+ broken links?", cells[1].TextContent);
+            var lines = cells[2].QuerySelectorAll(".where").ToList();
+            var first = page.Targets[0];
+            var element = ReportPlainWords.LinkWords(first.Kind, first.Text, first.Position, first.Flags) ?? "A link";
+            Assert.StartsWith(element + "It leads to ", lines[0].TextContent, StringComparison.Ordinal);
+            Assert.Equal(first.Url, lines[0].QuerySelector(".where__what a")!.GetAttribute("href"));
+            Assert.Contains($", which {ReportPlainWords.Status(first.Facts?.Final?.StatusCode ?? first.StatusCode, first.Facts?.Final?.Outcome ?? first.Outcome)}", lines[0].TextContent, StringComparison.Ordinal);
+            var more = page.Total - page.Targets.Count;
+            Assert.Equal(more > 0, lines[^1].TextContent == ReportPlainWords.Sentence(ReportPlainWords.Others(check.Id, more)));
+        }
+
+        // A page naming more than the report lists says how many more, by what they are. A thing worth a look, which is
+        // often on every page and sets its list beside its text, names two to a page, where a problem to fix names five.
+        Assert.Equal((5, 2), (ReportReader.LISTED_TARGETS, ReportReader.LISTED_LOOK_TARGETS));
+        Assert.Equal(IssueSeverity.Notice, IssueCatalog.Find("links-to-redirects")!.Severity);
+        var redirects = FoundOnReader.ReadTargets(crawl.Path, "links-to-redirects", [.. FirstRows("links-to-redirects", 10).Select(row => row.Id)], ReportReader.LISTED_LOOK_TARGETS)!;
+        var most = redirects.First(page => page.Total > page.Targets.Count);
+        var listed = plain.QuerySelectorAll("article.problem[data-check=links-to-redirects] tbody tr").First(row => row.TextContent.Contains(" other link", StringComparison.Ordinal)).QuerySelectorAll(".where").ToList();
+        Assert.Equal(ReportReader.LISTED_LOOK_TARGETS + 1, listed.Count);
+        Assert.Equal(ReportPlainWords.Sentence(ReportPlainWords.Others("links-to-redirects", most.Total - most.Targets.Count)), listed[^1].TextContent);
+
+        // The technical words a client can't read are nowhere in the plain report's rows (the audit's S-11 list).
+        var rows = string.Join('\n', plain.QuerySelectorAll(".examples").Select(table => table.TextContent));
+        foreach (var jargon in new[] { "not indexable", "Inlinks:", "Linking pages:", "Type: Page", " broken URL", "(200; ", "; content", "Response time:", "Redirect kind:" })
+        {
+            Assert.DoesNotContain(jargon, rows, StringComparison.Ordinal);
+        }
+
+        Assert.DoesNotMatch("H[1-6] → H[1-6]", rows);
+        Assert.DoesNotMatch("(Empty|Missing) og:", rows);
+
+        // A check of addresses that isn't fixed at the link leads with the address; where it's linked from comes after.
+        foreach (var (document, where) in new[] { (plain, "Where it’s linked from"), (technical, "Where to fix it") })
+        {
+            Assert.Equal(["Address", "What was found", where], document.QuerySelector("article.problem[data-check=redirect-chain]")!.QuerySelectorAll(".examples thead th").Select(cell => cell.TextContent));
         }
     }
+
+    /// <summary>
+    /// The full report is many screens long (the audit's A-12: 17,000 px with nothing to steer by): it lists its parts under
+    /// its head, each a link to its part and there only when the part is; "Fix these first" and the score's table lead to
+    /// each problem's section. The summary page, which has no sections, has none of it.
+    /// </summary>
+    [Fact]
+    public void TheFullReportListsItsPartsAndItsFirstFixesLeadToTheirSections()
+    {
+        var results = IssueReader.ReadResults(crawl.Path)!;
+        var document = Parse(ReportExport.Build(crawl.Path, settings: SETTINGS));
+        AssertInert(document);
+        var contents = document.QuerySelectorAll("nav.contents a").ToList();
+        int Of(IssueSeverity severity) => results.FixFirst.Count(id => IssueCatalog.Find(id)!.Severity == severity);
+        string[] parts =
+        [
+            "Summary", "Fix these first", "How the score is worked out", "What to fix", $"Serious ({Of(IssueSeverity.Error)})", $"Worth fixing ({Of(IssueSeverity.Warning)})",
+            $"Worth a look ({Of(IssueSeverity.Notice)})", "What couldn’t be checked", "What was checked and found nothing wrong", "About this check"
+        ];
+        var skipped = IssueCatalog.All.Count - results.Counts.Count;
+        Assert.Equal(parts.Where(part => skipped > 0 || part != "What couldn’t be checked"), contents.Select(link => link.TextContent));
+
+        // Every link of the document that stays inside it leads to something that is there, once.
+        var inside = document.QuerySelectorAll("a[href^='#']").ToList();
+        Assert.All(inside, link => Assert.Single(document.QuerySelectorAll($"[id='{link.GetAttribute("href")![1..]}']")));
+        Assert.All(inside, link => Assert.Null(link.GetAttribute("target")));
+
+        // "Fix these first" and the score's rows lead to their problems' sections, which carry the same titles.
+        var first = document.QuerySelectorAll("ol.first a.first__title").ToList();
+        Assert.Equal(results.FixFirst.Take(5).Select(id => $"#problem-{id}"), first.Select(link => link.GetAttribute("href")));
+        Assert.All(first, link => Assert.EndsWith(link.TextContent, document.QuerySelector($"[id='{link.GetAttribute("href")![1..]}'] h3 > span")!.TextContent, StringComparison.Ordinal));
+        Assert.Equal(
+            results.FixFirst.Where(id => IssueCatalog.Find(id)!.Severity != IssueSeverity.Notice).Select(id => $"#problem-{id}"),
+            document.QuerySelectorAll("table.score-table tbody a").Select(link => link.GetAttribute("href")));
+
+        // Where the app's preview puts its own way into each problem: a comment, so a saved file has no control that leads nowhere.
+        var html = ReportExport.Build(crawl.Path, settings: SETTINGS);
+        Assert.All(results.FixFirst, id => Assert.Contains($"</span><!--si:open {id}-->", html, StringComparison.Ordinal));
+
+        // On paper a link is plain text; on a screen it looks like one.
+        var sheet = document.QuerySelector("style")!.TextContent;
+        Assert.Contains("a { color: inherit; text-decoration: none; }", sheet, StringComparison.Ordinal);
+        Assert.Contains("@media screen {", sheet, StringComparison.Ordinal);
+        Assert.Contains("a { color: var(--link); text-decoration: underline;", sheet, StringComparison.Ordinal);
+
+        var summary = Parse(ReportExport.Build(crawl.Path, new ReportOptions { Cut = ReportCut.Summary }, SETTINGS));
+        Assert.Null(summary.QuerySelector("nav.contents"));
+        Assert.Empty(summary.QuerySelectorAll("a[href^='#']"));
+        Assert.Equal(5, summary.QuerySelectorAll("ol.first span.first__title").Length);
+    }
+
+    /// <summary>
+    /// A problem lists every one of its pages while they fit (the audit's A-12: "The first 5 of 8 … And 3 more: the full
+    /// list is on sheet 1" sent a client to a second file for three rows): up to 25 for a problem to fix and 10 for a
+    /// thing worth a look, unless asked otherwise.
+    /// </summary>
+    [Fact]
+    public void AProblemListsEveryPageWhileTheyFit()
+    {
+        Assert.Equal((25, 10), (ReportOptions.DEFAULT_EXAMPLES, ReportOptions.DEFAULT_LOOK_EXAMPLES));
+        var counts = IssueReader.ReadResults(crawl.Path)!.Counts;
+        var document = Parse(ReportExport.Build(crawl.Path, settings: SETTINGS));
+        var between = counts.Where(count => count.Value is > 5 and <= 25 && IssueCatalog.Find(count.Key)!.Severity != IssueSeverity.Notice).Select(count => count.Key).ToList();
+        Assert.NotEmpty(between);
+        foreach (var id in between)
+        {
+            var problem = document.QuerySelector($"article.problem[data-check={id}]")!;
+            Assert.Equal($"All {counts[id]}", problem.QuerySelector(".examples caption")!.TextContent);
+            Assert.Equal(counts[id], problem.QuerySelectorAll(".examples tbody tr").Length);
+            Assert.Null(problem.QuerySelector(".more"));
+        }
+    }
+
+    /// <summary>The technical report carries each check's own name and severity beside its title, and its rows as the engine says them.</summary>
+    [Fact]
+    public void TheTechnicalReportSpeaksAsTheChecksDo()
+    {
+        var results = IssueReader.ReadResults(crawl.Path)!;
+        var document = Parse(ReportExport.Build(crawl.Path, new ReportOptions { Wording = ReportWording.Technical, LookExamples = 50 }, SETTINGS));
+        AssertInert(document);
+        Assert.Equal(
+            GridListing.Listed(results.FixFirst).Select(listed => $"{IssueCatalog.Find(listed.Id)!.Title} · {IssueCatalog.Find(listed.Id)!.Severity}"),
+            document.QuerySelectorAll("article.problem .problem__tech").Select(tech => tech.TextContent));
+        Assert.Null(document.QuerySelector("table.names"));
+        string Examples(string id) => document.QuerySelector($"article.problem[data-check={id}] .examples")!.TextContent;
+        Assert.Matches("[0-9,]+ px, over [0-9,]+ \\([0-9]+ characters\\)", Examples("title-too-long"));
+        Assert.Matches("H1 → H[3-6]", Examples("heading-levels-skipped"));
+        Assert.Matches("4[0-9]{2} [A-Z][a-z]+", Examples("internal-client-error"));
+        Assert.Contains("Type: ", Examples("internal-client-error"), StringComparison.Ordinal);
+    }
+
+    /// <summary>A line of evidence that only repeats the plain detail is left out of a plain row; one that adds a text or a number stays.</summary>
+    [Theory]
+    [InlineData("5 clicks from the home page; at most 4 is advised", "5 clicks from the home page", true)]
+    [InlineData("5 clicks from the home page; at most 4 is advised", "1 link to it", false)]
+    [InlineData("The main heading is a picture: “Synthetic Store logo”", "Main heading: “Synthetic Store logo”", true)]
+    [InlineData("1,026 links to your own pages, more than 1,000", "1,026 links on the page", true)]
+    [InlineData("12 pages link here", "1 link to it", false)]
+    [InlineData("It couldn’t be reached", "It couldn’t be reached", true)]
+    [InlineData("Pages use it as a script, but the server says it’s plain text", "The server says it’s plain text", true)]
+    [InlineData("Only 16 characters long", "“Garden Furniture”", false)]
+    [InlineData("Another page has the same title", "“Login”", false)]
+    [InlineData("It links to none of your other pages", "No links on the page", false)]
+    public void EvidenceThatOnlyRepeatsThePlainDetailIsLeftOut(string detail, string evidence, bool repeats) =>
+        Assert.Equal(repeats, ReportRows.SaidByTheDetail(detail, evidence));
 
     /// <summary>
     /// What a site wrote can be one unbroken run of any length (a detail, a fault's text): it wraps inside its cell, where
@@ -1109,7 +1303,8 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
 
     /// <summary>
     /// Nothing in the document runs or asks for anything: no script, no handler, no style attribute, no frame, image or
-    /// form, and no link but to http or https, each opened apart and telling the site nothing.
+    /// form, and no link but to http or https, each opened apart and telling the site nothing, or to a part of the
+    /// document itself: one of its own ids, which no text a site sends can be.
     /// </summary>
     private static void AssertInert(IDocument document)
     {
@@ -1124,6 +1319,14 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
                 if (attribute.Name == "href")
                 {
                     Assert.Equal("a", element.LocalName);
+                    if (attribute.Value.StartsWith('#'))
+                    {
+                        Assert.Matches("^#[a-z][a-z0-9-]*$", attribute.Value);
+                        Assert.Single(document.All, target => target.Id == attribute.Value[1..]);
+                        Assert.Null(element.GetAttribute("target"));
+                        continue;
+                    }
+
                     Assert.True(attribute.Value.StartsWith("http://", StringComparison.Ordinal) || attribute.Value.StartsWith("https://", StringComparison.Ordinal), attribute.Value);
                     Assert.Equal("_blank", element.GetAttribute("target"));
                     Assert.Equal("noopener noreferrer nofollow", element.GetAttribute("rel"));

@@ -345,8 +345,18 @@ public sealed class CliTests : IAsyncLifetime
         Assert.Equal(0, (await RunAsync("export", crawl, "--kind", "report", "--out", summary, "--cut", "summary")).ExitCode);
         var document = await File.ReadAllTextAsync(report);
         Assert.StartsWith("<!doctype html>", document, StringComparison.Ordinal);
-        Assert.Contains("<h2>What to fix</h2>", document, StringComparison.Ordinal);
-        Assert.DoesNotContain("<h2>What to fix</h2>", await File.ReadAllTextAsync(summary), StringComparison.Ordinal);
+        Assert.Contains("<h2 id=\"what-to-fix\">What to fix</h2>", document, StringComparison.Ordinal);
+        Assert.DoesNotContain("<h2 id=\"what-to-fix\">What to fix</h2>", await File.ReadAllTextAsync(summary), StringComparison.Ordinal);
+
+        // In a site owner's words unless asked for a working SEO's: then each problem carries its check's technical name.
+        var technical = Path.Combine(_folder, "technical.html");
+        Assert.DoesNotContain("class=\"problem__tech\"", document, StringComparison.Ordinal);
+        Assert.Equal(0, (await RunAsync("report", crawl, "--out", technical, "--words", "technical")).ExitCode);
+        Assert.Contains("class=\"problem__tech\"", await File.ReadAllTextAsync(technical), StringComparison.Ordinal);
+        Assert.Equal(0, (await RunAsync("export", crawl, "--kind", "report", "--out", technical, "--words", "plain")).ExitCode);
+        Assert.DoesNotContain("class=\"problem__tech\"", await File.ReadAllTextAsync(technical), StringComparison.Ordinal);
+        Assert.Equal(2, (await RunAsync("report", crawl, "--out", technical, "--words", "simple")).ExitCode);
+        Assert.Equal(2, (await RunAsync("export", crawl, "--kind", "urls", "--out", Path.Combine(_folder, "words.csv"), "--words", "plain")).ExitCode);
         Assert.Equal(0, (await RunAsync("report", crawl, "--out", summary, "--cut", "summary", "--examples", "2", "--look-examples", "0")).ExitCode);
 
         // The two lists, as their screens list them: the sitemaps, and the origins searched and filtered.

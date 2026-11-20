@@ -91,6 +91,32 @@ const PROBLEM_IDS = [
   'slow-response',
 ];
 
+// How each page links to what it names: the logo's link home, in the header, with no words.
+const ANCHOR_TARGETS: FakeRoute = [
+  'POST',
+  /\/issues\/empty-anchor-text\/targets$/,
+  (request) =>
+    json({
+      checkId: 'empty-anchor-text',
+      urls: (request.body as { urlIds: number[] }).urlIds.map((urlId) => ({
+        urlId,
+        total: 1,
+        targets: [
+          {
+            id: urlId === 1 ? 28 : 1,
+            url: urlId === 1 ? `${SITE}/greenhouses/` : `${SITE}/`,
+            statusCode: 200,
+            fetched: true,
+            outcome: 'success',
+            kind: 'hyperlink',
+            text: null,
+            position: urlId === 1 ? 'content' : 'header',
+          },
+        ],
+      })),
+    }),
+];
+
 async function open(
   path: string,
   analysis: Analysis = GARDEN_ANALYSIS,
@@ -142,10 +168,11 @@ describe.skipIf(TABLE_STUBBED)('What to fix', () => {
     ]) {
       expect(main().getByRole('heading', { level: 2, name: `${name} ${count}` })).toBeVisible();
     }
+    // The UX audit of 2026-11-19 (S-04): this pinned two links, the second to broken-internal-links; that check is now
+    // merged into the first row, and the heading above still counts both problems.
     const serious = within(main().getByRole('region', { name: 'Serious 2' }));
     expect(serious.getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([
       `${FIX}/internal-client-error`,
-      `${FIX}/broken-internal-links`,
     ]);
   });
 
@@ -160,7 +187,7 @@ describe.skipIf(TABLE_STUBBED)('What to fix', () => {
     await whatToFix();
     const looks = () => within(main().getByRole('region', { name: 'Worth a look 23' }));
     expect(looks().getAllByRole('link')).toHaveLength(3);
-    expect(await looks().findByText('One fix')).toBeVisible();
+    expect(await looks().findByText('Fix once')).toBeVisible();
     fireEvent.click(looks().getByRole('button', { name: 'Show all 23 things worth a look' }));
     expect(looks().getAllByRole('link')).toHaveLength(23);
     const passed = within(main().getByRole('region', { name: 'Nothing wrong 115' }));
@@ -183,7 +210,7 @@ describe.skipIf(TABLE_STUBBED)('What to fix', () => {
     await whatToFix();
     const looks = within(main().getByRole('region', { name: 'Worth a look 23' }));
     expect(await looks.findByText('One fix covers 264 of 265 pages')).toBeVisible();
-    expect(looks.queryByText('One fix')).toBeNull();
+    expect(looks.queryByText('Fix once')).toBeNull();
     expect(
       looks.getByRole('link', { name: /^Worth a look Links with nothing to read One fix covers 264 of 265 pages/ }),
     ).toBeVisible();
@@ -239,7 +266,12 @@ describe.skipIf(TABLE_STUBBED)('What to fix', () => {
     expect(first).toHaveFocus();
     expect(first).toHaveAttribute('aria-current', 'true');
     fireEvent.keyDown(first, { key: 'j' });
-    expect(main().getByRole('link', { name: /Links that lead to broken pages/ })).toHaveFocus();
+    // The UX audit of 2026-11-19 (S-04): this pinned focus on the nested row of "Links that lead to broken pages";
+    // that check is merged into the first row, so J goes straight to the next problem.
+    const second = main().getByRole('link', { name: /Large images that slow pages down/ });
+    expect(second).toHaveAttribute('href', `${FIX}/image-too-large`);
+    expect(second).toHaveFocus();
+    expect(first).not.toHaveAttribute('aria-current');
     fireEvent.keyDown(document.activeElement ?? document.body, { key: 'k' });
     expect(first).toHaveFocus();
   });
@@ -261,11 +293,16 @@ describe.skipIf(TABLE_STUBBED)('What to fix', () => {
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0]).toContain('Serious (2)');
     // A row's count without what it's a share of, so the rows compare, and the points fixing it gives back: with the
-    // broken links its fix clears, folded under it.
+    // broken links its fix clears, merged into it.
+    // The UX audit of 2026-11-19 (S-04, S-19): this pinned "…: 9 addresses, 6 points back. Some addresses…"; the lead
+    // line now counts the merged check's pages too, and says the points as they add to the score.
     expect(writes[0]).toContain(
-      "- Pages or files that can't be found: 9 addresses, 6 points back. Some addresses on your site answer with an error",
+      "\n- Pages or files that can't be found: 9 addresses on 5 pages, +6 to your score. Some addresses on your site answer with an error",
     );
-    expect(writes[0]).toContain('  - Fixed along with it: Links that lead to broken pages, 5 pages.\n');
+    // The UX audit of 2026-11-19 (S-04): this pinned "  - Fixed along with it: Links that lead to broken pages, 5
+    // pages."; a merged check is now named alone under the line that counts it.
+    expect(writes[0]).toContain('\n  - The same links, fixed in one go: Links that lead to broken pages.\n');
+    expect(writes[0]).not.toContain('Fixed along with it');
     // A reason many checks share, once, with the checks under it.
     expect(writes[0]).toMatch(
       /\n- 24 checks couldn’t run: This site check was made with an older version[^\n]*\n {2}- /,
@@ -350,21 +387,29 @@ describe.skipIf(TABLE_STUBBED)('What to fix, related and ordered', () => {
     await whatToFix();
     const serious = within(main().getByRole('region', { name: /^Serious/ }));
     const rows = serious.getAllByRole('link');
-    expect(rows.map((row) => row.getAttribute('href'))).toEqual([
-      `${FIX}/internal-client-error`,
-      `${FIX}/broken-internal-links`,
-    ]);
-    expect(rows[0]).toHaveAccessibleName(/Pages or files that can't be found .* 9 addresses 6 points back$/);
-    expect(rows[1]).toHaveAccessibleName(
-      /^Serious Links that lead to broken pages Fixed along with the problem above\. 5 pages$/,
+    // The UX audit of 2026-11-19 (S-04): this pinned two links, the second to broken-internal-links as a nested row;
+    // dead addresses and the pages that link to them are now one row.
+    expect(rows.map((row) => row.getAttribute('href'))).toEqual([`${FIX}/internal-client-error`]);
+    // The UX audit of 2026-11-19 (S-04, S-19): this pinned "… 9 addresses 6 points back", and a second row named
+    // "Serious Links that lead to broken pages Fixed along with the problem above. 5 pages" in a nested item.
+    expect(rows[0]).toHaveAccessibleName(
+      /Pages or files that can't be found with “Links that lead to broken pages”: one list fixes both .* 9 addresses on 5 pages \+6 to your score$/,
     );
-    expect(rows[1]!.closest('li')).toHaveClass('si-plain-list__nested');
+    expect(
+      main()
+        .getByRole('region', { name: /^Serious/ })
+        .querySelector('.si-plain-list__nested'),
+    ).toBeNull();
     // Still two problems: the heading counts them.
     expect(main().getByRole('heading', { level: 2, name: /^Serious\s*2$/ })).toBeVisible();
-    // J and K go through the folded one after the one it's under.
+    // The UX audit of 2026-11-19 (S-04): J and K went through the folded row after the one it was under; with it
+    // merged, the second J lands on the next part's first problem.
     fireEvent.keyDown(document.body, { key: 'j' });
+    expect(rows[0]).toHaveFocus();
     fireEvent.keyDown(document.activeElement ?? document.body, { key: 'j' });
-    expect(rows[1]).toHaveFocus();
+    const next = within(main().getByRole('region', { name: /^Worth fixing/ })).getAllByRole('link')[0];
+    expect(next).toHaveAttribute('href', `${FIX}/image-too-large`);
+    expect(next).toHaveFocus();
   });
 
   it('orders each part by the most points back or the most found, remembered for Simple', async () => {
@@ -404,8 +449,11 @@ describe.skipIf(TABLE_STUBBED)('one problem', () => {
     const { router } = await open(`${FIX}/internal-client-error`);
     await problem("Pages or files that can't be found");
     const also = main().getByRole('list', { name: 'Fixed along with it' });
-    expect(also).toHaveTextContent(
-      'Fixing this also fixes Links that lead to broken pages: all 5 pages, 4 more points back.',
+    // The UX audit of 2026-11-19 (S-19): this pinned "…: all 5 pages, 4 more points back."; the points of both are now
+    // one figure among the page's facts (it read "Takes 2 points off the score"), made up as said.
+    expect(also).toHaveTextContent(/^Fixing this also fixes Links that lead to broken pages: all 5 pages\.$/);
+    expect(main().getByText(/^Fixing this adds/)).toHaveTextContent(
+      /^Fixing this adds 6 to your score \(2 for these, 4 for what it also fixes\)$/,
     );
     fireEvent.click(within(also).getByRole('link', { name: 'Links that lead to broken pages' }));
     await problem('Links that lead to broken pages');
@@ -440,8 +488,8 @@ describe.skipIf(TABLE_STUBBED)('one problem', () => {
       ],
     );
     await problem("Pages or files that can't be found");
-    const where = main().getByRole('region', { name: 'Where it is' });
-    // Each address listed (a page without a title is named by its address, which may show twice in its line).
+    // A check of dead addresses lists them page first (Where to fix it); one whose links aren't known is still listed.
+    const where = main().getByRole('region', { name: 'Where to fix it' });
     expect((await within(where).findAllByText('/edale-4-seater-sofa-set/', { exact: false }))[0]).toBeVisible();
     expect(
       within(where).getAllByText('/outdoor-pe-rattan-dining-set-with-fire-pit-table/', { exact: false })[0],
@@ -449,23 +497,25 @@ describe.skipIf(TABLE_STUBBED)('one problem', () => {
     expect(within(where).queryByText(/\b0 kinds of problem\b/)).toBeNull();
   });
 
-  it('lists where it is: each cause, its first pages by title then address, and Show them for the rest', async () => {
-    await open(`${FIX}/empty-anchor-text`);
+  it('lists where to fix a link: the page to edit first, and a link many pages share once, with its pages when asked', async () => {
+    await open(`${FIX}/empty-anchor-text`, GARDEN_ANALYSIS, [], [ANCHOR_TARGETS]);
     await problem('Links with nothing to read');
-    const where = within(main().getByRole('region', { name: 'Where it is' }));
-    expect(await where.findByText('2 addresses on 265 pages')).toBeVisible();
-    expect(await where.findByText('Your home page')).toBeVisible();
-    // A check that names what its pages link to lists its first pages one by one, each with its own line (where its
-    // link is: ProblemScreen.evidence.test.tsx), then how many more.
-    expect(await where.findByText('Page 0')).toBeVisible();
-    expect(where.getByText('Page 2')).toBeVisible();
-    expect(where.getByText(/And 261 more\./)).toBeVisible();
-    fireEvent.click(where.getByRole('button', { name: 'Show them' }));
+    // The UX audit of 2026-11-19 (S-02 to S-04): this pinned "2 addresses on 265 pages" with the address leading and
+    // the pages behind "Show them"; a link fault now leads with the page to edit.
+    const where = within(main().getByRole('region', { name: 'Where to fix it' }));
+    expect(await where.findByText('1 link to change on 1 page · 1 link many pages share')).toBeVisible();
+    // The page that alone links to /greenhouses/ with no words, by its title, as a link that opens it.
+    const pages = within(where.getByRole('list', { name: 'Pages to edit' }));
+    expect(pages.getByRole('link', { name: /Home/ })).toHaveAttribute('href', 'https://www.gardenfurnituresets.co.uk/');
+    expect(pages.getByRole('button', { name: 'Open page: Home' })).toBeVisible();
+    // The logo's link, in every page's header: one row, fixed once, never 264 pages each with the same line.
+    expect(where.getByText('In the header of 264 pages')).toBeVisible();
+    expect(where.getByText(/fix it there once/)).toBeVisible();
+    expect(where.queryByText('Page 0')).toBeNull();
+    fireEvent.click(where.getByRole('button', { name: 'Show the pages' }));
     expect(await where.findByText('Page 199')).toBeVisible();
-    expect(where.getByRole('button', { name: 'See all 264 in Advanced' })).toBeVisible();
-    expect(
-      where.getByText('All 2 addresses are shown. Addresses starting with “/” are on www.gardenfurnituresets.co.uk.'),
-    ).toBeVisible();
+    expect(where.getByText(/The first 200 of 264 pages\./)).toBeVisible();
+    expect(where.getByText('Addresses starting with “/” are on www.gardenfurnituresets.co.uk.')).toBeVisible();
   });
 
   it('lists a check that doesn’t group flat, with what was measured', async () => {
@@ -475,7 +525,8 @@ describe.skipIf(TABLE_STUBBED)('one problem', () => {
     // The engine's detail, plainly: no ms (plainDetails.ts).
     expect(await where.findByText('It took 5.5 seconds to open')).toBeVisible();
     expect(where.getByText('Login')).toBeVisible();
-    expect(main().getByText(/off the score/)).toHaveTextContent('Takes 2 points off the score');
+    // The UX audit of 2026-11-19 (S-19): this pinned "Takes 2 points off the score".
+    expect(main().getByText(/^Fixing this adds/)).toHaveTextContent(/^Fixing this adds 2 to your score$/);
   });
 
   it('copies the list on Ctrl+Shift+C: titles, how to fix it, then each cause with full addresses', async () => {
@@ -489,13 +540,26 @@ describe.skipIf(TABLE_STUBBED)('one problem', () => {
         },
       },
     });
-    await open(`${FIX}/empty-anchor-text`);
+    await open(`${FIX}/empty-anchor-text`, GARDEN_ANALYSIS, [], [ANCHOR_TARGETS]);
     await problem('Links with nothing to read');
     fireEvent.keyDown(document.body, { key: 'C', ctrlKey: true, shiftKey: true });
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0]).toMatch(/^Links with nothing to read \(Internal links without anchor text\)/);
     expect(writes[0]).toContain('gardenfurnituresets.co.uk, checked on 31 October 2026');
-    expect(writes[0]).toContain(`  ${SITE}/page-0/`);
+    // A link fault is handed on as the card shows it (the UX audit of 2026-11-19, S-05): the page to edit first, then
+    // the link, its place and where it leads. It pinned each address with its pages indented under it, unlabelled.
+    expect(writes[0]).toContain(
+      [
+        'Where to fix it:',
+        `Page: ${SITE}/ (Home)`,
+        '  Link: A link with no words (main content)',
+        `    leads to: ${SITE}/greenhouses/`,
+        '',
+        'Links many pages share:',
+        '  In the header of 264 pages: A link with no words',
+        `    leads to: ${SITE}/`,
+      ].join('\n'),
+    );
   });
 
   it('a skipped check says why it couldn’t run and what would let it; See it in Advanced switches mode', async () => {
@@ -516,7 +580,7 @@ describe.skipIf(TABLE_STUBBED)('one problem', () => {
     ];
     await open(`${FIX}/broken-internal-links`, GARDEN_ANALYSIS, [], [failing]);
     await problem('Links that lead to broken pages');
-    const where = within(main().getByRole('region', { name: 'Where it is' }));
+    const where = within(main().getByRole('region', { name: 'Where to fix it' }));
     expect(await where.findByText(/The list couldn’t be read/, undefined, { timeout: 5_000 })).toBeVisible();
     expect(where.queryByText(/are shown|is shown|Showing/)).toBeNull();
   });

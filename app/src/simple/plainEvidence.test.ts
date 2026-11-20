@@ -129,7 +129,8 @@ describe('how a page has a cause, in plain words', () => {
       loading: 'lazy',
     };
     expect(plainTargetLine(target({ kind: 'image', img }), IMAGE)).toBe(
-      'Shown at 400×300 pixels, loads when scrolled to, in the main content',
+      // "loads when scrolled to" went (the UX audit of 2026-11-19, section 5: jargon turned into a riddle).
+      'Shown at 400×300 pixels, in the main content',
     );
     expect(plainShownAt({ width: '100%', height: null })).toBe('Shown 100% wide, with no height set');
     expect(plainShownAt({ width: null, height: null })).toBe('No width or height set');

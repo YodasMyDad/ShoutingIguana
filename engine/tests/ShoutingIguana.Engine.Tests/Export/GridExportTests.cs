@@ -295,8 +295,60 @@ public sealed class GridExportTests : IDisposable
         // then where to fix it where its URLs are referred to (this check's are: a 404 is linked from pages).
         var (_, plain) = Export(_crawl.Path, new ExportRequest { Kind = ExportKind.IssueRows, Format = ExportFormat.Csv, CheckId = check.Id }, check.Title);
         Assert.Equal(IssueReferences.Sources, check.References);
-        Assert.Equal(["URL", "Detail", "Type", "Related URL", "Linked from (pages)", "Linked from", "Listed in sitemaps"], plain[0]);
+        // A missing address is fixed at the link to it, so the page that holds the link leads the row (the audit's S-05).
+        Assert.True(WhereFoundColumns.FixedAtTheLink(check));
+        Assert.Equal([.. WhereFoundColumns.SOURCE_TITLES.Take(3), "URL", "Detail", "Type", "Related URL", .. WhereFoundColumns.SOURCE_TITLES.Skip(3)], plain[0]);
         Assert.Equal(counts[check.Id], plain.Count - 1);
+    }
+
+    /// <summary>
+    /// The UX audit's S-05: a check's file held where each address is linked from in one cell, "https://x/blog/ (content,
+    /// “Buy Now”)", which can't be sorted or filtered by page. The first page that links to it has cells of its own: the
+    /// page, where on it the link is, and the link's text; any other pages follow in one cell, as before. A missing
+    /// address is fixed at the link, so there the page leads the row, ahead of the address.
+    /// </summary>
+    [Fact]
+    public void AnAddressOtherPagesLinkToHasThePageThatLinksToItInCellsOfItsOwn()
+    {
+        Assert.Equal(["Page that links to it", "Where on the page", "Link text", "Linked from (pages)", "Other pages that link to it", "Listed in sitemaps"], WhereFoundColumns.SOURCE_TITLES);
+        foreach (var check in new[] { IssueCatalog.INTERNAL_CLIENT_ERROR, IssueCatalog.REDIRECT_CHAIN })
+        {
+            var leads = check == IssueCatalog.INTERNAL_CLIENT_ERROR;
+            Assert.Equal(leads, WhereFoundColumns.FixedAtTheLink(check));
+            var listed = IssueGroupReader.ReadRows(_crawl.Path, check.Id, new UrlQuery { Columns = ["url"], Limit = 500 }, cache: _cache)!.Page!.Rows;
+            var found = FoundOnReader.ReadFoundOn(_crawl.Path, [.. listed.Select(row => (int)row.Id)], WhereFoundColumns.LISTED).ToDictionary(url => url.UrlId);
+            Assert.True(!leads || found.Values.Any(url => url.Sources.Select(source => source.Id).Distinct().Count() > 1), "A missing address that several pages link to.");
+            Assert.Contains(found.Values, url => url.Sources.Count > 0 && !string.IsNullOrWhiteSpace(url.Sources[0].Text) && url.Sources[0].Position is not null);
+            foreach (var format in new[] { ExportFormat.Csv, ExportFormat.Xlsx })
+            {
+                var (_, rows) = Export(_crawl.Path, new ExportRequest { Kind = ExportKind.IssueRows, Format = format, CheckId = check.Id }, XlsxSheetName(check.Title));
+                var titles = rows[0].Select(title => (string)title!).ToList();
+                Assert.Equal(leads ? 0 : titles.Count - WhereFoundColumns.SOURCE_TITLES.Count, titles.IndexOf("Page that links to it"));
+                Assert.Equal(leads ? 3 : 0, titles.IndexOf("URL"));
+                Assert.Equal(titles.Count - 1, titles.IndexOf("Listed in sitemaps"));
+                Assert.Equal(listed.Count, rows.Count - 1);
+                foreach (var (row, cells) in listed.Zip(rows.Skip(1)))
+                {
+                    object? Cell(string title) => titles.IndexOf(title) is var at && at < cells.Length ? cells[at] : null;
+                    var url = found[(int)row.Id];
+                    Assert.Equal((string)row.Values[^1]!, Cell("URL"));
+                    var first = url.Sources.FirstOrDefault();
+                    Assert.Equal(first?.Url, Cell("Page that links to it"));
+                    Assert.Equal(first is null || string.IsNullOrWhiteSpace(first.Text) ? null : string.Join(' ', first.Text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)), Cell("Link text") as string);
+                    if (first is { Kind: null or ShoutingIguana.Engine.Parsing.Models.LinkKind.Hyperlink, Position: ShoutingIguana.Engine.Parsing.Models.LinkPosition.Content })
+                    {
+                        Assert.Equal("content", Cell("Where on the page"));
+                    }
+
+                    // Never the page and its place in one cell again; the other pages that link to it are named after the first.
+                    Assert.DoesNotContain(" (", Cell("Page that links to it") as string ?? string.Empty, StringComparison.Ordinal);
+                    var others = url.Sources.Select(source => source.Id).Distinct().Skip(1).Select(id => url.Sources.First(source => source.Id == id).Url).ToList();
+                    Assert.All(others, other => Assert.Contains(other, Cell("Other pages that link to it") as string ?? string.Empty, StringComparison.Ordinal));
+                    Assert.Equal(others.Count == 0 && !url.Start && url.Pages <= 1, Cell("Other pages that link to it") is null);
+                    Assert.Equal(url.Pages, Convert.ToInt64(Cell("Linked from (pages)"), System.Globalization.CultureInfo.InvariantCulture));
+                }
+            }
+        }
     }
 
     [Fact]
@@ -690,14 +742,18 @@ public sealed class GridExportTests : IDisposable
     /// <param name="checkId">A check's rows: after the grid's columns, where to fix each URL, for a check whose URLs are referred to.</param>
     private static void AssertSame(IReadOnlyList<UrlColumnInfo> shown, List<object?[]> grid, List<object?[]> file, ExportFormat format, string? checkId = null)
     {
-        string[] where = (checkId is null ? null : IssueCatalog.Find(checkId)?.References) switch
+        var check = checkId is null ? null : IssueCatalog.Find(checkId);
+        string[] where = check?.References switch
         {
-            IssueReferences.Sources => ["Linked from (pages)", "Linked from", "Listed in sitemaps"],
+            IssueReferences.Sources => [.. WhereFoundColumns.SOURCE_TITLES],
             IssueReferences.Targets => ["Links to (addresses)", "Links to"],
             _ => []
         };
-        Assert.Equal([.. shown.Select(GridExport.Title), .. where], file[0].Select(title => (string)title!));
-        AssertSameCells(grid, file, format, shown);
+
+        // A check fixed at the link leads each row with the page that holds it: the grid's own cells follow those three.
+        var leading = check is not null && WhereFoundColumns.FixedAtTheLink(check) ? 3 : 0;
+        Assert.Equal([.. where.Take(leading), .. shown.Select(GridExport.Title), .. where.Skip(leading)], file[0].Select(title => (string)title!));
+        AssertSameCells(grid, leading == 0 ? file : [.. file.Select(row => row.Skip(leading).ToArray())], format, shown);
     }
 
     private static void AssertSameCells(List<object?[]> grid, List<object?[]> file, ExportFormat format, IReadOnlyList<UrlColumnInfo>? shown = null)

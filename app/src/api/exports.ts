@@ -37,13 +37,22 @@ export interface ExportGridQuery {
   sort?: GridSort[];
 }
 
-/** How the report is cut and how many of each problem's pages it lists (0 to 50). */
+/**
+ * Whose words the report's rows are in: `plain` is a site owner's, as Simple's screens say them ("The link that says
+ * “Buy Now”, in the main content"); `technical` a working SEO's, as Advanced says them, with each check's technical
+ * name beside its title.
+ */
+export type ReportWording = 'plain' | 'technical';
+
+/** How the report is cut, whose words it's in, and how many of each problem's pages it lists (0 to 50). */
 export interface ReportOptions {
   cut?: ReportCut;
-  /** The first pages of each problem to fix. 5 when left out. */
+  /** The first pages of each problem to fix. 25 when left out: a problem lists all its pages while they fit. */
   examples?: number;
-  /** The first pages of each thing worth a look. 3 when left out. */
+  /** The first pages of each thing worth a look. 10 when left out. */
   lookExamples?: number;
+  /** `plain` when left out. */
+  words?: ReportWording;
   /** Checks the user hid, left out of the lists and counts (the score stays the analysis's). */
   hiddenChecks?: string[];
 }

@@ -15,9 +15,25 @@ import { openExportDialog } from '../export/exportFlow';
 import type { ExportOffer } from '../export/exportOffer';
 import { issuesOffer } from '../export/offers';
 import { longDate } from './dates';
+import { settingNames, sitemapLine } from './developerNotes';
 import { plainDetail, plainDetailColumn } from './plainEvidence';
 import { plainTitle } from './plainWords';
-import { causeName, causesWords, fileWords, filesOf, rowDetailSaysMore } from './whereWords';
+import { evidenceOf } from '../screens/issues/evidenceColumns';
+import {
+  DEAD_END_COLUMNS,
+  LINK_COLUMNS,
+  SHARED_PAGES,
+  addressesModel,
+  deadEndWrong,
+  fixListText,
+  fixShape,
+  fixSummary,
+  pagesModel,
+  type FixModel,
+} from './fixPages';
+import type { IssueTargetsOfUrl, UrlFoundOn } from '../api/inspector';
+import type { LinkRow as GridLink } from '../api/grids';
+import { causeName, causesWords, fileWords, filesOf, pathOrigin, rowDetailSaysMore } from './whereWords';
 
 /** The most rows (or groups) one read asks for (the contract's limit). */
 const PAGE = 1_000;
@@ -44,6 +60,8 @@ export interface ProblemListContext {
    * place of how to fix it. Null or left out: the steps.
    */
   platform?: PlatformOwner | null | undefined;
+  /** The site's own addresses are shortened against it where the list says what's wrong ("forwards to /new/"). */
+  item?: Pick<CrawlListItem, 'site' | 'startUrl'> | null | undefined;
 }
 
 /** A cause of a check that groups its issues, with the rows of the addresses it's on, as Copy the list hands it on. */
@@ -53,8 +71,12 @@ export interface ProblemCause {
 }
 
 /** A row's detail as the page says it: a few checks' details are said plainly ("Google will likely cut this title…"). */
-const detailOf = (check: Check, row: IssueRow): string | null =>
-  plainDetail(check, row as unknown as Record<string, unknown>) ?? row.detail ?? null;
+const detailOf = (check: Check, row: IssueRow): string | null => {
+  const said = plainDetail(check, row as unknown as Record<string, unknown>) ?? row.detail ?? null;
+  // S-16: the names a developer will ask for, after the plain words.
+  const names = settingNames(check, row.detail);
+  return said && names.length > 0 ? `${said} [${names.join(', ')}]` : said;
+};
 
 /**
  * What a file a cause names is, where the check judges it by that: "2.1 MB, 4000×3000 pixels" for an oversized
@@ -94,6 +116,8 @@ export function problemListText(
   context: ProblemListContext,
   rows: readonly IssueRow[],
   causes: readonly ProblemCause[] | null = null,
+  /** A fault that is a link (fixPages.ts): the list by the page to edit, as "Where to fix it" shows it. */
+  fix: FixModel | null = null,
 ): string {
   const { check } = context;
   const head = [
@@ -105,6 +129,12 @@ export function problemListText(
   const lines = [...head, ''];
   if (context.platform) lines.push(context.platform.reason, '');
   else if (steps.length > 0) lines.push('How to fix it:', ...steps, '');
+  if (fix) {
+    // S-05: what a developer needs from the list alone: the page that holds each link first, then the link's words,
+    // its place, where it leads and what's wrong there.
+    lines.push('Where to fix it:', ...fixListText(fix));
+    return lines.join('\n');
+  }
   lines.push('Where it is:');
   // X4: a check about a file names its files, then what was found, never the home page its issue is on.
   const files = filesOf(check, context);
@@ -113,6 +143,9 @@ export function problemListText(
     for (const file of files) lines.push(`${label}: ${file.url}`);
     const found = rows.map((row) => detailOf(check, row)).filter((detail): detail is string => Boolean(detail));
     for (const detail of new Set(found)) lines.push(`What was found: ${detail}`);
+    for (const line of new Set(rows.map((row) => sitemapLine(check, row.detail)))) {
+      if (line) lines.push(`Line to add: ${line}`);
+    }
     return lines.join('\n');
   }
   if (check.grouping === 'none' || causes === null) {
@@ -133,9 +166,9 @@ export function problemListText(
 }
 
 /** The columns each row is read with: its address, its detail and the address it's about, and a plain line's column. */
-function rowColumns(checkId: string): string[] {
+function rowColumns(checkId: string, extra: readonly string[] = []): string[] {
   const plain = plainDetailColumn({ id: checkId });
-  return ['url', 'detail', 'relatedUrl', ...(plain ? [plain] : [])];
+  return ['url', 'title', 'detail', 'relatedUrl', ...(plain ? [plain] : []), ...extra];
 }
 
 /** Reads every row of a check, or of one of its groups, page after page, until its cursor runs out. */
@@ -145,6 +178,7 @@ async function readAllRows(
   signal: AbortSignal,
   onPage: (read: number, total: number | null) => void,
   group: CheckGroupRef | null = null,
+  extra: readonly string[] = [],
 ): Promise<IssueRow[]> {
   const rows: IssueRow[] = [];
   let after: string | undefined;
@@ -153,7 +187,7 @@ async function readAllRows(
       crawlId,
       checkId,
       {
-        columns: rowColumns(checkId),
+        columns: rowColumns(checkId, extra),
         filters: [],
         sort: [],
         limit: PAGE,
@@ -204,6 +238,98 @@ async function readCauses(
   return causes;
 }
 
+/** The ids one read of where addresses are found, or of what pages name, takes. */
+const IDS_A_READ = 100;
+
+const chunks = <T>(items: readonly T[], size: number): T[][] =>
+  Array.from({ length: Math.ceil(items.length / size) }, (_, index) => items.slice(index * size, (index + 1) * size));
+
+/** Every link to some addresses, with the page each is on: the links grid, read to its end. */
+async function readLinksTo(crawlId: string, targetIds: readonly number[], signal: AbortSignal): Promise<GridLink[]> {
+  const links: GridLink[] = [];
+  for (const ids of chunks(targetIds, IDS_A_READ)) {
+    let after: string | undefined;
+    for (;;) {
+      const page = await api.links(
+        crawlId,
+        {
+          columns: [...LINK_COLUMNS],
+          filters: [{ column: 'to.id', op: 'in', values: ids }],
+          sort: [],
+          limit: PAGE,
+          ...(after ? { after } : {}),
+        },
+        signal,
+      );
+      links.push(...page.rows);
+      if (!page.next || page.rows.length === 0) break;
+      after = page.next;
+    }
+  }
+  return links;
+}
+
+/**
+ * A check of dead addresses as "Where to fix it" lists it, in full: every address, where each is found, and every
+ * link to those a few pages link to (one many pages share is one line, as on the screen).
+ */
+async function readAddressesModel(
+  context: ProblemListContext,
+  item: Pick<CrawlListItem, 'site' | 'startUrl'> | null,
+  signal: AbortSignal,
+  update: (read: number, total: number | null) => void,
+): Promise<FixModel> {
+  const { crawlId, check } = context;
+  const extra = [...DEAD_END_COLUMNS, ...evidenceOf(check)];
+  const rows = await readAllRows(crawlId, check.id, signal, update, null, extra);
+  const found = new Map<number, UrlFoundOn>();
+  for (const ids of chunks(
+    rows.map((row) => row.id),
+    IDS_A_READ,
+  )) {
+    for (const url of (await api.foundOn(crawlId, ids, undefined, signal)).urls) found.set(url.urlId, url);
+  }
+  const few = rows
+    .map((row) => row.id)
+    .filter((id) => {
+      const pages = found.get(id)?.pages ?? 0;
+      return pages > 0 && pages <= SHARED_PAGES;
+    });
+  const links = few.length > 0 ? await readLinksTo(crawlId, few, signal) : [];
+  const origin = pathOrigin(rows[0]?.url, item ?? { site: null, startUrl: null });
+  return addressesModel(
+    rows.map((row) => ({ ...row, wrong: deadEndWrong(check, row, origin) })),
+    found,
+    links,
+  );
+}
+
+/** A check of pages that hold a faulty link, as "Where to fix it" lists it, in full: its causes with how each page links. */
+async function readPagesModel(
+  context: ProblemListContext,
+  item: Pick<CrawlListItem, 'site' | 'startUrl'> | null,
+  causes: readonly ProblemCause[],
+  signal: AbortSignal,
+): Promise<FixModel> {
+  const { crawlId, check } = context;
+  // A shared link's place is read from its first pages; a link on a few pages from each of them.
+  const pageIds = [
+    ...new Set(
+      causes.flatMap(({ group, rows }) =>
+        ((group.urls ?? group.pages) > SHARED_PAGES || group.likelyTemplate ? rows.slice(0, SHARED_PAGES) : rows).map(
+          (row) => row.id,
+        ),
+      ),
+    ),
+  ];
+  const targets = new Map<number, IssueTargetsOfUrl>();
+  for (const ids of chunks(pageIds, IDS_A_READ)) {
+    for (const url of (await api.issueTargets(crawlId, check.id, ids, 50, signal)).urls) targets.set(url.urlId, url);
+  }
+  const origin = pathOrigin(causes[0]?.rows[0]?.url, item ?? { site: null, startUrl: null });
+  return pagesModel(causes, targets, origin);
+}
+
 /** Copy the list: every cause and address of the problem, as text. Says what it copied, once. */
 export async function copyProblemList(
   context: ProblemListContext,
@@ -219,24 +345,37 @@ export async function copyProblemList(
     progress?.update(total === null ? `${formatCount(read)} read` : `${formatCount(read)} of ${formatCount(total)}`);
   try {
     // A check that groups its issues hands over its causes as its groups give them; its rows alone where it has none.
-    const groups = check.grouping === 'none' ? [] : await readAllGroups(context.crawlId, check.id, controller.signal);
+    // A fault that is a link is handed on as "Where to fix it" shows it: by the page to edit (S-05).
+    const shape = filesOf(check, context) ? null : fixShape(check);
+    const groups =
+      check.grouping === 'none' || shape === 'addresses'
+        ? []
+        : await readAllGroups(context.crawlId, check.id, controller.signal);
     const causes =
       groups.length > 0
         ? await readCauses(context.crawlId, check.id, groups, controller.signal, (read) => update(read, groups.length))
         : null;
-    const rows = causes ? [] : await readAllRows(context.crawlId, check.id, controller.signal, update);
+    const fix =
+      shape === 'addresses'
+        ? await readAddressesModel(context, context.item ?? null, controller.signal, update)
+        : shape === 'pages' && causes
+          ? await readPagesModel(context, context.item ?? null, causes, controller.signal)
+          : null;
+    const rows = causes || fix ? [] : await readAllRows(context.crawlId, check.id, controller.signal, update);
     clearTimeout(timer);
-    const copied = await copy(problemListText(context, rows, causes));
+    const copied = await copy(problemListText(context, rows, causes, fix));
     const pages = causes ? new Set(causes.flatMap((cause) => cause.rows.map((row) => row.url))).size : rows.length;
     const files = filesOf(check, context);
     const fileNoun = check.about ? fileWords(check.about) : null;
     const words = !copied
       ? 'The list couldn’t be copied'
-      : files && fileNoun
-        ? `Copied the list: ${formatCount(files.length)} ${files.length === 1 ? fileNoun.one : fileNoun.many}`
-        : causes
-          ? `Copied the list: ${causesWords(check, causes.length, pages)}`
-          : `Copied the list: ${pages === 1 ? '1 address' : `${formatCount(pages)} addresses`}`;
+      : fix
+        ? `Copied the list: ${fixSummary(fix)}`
+        : files && fileNoun
+          ? `Copied the list: ${formatCount(files.length)} ${files.length === 1 ? fileNoun.one : fileNoun.many}`
+          : causes
+            ? `Copied the list: ${causesWords(check, causes.length, pages)}`
+            : `Copied the list: ${pages === 1 ? '1 address' : `${formatCount(pages)} addresses`}`;
     const shown = progress as ReturnType<typeof notifyProgress> | null;
     if (shown) shown.done(words);
     else if (copied) notifyResult(words);

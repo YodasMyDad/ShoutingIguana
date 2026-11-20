@@ -254,13 +254,16 @@ public sealed class WorkbookExportTests : IDisposable
             return;
         }
 
+        // A check fixed at the link (a missing address) leads each row with the page that holds the link: its own cells follow.
+        var lead = Leading(IssueCatalog.Find(checkId)!);
         for (var row = 0; row < rows.Count; row++)
         {
             for (var column = 0; column < shape.Columns.Length; column++)
             {
                 var expected = rows[row][Array.IndexOf(SHEET_COLUMNS, shape.Columns[column]) + 1] as string;
                 expected = string.IsNullOrEmpty(expected) ? null : guarded && "=+-@\t\r".Contains(expected[0], StringComparison.Ordinal) ? "'" + expected : expected;
-                Assert.True(Equals(expected, sheet[row + 1][column]), $"{checkId}, row {row + 1}, {shape.Titles[column]}: the grid has '{expected}', the sheet '{sheet[row + 1][column]}'.");
+                var written = sheet[row + 1].Length > column + lead ? sheet[row + 1][column + lead] : null;
+                Assert.True(Equals(expected, written), $"{checkId}, row {row + 1}, {shape.Titles[column]}: the grid has '{expected}', the sheet '{written}'.");
             }
         }
 
@@ -324,7 +327,7 @@ public sealed class WorkbookExportTests : IDisposable
 
         object?[] where = check.References switch
         {
-            IssueReferences.Sources => ["Linked from (pages)", "Linked from", "Listed in sitemaps"],
+            IssueReferences.Sources => [.. WhereFoundColumns.SOURCE_TITLES],
             IssueReferences.Targets when check.Category == IssueCategory.Canonicals => ["Canonical"],
             IssueReferences.Targets when check == IssueCatalog.IMAGE_TOO_LARGE => ["Images (addresses)", "Images", "Largest image (bytes)"],
             IssueReferences.Targets when check == IssueCatalog.PROTOCOL_RELATIVE_LINKS => ["URLs without a scheme (addresses)", "URLs without a scheme"],
@@ -337,8 +340,12 @@ public sealed class WorkbookExportTests : IDisposable
             },
             _ => []
         };
-        return [.. shape.Titles, .. EvidenceTitles(shape.Evidence), .. where];
+        var lead = Leading(check);
+        return [.. where.Take(lead), .. shape.Titles, .. EvidenceTitles(shape.Evidence), .. where.Skip(lead)];
     }
+
+    /// <summary>How many of a check's where-to-fix cells lead its rows: the page that holds the link, for a check fixed there.</summary>
+    private static int Leading(IssueDefinition check) => check.References == IssueReferences.Sources && WhereFoundColumns.FixedAtTheLink(check) ? 3 : 0;
 
     /// <summary>The titles of a check's evidence columns on its sheet, its unit in brackets: "Title length", "Response time (ms)".</summary>
     private static string[] EvidenceTitles(string[] evidence) =>
@@ -360,20 +367,21 @@ public sealed class WorkbookExportTests : IDisposable
             return;
         }
 
+        var titles = Titles(checkId);
+
         foreach (var (id, index) in ids.Select((id, index) => (id, index)).Take(FoundOnReader.MAX_URLS))
         {
             var row = sheet[index + 1];
             string? Cell(int column) => row.Length > first + column && row[first + column] is { } value ? Convert.ToString(value, CultureInfo.InvariantCulture) : null;
             if (references == IssueReferences.Sources)
             {
+                // By its title: the page that links to it has cells of its own (the page, where on it, the link's text), which lead
+                // the row of a check fixed at the link.
+                string? Named(string title) => Array.IndexOf(titles, title) is var at && row.Length > at && row[at] is { } value ? Convert.ToString(value, CultureInfo.InvariantCulture) : null;
                 var found = FoundOnReader.ReadFoundOn(_crawl.Path, [id], WhereFoundColumns.LISTED).Single();
-                Assert.Equal(found.Pages.ToString(CultureInfo.InvariantCulture), Cell(0));
-                if (found.Sources.Count > 0)
-                {
-                    Assert.StartsWith(found.Sources[0].Url, Cell(1)!.TrimStart('\''),StringComparison.Ordinal);
-                }
-
-                Assert.Equal(found.Sitemaps.Total > 0, Cell(2) is not null);
+                Assert.Equal(found.Pages.ToString(CultureInfo.InvariantCulture), Named("Linked from (pages)"));
+                Assert.Equal(found.Sources.Count > 0 ? found.Sources[0].Url : null, Named("Page that links to it")?.TrimStart('\''));
+                Assert.Equal(found.Sitemaps.Total > 0, Named("Listed in sitemaps") is not null);
             }
             else
             {

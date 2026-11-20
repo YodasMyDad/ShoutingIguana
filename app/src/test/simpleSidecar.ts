@@ -405,6 +405,39 @@ export function problemRoutes(): FakeRoute[] {
         return json({ urls: urlIds.filter((id) => id >= 60 && id < 60 + BROKEN_ADDRESSES.length).map(brokenFoundOn) });
       },
     ],
+    // The links to those addresses, with the page each is on: what "Where to fix it" lists a dead address's pages from.
+    [
+      'POST',
+      /^\/api\/crawls\/[0-9a-f]{16}\/links$/,
+      (request) => {
+        const filter = (request.body as { filters?: { column: string; values?: number[] }[] }).filters?.[0];
+        const rows = (filter?.column === 'to.id' ? (filter.values ?? []) : [])
+          .filter((id) => id >= 60 && id < 60 + BROKEN_ADDRESSES.length)
+          .flatMap((id) =>
+            brokenFoundOn(id).sources.map((source) => ({
+              id: id * 1_000 + source.id,
+              'from.id': source.id,
+              'from.url': source.url,
+              'from.title': SOURCE_TITLES[source.id] ?? null,
+              'to.id': id,
+              'to.url': `${SITE}${BROKEN_ADDRESSES[id - 60] ?? '/'}`,
+              kind: source.kind,
+              text: source.text,
+              position: source.position,
+            })),
+          );
+        return json({
+          columns: ['id'],
+          rows,
+          offset: 0,
+          matching: rows.length,
+          total: rows.length,
+          next: null,
+          summary: { available: true, reason: null },
+          unavailable: [],
+        });
+      },
+    ],
     // The logo's link to the home page, in every page's header.
     [
       'POST',
@@ -442,6 +475,9 @@ export const BROKEN_ADDRESSES = [
   '/old-range/',
   '/gone-for-good/',
 ];
+
+/** The titles of the pages that link to the broken addresses, by id; the blog has none. */
+const SOURCE_TITLES: Record<number, string> = { 300: 'Garden Furniture', 301: 'Sofas' };
 
 /** Where each broken address is found: the first three in /garden-furniture/'s footer (and on other pages), the last in the sitemap only. */
 function brokenFoundOn(urlId: number) {

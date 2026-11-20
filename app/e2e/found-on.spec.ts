@@ -1,9 +1,11 @@
 // Where each of a check's URLs is found, and opening any listed URL in the browser, against the real sidecar and its
 // synthetic crawl (planted 404s linked from its pages, one named only by an hreflang, redirects): Advanced's Issues says
 // how many pages link to a broken URL and the first, opens a row to list them (each to the inspector, all to Links); a
-// page holding the bad links says what it links to; Simple's problem page says "Linked from …"; and every grid's URL
+// page holding the bad links says what it links to; Simple's problem page lists the pages to edit, each with its links to
+// a broken URL (it said "Linked from …" under each broken URL until the UX audit of 2026-11-19); and every grid's URL
 // has an open-in-browser button and Shift+Enter, which open the full URL (the opener stubbed: no browser opens).
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { deadEndFixList, LINK_PLACE, LINK_WORDS } from './fixList';
 import { urlAtText } from '../src/lib/textFragment';
 import { expectNoViolations, openSection, read, seededCrawl, showChecks, showGroups } from './support';
 
@@ -297,15 +299,67 @@ test.describe('Simple', () => {
   test('the problem page for broken addresses says which pages link to each', async ({ page }) => {
     await stubOpener(page);
     const { crawl, rows, found } = await brokenUrls();
+    const list = await deadEndFixList(crawl.id, 'internal-client-error');
     await page.goto(`/crawls/${crawl.id}/issues/internal-client-error`);
-    const where = page.getByRole('region', { name: 'Where it is' });
+    // It pinned a region "Where it is". Changed in the UX audit of 2026-11-19 (S-02 to S-05, S-07): a problem that is
+    // a link has "Where to fix it" in its place.
+    const where = page.getByRole('region', { name: 'Where to fix it' });
     await expect(where).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Where it is' })).toHaveCount(0);
     const linked = [...found.values()].filter((url) => url.pages > 0);
     expect(linked.length).toBeGreaterThan(0);
-    await expect(where.getByText(/^Linked from \S+/).first()).toBeVisible();
-    await expect(where.locator('.si-found-on').first()).toHaveText(
-      /^(Linked from .+|Listed in your sitemaps?|It’s the address the check started from)$/,
+    expect(list.pages.length).toBeGreaterThan(0);
+    // It pinned "Linked from <page>" under a broken address. Changed in the UX audit of 2026-11-19 (S-02, S-03): the
+    // card counts the links to change, then lists each page to edit once, in the order to edit them (the most links
+    // first), with its links under it: the link's words, where on the page, where it leads and what's wrong there.
+    await expect(where.getByText(list.summary, { exact: true })).toBeVisible({ timeout: 15_000 });
+    const pages = where.getByRole('list', { name: 'Pages to edit' }).getByRole('listitem');
+    await expect(pages).toHaveCount(list.pages.length);
+    for (const [index, expected] of list.pages.entries()) {
+      const item = pages.nth(index);
+      const address = new URL(expected.url);
+      const name = expected.title ? `${expected.title} ${expected.url}` : expected.url;
+      await expect(item.getByRole('link', { name, exact: true })).toHaveAttribute(
+        'href',
+        new RegExp(`^${expected.url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(#:~:text=.+)?$`),
+      );
+      await expect(
+        item.getByRole('button', {
+          name: `Open page: ${expected.title ?? `${address.pathname}${address.search}`}`,
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect(
+        item.getByText(expected.links === 1 ? '1 link to change' : `${expected.links} links to change`, {
+          exact: true,
+        }),
+      ).toBeVisible();
+      const links = item.locator('tbody tr');
+      await expect(links).toHaveCount(expected.links);
+      for (let row = 0; row < expected.links; row += 1) {
+        const cells = links.nth(row).getByRole('cell');
+        await expect(cells.nth(0)).toHaveText(LINK_WORDS);
+        await expect(cells.nth(1)).toHaveText(LINK_PLACE);
+        await expect(cells.nth(2).locator('.si-fix-leads__wrong')).toHaveText(/^[a-z’ ]+ \(4\d\d [A-Za-z ’]+\)$/);
+      }
+    }
+    // Each broken address a few pages link to is where one of those rows leads, a link to it.
+    for (const url of list.linked) {
+      await expect(pages.getByRole('link', { name: url, exact: true }).first()).toBeVisible();
+    }
+    // It pinned "Listed in your sitemap" and "It’s the address the check started from" under an address. Changed in
+    // the UX audit of 2026-11-19 (S-03): a link more than ten pages share, and an address no page links to, each have
+    // a part of their own under the pages, and only when there is one.
+    await expect(where.getByRole('heading', { name: /^Links (many|your) pages share$/ })).toHaveCount(
+      list.shared.length > 0 ? 1 : 0,
     );
+    await expect(
+      where.getByRole('heading', {
+        name: list.unlinkedInSitemap
+          ? 'Not linked from any page, and still in your sitemap'
+          : /^Not linked from any page$/,
+      }),
+    ).toHaveCount(list.unlinked.length > 0 ? 1 : 0);
     // Each address opens in the browser, as its full address.
     const first = rows[0]!;
     const open = where.getByRole('button', { name: `Open ${first.url} in your browser` }).first();

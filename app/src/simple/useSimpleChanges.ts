@@ -8,7 +8,8 @@ import { comparisonOf, type CheckChange, type CrawlComparison } from '../api/fix
 import { changesQuery } from '../api/queries';
 import { isLive, type CrawlListItem, type CrawlStatus } from '../api/types';
 import { comparisonStage } from '../changes/changes';
-import { checkChangeWords, copyChangeWords } from '../changes/changeWords';
+import { copyChangeWords } from '../changes/changeWords';
+import { rowChangeLine, sameDay } from './changeLine';
 import { useLikeForLike } from '../changes/likeForLike';
 
 export interface SimpleChanges {
@@ -18,7 +19,7 @@ export interface SimpleChanges {
   since: string | null;
   /** A check's change by its id. */
   changeOf: (checkId: string) => CheckChange | null;
-  /** A check's count's second line: "9 on 17 Oct", "New since 17 Oct", "Not looked for last time"; null for none. */
+  /** A check's count's second line: "▲ 3 more than on 17 Oct", "New since 17 Oct"; null for none, and for no change. */
   wordsOf: (checkId: string) => string | null;
   /** What Copy this list adds after a count: " (was 9)", " (new since 17 Oct)". */
   copyWordsOf: (checkId: string) => string;
@@ -44,22 +45,25 @@ export function useSimpleChanges(
   const stage = comparisonStage(item, status, comparison);
   useLikeForLike(crawlId, stage, true);
   const shown = stage.kind === 'shown' ? stage.comparison : null;
+  const startedAt = item?.startedAt ?? null;
   return useMemo(() => {
     if (!shown) return NONE;
     const byId = new Map(shown.checks.map((check) => [check.checkId, check]));
     const since = shown.with.startedAt;
+    // Two checks on one day: "than on 17 Nov" on a check dated 17 Nov says nothing (S-20).
+    const ambiguous = sameDay(since, startedAt);
     return {
       comparison: shown,
       since,
       changeOf: (checkId) => byId.get(checkId) ?? null,
       wordsOf: (checkId) => {
         const change = byId.get(checkId);
-        return change ? checkChangeWords(change, since, 'simple') : null;
+        return change ? rowChangeLine(change, since, ambiguous) : null;
       },
       copyWordsOf: (checkId) => {
         const change = byId.get(checkId);
         return change ? copyChangeWords(change, since) : '';
       },
     };
-  }, [shown]);
+  }, [shown, startedAt]);
 }

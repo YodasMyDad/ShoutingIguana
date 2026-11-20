@@ -74,7 +74,10 @@ internal static class GridExport
     {
         query = (query ?? run.Request.Query) with { Columns = [.. columns.Select(column => column.Id).Distinct(StringComparer.Ordinal)] };
         group ??= run.Request.Kind == ExportKind.IssueRows ? run.Request.Group : null;
-        var cells = new object?[columns.Count + (extra?.Titles.Count ?? 0)];
+        // The cells in the order written: the added columns that lead, the grid's own, then the rest of the added ones.
+        var leading = extra?.Leading ?? 0;
+        var cells = new object?[columns.Count];
+        var line = new object?[columns.Count + (extra?.Titles.Count ?? 0)];
         var places = new int[columns.Count];
         var begun = false;
         string? after = null;
@@ -86,7 +89,7 @@ internal static class GridExport
             if (!begun)
             {
                 begun = true;
-                Begin(run, table, name, [.. titles ?? [.. columns.Select(Title)], .. extra?.Titles ?? []], page, query);
+                Begin(run, table, name, [.. extra?.Titles.Take(leading) ?? [], .. titles ?? [.. columns.Select(Title)], .. extra?.Titles.Skip(leading) ?? []], page, query);
             }
 
             for (var index = 0; index < columns.Count; index++)
@@ -118,16 +121,17 @@ internal static class GridExport
                     }
                 }
 
+                cells.CopyTo(line, leading);
                 if (extra is not null)
                 {
                     var cellsOf = added.GetValueOrDefault((int)row.Id);
                     for (var index = 0; index < extra.Titles.Count; index++)
                     {
-                        cells[columns.Count + index] = cellsOf?[index];
+                        line[index < leading ? index : columns.Count + index] = cellsOf?[index];
                     }
                 }
 
-                table.WriteRow(cells);
+                table.WriteRow(line);
                 written++;
             }
 

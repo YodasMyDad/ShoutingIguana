@@ -3,6 +3,7 @@ import { api } from '../api/client';
 import { queryKeys } from '../api/queries';
 import type { IssueGroupPage } from '../api/grids';
 import type { CheckEntry } from '../screens/issues/checkList';
+import { oneFixHolds } from './oneFixWords';
 
 /** A check's largest group, as the problem's "Where it is" and its "One fix" read it. */
 export const firstGroupQuery = (crawlId: string, checkId: string) => ({
@@ -19,7 +20,9 @@ export const firstGroupQuery = (crawlId: string, checkId: string) => ({
  * doesn't group has no cause to name.
  */
 export function useOneFix(crawlId: string, entries: readonly CheckEntry[]): ReadonlySet<string> {
-  const grouped = entries.filter((entry) => entry.check.grouping !== 'none' && (entry.count ?? 0) > 0);
+  const grouped = entries.filter(
+    (entry) => entry.check.grouping !== 'none' && (entry.count ?? 0) > 0 && oneFixHolds(entry.check),
+  );
   return useQueries({
     queries: grouped.map((entry) => firstGroupQuery(crawlId, entry.check.id)),
     combine: (results) =>
@@ -40,7 +43,9 @@ export function useOneFix(crawlId: string, entries: readonly CheckEntry[]): Read
  * every page is `useOneFix`'s "One fix" instead. Reads the same largest groups, so nothing more is asked of the sidecar.
  */
 export function useOneFixCovers(crawlId: string, entries: readonly CheckEntry[]): ReadonlyMap<string, number> {
-  const grouped = entries.filter((entry) => entry.check.grouping !== 'none' && (entry.count ?? 0) > 0);
+  const grouped = entries.filter(
+    (entry) => entry.check.grouping !== 'none' && (entry.count ?? 0) > 0 && oneFixHolds(entry.check),
+  );
   return useQueries({
     queries: grouped.map((entry) => firstGroupQuery(crawlId, entry.check.id)),
     combine: (results) =>

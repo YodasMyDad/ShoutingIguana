@@ -216,7 +216,9 @@ function SectionLink({
         <li>
           <NavItem
             to="/crawls/$crawl/issues/{-$check}"
-            params={{ crawl: crawlId }}
+            // Simple's item is the list (its problems are pages of their own): left out, the router keeps the check
+            // the page is on and the item leads nowhere. Advanced's keeps the check shown beside its list.
+            params={issueCounts ? { crawl: crawlId } : { crawl: crawlId, check: undefined }}
             activeOptions={{ includeSearch: false }}
             {...props}
           />

@@ -44,14 +44,15 @@ import {
   skippedListWords,
 } from './plainWords';
 import { ProblemScreen } from './ProblemScreen';
-import { useKeepsPlace } from './scrollPlace';
+import { PageFinder } from './PageFinder';
+import { useKeepsPlace, useKeptOpen } from './scrollPlace';
 import { plainResults, type PlainResults, type PlatformEntry, type SkippedGroup } from './results';
 import { ProblemRow } from './SummaryParts';
 import { useOneFix, useOneFixCovers } from './useOneFix';
 import { showAllHidden, useHiddenChecks } from '../settings/hiddenChecks';
 import { updateSettings, useSettings } from '../settings/settingsStore';
 import { ShopifyPrompt } from '../shopify/ShopifyPrompt';
-import { fixRows, PLAIN_CHECK_SORTS, type FixRow } from './fixRows';
+import { fixRows, mergedWords, PLAIN_CHECK_SORTS, type FixRow } from './fixRows';
 
 const ROUTE = '/crawls/$crawl/issues/{-$check}';
 
@@ -212,18 +213,22 @@ function WhatToFix({ crawlId }: { crawlId: string }) {
       </>
     );
     body = (
-      <FixLists
-        crawlId={crawlId}
-        results={results}
-        analysis={analysis.data}
-        sort={sort}
-        hiddenCount={hiddenCount}
-        showHidden={showHidden}
-        onShowHidden={setShowHidden}
-        onUnhide={() => showAllHidden(crawlId)}
-        changes={changes}
-        fixed={fixed}
-      />
+      <>
+        {/* S-06: what's wrong with one page, asked by its address or title. */}
+        <PageFinder crawlId={crawlId} item={item} />
+        <FixLists
+          crawlId={crawlId}
+          results={results}
+          analysis={analysis.data}
+          sort={sort}
+          hiddenCount={hiddenCount}
+          showHidden={showHidden}
+          onShowHidden={setShowHidden}
+          onUnhide={() => showAllHidden(crawlId)}
+          changes={changes}
+          fixed={fixed}
+        />
+      </>
     );
   }
 
@@ -328,12 +333,15 @@ function FixLists({
   const landed = fixSectionOf(hash);
   // The fix loop: the Summary's "3 problems fixed" lands on the Fixed group (it opens), its "1 new" on the new problems.
   const landedOnFixed = hash.replace(/^#/, '') === FIXED_SECTION;
-  const landedOnNew = hash.replace(/^#/, '') === 'new-since';
+  // "2 got worse" lands the same way, on the first problem that's on more pages than last time.
+  const landedState = ({ 'new-since': 'new', 'worse-since': 'more' } as const)[hash.replace(/^#/, '')] ?? null;
+  const landedOnNew = landedState !== null;
   const [fixedOpen, setFixedOpen] = useState(landedOnFixed);
   const fixedHeading = useRef<HTMLHeadingElement>(null);
   const nothingAbove = results.counts.error + results.counts.warning === 0;
-  const [allLooks, setAllLooks] = useState(landed === 'notice');
-  const [passedOpen, setPassedOpen] = useState(landed === 'passed');
+  // Kept across a visit to a problem and Back (S-10): what was opened is open again, at the place it was scrolled to.
+  const [allLooks, setAllLooks] = useKeptOpen(`what-to-fix:${crawlId}:looks`, landed === 'notice');
+  const [passedOpen, setPassedOpen] = useKeptOpen(`what-to-fix:${crawlId}:passed`, landed === 'passed');
   // A reason more than one check couldn't run for lists its checks on demand; landing on the part opens them all.
   const everySkipped = () => new Set(results.skipped.map(skippedKey));
   const [skippedOpen, setSkippedOpen] = useState<ReadonlySet<string>>(() =>
@@ -395,7 +403,7 @@ function FixLists({
     fixedHeading.current?.focus({ preventScroll: true });
   }, [landedOnFixed, fixedShown, hash]);
   // Landing on the new problems: the keys are on the first, as J would put them, once the changes are read.
-  const firstNew = shown.findIndex((entry) => changes.changeOf(entry.check.id)?.state === 'new');
+  const firstNew = shown.findIndex((entry) => changes.changeOf(entry.check.id)?.state === landedState);
   const [newLandedOn, setNewLandedOn] = useState<string | null>(null);
   if (landedOnNew && firstNew >= 0 && newLandedOn !== hash) {
     setNewLandedOn(hash);
@@ -414,6 +422,7 @@ function FixLists({
     points: number | null,
     nested = false,
     platform: PlatformOwner | null = null,
+    merged: readonly CheckEntry[] = [],
   ) => (
     <li key={entry.check.id} className={nested ? 'si-plain-list__nested' : undefined}>
       <ProblemRow
@@ -424,6 +433,7 @@ function FixLists({
         oneFixCovers={platform ? null : covers.get(entry.check.id)}
         points={points}
         nested={nested}
+        merged={merged}
         platform={platform}
         change={changes.wordsOf(entry.check.id)}
         ref={(element: HTMLAnchorElement | null) => {
@@ -437,7 +447,7 @@ function FixLists({
   // A row, then what's folded under it: one job, with the points of both on the row.
   const rowsFor = (rows: readonly FixRow[]) =>
     rows.flatMap((row) => [
-      rowFor(row.entry, index++, row.points),
+      rowFor(row.entry, index++, row.points, false, null, row.merged),
       ...row.nested.map((nested) => rowFor(nested, index++, null, true)),
     ]);
 
@@ -681,11 +691,12 @@ async function copyWhatToFix(
     for (const row of parts[severity]) {
       const back = rowPointsWords(row.points);
       lines.push(
-        `- ${plainTitle(row.entry.check)}: ${rowCountWords(row.entry.check, row.entry.count ?? 0).text}${changeOf(row.entry.check.id)}${back ? `, ${back}` : ''}. ${plainSummary(row.entry.check)}`,
+        `- ${plainTitle(row.entry.check)}: ${rowCountWords(row.entry.check, row.entry.count ?? 0).text}${row.merged.length > 0 ? ` ${mergedWords(row.merged) ?? ''}` : ''}${changeOf(row.entry.check.id)}${back ? `, ${back}` : ''}. ${plainSummary(row.entry.check)}`,
       );
+      for (const merged of row.merged) lines.push(`  - The same links, fixed in one go: ${plainTitle(merged.check)}.`);
       for (const nested of row.nested) {
         lines.push(
-          `  - Fixed along with it: ${plainTitle(nested.check)}, ${rowCountWords(nested.check, nested.count ?? 0).text}${changeOf(nested.check.id)}.`,
+          `  - Cleared by the same fix: ${plainTitle(nested.check)}, ${rowCountWords(nested.check, nested.count ?? 0).text}${changeOf(nested.check.id)}.`,
         );
       }
     }

@@ -81,7 +81,7 @@ test.describe('in Simple', () => {
     const { crawl } = await scoredCrawl();
     await page.goto(`/crawls/${crawl.id}/report?cut=summary`);
     await expect(sheet(page).getByRole('heading', { level: 1 })).toBeVisible({ timeout: 20_000 });
-    await page.getByRole('button', { name: /^Save…/ }).click();
+    await page.getByRole('button', { name: /^Save as HTML…/ }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByRole('radio', { name: /The report/ })).toBeChecked();
     // The cut shown is the cut saved, under the design's default name.
@@ -90,8 +90,8 @@ test.describe('in Simple', () => {
     );
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
-    await expect(page.getByRole('button', { name: /^Save…/ })).toBeFocused();
-    await page.getByRole('button', { name: /Spreadsheet of everything/ }).click();
+    await expect(page.getByRole('button', { name: /^Save as HTML…/ })).toBeFocused();
+    await page.getByRole('button', { name: /^Save spreadsheet…/ }).click();
     await expect(dialog.getByRole('radio', { name: /Spreadsheet of everything/ })).toBeChecked();
     await expect(dialog.getByRole('textbox', { name: 'Save as' })).toHaveValue(/ \d{4}-\d{2}-\d{2} report\.xlsx$/);
     await page.keyboard.press('Escape');

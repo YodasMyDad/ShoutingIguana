@@ -63,6 +63,9 @@ internal sealed record ExportRequestDto
 
     public int? LookExamples { get; init; }
 
+    /// <summary>For <c>report</c>: whose words its rows are in, <c>plain</c> (Simple's, the default) or <c>technical</c> (Advanced's).</summary>
+    public string? Words { get; init; }
+
     /// <summary>For <c>report</c> and <c>workbook</c>: checks the user hid, left out of the lists and counts.</summary>
     public IReadOnlyList<string>? HiddenChecks { get; init; }
 

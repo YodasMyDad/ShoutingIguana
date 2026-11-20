@@ -48,7 +48,11 @@ describe('what Where it is counts', () => {
   it('counts the causes against the pages the headline counts', () => {
     expect(causesWords(check('image-too-large'), 129, 60)).toBe('129 images on 60 pages');
     expect(causesWords(check('image-missing-dimensions'), 3_661, 225)).toBe('3,661 images on 225 pages');
-    expect(causesWords(check('h1-missing'), 1, 2)).toBe('1 kind of problem on 2 pages');
+    // One kind of problem is no count (the UX audit of 2026-11-19, S-17: this pinned "1 kind of problem on 2 pages").
+    expect(causesWords(check('h1-missing'), 1, 2)).toBe('2 pages');
+    // Never "2 addresses on 3 addresses" (S-18).
+    expect(causesWords(check('redirect-chain'), 2, 3)).toBe('3 addresses that end at 2 addresses');
+    expect(causesWords(check('redirect-chain'), 1, 1)).toBe('1 address that ends at 1 address');
     expect(causesWords(check('internal-client-error'), 2, 1)).toBe('2 kinds of problem on 1 address');
     expect(causesWords(check('title-duplicate'), 1, 1)).toBe('1 title on 1 page');
   });
@@ -180,17 +184,17 @@ describe('a cause found by its detail, named', () => {
 describe('Where it is, under its list', () => {
   it('counts what the list lists: causes for a check that groups them, never “it is shown”', () => {
     const base = { noun: pages, origin: null, shortened: false };
-    expect(shownWords({ ...base, grouped: true, listed: 1, all: 1 })).toBe('The one cause is shown.');
+    expect(shownWords({ ...base, grouped: true, listed: 1, all: 1 })).toBe('');
     expect(shownWords({ ...base, grouped: true, listed: 3, all: 3 })).toBe('All 3 causes are shown.');
     expect(shownWords({ ...base, grouped: true, listed: 25, all: 126 })).toBe('Showing 25 of 126 causes.');
     expect(shownWords({ ...base, grouped: false, listed: 25, all: 1_080 })).toBe('Showing 25 of 1,080 pages.');
-    expect(shownWords({ ...base, grouped: false, listed: 1, all: 1 })).toBe('The one page is shown.');
+    expect(shownWords({ ...base, grouped: false, listed: 1, all: 1 })).toBe('');
   });
 
   it('counts a check’s causes by what they are, where it says', () => {
     const images = (count: number) => (count === 1 ? 'image' : 'images');
     const base = { noun: pages, cause: images, origin: null, shortened: false, grouped: true };
-    expect(shownWords({ ...base, listed: 1, all: 1 })).toBe('The one image is shown.');
+    expect(shownWords({ ...base, listed: 1, all: 1 })).toBe('');
     expect(shownWords({ ...base, listed: 3, all: 3 })).toBe('All 3 images are shown.');
     expect(shownWords({ ...base, listed: 25, all: 129 })).toBe('Showing 25 of 129 images.');
     expect(shownWords({ ...base, grouped: false, listed: 25, all: 60 })).toBe('Showing 25 of 60 pages.');
@@ -199,14 +203,12 @@ describe('Where it is, under its list', () => {
   it('says where the addresses shown as paths are, and only when some are', () => {
     const said = { grouped: true, listed: 1, all: 1, noun: pages };
     expect(shownWords({ ...said, origin: 'https://www.gardenfurnituresets.co.uk', shortened: true })).toBe(
-      'The one cause is shown. Addresses starting with “/” are on www.gardenfurnituresets.co.uk.',
+      'Addresses starting with “/” are on www.gardenfurnituresets.co.uk.',
     );
     expect(shownWords({ ...said, origin: 'http://127.0.0.1:8080', shortened: true })).toBe(
-      'The one cause is shown. Addresses starting with “/” are on http://127.0.0.1:8080.',
+      'Addresses starting with “/” are on http://127.0.0.1:8080.',
     );
-    expect(shownWords({ ...said, origin: 'https://www.gardenfurnituresets.co.uk', shortened: false })).toBe(
-      'The one cause is shown.',
-    );
+    expect(shownWords({ ...said, origin: 'https://www.gardenfurnituresets.co.uk', shortened: false })).toBe('');
   });
 
   it('shortens against the origin the site’s pages are on, www. or not, else the start address’s', () => {

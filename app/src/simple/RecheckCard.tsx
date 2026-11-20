@@ -32,6 +32,8 @@ import { OpenUrlButton } from '../ui/OpenUrlButton';
 import { ProgressBar } from '../ui/ProgressBar';
 import { siteGroups } from './home/sites';
 import { plainDetail } from './plainEvidence';
+import { formatCount } from '../lib/format';
+import { OpenLink } from './OpenLink';
 import { recheckCardState, type RecheckCardState } from './recheckCardState';
 import { pathOrigin } from './whereWords';
 
@@ -81,7 +83,7 @@ export function RecheckCard({
   if (resultOnly && state.kind !== 'result' && state.kind !== 'running') return null;
 
   return (
-    <Card as="section" aria-labelledby="recheck-title" className="mt-4 flex flex-col gap-3 px-6 py-5">
+    <Card as="section" aria-labelledby="recheck-title" id="fixed-it" className="mt-4 flex flex-col gap-3 px-6 py-5">
       <h2 id="recheck-title" className="font-semibold">
         Fixed it?
       </h2>
@@ -386,13 +388,15 @@ function Result({
     <div className="flex flex-col gap-3">
       <div role="status">
         <p className="text-16 text-text">{lines[0]}</p>
-        {listed ? <AddressList rows={still?.rows ?? []} item={item} check={check} /> : null}
+        {listed ? <AddressList rows={still?.rows ?? []} item={item} check={check} total={result.still} /> : null}
         {lines.slice(1).map((line) => (
           <p key={line} className="mt-1.5 text-14 leading-body text-text-secondary">
             {line}
           </p>
         ))}
-        {added && added.rows.length > 0 ? <AddressList rows={added.rows} item={item} check={check} /> : null}
+        {added && added.rows.length > 0 ? (
+          <AddressList rows={added.rows} item={item} check={check} total={result.new} />
+        ) : null}
       </div>
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
         {meta.length > 0 ? <p className="min-w-0 flex-1 text-13 text-text-muted">{meta.join('  ')}</p> : null}
@@ -411,26 +415,42 @@ function Result({
  * The addresses a result names: each by its path on the site, with what it has now in plain words ("1 broken link",
  * never the engine's "1 broken URL"), and Open in the browser.
  */
-function AddressList({ rows, item, check }: { rows: readonly RecheckRow[]; item: CrawlListItem; check: Check }) {
+function AddressList({
+  rows,
+  item,
+  check,
+  total,
+}: {
+  rows: readonly RecheckRow[];
+  item: CrawlListItem;
+  check: Check;
+  /** How many there are: past those listed, "and 3 more" (S-15: eight were counted and five listed, with no word of the rest). */
+  total: number;
+}) {
   return (
-    <ul className="mt-2 flex flex-col gap-1">
+    <ul className="si-found-on mt-2 flex flex-col gap-1">
       {rows.map((row) => {
         const origin = pathOrigin(row.url, item);
         const path = origin && row.url.startsWith(origin) ? row.url.slice(origin.length) || '/' : row.url;
         return (
           <li key={row.urlId} className="flex min-w-0 items-center gap-2 text-14">
-            <span className="min-w-0 truncate font-medium" title={row.url}>
-              {path}
-            </span>
+            {/* The address is the link, its open button straight after it (the UX fix round's rules 1 and 2). */}
+            <OpenLink url={row.url} className="min-w-0 truncate font-medium">
+              <span aria-hidden="true">{path}</span>
+              <span className="sr-only">{row.url}</span>
+            </OpenLink>
+            <OpenUrlButton url={row.url} />
             {row.detailAfter ? (
               <span className="min-w-0 truncate text-text-secondary">
                 · {plainDetail(check, { detail: row.detailAfter }) ?? row.detailAfter}
               </span>
             ) : null}
-            <OpenUrlButton url={row.url} />
           </li>
         );
       })}
+      {total > rows.length ? (
+        <li className="text-14 text-text-secondary">and {formatCount(total - rows.length)} more.</li>
+      ) : null}
     </ul>
   );
 }

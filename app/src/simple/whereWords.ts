@@ -62,7 +62,9 @@ export function causeWords(check: Pick<Check, 'id' | 'category' | 'grouping' | '
       return { one: 'main address', many: 'main addresses', heading: 'Main address they name' };
     }
     if (check.category === 'links') return { one: 'address', many: 'addresses', heading: 'Address linked to' };
-    return { one: 'address', many: 'addresses', heading: 'What it’s about' };
+    // S-18: "What it’s about" headed a column of bare addresses: the one a forwarding address ends at.
+    if (check.category === 'redirects') return { one: 'address', many: 'addresses', heading: 'Where they end up' };
+    return { one: 'address', many: 'addresses', heading: 'Address' };
   })();
   return { ...kind, pagesHeading, ...CAUSE_WORDS[check.id] };
 }
@@ -76,6 +78,12 @@ export function causesWords(
   const words = causeWords(check);
   const onPages = (check.subject ?? 'page') === 'page';
   const noun = onPages ? (pages === 1 ? 'page' : 'pages') : pages === 1 ? 'address' : 'addresses';
+  // One kind of problem is no count worth reading ("1 kind of problem on 8 addresses": S-17).
+  if (causes === 1 && check.grouping !== 'relatedUrl') return `${formatCount(pages)} ${noun}`;
+  // Never "2 addresses on 3 addresses" (S-18): forwarding addresses, and where they end.
+  if (!onPages && check.category === 'redirects' && check.grouping === 'relatedUrl') {
+    return `${formatCount(pages)} ${noun} that ${pages === 1 ? 'ends' : 'end'} at ${formatCount(causes)} ${causes === 1 ? 'address' : 'addresses'}`;
+  }
   return `${formatCount(causes)} ${causes === 1 ? words.one : words.many} on ${formatCount(pages)} ${noun}`;
 }
 
@@ -251,11 +259,13 @@ export function shownWords({
   shortened: boolean;
 }): string {
   const what = (count: number) => (grouped ? cause(count) : noun(count));
+  // A list of one says nothing by "The one kind of problem is shown." (S-17).
   const count =
     listed >= all
       ? all === 1
-        ? `The one ${what(1)} is shown.`
+        ? ''
         : `All ${formatCount(all)} ${what(all)} are shown.`
       : `Showing ${formatCount(listed)} of ${formatCount(all)} ${what(all)}.`;
-  return origin && shortened ? `${count} Addresses starting with “/” are on ${originName(origin)}.` : count;
+  const where = origin && shortened ? `Addresses starting with “/” are on ${originName(origin)}.` : '';
+  return [count, where].filter((part) => part !== '').join(' ');
 }

@@ -90,9 +90,8 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
     expect(
       main().getByText('Your site is in good shape. There are 2 serious problems and 3 problems worth fixing.'),
     ).toBeVisible();
-    expect(
-      main().getByText(/The score covers all 265 pages and 143 of 170 checks\. 27 checks couldn’t run\./),
-    ).toBeVisible();
+    // S-17: "27 checks couldn’t run." followed it here, a third time on the screen.
+    expect(main().getByText('The score covers all 265 pages and 143 of 170 checks.')).toBeVisible();
     expect(main().getByText(/Checked on 31 October 2026\. 265 pages read in 37 min/)).toBeVisible();
     expect(main().getByText(/Shouting Iguana read 265 pages and checked 4,521 addresses in all/)).toBeVisible();
   });
@@ -131,20 +130,23 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
     await site();
     const list = within(main().getByRole('region', { name: 'Fix these first' }));
     const rows = list.getAllByRole('link').filter((link) => link.getAttribute('href')?.includes('/issues/'));
+    // The UX audit of 2026-11-19 (S-04): this pinned five links, "Links that lead to broken pages" second, as a nested
+    // row under the missing addresses; the two are now one row, with no link to the second.
     expect(rows.map((row) => row.getAttribute('href'))).toEqual(
-      ['internal-client-error', 'broken-internal-links', 'image-too-large', 'title-duplicate', 'slow-response'].map(
-        (id) => `${FIX}/${id}`,
-      ),
+      ['internal-client-error', 'image-too-large', 'title-duplicate', 'slow-response'].map((id) => `${FIX}/${id}`),
     );
     // One job as What to fix has it (related checks): restoring the 9 missing addresses clears the broken links on all
-    // 5 pages, so they're folded under it, unnumbered, and the row above carries the points of both.
-    expect(rows[0]).toHaveAccessibleName(/^1 Serious Pages or files that can't be found .* 9 addresses 6 points back$/);
-    expect(rows[1]).toHaveAccessibleName(
-      /^Serious Links that lead to broken pages Fixed along with the problem above\. 5 pages$/,
+    // 5 pages, so the row says both and carries the points of both.
+    // The UX audit of 2026-11-19 (S-04, S-19): this pinned "… 9 addresses 6 points back", then a second, unnumbered
+    // row "Serious Links that lead to broken pages Fixed along with the problem above. 5 pages" in a nested item.
+    expect(rows[0]).toHaveAccessibleName(
+      /^1 Serious Pages or files that can't be found with “Links that lead to broken pages”: one list fixes both .* 9 addresses on 5 pages \+6 to your score$/,
     );
-    expect(rows[1]!.closest('li')).toHaveClass('si-plain-list__nested');
-    expect(rows[2]).toHaveAccessibleName(/^2 Worth fixing /);
-    expect(rows[4]).toHaveAccessibleName(/^4 Worth fixing /);
+    expect(list.queryByRole('link', { name: /^Serious Links that lead to broken pages/ })).toBeNull();
+    expect(main().getByRole('region', { name: 'Fix these first' }).querySelector('.si-plain-list__nested')).toBeNull();
+    // The UX audit of 2026-11-19 (S-04): these were rows[2] and rows[4], after the nested row.
+    expect(rows[1]).toHaveAccessibleName(/^2 Worth fixing /);
+    expect(rows[3]).toHaveAccessibleName(/^4 Worth fixing /);
     expect(list.getByText(/Fixing these four takes the score from/)).toHaveTextContent(
       'Fixing these four takes the score from 87 to 100.',
     );
@@ -185,7 +187,7 @@ describe.skipIf(TABLE_STUBBED)('the Summary of a finished check', () => {
     await site();
     const list = within(main().getByRole('region', { name: 'Fix these first' }));
     expect(await list.findByText('One fix covers 50 of 61 pages')).toBeVisible();
-    expect(list.queryByText('One fix')).toBeNull();
+    expect(list.queryByText('Fix once')).toBeNull();
   });
 
   it('says what’s fine and what couldn’t be checked, with the engine’s plain reasons', async () => {
@@ -382,7 +384,8 @@ describe.skipIf(TABLE_STUBBED)('the Summary in every other state', () => {
     expect(main().getByText(/That holds everything else back\. There are 2 serious problems\./)).toBeVisible();
     const first = within(main().getByRole('region', { name: 'Fix these first' })).getAllByRole('link')[0];
     expect(first).toHaveAttribute('href', `${FIX}/no-https`);
-    expect(first).toHaveAccessibleName(/The whole site 60 points back$/);
+    // The UX audit of 2026-11-19 (S-19): this pinned "The whole site 60 points back".
+    expect(first).toHaveAccessibleName(/The whole site \+60 to your score$/);
   });
 
   it('never analysed: no score yet, and Work out the results', async () => {

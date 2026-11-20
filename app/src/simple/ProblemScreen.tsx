@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useRouter } from '@tanstack/react-router';
-import { ArrowLeft, ArrowUpRight, FileText, Gauge, UserRound } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUpRight, FileText, Gauge, UserRound } from 'lucide-react';
 import { useMemo, useRef, type ReactNode } from 'react';
 import { analysisQuery, checksQuery, crawlQuery } from '../api/queries';
 import type { IssueGroup } from '../api/grids';
@@ -26,6 +26,7 @@ import { Icon } from '../ui/Icon';
 import { SeverityWord } from '../ui/SeverityWord';
 import { copyProblemList, saveCheckSheet } from './handOver';
 import {
+  fixAddsWords,
   fixerWords,
   looksForWords,
   passedWords,
@@ -35,10 +36,12 @@ import {
   wholesOf,
   type ShareWords,
 } from './plainWords';
-import { flatOneFixSentences, oneFixSentences, oneFixTitle } from './oneFixWords';
+import { SITEMAP_ITSELF, flatOneFixSentences, oneFixHolds, oneFixSentences, oneFixTitle } from './oneFixWords';
 import { plainImageInsight, plainRelated } from './plainEvidence';
 import { saysShownAt, useGroupShownAt } from '../screens/issues/useShownAt';
 import { WhereItIs } from './WhereItIs';
+import { WhereToFix } from './WhereToFix';
+import { fixShape } from './fixPages';
 import { RecheckCard } from './RecheckCard';
 import { ChangeFact, FixedSinceNote } from './ProblemSince';
 import { useSimpleChanges, type SimpleChanges } from './useSimpleChanges';
@@ -157,11 +160,12 @@ export function ProblemScreen({ crawlId, checkId }: { crawlId: string; checkId: 
 
   return (
     <div ref={screenRef} className="@container">
-      <div className="si-simple-page flex flex-col">
+      <div className="si-simple-page si-simple-page--wide flex flex-col">
         <p className="mb-4">
           <Link
             to={FIX}
-            params={{ crawl: crawlId }}
+            // The list: left out, the route's optional check is the one this page is on, and the link leads nowhere.
+            params={{ crawl: crawlId, check: undefined }}
             className="inline-flex items-center gap-1.5 text-14 font-medium text-text-secondary hover:text-text"
           >
             <Icon icon={ArrowLeft} size="sm" />
@@ -203,12 +207,25 @@ function SeeInAdvanced() {
   );
 }
 
+/** Brings a part of the page into view and puts the keys on it, so Tab goes on from there. */
+function jumpTo(id: string): void {
+  const part = document.getElementById(id);
+  if (!part) return;
+  part.scrollIntoView({ block: 'start', behavior: 'auto' });
+  const heading = part.querySelector<HTMLElement>('h2');
+  if (heading) {
+    heading.tabIndex = -1;
+    heading.focus({ preventScroll: true });
+  }
+}
+
 function ProblemHead({
   titleRef,
   outcome,
   title,
   facts,
   after,
+  jumps,
 }: {
   titleRef: React.RefObject<HTMLHeadingElement | null>;
   outcome: CheckEntry['outcome'];
@@ -216,6 +233,11 @@ function ProblemHead({
   facts?: ReactNode;
   /** Under the facts: what a fix of it also fixes. */
   after?: ReactNode;
+  /**
+   * The ways down the page from its head (the UX audit of 2026-11-19, S-14): at 1280 × 720 the list a problem's page
+   * exists for started below the fold, and "Fixed it?" was thousands of pixels under a long list.
+   */
+  jumps?: readonly { to: string; words: string }[] | undefined;
 }) {
   return (
     <header className="mb-5">
@@ -228,6 +250,21 @@ function ProblemHead({
       </h1>
       {facts ? <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-14 text-text-secondary">{facts}</ul> : null}
       {after}
+      {jumps && jumps.length > 0 ? (
+        <p className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-14">
+          {jumps.map((jump) => (
+            <button
+              key={jump.to}
+              type="button"
+              className="si-link inline-flex items-center gap-1"
+              onClick={() => jumpTo(jump.to)}
+            >
+              {jump.words}
+              <Icon icon={ArrowDown} size="sm" />
+            </button>
+          ))}
+        </p>
+      ) : null}
     </header>
   );
 }
@@ -263,7 +300,7 @@ function AlsoFixes({
           {other.all
             ? `: ${other.pages === 1 ? 'its 1 page' : `all ${pages(other.pages)}`}`
             : ` on ${formatCount(other.pages)} of its ${pages(other.entry.count ?? other.pages)}`}
-          {other.points ? `, ${formatCount(other.points)} more ${other.points === 1 ? 'point' : 'points'} back` : ''}.
+          .
         </li>
       ))}
       {related.clearedBy.map((other) => (
@@ -325,13 +362,23 @@ function FoundProblem({
   const share = shareWords(check, count, wholes);
   const line = analysis.score?.lines.find((candidate) => candidate.checkId === check.id);
   const points = analysis.score ? pointsWords(line, check.severity) : null;
+  // One figure for the job, as its row has it: its own points with those of the problems its fix clears entirely.
+  const adds = fixAddsWords(
+    points?.points ?? 0,
+    (related?.clears ?? []).reduce((sum, other) => sum + (other.all ? (other.points ?? 0) : 0), 0),
+  );
   const fixer = fixerWords(check.fixer);
   const first = useQuery({ ...firstGroupQuery(crawlId, check.id), enabled: check.grouping !== 'none' });
-  const template = first.data?.groups[0]?.likelyTemplate ? first.data.groups[0] : null;
+  // One fix only where the pages share one thing (oneFixWords' oneFixHolds): never for a kind of fault that is a
+  // different element on every page.
+  const template = first.data?.groups[0]?.likelyTemplate && oneFixHolds(check) ? first.data.groups[0] : null;
   // A check that doesn't group, on nearly every page checked: the engine says it's probably the template's.
-  const flatTemplate =
+  const onNearlyAll =
     check.grouping === 'none' &&
     analysis.counts.find((candidate) => candidate.checkId === check.id)?.likelyTemplate === true;
+  const flatTemplate = onNearlyAll && oneFixHolds(check);
+  // Pages missing from the sitemap, nearly all of them: the sitemap is what's wrong, not a part the pages share.
+  const sitemapItself = onNearlyAll && !flatTemplate && check.category === 'sitemaps';
   // Where the one fix is: the link every page shares (a check of pages holding it), or the one page linking to most
   // of the broken addresses (a check of the addresses).
   const templateTarget = useTemplateLink(crawlId, check, template);
@@ -344,6 +391,8 @@ function FoundProblem({
   const files = filesOf(check, counted);
   // What only the site's platform can change (the Shopify lane, phase B): its reason, as given, in place of a fix.
   const owner = counted?.platform ?? null;
+  // A fault that is a link is listed by the page to edit (Where to fix it); every other by its cause (Where it is).
+  const shape = files ? null : fixShape(check);
   const context = {
     crawlId,
     check,
@@ -352,6 +401,7 @@ function FoundProblem({
     share: share.text,
     files,
     platform: owner,
+    item,
   };
   const copyList = () => void copyProblemList(context);
   const saveSheet = () => saveCheckSheet(item, check);
@@ -379,6 +429,38 @@ function FoundProblem({
   const noun = (check.subject ?? 'page') === 'page' ? 'pages' : 'addresses';
   const what = check.plainWhat ?? [check.description];
   const steps = check.plainFix ?? [check.fix];
+  const explain = owner ? (
+    // Nothing to fix: what was found, in its first sentence alone (the others say why it matters, and who'd fix it).
+    <Card as="section" aria-labelledby="problem-what" className="px-7 py-6">
+      <h2 id="problem-what" className="mb-2 text-14 font-semibold">
+        What was found
+      </h2>
+      <p className="text-16 text-text">{what[0]}</p>
+    </Card>
+  ) : (
+    <Card className="si-explain2 @max-split:grid-cols-1">
+      <section aria-labelledby="problem-what" className="si-explain2__col">
+        <h2 id="problem-what" className="mb-2 text-14 font-semibold">
+          What’s wrong, and why it matters
+        </h2>
+        {what.map((sentence, index) => (
+          <p key={index} className={index === 0 ? 'text-16 text-text' : 'mt-2.5 text-16 text-text-secondary'}>
+            {sentence}
+          </p>
+        ))}
+      </section>
+      <section aria-labelledby="problem-fix" className="si-explain2__col">
+        <h2 id="problem-fix" className="mb-2 text-14 font-semibold">
+          How to fix it
+        </h2>
+        <ol className="si-steps text-16">
+          {steps.map((step, index) => (
+            <li key={index}>{step}</li>
+          ))}
+        </ol>
+      </section>
+    </Card>
+  );
   return (
     <>
       <ProblemHead
@@ -395,8 +477,8 @@ function FoundProblem({
                   points.text
                 ) : (
                   <>
-                    Takes <b className="font-semibold text-text">{points.points}</b>{' '}
-                    {points.points === 1 ? 'point' : 'points'} off the score
+                    Fixing this adds <b className="font-semibold text-text">{adds.points}</b> to your score
+                    {adds.split ? ` (${adds.split})` : null}
                   </>
                 )}
               </Fact>
@@ -411,39 +493,15 @@ function FoundProblem({
             <AlsoFixes crawlId={crawlId} related={related} />
           ) : null
         }
+        jumps={[
+          // The list leads a link fault's page, so its jump is to the explanation under it.
+          shape
+            ? { to: 'how-to-fix-it', words: 'What’s wrong, and how to fix it' }
+            : { to: 'the-list', words: 'Jump to the list' },
+          ...(owner ? [] : [{ to: 'fixed-it', words: 'Fixed it? Check it again' }]),
+        ]}
       />
-      {owner ? (
-        // Nothing to fix: what was found, in its first sentence alone (the others say why it matters, and who'd fix it).
-        <Card as="section" aria-labelledby="problem-what" className="px-7 py-6">
-          <h2 id="problem-what" className="mb-2 text-14 font-semibold">
-            What was found
-          </h2>
-          <p className="text-16 text-text">{what[0]}</p>
-        </Card>
-      ) : (
-        <Card className="si-explain2 @max-split:grid-cols-1">
-          <section aria-labelledby="problem-what" className="si-explain2__col">
-            <h2 id="problem-what" className="mb-2 text-14 font-semibold">
-              What’s wrong, and why it matters
-            </h2>
-            {what.map((sentence, index) => (
-              <p key={index} className={index === 0 ? 'text-16 text-text' : 'mt-2.5 text-16 text-text-secondary'}>
-                {sentence}
-              </p>
-            ))}
-          </section>
-          <section aria-labelledby="problem-fix" className="si-explain2__col">
-            <h2 id="problem-fix" className="mb-2 text-14 font-semibold">
-              How to fix it
-            </h2>
-            <ol className="si-steps text-16">
-              {steps.map((step, index) => (
-                <li key={index}>{step}</li>
-              ))}
-            </ol>
-          </section>
-        </Card>
-      )}
+      {shape ? null : explain}
       {owner ? null : template ? (
         <Callout className="mt-4" title={oneFixTitle(template.urls ?? template.pages, count, noun)}>
           <OneFixWords
@@ -458,11 +516,14 @@ function FoundProblem({
         </Callout>
       ) : flatTemplate ? (
         <Callout className="mt-4" title={oneFixTitle(count, count, noun)}>
-          {flatOneFixSentences(count, analysis.pagesAnalyzed).lead}{' '}
-          {check.plainOneFix ?? 'That’s almost certainly in the part of the site every page shares.'}{' '}
+          {flatOneFixSentences(count, analysis.pagesAnalyzed).lead} {check.plainOneFix}{' '}
           {flatOneFixSentences(count, analysis.pagesAnalyzed).fix}
         </Callout>
-      ) : shared ? (
+      ) : sitemapItself ? (
+        <Callout className="mt-4" title={SITEMAP_ITSELF.title}>
+          {SITEMAP_ITSELF.words}
+        </Callout>
+      ) : shared && !shape ? (
         <Callout
           className="mt-4"
           title={`One page links to ${shared.urls.toLocaleString('en-GB')} of ${shared.of >= count ? 'these' : 'the first'} ${shared.of.toLocaleString('en-GB')} ${noun}`}
@@ -471,16 +532,36 @@ function FoundProblem({
         </Callout>
       ) : null}
       {shopifyHere ? <ShopifyPrompt crawlId={crawlId} mode="simple" className="mt-4" /> : null}
-      <WhereItIs
-        crawlId={crawlId}
-        item={item}
-        check={check}
-        total={count}
-        onCopy={copyList}
-        onSave={saveSheet}
-        changes={changes}
-        files={files}
-      />
+      {shape ? (
+        <WhereToFix
+          crawlId={crawlId}
+          item={item}
+          check={check}
+          shape={shape}
+          total={count}
+          onCopy={copyList}
+          onSave={saveSheet}
+          changes={changes}
+        />
+      ) : (
+        <WhereItIs
+          crawlId={crawlId}
+          item={item}
+          check={check}
+          total={count}
+          onCopy={copyList}
+          onSave={saveSheet}
+          changes={changes}
+          files={files}
+        />
+      )}
+      {/* A fault that is a link leads with where to fix it (the owner: people are "more interested as to where the
+          broken link is"): at 1280 × 720 the explanation filled the first screen and the list began under it. */}
+      {shape ? (
+        <div id="how-to-fix-it" className="mt-4">
+          {explain}
+        </div>
+      ) : null}
       {/* The fix loop: Fixed it? is a recheck of these pages (./RecheckCard); none for what the owner can't change. */}
       {owner ? null : <RecheckCard crawlId={crawlId} item={item} check={check} />}
     </>

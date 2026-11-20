@@ -11,7 +11,8 @@ import { SeverityMark } from '../ui/SeverityMark';
 import { SeverityWord } from '../ui/SeverityWord';
 import { plainSeverityCount, type CheckOutcome } from '../ui/severity';
 import { FIX_SECTIONS } from './fixSections';
-import { fixRows, type FixRow } from './fixRows';
+import { fixRows, mergedWords, type FixRow } from './fixRows';
+import { saysWorse } from './changeLine';
 import {
   bandWord,
   categoriesWords,
@@ -160,6 +161,7 @@ export function ProblemRow({
   oneFix,
   points,
   nested = false,
+  merged,
   change,
   platform = null,
   oneFixCovers = null,
@@ -176,6 +178,8 @@ export function ProblemRow({
   points?: number | null | undefined;
   /** Folded under the row above: a fix of that one clears it. */
   nested?: boolean | undefined;
+  /** The checks that are this one from its other end (fixRows): the row says both, and names them in its line. */
+  merged?: readonly CheckEntry[] | undefined;
   /** The fix loop: its change since the site's last check, under its count ("9 on 3 Nov"); left out or null, none. */
   change?: string | null | undefined;
   /**
@@ -192,6 +196,7 @@ export function ProblemRow({
 } & Omit<React.HTMLAttributes<HTMLAnchorElement>, 'title' | 'results'>) {
   const share = rowCountWords(entry.check, entry.count ?? 0);
   const back = platform ? null : rowPointsWords(points);
+  const also = merged && merged.length > 0 ? mergedWords(merged) : null;
   return (
     <PlainCheckRow
       asChild
@@ -212,11 +217,21 @@ export function ProblemRow({
               )}
             </span>
           </>
+        ) : merged && merged.length > 0 ? (
+          // Two problems, one row: the other is named beside the title, where the row's one-line summary would cut it.
+          <>
+            {plainTitle(entry.check)}{' '}
+            <span className="text-13 font-regular text-text-secondary">
+              with “{merged.map((other) => plainTitle(other.check)).join('”, “')}”: one list fixes both
+            </span>
+          </>
         ) : (
           plainTitle(entry.check)
         )
       }
-      summary={platform ? platform.reason : nested ? 'Fixed along with the problem above.' : plainSummary(entry.check)}
+      summary={
+        platform ? platform.reason : nested ? 'Fixing the problem above clears this too.' : plainSummary(entry.check)
+      }
       count={
         <>
           {share.count === null ? (
@@ -227,6 +242,7 @@ export function ProblemRow({
               {share.rest}
             </>
           )}
+          {also ? ` ${also}` : null}
           {back ? (
             <>
               {' '}
@@ -236,7 +252,13 @@ export function ProblemRow({
           {change ? (
             <>
               {' '}
-              <span className="si-plain-row__change">{change}</span>
+              <span
+                className={
+                  saysWorse(change) ? 'si-plain-row__change si-plain-row__change--worse' : 'si-plain-row__change'
+                }
+              >
+                {change}
+              </span>
             </>
           ) : null}
         </>
@@ -290,6 +312,7 @@ export function FixFirstCard({
                 oneFix={oneFix.has(job.entry.check.id)}
                 oneFixCovers={covers.get(job.entry.check.id)}
                 points={job.points}
+                merged={job.merged}
                 change={changeOf(job.entry.check.id)}
               />
             </li>,
@@ -379,7 +402,13 @@ function fixFirstJobs(results: PlainResults, score: Score | null): FixRow[] {
  * checks couldn’t run."), the reason said once, and their names on demand (after the Shopify merge, never two dozen
  * names run together).
  */
-function SkippedReason({ group }: { group: SkippedGroup }) {
+function SkippedReason({
+  group,
+  only = false,
+}: {
+  group: SkippedGroup;
+  /** The one reason: its count is the card's own. */ only?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const listId = useId();
   const reason = [
@@ -398,7 +427,8 @@ function SkippedReason({ group }: { group: SkippedGroup }) {
   }
   return (
     <div>
-      <b className="font-medium text-text">{skippedGroupWords(titles.length)}.</b> {reason}{' '}
+      {only ? null : <b className="font-medium text-text">{skippedGroupWords(titles.length)}. </b>}
+      {reason}{' '}
       <Button
         variant="ghost"
         size="sm"
@@ -484,7 +514,7 @@ export function SummaryCards({ crawlId, results }: { crawlId: string; results: P
             {results.skipped.map((group) => (
               <li key={group.code ?? 'unknown'} className="grid grid-cols-(--check-row-columns) gap-2">
                 <SeverityWord severity="skipped" variant="mark" size="sm" className="mt-0.5" />
-                <SkippedReason group={group} />
+                <SkippedReason group={group} only={results.skipped.length === 1 && group.entries.length > 1} />
               </li>
             ))}
           </ul>

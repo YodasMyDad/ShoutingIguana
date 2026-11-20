@@ -46,11 +46,18 @@ afterEach(() => {
 describe.skipIf(TABLE_STUBBED)('What to fix since the last check', () => {
   it('gives each row its change in its count’s second line', async () => {
     await open(comparedGardenItem(), [changesRoute()]);
-    await waitFor(() => expect(row('Links that lead to broken pages')).toHaveTextContent('9 on 17 Oct'));
-    expect(row('Pages that share the same title')).toHaveTextContent('New since 17 Oct');
-    expect(row('Pages that are slow to answer')).toHaveTextContent('Not looked for last time');
-    expect(row('Links with nothing to read')).toHaveTextContent('same as 17 Oct');
-    expect(row('Large images that slow pages down')).toHaveTextContent('58 on 17 Oct');
+    // The UX audit of 2026-11-19 (S-04, S-12, S-20): this pinned "9 on 17 Oct" on the row of "Links that lead to broken
+    // pages", which is now merged into the missing addresses' row; that row says its own change (12 addresses then, 9
+    // now), which way and by how much.
+    await waitFor(() =>
+      expect(row("Pages or files that can't be found")).toHaveTextContent(/▼ 3 fewer than on 17 Oct$/),
+    );
+    expect(row('Pages that share the same title')).toHaveTextContent(/New since 17 Oct$/);
+    expect(row('Pages that are slow to answer')).toHaveTextContent(/Not looked for last time$/);
+    // The UX audit of 2026-11-19 (S-20): this pinned "same as 17 Oct"; a row that didn't change now says nothing.
+    expect(row('Links with nothing to read')).not.toHaveTextContent(/17 Oct|than last time|since|same as/);
+    // The UX audit of 2026-11-19 (S-12): this pinned "58 on 17 Oct"; 58 pages then, 61 now.
+    expect(row('Large images that slow pages down')).toHaveTextContent(/▲ 3 more than on 17 Oct$/);
   });
 
   it('folds the checks fixed since below the severities, each with its count then', async () => {
@@ -90,19 +97,31 @@ describe.skipIf(TABLE_STUBBED)('What to fix since the last check', () => {
   it('says what moved when the list is copied', async () => {
     const copy = vi.spyOn(clipboard, 'copyText').mockResolvedValue(true);
     await open(comparedGardenItem(), [changesRoute()]);
-    await waitFor(() => expect(row('Links that lead to broken pages')).toHaveTextContent('9 on 17 Oct'));
+    // The UX audit of 2026-11-19 (S-04, S-12): this waited for "9 on 17 Oct" on the row of "Links that lead to broken
+    // pages", now merged into the missing addresses' row, which says its own change.
+    await waitFor(() =>
+      expect(row("Pages or files that can't be found")).toHaveTextContent(/▼ 3 fewer than on 17 Oct$/),
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Copy this list' }));
     await waitFor(() => expect(copy).toHaveBeenCalled());
     const text = String(copy.mock.calls[0]?.[0]);
-    expect(text).toMatch(/Pages or files that can't be found: 9 addresses \(was 12\)/);
-    expect(text).toMatch(/Fixed along with it: Links that lead to broken pages, 5 pages \(was 9\)\./);
+    // The UX audit of 2026-11-19 (S-04): this pinned "…: 9 addresses (was 12)"; the lead line now counts the pages of
+    // the check merged into it, before what it was.
+    expect(text).toMatch(/Pages or files that can't be found: 9 addresses on 5 pages \(was 12\)/);
+    // The UX audit of 2026-11-19 (S-04): this pinned "Fixed along with it: Links that lead to broken pages, 5 pages
+    // (was 9)."; a merged check is now named alone, without its count or what it was.
+    expect(text).toMatch(/\n {2}- The same links, fixed in one go: Links that lead to broken pages\.\n/);
     expect(text).toMatch(/Pages that share the same title: 6 pages \(new since 17 Oct\)/);
   });
 
   it('says nothing of changes for a first check', async () => {
     await open(gardenItem({ previous: null, changes: null }), recheckRoutes({ rechecks: [] }));
     await screen.findAllByRole('link', { name: /Links that lead to broken pages/ });
-    expect(row('Links that lead to broken pages')).not.toHaveTextContent(/on \d|since/);
+    // The UX audit of 2026-11-19 (S-04, S-12): this pinned no /on \d|since/ on the row; the row, now the missing
+    // addresses' with the broken links merged into it, rightly reads "9 addresses on 5 pages", so the change words are
+    // named exactly, and it ends at its points.
+    expect(row('Links that lead to broken pages')).not.toHaveTextContent(/than on \d|than last time|since|▲|▼/);
+    expect(row('Links that lead to broken pages')).toHaveTextContent(/ 9 addresses on 5 pages \+6 to your score$/);
     expect(screen.queryByRole('button', { name: /^Fixed/ })).toBeNull();
   });
 

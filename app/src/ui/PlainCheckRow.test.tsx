@@ -62,7 +62,8 @@ describe('the plain check row', () => {
       </PlainCheckRow>,
     );
     expect(screen.getByRole('link')).toHaveAccessibleName(
-      '2 Worth a look Links with nothing to read One fix Some links have no words. 265 of 265 pages',
+      // The tag read "One fix" (the UX audit of 2026-11-19, section 5: it reads as a count).
+      '2 Worth a look Links with nothing to read Fix once Some links have no words. 265 of 265 pages',
     );
   });
 

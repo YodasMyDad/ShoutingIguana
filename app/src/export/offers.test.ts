@@ -295,7 +295,10 @@ describe('Issues and Overview', () => {
       format: 'html',
       path: 'C:\\x\\a.xlsx',
       cut: 'summary',
+      // Advanced's report speaks as the checks do; Simple's, as Simple's screens do (the UX audit's S-11).
+      words: 'technical',
     });
+    expect(crawlFileChoices(item, true)[0]?.build(as({ format: 'html' }))).toMatchObject({ words: 'plain' });
     expect(offer.choices[3]?.build(as())).toEqual({ kind: 'workbook', format: 'xlsx', path: 'C:\\x\\a.xlsx' });
   });
 

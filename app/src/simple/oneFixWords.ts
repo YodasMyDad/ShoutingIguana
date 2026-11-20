@@ -137,3 +137,28 @@ export function flatOneFixSentences(count: number, pagesChecked: number): { lead
     fix: `Fix it there once and all ${formatCount(count)} are fixed.`,
   };
 }
+
+/**
+ * Whether a cause on most of a check's pages is one thing to fix once (the UX audit of 2026-11-19, S-09: "Headings
+ * that jump levels" promised one fix for 45 pages whose rows each named a different heading, and "Pages missing from
+ * your sitemap" one "in the part of the site every page shares"). It is where the pages share one element: a check
+ * grouped by the address its pages name (the same link, the same image file), or one the engine gives a sentence for
+ * where such a fault usually lives (`plainOneFix`: the page design leaves a tag out of every page). A check grouped
+ * by the kind of fault, with no such sentence, has a different element on every page: nothing is promised.
+ */
+export function oneFixHolds(check: {
+  grouping?: string | null | undefined;
+  plainOneFix?: string | null | undefined;
+}): boolean {
+  return check.grouping === 'relatedUrl' || Boolean(check.plainOneFix);
+}
+
+/**
+ * What nearly every page missing from the sitemap means: not a fault in each page, nor in what they share, but in the
+ * sitemap itself.
+ */
+export const SITEMAP_ITSELF = {
+  title: 'The sitemap itself is the fault',
+  words:
+    'Nearly every page is missing from it, so there’s nothing to fix page by page: the sitemap may be out of date, or not the one your site makes now. Find where your site makes its sitemap and have it list every page.',
+};

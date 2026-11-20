@@ -294,18 +294,30 @@ The sentence is built from counts only:
   3b, remembered for Simple), the most points back or the most found first. Then **Couldn't check**, always listed
   with reasons, and **Nothing wrong**, folded.
 - **Related problems are one job (step 3b).** A problem a fix of another clears entirely (the analysis's
-  `clears[].all`: restoring 9 missing addresses clears the broken links on all 5 pages) is folded under that one, in
-  the same group: "Fixed along with the problem above", and the row above carries the points of both ("6 points
-  back").
+  `clears[].all`) is folded under that one, in the same group: "Fixing the problem above clears this too.", and the
+  row above carries the points of both ("+6 to your score").
+- **Broken links are one row (the UX round of 2026-11-19, S-04).** Dead addresses and the pages that link to them
+  are one list of links to change, so they are one row, not a row and its mirror folded under it: "Pages or files
+  that can't be found with “Links that lead to broken pages”: one list fixes both", counted "9 addresses on 5 pages".
+  The heading still counts both problems. The rule is `fixRows.ts`'s `mirrors`: the row's check is a check of dead
+  addresses and the folded one a check of the pages that hold the links (`fixPages.ts`'s shapes).
 - **How many at once.** Every Serious and Worth fixing problem. Worth a look shows its first three and "Show all
   13 things worth a look" while anything above needs fixing; with nothing above, it shows them all. Nothing wrong
   is folded behind "Show the 63 checks that found nothing wrong", and lists each check's good-news line ("Every
   page has a title"). Why fold: 13 notices and 63 passes would bury 6 problems.
 - **A row** has at most two labels: the severity mark, and "One fix" when one cause covers most of the pages.
   Then the plain title, the first sentence of what's wrong, and "5 pages", with the points fixing it gives back
-  under it ("4 points back"). A row doesn't say what its count is a share of (step 3b: "9 of 4,521 addresses" beside
-  "5 of 265 pages" couldn't be compared); the problem's page does.
-- **No search and no filter.** A site has at most 86 rows here. Advanced has both.
+  under it ("+4 to your score"). A row doesn't say what its count is a share of (step 3b: "9 of 4,521 addresses"
+  beside "5 of 265 pages" couldn't be compared); the problem's page does, for pages only (an address count has no
+  whole an owner knows). The tag reads "Fix once", and shows only where the pages share one thing (see One problem).
+- **Since the last check (the UX round, S-12, S-20).** A row says its change only when there is one: "▲ 239 more than
+  on 17 Nov" in the warning colour, "▼ 3 fewer than on 17 Nov", "New since 17 Nov". Unchanged, it says nothing. When
+  the last check was the same day, "than last time". The Summary's sentence adds "2 got worse", a link that lands on
+  the first of them (`#worse-since`).
+- **What's wrong with one page? (the UX round, S-06.)** A search above the list takes part of a page's address or
+  title and offers the site's pages that match; picking one lists everything found on it, each a link to that
+  problem, with the page a link that opens it. No filter of the list itself: a site has at most 86 rows here.
+- **Back keeps the list as it was left**: its scroll place, and "Show all" and "Nothing wrong" if they were open.
 - **Copy this list** copies the titles, counts and one-line summaries as text. **Open the report** is beside it.
 - **Hidden checks** (hidden in Advanced) stay out of the list, and a last line says "1 check is hidden", with
   Show. They still count in the score, which is the engine's.
@@ -315,17 +327,44 @@ The sentence is built from counts only:
 
 `problem.html`, `problem-template.html`.
 
-- **Head.** Back to What to fix; the severity badge; the plain title; one line of three facts: "5 of 265 pages",
-  "Takes 4 points off the score" (or "Doesn't change the score"), "Usually fixed by you, in your site's editor".
-  At the right, **See it in Advanced**. Under the facts (step 3b), what fixing it also fixes ("Fixing this also fixes
-  Links that lead to broken pages: all 5 pages, 4 more points back.") and which problem's fix fixes it, each a link.
+- **Head.** Back to What to fix (the link, the sidebar's item, the breadcrumb and Ctrl+2 all lead to the list); the
+  severity badge; the plain title; one line of three facts: "5 of 265 pages" ("9 addresses" for a check of
+  addresses), "Fixing this adds 6 to your score (2 for these, 4 for what it also fixes)" (or "Doesn't change the
+  score"), "Usually fixed by you, in your site's editor". At the right, **See it in Advanced**. Under the facts (step
+  3b), what fixing it also fixes ("Fixing this also fixes Links that lead to broken pages: all 5 pages.") and which
+  problem's fix fixes it, each a link. Then two ways down the page: "Jump to the list" and "Fixed it? Check it
+  again", which bring that part into view with the keys on it. The page is up to 1,400 px wide on a wide window.
 - **Two columns:** "What's wrong, and why it matters" and "How to fix it", as numbered steps.
-- **Where it is.** The check's groups, as Advanced has them, in plain columns: the cause on the left ("This address
-  doesn't work"), and where it is on the right ("Linked from"), each page by its title and its address. A check
-  with no groups lists its pages flat, with what was measured ("5,476 ms").
+- **Where to fix it (the UX round of 2026-11-19, S-02 to S-05, S-07).** A problem that is a link leads with the page
+  to edit, not the dead address: the owner's job is "open this page, find the link that says X, change it". Which
+  checks: dead addresses (`internal-client-error`, `redirect-broken`, `redirect-loop`), read from the links to them,
+  and pages holding a faulty link (broken, forwarding, nofollow, wordless, to a missing section, to localhost, slow),
+  read from the check's groups: `fixPages.ts`'s `fixShape`.
+  - Each page once, the one with the most links to change first: its title and address are one link, **Open page**
+    sits straight after it and opens the page at the link's words (a text fragment), then a row for each link: what
+    it says, where on the page, where it leads (a link that opens it) and what's wrong there ("missing (404 Not
+    Found)").
+  - A link on more than ten pages, or one the engine takes for the template's, is one row: "In the footer of 212
+    pages", fixed once, with "Show the pages".
+  - An address no page links to is in a list of its own, with where it came from and its sitemap as a link.
+  - **Copy the list** hands on the same: `Page:`, `Link:`, `leads to:`.
+- **Where it is**, for every other problem. The check's groups, as Advanced has them, in plain columns: the cause
+  on the left, and where it is on the right, each page by its title and its address, both links that open it, with
+  the open button always in sight after the address. "Linked from /garden/ (in the footer: “Old range”) and 3 more"
+  names each page as a link that opens at the link's words; "3 more" lists the rest in place. An address no page
+  links to says so, with its sitemap. A check with no groups lists its pages flat, with what was measured.
+  - A long title or description is shown whole, the part Google cuts greyed, with "171 characters: about 20 more
+    than Google shows." A security check names its settings after the plain words (Content-Security-Policy). The
+    rules file's row gives the line to add, with a button to copy it.
+  - Lines that say nothing aren't shown: "It's a page", how long a broken address took, "Can appear in search
+    results", "Still there since" (only what's new says so), "1 kind of problem", "The one cause is shown.".
   - 25 causes at a time, "Show 25 more", up to 200. Past that: "Save as a spreadsheet" and "See all 4,000 in
     Advanced".
   - A cause on many pages names the first three and offers "Show them".
+- **One fix is promised only where the pages share one thing (the UX round, S-09).** A check grouped by the address
+  its pages name, or one with the engine's `plainOneFix` sentence. A kind of fault that is a different element on
+  every page ("Headings that jump levels") gets no callout; pages missing from the sitemap, nearly all of them, say
+  "The sitemap itself is the fault".
 - **A template fault is one thing to fix.** When a group is the engine's `likelyTemplate`, a callout leads: "One
   fix clears 264 of these 265 pages. The same link has no words on 264 pages: the link to your home page. That's
   almost certainly your logo, which sits in the part of the site every page shares." The group's row carries "One
@@ -682,19 +721,21 @@ font, light only. It prints to A4 and Letter from the system print dialog, which
 
 ### Outline
 
-1. **Head.** "Website check", the site, the date, pages read, addresses checked, checks run.
+1. **Head.** "Website check", the site, the date, pages read, addresses checked, checks run. In the full report,
+   **"In this report"** under it: each part as a link, there only when the part is (the UX audit of 2026-11-19, A-12:
+   17,000 px with nothing to steer by).
 2. **Summary.** The score as a ring, its word, the sentence, what it covers; the five counts.
 3. **Fix these first.** Up to five: mark, plain title, count and share. "Fixing these five takes the score from 85
    to 98." Related problems are one job, as on the Summary: one a fix of another among the five clears entirely is
    listed under it, indented and unnumbered, "Fixed along with the problem above"; only the jobs are numbered, 1 to
-   4, and "these four" counts them.
+   4, and "these four" counts them. In the full report each is a link to its section.
 4. **How the score is worked out.** The two sentences, the line for each check that cost points, the sum, the
    bands in one line, the version.
-5. **What to fix**, from a new page. Every check that found something, in three groups. For each: the plain title,
-   with the technical title and severity small at the right ("Links to broken internal URLs · Error"); its count
-   and share, its points, who usually fixes it; what's wrong and why it matters; how to fix it; a "One fix" line
-   for a template fault; then its first pages, with what was found on each, and "And 56 more: the full list is on
-   sheet 3 of the spreadsheet". Problems are numbered in "Fix first" order, 1 to 19 on the garden crawl, so the list
+5. **What to fix**, from a new page. Every check that found something, in three groups. For each: the plain title
+   (in the technical wording, with the technical title and severity small at the right: "Links to broken internal
+   URLs · Error"); its count and share, its points, who usually fixes it; what's wrong and why it matters; how to fix
+   it; a "One fix" line for a template fault; then **where to fix it**: its pages, all of them while they fit, with
+   what was found on each, and for a long list "And 56 more: the full list is on sheet 3 of the spreadsheet". Problems are numbered in "Fix first" order, 1 to 19 on the garden crawl, so the list
    on page 1, the section here and the workbook's sheet all carry one number.
    Only jobs are numbered: a problem a fix of another of its severity clears entirely follows that one, indented and
    unnumbered, and says "Fixed along with the problem above." Its full list is on its job's sheet number with a
@@ -703,12 +744,40 @@ font, light only. It prints to A4 and Letter from the system print dialog, which
 7. **What was checked and found nothing wrong**: every passed check's good-news line, by category.
 8. **About this check.** Where it started, when, how long, what was read, how many pages can appear in search,
    what wasn't followed, how it was read (speed, limit, robots.txt), whether it finished, and the report's words
-   beside the technical ones.
+   beside the technical ones: in the plain wording, each problem's technical name, once ("What a developer or an SEO
+   tool calls each problem").
 9. **Foot.** "Made with Shouting Iguana", the date, the score's version, the engine's version.
 
-- **One document for both modes and both readers.** Plain words lead, and each check carries its technical name,
-  so the developer it is sent to can find the check. Why not two reports: "a report for everything", and two would
-  disagree.
+- **One outline, two wordings** (the UX audit of 2026-11-19, S-11; before it, one document served both readers, and
+  a client read "404 Not Found · Type: Page", "(404; not indexable; content, “Buy Now”)", "H1 → H4", "Inlinks: 1"
+  and, under every plain title, "Internal URL returns 4xx · Error"). The score, the order, the numbers, the titles,
+  what's wrong and how to fix it are the same in both, so the two can't disagree; what differs is how a row says what
+  was found.
+  - **Plain**, in Simple: every row says what Simple's screens say ("It is missing (404 Not Found)", "1 broken link",
+    "It goes from the main heading to a level-4 heading, skipping levels 2 and 3", "For sharing, its title and
+    description are empty", "The cookie “ASP.NET_SessionId” can be sent without the secure connection"). Lines that say
+    nothing a site owner can act on are left out ("It's a page", how long checking took), and so is evidence that only
+    repeats the line before it. The technical name of each check is listed once, under About this check, for the
+    developer the report is sent to.
+  - **Technical**, in Advanced: the engine's own details and evidence, a fact with its unit, and each check's
+    technical name and severity beside its plain title.
+  - The plain sentences are the app's own (`app/src/simple`), mirrored in the engine; one file of cases, read by a
+    test on each side, holds the two together ([the API's words for it](v2-sidecar-api.md#report-e5)).
+- **Each problem says where to fix it** (S-02, S-11: "people are going to be more interested as to where the broken
+  link is"). A missing page is mended at the link to it, so its row leads with the page to edit, as a link, then the
+  link's words and where on the page it is, then where it leads and what's wrong:
+
+  | Page to edit | It leads to | What's wrong |
+  | --- | --- | --- |
+  | /blog/best-rattan-patio-sets/ · The link that says “Buy Now”, in the main content | /3-pieces-patio-furniture-set/ | It is missing (404 Not Found) |
+
+  One page's links are together. A page that holds bad links or images lists what to change on it a line each: the
+  thing on the page ("The link that says “Buy Now”, in the main content"; "The picture with the alt text “Sofa”, in
+  the main content"), then where it leads and how that answered, or the image's file with its size. Any other check of
+  addresses (a server error, a chain of forwards) leads with the address, and the pages that link to it follow, each
+  a link.
+- **Its links are links.** On a screen an address looks like a link, and opens the page; "Fix these first", the
+  score's rows and "In this report" lead to their sections. On paper a link is plain text, and a PDF keeps it.
 - **Two cuts.** The Report screen's **Full report | Summary page** asks the engine for the whole document, or for
   parts 1 to 4 and 9 alone. The summary is the full report's first page (or two, for a site with many problems),
   so the two can't differ.
@@ -718,13 +787,15 @@ font, light only. It prints to A4 and Letter from the system print dialog, which
 
 ### Sizes
 
-- **Examples are capped:** the first 5 pages of each Serious and Worth fixing problem, the first 3 of each thing
-  worth a look, in crawl order. The engine takes the caps as options, and these are the defaults. Why so few: the
-  report explains, and the workbook lists.
-- **The length follows the checks that fired, never the site's size.** About half a page for a problem to fix and
-  a quarter for a thing worth a look, which sets its examples beside its text. The garden crawl's 19 checks print
-  to 11 pages of A4 and an 84 KB file. A 100,000-page site whose crawl fires 76 checks prints to about 30 pages.
-  With all 87 firing it is about 35 pages and under 300 KB.
+- **A problem lists every page while they fit:** up to 25 for each Serious and Worth fixing problem and 10 for each
+  thing worth a look, the most important first, and up to five of the things one page names (two for a thing worth a
+  look), then how many more. The engine takes the caps as options, and these are the defaults. They were 5 and 3
+  until the UX audit of 2026-11-19 (A-12): "The first 5 of 8 … And 3 more: the full list is on sheet 1" sent a client
+  to a second file for three rows. Past the caps the report explains, and the workbook lists.
+- **The length follows the checks that fired, never the site's size.** A problem's section is its text and at most
+  its cap of rows. With the caps of 5 and 3 the garden crawl's 19 checks printed to 11 pages of A4 and an 84 KB file;
+  with 25 and 10, and its 29 checks of 17 November, it is about twice as long on screen and a 237 KB file (not
+  printed and counted again), which is what "In this report" and the links from "Fix these first" are for.
 - **A crawl stopped early.** The head says so under the site: "This check was stopped early: 312 pages read, 1,380
   addresses still to check. This report covers only what was read." The score is marked "so far". Part 6 lists the
   checks that need a finished crawl. Part 8's "Finished?" says no, and how to continue.
@@ -735,7 +806,11 @@ font, light only. It prints to A4 and Letter from the system print dialog, which
 
 The full lists go in an Excel workbook beside the report, which the export work (E5) builds: a summary sheet (the
 score, the counts, every check with its severity, plain and technical titles, count and share), then a sheet a
-check that found something, with every URL, its title, its detail and the other URL involved. A sheet is named by
+check that found something, with every URL, its title, its detail and the other URL involved. A check whose
+addresses other pages link to (a 404, a redirect) has the first page that links to each in columns of its own, "Page
+that links to it", "Where on the page" and "Link text", so the sheet can be sorted and filtered by the page to edit
+(the UX audit's S-05: they were one cell, "https://…/blog/ (content, “Buy Now”)"); then how many pages link to it,
+the others of them, and the sitemaps listing it. On a missing page's sheet those three columns lead. A sheet is named by
 the problem's number in the report and the start of its plain title ("3 Large images that slow pages…"), as Excel
 allows 31 characters, and the summary sheet lists each number with its full title. A problem folded under a job has
 no number of its own: its sheet follows its job's and is named by the job's number with a letter ("2a Links that
@@ -746,11 +821,17 @@ formatted.
 
 `report-screen.html`. In both modes, the same screen.
 
-- **A toolbar:** the title, the site, date and page count; **Full report | Summary page**; **Spreadsheet of
-  everything…**; **Save…** (the HTML file); **Print or save as PDF** (Ctrl+P), the primary action, which opens the
-  system print dialog on the frame.
-- **The document** below it, as a sheet on the canvas: the engine's HTML in a sandboxed frame with scripts off. It
-  is light in both themes, as paper is.
+- **A toolbar:** the title, the site, date and page count; **Full report | Summary page**; **Save spreadsheet…**;
+  **Save as HTML…**; **Print or save as PDF** (Ctrl+P), the primary action, which opens the system print dialog on
+  the frame. Each is named for what it does (the UX audit's A-12: "Save…" didn't say what it saved).
+- **The document** below it, as a sheet on the canvas: the engine's HTML in a sandboxed frame with scripts off, in
+  the mode's wording. It is light in both themes, as paper is.
+- **Its links work** (S-11: all 134 did nothing, as a sandboxed frame may open no window). The page carries each
+  out: an address opens in the browser, a link to a part of the report scrolls it into view, and each problem's
+  heading has the app's own link into that problem, **Open in What to fix** in Simple and **Open in Issues** in
+  Advanced, at the heading's far side. That link is the preview's alone: the saved file and paper don't have it.
+- **The sheet fills the pane.** It is zoomed to fit, from its own size up to half as big again (at 2560 px it was a
+  760 px column of 12 px type with 700 px blank either side), on screen only: it prints at its own size.
 - Saving uses a native dialog, then a toast with "Open folder", as every export does. Default names:
   `gardenfurnituresets.co.uk 2026-10-31 report.html` and `… .xlsx`.
 - **States:** building (a skeleton sheet; it should take well under a second); never analysed (above); out of date

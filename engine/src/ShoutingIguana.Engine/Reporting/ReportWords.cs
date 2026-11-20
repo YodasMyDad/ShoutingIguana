@@ -85,6 +85,29 @@ internal static class ReportWords
         ? CHECKED_ONCE
         : check.Subject == IssueSubject.Page ? Plural(count, "page", "pages") : Plural(count, "address", "addresses");
 
+    /// <summary>
+    /// What changed since the last check, as the summary page's line counts it: "2 problems fixed, 1 new, 3 got better, 2
+    /// got worse." The first count carries the noun, so a line of one count reads alone ("2 problems got worse."). A
+    /// problem got better when it is on fewer pages than then, and worse when on more.
+    /// </summary>
+    public static string ChangeCounts(int fixedCount, int added, int fewer, int more)
+    {
+        List<string> counts = [];
+        void Count(int count, Func<string, string> first, string then)
+        {
+            if (count > 0)
+            {
+                counts.Add(counts.Count == 0 ? first(Plural(count, "problem", "problems")) : $"{Number(count)} {then}");
+            }
+        }
+
+        Count(fixedCount, problems => $"{problems} fixed", "fixed");
+        Count(added, _ => Plural(added, "new problem", "new problems"), "new");
+        Count(fewer, problems => $"{problems} got better", "got better");
+        Count(more, problems => $"{problems} got worse", "got worse");
+        return counts.Count == 0 ? "No problem was fixed, and none is new." : string.Join(", ", counts) + ".";
+    }
+
     /// <summary>A count with its thousands apart, as the UK writes them: 4,521.</summary>
     public static string Number(long number) => number.ToString("N0", NUMBERS);
 

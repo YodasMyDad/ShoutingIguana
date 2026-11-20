@@ -1,5 +1,5 @@
 import { createMemoryHistory } from '@tanstack/react-router';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setTransport } from '../api/transport';
 import type { Analysis, CrawlListItem } from '../api/types';
@@ -15,8 +15,10 @@ import { ISSUES_ANALYSIS } from '../test/issuesSidecar';
 import { overviewRoutes } from '../test/overviewSidecar';
 
 const REPORT = `/crawls/${TEST_CRAWL_ID}/report`;
-const DOCUMENT = (cut: string) =>
-  `<!doctype html><html><head><meta charset="utf-8"><title>Website check</title></head><body><h1>Website check</h1><p>The ${cut} cut.</p></body></html>`;
+const BODY = (cut: string, words: string) =>
+  `<h1>Website check</h1><p>The ${cut} cut, in ${words} words.</p><h3><span>1. Pages or files that can’t be found</span><!--si:open internal-client-error--></h3><p><a id="out" href="https://example.com/blog/" target="_blank">/blog/</a></p>`;
+const DOCUMENT = (cut: string, words: string) =>
+  `<!doctype html><html><head><meta charset="utf-8"><title>Website check</title></head><body>${BODY(cut, words)}</body></html>`;
 
 const ITEM: Partial<CrawlListItem> = {
   site: 'gardenfurnituresets.co.uk',
@@ -30,9 +32,13 @@ function sidecar(
 ): FakeSidecar {
   const report: FakeRoute = [
     'GET',
-    /^\/api\/crawls\/[0-9a-f]{16}\/report(?:\?cut=(\w+))?$/,
-    (_request, match) =>
-      new Response(DOCUMENT(match[1] ?? 'full'), { headers: { 'Content-Type': 'text/html; charset=utf-8' } }),
+    /^\/api\/crawls\/[0-9a-f]{16}\/report(?:\?(.*))?$/,
+    (_request, match) => {
+      const query = new URLSearchParams(match[1] ?? '');
+      return new Response(DOCUMENT(query.get('cut') ?? 'full', query.get('words') ?? 'plain'), {
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      });
+    },
   ];
   const transport = fakeSidecar([
     report,
@@ -79,7 +85,7 @@ describe('the Report screen', () => {
     expect(sheet.tagName).toBe('IFRAME');
     // Scripts off; the page may reach it to print, and it may open the print dialog.
     expect(sheet.getAttribute('sandbox')).toBe('allow-same-origin allow-modals');
-    expect(sheet.getAttribute('srcdoc')).toContain('The full cut.');
+    expect(sheet.getAttribute('srcdoc')).toContain('The full cut, in plain words.');
     expect(screen.getByRole('heading', { level: 1, name: 'Report' })).toBeVisible();
     expect(reportLine()).toBe('gardenfurnituresets.co.uk · checked 31 October 2026 · 265 pages read');
     expect(screen.getByRole('button', { name: /Print or save as PDF/ })).toBeEnabled();
@@ -97,9 +103,77 @@ describe('the Report screen', () => {
     const router = await open(REPORT);
     await frame();
     fireEvent.click(screen.getByRole('radio', { name: 'Summary page' }));
-    await waitFor(async () => expect((await frame()).getAttribute('srcdoc')).toContain('The summary cut.'));
+    await waitFor(async () => expect((await frame()).getAttribute('srcdoc')).toContain('The summary cut,'));
     expect(router.state.location.search).toEqual({ cut: 'summary' });
-    expect(reportCalls(transport)).toContain(`/api/crawls/${TEST_CRAWL_ID}/report?cut=summary`);
+    expect(reportCalls(transport)).toContain(`/api/crawls/${TEST_CRAWL_ID}/report?cut=summary&words=plain`);
+  });
+
+  // The UX audit's S-11: the report Simple shows says what Simple's screens say; Advanced's speaks as the checks do.
+  it('asks for the report in a site owner’s words in Simple, and a working SEO’s in Advanced', async () => {
+    const simple = sidecar();
+    await open(REPORT);
+    expect((await frame()).getAttribute('srcdoc')).toContain('in plain words.');
+    expect(reportCalls(simple)).toContain(`/api/crawls/${TEST_CRAWL_ID}/report?cut=full&words=plain`);
+    cleanup();
+    const advanced = sidecar();
+    await open(REPORT, 'advanced');
+    expect((await frame()).getAttribute('srcdoc')).toContain('in technical words.');
+    expect(reportCalls(advanced)).toContain(`/api/crawls/${TEST_CRAWL_ID}/report?cut=full&words=technical`);
+  });
+
+  // The audit's A-12: three buttons, two of which opened one dialog, and "Save…" didn't say what.
+  it('names each way out for what it does', async () => {
+    sidecar();
+    await open(REPORT);
+    await frame();
+    const bar = screen.getByRole('heading', { level: 1, name: 'Report' }).closest('header');
+    expect(
+      within(bar!)
+        .getAllByRole('button')
+        .map((button) => button.textContent.replace(/Ctrl\+?P$/, '').trim()),
+    ).toEqual(['Save spreadsheet…', 'Save as HTML…', 'Print or save as PDF']);
+  });
+
+  /** The frame's document as the browser would have it: jsdom doesn't read `srcdoc`, so the test writes it in. */
+  async function loadedFrame(): Promise<Document> {
+    const shown = (await frame()) as HTMLIFrameElement;
+    const inside = shown.contentDocument;
+    if (!inside) throw new Error('The frame has no document.');
+    const written = new DOMParser().parseFromString(shown.getAttribute('srcdoc') ?? '', 'text/html');
+    inside.body.innerHTML = written.body.innerHTML;
+    fireEvent.load(shown);
+    return inside;
+  }
+
+  // S-11: the report's 134 links did nothing in the app (the frame can't open a window, and nothing listened).
+  it('opens an address in the report in the browser', async () => {
+    sidecar();
+    await open(REPORT);
+    const inside = await loadedFrame();
+    const opened = vi.spyOn(window, 'open').mockReturnValue(window);
+    const link = inside.getElementById('out');
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+    link?.dispatchEvent(click);
+    await waitFor(() => expect(opened).toHaveBeenCalledTimes(1));
+    expect(opened.mock.calls[0]?.[0]).toBe('https://example.com/blog/');
+    expect(click.defaultPrevented).toBe(true);
+  });
+
+  // A-12: no way from the report back into the app. Each problem's heading has one, named for the mode's screen.
+  it('leads from a problem’s heading to that problem: What to fix in Simple, Issues in Advanced', async () => {
+    sidecar();
+    const router = await open(REPORT);
+    const inside = await loadedFrame();
+    const link = inside.querySelector('a.si-open');
+    expect(link?.textContent).toBe('Open in What to fix');
+    link?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/crawls/${TEST_CRAWL_ID}/issues/internal-client-error`),
+    );
+    cleanup();
+    sidecar();
+    await open(REPORT, 'advanced');
+    expect((await loadedFrame()).querySelector('a.si-open')?.textContent).toBe('Open in Issues');
   });
 
   it('prints the frame alone on Ctrl+P, and on its button', async () => {
@@ -186,11 +260,11 @@ describe('the Report screen', () => {
     expect(current.map((link) => link.textContent)).toContain('Report');
   });
 
-  it('Save and Spreadsheet of everything open the app’s one export dialog, on their choice and the cut shown', async () => {
+  it('Save as HTML and Save spreadsheet open the app’s one export dialog, on their choice and the cut shown', async () => {
     sidecar();
     await open(`${REPORT}?cut=summary`);
     await frame();
-    fireEvent.click(screen.getByRole('button', { name: /^Save…/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Save as HTML…/ }));
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByRole('radio', { name: /The report/ })).toBeChecked();
     expect(within(dialog).getByRole('radio', { name: 'Summary page' })).toBeChecked();
@@ -198,7 +272,7 @@ describe('the Report screen', () => {
       'gardenfurnituresets.co.uk 2026-10-31 report summary.html',
     );
     act(() => closeExportDialog());
-    fireEvent.click(screen.getByRole('button', { name: /Spreadsheet of everything/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Save spreadsheet…/ }));
     const again = await screen.findByRole('dialog');
     expect(within(again).getByRole('radio', { name: /Spreadsheet of everything/ })).toBeChecked();
     expect(within(again).getByRole('textbox', { name: 'Save as' })).toHaveValue(

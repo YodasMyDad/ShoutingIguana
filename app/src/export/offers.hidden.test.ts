@@ -26,7 +26,13 @@ afterEach(() => replaceSettings({ hiddenChecks: [], hiddenChecksByCrawl: {} }));
 describe('the report and the workbook', () => {
   it('ask for nothing more while no check is hidden', () => {
     const [report, workbook] = crawlFileChoices(item, false);
-    expect(report?.build(as({ format: 'html' }))).toEqual({ kind: 'report', format: 'html', path: 'C:/x/a.xlsx' });
+    // The report is in the words of the mode it's saved from: Advanced's here.
+    expect(report?.build(as({ format: 'html' }))).toEqual({
+      kind: 'report',
+      format: 'html',
+      path: 'C:/x/a.xlsx',
+      words: 'technical',
+    });
     expect(workbook?.build(as())).toEqual({ kind: 'workbook', format: 'xlsx', path: 'C:/x/a.xlsx' });
   });
 

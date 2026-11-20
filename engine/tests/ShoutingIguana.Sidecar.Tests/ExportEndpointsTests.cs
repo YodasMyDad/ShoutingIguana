@@ -244,14 +244,24 @@ public sealed class ExportEndpointsTests(GridSidecar grid) : IClassFixture<GridS
         Assert.Equal("default-src 'none'; frame-ancestors 'none'", response.Headers.GetValues("Content-Security-Policy").Single());
         var full = await response.Content.ReadAsStringAsync();
         Assert.StartsWith("<!doctype html>", full, StringComparison.Ordinal);
-        Assert.Contains("<h2>What to fix</h2>", full, StringComparison.Ordinal);
+        Assert.Contains("<h2 id=\"what-to-fix\">What to fix</h2>", full, StringComparison.Ordinal);
         Assert.Contains("http-equiv=\"Content-Security-Policy\" content=\"default-src &#39;none&#39;; style-src &#39;sha256-", full, StringComparison.Ordinal);
         Assert.DoesNotContain("<script", full, StringComparison.OrdinalIgnoreCase);
 
         var summary = await Sidecar.Client.GetStringAsync($"api/crawls/{grid.Id}/report?cut=summary");
-        Assert.DoesNotContain("<h2>What to fix</h2>", summary, StringComparison.Ordinal);
-        Assert.Contains("<h2>How the score is worked out</h2>", summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("<h2 id=\"what-to-fix\">What to fix</h2>", summary, StringComparison.Ordinal);
+        Assert.Contains("<h2 id=\"score\">How the score is worked out</h2>", summary, StringComparison.Ordinal);
         Assert.True(summary.Length < full.Length / 2);
+
+        // Whose words its rows are in (the UX audit's S-11): a site owner's unless asked, as Simple shows it, with no check's
+        // technical name beside its title; a working SEO's when asked, as Advanced does. The file an export saves is the same.
+        Assert.DoesNotContain("class=\"problem__tech\"", full, StringComparison.Ordinal);
+        Assert.Equal(WithoutMadeOn(full), WithoutMadeOn(await Sidecar.Client.GetStringAsync($"api/crawls/{grid.Id}/report?words=plain")));
+        var technical = await Sidecar.Client.GetStringAsync($"api/crawls/{grid.Id}/report?words=technical");
+        Assert.Contains("class=\"problem__tech\"", technical, StringComparison.Ordinal);
+        var technicalPath = Path.Combine(_folder, "technical.html");
+        await ExportAsync(grid.Id, """{"kind":"report","format":"html","words":"technical"}""", technicalPath);
+        Assert.Equal(WithoutMadeOn(technical), WithoutMadeOn(await File.ReadAllTextAsync(technicalPath)));
 
         // The examples asked for: with none, no problem lists a page.
         var bare = await Sidecar.Client.GetStringAsync($"api/crawls/{grid.Id}/report?cut=full&examples=0&lookExamples=0");
@@ -272,7 +282,7 @@ public sealed class ExportEndpointsTests(GridSidecar grid) : IClassFixture<GridS
 
         // A crawl never analysed has no report; nor is one made with numbers that aren't.
         TestSidecar.AssertProblem(await Sidecar.SendAsync(HttpMethod.Get, $"api/crawls/{grid.FreshId}/report"), HttpStatusCode.NotFound, "not-analyzed");
-        foreach (var (query, field) in new[] { ("cut=half", "cut"), ("examples=51", "examples"), ("examples=x", "examples"), ("lookExamples=-1", "lookExamples"), ("pages=2", "pages") })
+        foreach (var (query, field) in new[] { ("cut=half", "cut"), ("examples=51", "examples"), ("examples=x", "examples"), ("lookExamples=-1", "lookExamples"), ("words=simple", "words"), ("pages=2", "pages") })
         {
             var problem = TestSidecar.AssertProblem(await Sidecar.SendAsync(HttpMethod.Get, $"api/crawls/{grid.Id}/report?{query}"), HttpStatusCode.UnprocessableEntity, "invalid-export");
             Assert.Equal([field], problem["errors"]!.AsObject().Select(error => error.Key));
@@ -303,6 +313,8 @@ public sealed class ExportEndpointsTests(GridSidecar grid) : IClassFixture<GridS
     [InlineData("""{"kind":"report","format":"html","cut":"half"}""", "cut")]
     [InlineData("""{"kind":"report","format":"html","examples":51}""", "examples")]
     [InlineData("""{"kind":"report","format":"html","lookExamples":-1}""", "lookExamples")]
+    [InlineData("""{"kind":"report","format":"html","words":"simple"}""", "words")]
+    [InlineData("""{"kind":"workbook","format":"xlsx","words":"plain"}""", "words")]
     [InlineData("""{"kind":"links","format":"csv","linkEnds":{"end":"to"}}""", "linkEnds")]
     [InlineData("""{"kind":"sitemapUrls","format":"csv","sitemapId":1,"linkEnds":{"end":"to"}}""", "linkEnds")]
     [InlineData("""{"kind":"urls","format":"csv","blocked":true}""", "blocked")]

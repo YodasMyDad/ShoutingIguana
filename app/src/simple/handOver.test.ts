@@ -6,7 +6,7 @@ import { closeExportDialog, defaultFileName, getExportDialog } from '../export/e
 import { liveStore } from '../live/liveStore';
 import { TEST_CRAWL_ID, fakeSidecar, testCrawlItem } from '../test/fakeSidecar';
 import { SHOPIFY_OWNER } from '../test/platformSidecar';
-import { SIMPLE_CHECKS } from '../test/simpleSidecar';
+import { SIMPLE_CHECKS, problemRoutes } from '../test/simpleSidecar';
 import type { TransportRequest } from '../api/transport';
 import { json } from '../test/fakeSidecar';
 import { checkSheetOffer, copyProblemList, problemListText, saveCheckSheet } from './handOver';
@@ -302,11 +302,52 @@ describe('Copy the list', () => {
   });
 
   it('lists a check whose groups come back empty flat, as Where it is does', async () => {
-    const rows = [{ id: 1, url: 'https://example.com/a/', detail: '404 Not Found' }];
-    setTransport(groupedSidecar('internal-client-error', [], () => rows));
-    const text = await copied('internal-client-error');
+    // A server error: a dead address (a 404) is handed on by the page to edit instead (below).
+    const rows = [{ id: 1, url: 'https://example.com/a/', detail: '500 Internal Server Error' }];
+    setTransport(groupedSidecar('internal-server-error', [], () => rows));
+    const text = await copied('internal-server-error');
     // As the page says it: the engine's detail in plain words (plainDetails.ts).
-    expect(text.endsWith('Where it is:\nhttps://example.com/a/ (It is missing (404 Not Found))')).toBe(true);
+    expect(
+      text.endsWith('Where it is:\nhttps://example.com/a/ (It has a server error (500 Internal Server Error))'),
+    ).toBe(true);
+  });
+
+  // The UX audit of 2026-11-19, S-05: the copied 404 list was eight bare dead addresses, with no page that holds each
+  // link; a developer couldn't act on it without crawling the site again.
+  it('hands a dead address on by the page to edit: the page, the link’s words and place, where it leads and what’s wrong', async () => {
+    const words: string[] = [];
+    setTransport(fakeSidecar([...problemRoutes()]));
+    const text = await copied('internal-client-error', words);
+    expect(
+      text.endsWith(
+        [
+          'Where to fix it:',
+          'Page: https://www.gardenfurnituresets.co.uk/garden-furniture/ (Garden Furniture)',
+          '  Link: “Our range” (footer)',
+          '    leads to: https://www.gardenfurnituresets.co.uk/monaco-corner-sofa/ (missing (404 Not Found))',
+          '  Link: “Our range” (footer)',
+          '    leads to: https://www.gardenfurnituresets.co.uk/old-range/ (missing (404 Not Found))',
+          '  Link: “Our range” (footer)',
+          '    leads to: https://www.gardenfurnituresets.co.uk/outdoor-pe-rattan-dining-set-with-fire-pit-table/ (missing (404 Not Found))',
+          '',
+          'Page: https://www.gardenfurnituresets.co.uk/sofas/ (Sofas)',
+          '  Link: A link with no words (main content)',
+          '    leads to: https://www.gardenfurnituresets.co.uk/monaco-corner-sofa/ (missing (404 Not Found))',
+          '  Link: A link with no words (main content)',
+          '    leads to: https://www.gardenfurnituresets.co.uk/old-range/ (missing (404 Not Found))',
+          '',
+          'Page: https://www.gardenfurnituresets.co.uk/blog/',
+          '  Link: A link with no words (main content)',
+          '    leads to: https://www.gardenfurnituresets.co.uk/old-range/ (missing (404 Not Found))',
+          '',
+          'Addresses no page links to:',
+          '  https://www.gardenfurnituresets.co.uk/gone-for-good/ (missing (404 Not Found))',
+          '    No page links to it. It’s listed in your sitemap: take it out of there.',
+          '    Sitemap: https://www.gardenfurnituresets.co.uk/sitemap.xml',
+        ].join('\n'),
+      ),
+    ).toBe(true);
+    expect(words).toEqual(['Copied the list: 6 links to change on 3 pages · 1 address no page links to']);
   });
 
   it('lists a check that doesn’t group flat, with what was measured', () => {
