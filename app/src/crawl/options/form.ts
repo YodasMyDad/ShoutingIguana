@@ -4,7 +4,7 @@
 //
 // Numbers are held as typed, so a half-typed value stays on screen; the engine checks them (`validate`), and a value
 // that isn't a number reaches it as typed, so its message says so beside the field.
-import type { CrawlOptions, SpeedPreset, UserAgentPreset } from '../../api/types';
+import type { CrawlOptions, JavaScriptRendering, SpeedPreset, UserAgentPreset } from '../../api/types';
 import type { SettingFocus } from '../../routing/search';
 import { ENGINE_DEFAULTS } from './engineDefaults';
 import { signatureFormOf, signaturesOf, type ShopifySignatureForm } from './shopifySignature';
@@ -45,6 +45,13 @@ export interface CrawlForm {
   extraSitemaps: string;
   storeHtml: boolean;
   useCookies: boolean;
+  javaScriptRendering: JavaScriptRendering;
+  /** One regular expression a line, matched against the whole URL. */
+  renderPatterns: string;
+  /** One regular expression a line. Empty fetches every URL. */
+  includePatterns: string;
+  /** One regular expression a line. A match is recorded and not fetched. */
+  excludePatterns: string;
   /** With its user name and password when it has them: a secret, as header values are. */
   proxyUrl: string;
   /** Shopify crawler access: one signature, for one domain. A secret, as the proxy's password is. */
@@ -107,6 +114,10 @@ export function formFromOptions(options: CrawlOptions, startUrl = ''): CrawlForm
     extraSitemaps: (options.extraSitemaps ?? []).join('\n'),
     storeHtml: options.storeHtml ?? defaults.storeHtml,
     useCookies: options.useCookies ?? defaults.useCookies,
+    javaScriptRendering: options.javaScriptRendering ?? defaults.javaScriptRendering,
+    renderPatterns: (options.renderPatterns ?? []).join('\n'),
+    includePatterns: (options.includePatterns ?? []).join('\n'),
+    excludePatterns: (options.excludePatterns ?? []).join('\n'),
     proxyUrl: options.hasRedactedProxyCredentials ? '' : proxy,
     signatures: signatureFormOf(options.signatures, startUrl || (options.startUrl ?? '')),
     requestTimeoutSeconds: numberText(options.requestTimeoutSeconds, defaults.requestTimeoutSeconds),
@@ -119,6 +130,14 @@ function typed(text: string): number {
   const trimmed = text.trim().replace(/,/g, '');
   const value = trimmed === '' ? Number.NaN : Number(trimmed);
   return (Number.isFinite(value) ? value : text) as number;
+}
+
+/** The non-empty lines of a textarea, trimmed. */
+function lines(text: string): string[] {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line !== '');
 }
 
 /**
@@ -169,12 +188,13 @@ export function optionsFromForm(form: CrawlForm, { secrets = true }: { secrets?:
     crawlHreflang: form.crawlHreflang,
     crawlPagination: form.crawlPagination,
     discoverSitemaps: form.discoverSitemaps,
-    extraSitemaps: form.extraSitemaps
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter((line) => line !== ''),
+    extraSitemaps: lines(form.extraSitemaps),
     storeHtml: form.storeHtml,
     useCookies: form.useCookies,
+    javaScriptRendering: form.javaScriptRendering,
+    renderPatterns: lines(form.renderPatterns),
+    includePatterns: lines(form.includePatterns),
+    excludePatterns: lines(form.excludePatterns),
     proxyUrl: form.proxyUrl.trim() === '' ? null : secrets ? form.proxyUrl.trim() : withoutCredentials(form.proxyUrl),
     signatures: secrets ? signaturesOf(form.signatures, withScheme(form.startUrl)) : {},
     requestTimeoutSeconds: typed(form.requestTimeoutSeconds),
@@ -253,11 +273,12 @@ export function withSpeed(form: CrawlForm, preset: SpeedPreset): CrawlForm {
 // ------------------------------------------------------------------------------------------- What's changed
 
 /** The form's sections, in order: where each setting lives in Advanced. */
-export type FormSection = 'start' | 'scope' | 'limits' | 'robots' | 'network' | 'shopify' | 'advanced';
+export type FormSection = 'start' | 'scope' | 'rendering' | 'limits' | 'robots' | 'network' | 'shopify' | 'advanced';
 
 export const SECTION_TITLES: Record<FormSection, string> = {
   start: 'Start',
   scope: 'Scope',
+  rendering: 'JavaScript and filters',
   limits: 'Limits',
   robots: 'Robots and sitemaps',
   network: 'Headers and network',
@@ -274,6 +295,10 @@ export const FIELD_SECTIONS: Record<CrawlFormField, FormSection> = {
   crawlCanonicals: 'scope',
   crawlHreflang: 'scope',
   crawlPagination: 'scope',
+  javaScriptRendering: 'rendering',
+  renderPatterns: 'rendering',
+  includePatterns: 'rendering',
+  excludePatterns: 'rendering',
   maxUrls: 'limits',
   maxDepth: 'limits',
   maxHtmlMb: 'limits',
@@ -307,6 +332,10 @@ export const SIMPLE_FIELDS: ReadonlySet<CrawlFormField> = new Set<CrawlFormField
   'checkExternalLinks',
   'checkResources',
   'signatures',
+  'javaScriptRendering',
+  'renderPatterns',
+  'includePatterns',
+  'excludePatterns',
 ]);
 
 /** Which of the form's settings differ from these defaults: by field, with the start URL left out. */
@@ -323,7 +352,15 @@ export function changedFields(form: CrawlForm, defaults: CrawlForm): CrawlFormFi
 }
 
 function sameText(field: CrawlFormField, a: string, b: string): boolean {
-  if (field === 'extraSitemaps' || field === 'acceptLanguage' || field === 'proxyUrl') return a.trim() === b.trim();
+  if (
+    field === 'extraSitemaps' ||
+    field === 'acceptLanguage' ||
+    field === 'proxyUrl' ||
+    field === 'renderPatterns' ||
+    field === 'includePatterns' ||
+    field === 'excludePatterns'
+  )
+    return a.trim() === b.trim();
   return Number(a) === Number(b) || a.trim() === b.trim();
 }
 

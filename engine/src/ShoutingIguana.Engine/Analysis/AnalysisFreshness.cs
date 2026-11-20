@@ -76,9 +76,12 @@ public static class AnalysisFreshness
     /// the empty list and reported every page as missing from the sitemaps (<see cref="SkippedCheckReasons.SITEMAP_LIST_LOST"/>).
     /// 22 drops the fix as code and says, in words, how to fix the checks that had one, and passes a legacy image whose
     /// picture element offers another source. An analysis 21 stored names checks whose texts have changed, and flagged
-    /// those images, so it's out of date.
+    /// those images, so it's out of date. 23 is JavaScript rendering. A crawl fetches by HTTP and, where the page is a
+    /// client-rendered shell or the crawl lists its URL to render, parses the HTML the browser produced. Analysing a
+    /// stored crawl is unchanged: the checks read the facts the crawl stored. The version moves so an analysis stored
+    /// before this engine is out of date.
     /// </summary>
-    public const int VERSION = 22;
+    public const int VERSION = 23;
 
     /// <summary>
     /// The catalog's check ids with their categories and severities, hashed. Titles, descriptions, fixes, why and

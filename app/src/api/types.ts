@@ -252,6 +252,17 @@ export interface CrawlOptions {
   extraSitemaps?: string[] | null;
   storeHtml?: boolean | null;
   useCookies?: boolean | null;
+  /**
+   * When a page is rendered in a browser. `automatic` renders a page whose HTML is a client-rendered shell.
+   * `off` never does. `matching` renders only the URLs `renderPatterns` name.
+   */
+  javaScriptRendering?: JavaScriptRendering | null;
+  /** Regular expressions matched against the whole URL. Used when `javaScriptRendering` is `matching`. */
+  renderPatterns?: string[] | null;
+  /** When any are set, a URL is fetched only if one matches. */
+  includePatterns?: string[] | null;
+  /** A URL that matches any of these is recorded and not fetched. */
+  excludePatterns?: string[] | null;
   proxyUrl?: string | null;
   requestTimeoutSeconds?: number | null;
   maxRetries?: number | null;
@@ -259,6 +270,9 @@ export interface CrawlOptions {
   /** In responses only: the proxy's user name and password were removed, so they must be given again. */
   hasRedactedProxyCredentials?: boolean | null;
 }
+
+/** When a page is fetched again in a browser and that HTML is what gets parsed. The first fetch is always HTTP. */
+export type JavaScriptRendering = 'off' | 'automatic' | 'matching';
 
 export type CrawlOptionField = keyof CrawlOptions;
 

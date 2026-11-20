@@ -30,9 +30,22 @@ jobs:
         with:
           dotnet-version: '10.0.4xx'
 
+      - name: Build
+        run: dotnet build ShoutingIguana.Engine.slnx -c Release
+
+      # JavaScript rendering uses headless Chromium. The browser is downloaded once; Linux also needs its libraries.
+      - name: Install Chromium
+        shell: pwsh
+        run: |
+          $playwright = Get-ChildItem -Recurse -Filter playwright.ps1 -Path src | Select-Object -First 1
+          & $playwright.FullName install chromium
+          if ($IsLinux) {
+            sudo bash ($playwright.FullName -replace '\.ps1$', '.sh') install-deps chromium
+          }
+
       # A hung test fails the run after 10 minutes, naming the test, instead of holding the runner for hours.
       - name: Test
-        run: dotnet test ShoutingIguana.Engine.slnx -c Release --blame-hang-timeout 10m --blame-hang-dump-type none
+        run: dotnet test ShoutingIguana.Engine.slnx -c Release --no-build --blame-hang-timeout 10m --blame-hang-dump-type none
 
   benchmark:
     name: 100k-page benchmark
@@ -51,6 +64,13 @@ jobs:
 
       - name: Build CLI
         run: dotnet build src/ShoutingIguana.Cli/ShoutingIguana.Cli.csproj -c Release
+
+      - name: Install Chromium
+        shell: pwsh
+        run: |
+          $playwright = Get-ChildItem -Recurse -Filter playwright.ps1 -Path src | Select-Object -First 1
+          & $playwright.FullName install chromium
+          sudo bash ($playwright.FullName -replace '\.ps1$', '.sh') install-deps chromium
 
       # Thresholds leave headroom for a 4-core runner, which crawls ~1,100 pages/s with a ~190 MB peak and
       # ~40 bytes of growth per URL. A per-URL leak of a few hundred bytes, or a halving of speed, fails the run.

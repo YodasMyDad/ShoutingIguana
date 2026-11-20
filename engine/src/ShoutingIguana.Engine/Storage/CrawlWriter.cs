@@ -47,6 +47,7 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
     private readonly CrawlFileLock _fileLock;
     private readonly WriterStatements _statements;
     private readonly CrawlOptions _options;
+    private readonly UrlPatternFilter _filter;
     private readonly CrawlCounters _counters;
     private readonly ILogger _logger;
     private readonly Dictionary<UInt128, UrlEntry> _urls = new();
@@ -108,6 +109,7 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
         _connection = connection;
         _fileLock = fileLock;
         _options = options;
+        _filter = new UrlPatternFilter(options);
         _counters = counters;
         _logger = logger;
         _statements = new WriterStatements(connection);
@@ -630,6 +632,10 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
 
             // Sitemap and start URLs are crawled in full, whatever link found them first, and never held to the depth limit.
             var skip = !link.IsInternal && !_options.CheckExternalLinks ? SkipReason.ExternalsDisabled : SkipReason.None;
+            if (skip == SkipReason.None && !_filter.Allows(link.Url))
+            {
+                skip = SkipReason.Excluded;
+            }
             int id;
             if (_urls.TryGetValue(link.Key, out var entry))
             {
@@ -1033,9 +1039,12 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
             _ => SkipReason.None
         };
 
-        return reason == SkipReason.None && !link.IsInternal && !_options.CheckExternalLinks
-            ? SkipReason.ExternalsDisabled
-            : reason;
+        if (reason == SkipReason.None && !link.IsInternal && !_options.CheckExternalLinks)
+        {
+            return SkipReason.ExternalsDisabled;
+        }
+
+        return reason == SkipReason.None && !_filter.Allows(link.Url) ? SkipReason.Excluded : reason;
     }
 
     private void SetState(string url, UrlState state)

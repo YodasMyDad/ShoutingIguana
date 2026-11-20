@@ -252,6 +252,9 @@ public sealed class CrawlOptionsTests : IAsyncLifetime
         {
             ExtraHeaders = roundTripped.ExtraHeaders,
             ExtraSitemaps = roundTripped.ExtraSitemaps,
+            RenderPatterns = roundTripped.RenderPatterns,
+            IncludePatterns = roundTripped.IncludePatterns,
+            ExcludePatterns = roundTripped.ExcludePatterns,
             Signatures = roundTripped.Signatures
         }, roundTripped);
         Assert.Equal(options.ExtraHeaders, roundTripped.ExtraHeaders);

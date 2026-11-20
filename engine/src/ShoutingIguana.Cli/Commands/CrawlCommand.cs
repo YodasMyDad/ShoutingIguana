@@ -36,6 +36,13 @@ internal static class CrawlCommand
         var anyFolder = new Option<bool>("--any-folder") { Description = "Crawl outside the start URL's folder." };
         var followNofollow = new Option<bool>("--follow-nofollow") { Description = "Follow nofollow links." };
         var storeHtml = new Option<bool>("--store-html") { Description = "Keep compressed HTML of every page." };
+        var render = new Option<JavaScriptRendering?>("--render")
+        {
+            Description = "JavaScript rendering: Automatic (a client-rendered shell), Off, or Matching (only --render-url)."
+        };
+        var renderUrls = new Option<string[]>("--render-url") { Description = "Regular expression matched against the whole URL. With --render Matching, only these URLs are rendered. Repeatable." };
+        var include = new Option<string[]>("--include") { Description = "Regular expression matched against the whole URL. When any are set, only matching URLs are fetched. Repeatable." };
+        var exclude = new Option<string[]>("--exclude") { Description = "Regular expression matched against the whole URL. A match is recorded and not fetched. Repeatable." };
         var noAnalyze = new Option<bool>("--no-analyze") { Description = "Skip the SEO checks when the crawl completes." };
         var quiet = new Option<bool>("--quiet", "-q") { Description = "No progress line." };
         var verbose = new Option<bool>("--verbose", "-v") { Description = "Detailed engine logging." };
@@ -44,12 +51,13 @@ internal static class CrawlCommand
         {
             url, database, resume, maxUrls, maxDepth, concurrency, rate, userAgent, userAgentString, headers, proxy, signatureFiles, timeout,
             ignoreRobots, crawlDelay, noResources, noExternal, noSitemaps, subdomains, anyFolder, followNofollow, storeHtml,
+            render, renderUrls, include, exclude,
             noAnalyze, quiet, verbose
         };
 
         // A resumed crawl keeps the scope and rules it started with; only how it talks to the site can change.
         Option[] fixedOnResume = [maxUrls, maxDepth, userAgent, userAgentString, ignoreRobots, crawlDelay, noResources, noExternal,
-            noSitemaps, subdomains, anyFolder, followNofollow, storeHtml];
+            noSitemaps, subdomains, anyFolder, followNofollow, storeHtml, render, renderUrls, include, exclude];
 
         command.SetAction((parse, cancellationToken) => CommandErrors.RunAsync(async () =>
         {
@@ -134,7 +142,11 @@ internal static class CrawlCommand
                     IncludeSubdomains = parse.GetValue(subdomains),
                     StayInStartFolder = !parse.GetValue(anyFolder),
                     FollowNofollow = parse.GetValue(followNofollow),
-                    StoreHtml = parse.GetValue(storeHtml)
+                    StoreHtml = parse.GetValue(storeHtml),
+                    Rendering = parse.GetValue(render) ?? defaults.Rendering,
+                    RenderPatterns = parse.GetValue(renderUrls) ?? [],
+                    IncludePatterns = parse.GetValue(include) ?? [],
+                    ExcludePatterns = parse.GetValue(exclude) ?? []
                 };
                 databasePath ??= CrawlDatabase.DefaultDatabasePath(startUrl);
             }

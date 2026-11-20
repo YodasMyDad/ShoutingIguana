@@ -11,6 +11,8 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.Extensions.Logging.Console" />
+        <!-- The browser driver has to sit beside this executable, not only beside the engine. -->
+        <PackageReference Include="Microsoft.Playwright" />
         <PackageReference Include="System.CommandLine" />
     </ItemGroup>
 

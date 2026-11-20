@@ -152,6 +152,7 @@ export const NOT_FETCHED_WORDS: Record<NotFetchedBecause, string> = {
   externalsDisabled: 'The crawl’s settings leave out URLs on other sites.',
   depthLimit: 'It’s deeper than the crawl’s depth limit.',
   urlLimit: 'The crawl reached its URL limit before it.',
+  excluded: 'An include or exclude pattern left it out.',
 };
 
 /** The common reason phrases, for the summary's status: "404 Not Found". Others show the code alone. */

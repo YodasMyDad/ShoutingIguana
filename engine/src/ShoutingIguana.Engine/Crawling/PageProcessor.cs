@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text;
 using ShoutingIguana.Engine.Analysis.Rules;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling.Models;
@@ -28,6 +29,7 @@ internal sealed class PageProcessor(
     CrawlScope scope,
     HostGateRegistry gates,
     FaviconFetcher favicon,
+    JavaScriptRenderer renderer,
     TimeProvider timeProvider)
 {
     private const int FORBIDDEN_SAMPLE_SIZE = 20;
@@ -60,6 +62,7 @@ internal sealed class PageProcessor(
     private int _refusedSaid;
     private DateTimeOffset _refusedSaidAt;
     private int _signatureRefusedReported;
+    private readonly UrlPatterns _renderPatterns = CompilePatterns(options.RenderPatterns);
 
     /// <summary>The site's hosts found to be a Shopify store's this run, and whether the crawl can sign its requests to one.</summary>
     public ShopifyWatch Shopify { get; } = new(new SignatureBook(options.Signatures, timeProvider));
@@ -148,6 +151,10 @@ internal sealed class PageProcessor(
             {
                 refusalNote = NoteShopifyRefusal(item, uri, response);
             }
+            else
+            {
+                response = await RenderIfNeededAsync(item, uri, response, cancellationToken).ConfigureAwait(false);
+            }
         }
 
         // A 429 says nothing about the URL: it is stored as not checked, and the site's own get one more try at the end.
@@ -173,6 +180,32 @@ internal sealed class PageProcessor(
         };
 
         return new PageRecord(item, row, [], false, null, null);
+    }
+
+    /// <summary>
+    /// A client-rendered page, or one the crawl lists to render, is fetched again in the browser. The HTML that comes
+    /// back replaces the HTTP body, and <see cref="Build"/> parses it once. A render that doesn't happen, or fails,
+    /// leaves the HTTP body to be parsed.
+    /// </summary>
+    private async Task<FetchResponse> RenderIfNeededAsync(FrontierItem item, Uri uri, FetchResponse response, CancellationToken cancellationToken)
+    {
+        if (item.Mode != FetchMode.Crawl || !item.IsInternal ||
+            response is not { Outcome: FetchOutcome.Success, IsHtml: true, Body: { } html, BodyTruncated: false } ||
+            !RenderNeed.ShouldRender(options.Rendering, _renderPatterns, item.Url, html))
+        {
+            return response;
+        }
+
+        var rendered = await renderer.RenderAsync(uri, cancellationToken).ConfigureAwait(false);
+        return rendered is null
+            ? response
+            : response with { Body = rendered, BodyBytes = Encoding.UTF8.GetByteCount(rendered), ByteOrderMark = null };
+    }
+
+    private static UrlPatterns CompilePatterns(IReadOnlyList<string>? patterns)
+    {
+        UrlPatterns.TryCompile(patterns, out var compiled, out _);
+        return compiled;
     }
 
     private PageRecord Build(FrontierItem item, Uri uri, FetchResponse response, long fetchedAt, string? shopifySignal)

@@ -11,6 +11,8 @@
 
     <ItemGroup>
         <PackageReference Include="Serilog" />
+        <!-- The browser driver has to sit beside this executable, not only beside the engine. -->
+        <PackageReference Include="Microsoft.Playwright" />
         <PackageReference Include="Serilog.Extensions.Logging" />
         <PackageReference Include="Serilog.Sinks.File" />
     </ItemGroup>

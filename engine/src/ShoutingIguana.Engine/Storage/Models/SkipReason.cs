@@ -23,5 +23,8 @@ public enum SkipReason : byte
     /// Let go by a recheck: nothing the crawl still has leads to it any more (its last link was removed), so its response,
     /// details, HTML and outgoing links were deleted. The row stays, so ids stay stable; it isn't counted as found.
     /// </summary>
-    NoLongerLinked = 8
+    NoLongerLinked = 8,
+
+    /// <summary>Left out by an include or exclude pattern. Recorded, not fetched, so the crawl doesn't follow it.</summary>
+    Excluded = 9
 }

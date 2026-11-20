@@ -325,6 +325,7 @@ const SKIPPED_BECAUSE = [
   'externalsDisabled',
   'depthLimit',
   'urlLimit',
+  'excluded',
 ] as const satisfies readonly NotFetchedBecause[];
 const POSITIONS = [
   'content',

@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using ShoutingIguana.TestSite.Models;
 
 namespace ShoutingIguana.TestSite;
@@ -1016,6 +1017,16 @@ public sealed partial class SyntheticSite
             });
         }
 
+        // A client-rendered shell. The raw HTML is an empty mount and a script tag. The script, which the page's
+        // content security policy allows (it's on this site), writes the body and then adds a link and an image the
+        // raw HTML does not contain. The crawl renders the page and parses that HTML once.
+        var shell = PlantPage("js-shell", "JS catalogue");
+        var rendered = Render(shell);
+        plants.Add(new Plant(shell.Path, 200, Linked: true, InSitemap: true, ["image-missing-alt"], () => Html(ClientShell(rendered))));
+        plants.Add(new Plant(PLANTS_PATH + "js-shell.js", 200, Linked: false, InSitemap: false, [],
+            () => new SyntheticResponse(200, "application/javascript", ShellScript(rendered), null, null), IsPage: false, IsAnalysed: false));
+        Page("js-rendered-product", "JS rendered product", ["not-in-sitemap"], inSitemap: false, linked: false);
+
         // The hub links to redirects, and to the unreachable URL, the redirect loop and the redirect to a 404, which are
         // all broken, so it carries those link issues itself.
         plants.Add(new Plant(PLANTS_PATH, 200, Linked: false, InSitemap: true, ["links-to-redirects", "broken-internal-links"], () => Html(RenderPlantsHub())));
@@ -1030,6 +1041,35 @@ public sealed partial class SyntheticSite
         H1 = name,
         Content = $"<p>{Text("plant-" + slug, PLANT_WORDS)}</p>"
     };
+
+    /// <summary>The raw HTML: the document's head, an empty mount, and the address of the script that fills it in.</summary>
+    private static string ClientShell(string renderedDocument)
+    {
+        var bodyAt = renderedDocument.IndexOf("<body>", StringComparison.Ordinal);
+        return renderedDocument[..bodyAt] + "<body><div id=\"app\"></div><script src=\"/plants/js-shell.js\"></script></body></html>";
+    }
+
+    /// <summary>
+    /// The script the shell loads. It writes the real body, then a link and an image, neither of which is in the
+    /// page's raw HTML. The product's address is built in two pieces so the script's source doesn't contain it whole.
+    /// </summary>
+    private static string ShellScript(string renderedDocument)
+    {
+        var bodyAt = renderedDocument.IndexOf("<body>", StringComparison.Ordinal);
+        var bodyEnd = renderedDocument.LastIndexOf("</body>", StringComparison.Ordinal);
+        var body = JsonSerializer.Serialize(renderedDocument[(bodyAt + "<body>".Length)..bodyEnd]);
+        return "document.body.innerHTML = " + body + ";" +
+               "var main = document.querySelector('main');" +
+               "var link = document.createElement('a');" +
+               "link.setAttribute('href', '/plants/' + 'js-rendered-product');" +
+               "link.textContent = 'Rendered product';" +
+               "main.appendChild(link);" +
+               "var img = document.createElement('img');" +
+               "img.setAttribute('src', '/img/1.jpg');" +
+               "img.setAttribute('width', '400');" +
+               "img.setAttribute('height', '300');" +
+               "main.appendChild(img);";
+    }
 
     private string RenderPlantsHub()
     {

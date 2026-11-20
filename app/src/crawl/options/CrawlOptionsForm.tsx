@@ -4,7 +4,7 @@ import clsx from 'clsx';
 // typed in one goes with the user to the other. New crawl and Settings > Crawl defaults both draw it.
 import { Globe, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useId, useRef, type ReactNode } from 'react';
-import type { SpeedPreset, UserAgentPreset } from '../../api/types';
+import type { JavaScriptRendering, SpeedPreset, UserAgentPreset } from '../../api/types';
 import { Button } from '../../ui/Button';
 import { Checkbox } from '../../ui/Checkbox';
 import { ChoiceCards } from '../../ui/ChoiceCards';
@@ -234,6 +234,22 @@ function SimpleQuestions({
         </div>
       </fieldset>
       <Fold
+        name="rendering"
+        level={3}
+        title={SIMPLE_WORDS.rendering.label}
+        summary={sectionSummary('rendering', form, 'simple')}
+        attention={
+          first(errors, 'renderPatterns') || first(errors, 'includePatterns') || first(errors, 'excludePatterns')
+            ? '1 to change'
+            : null
+        }
+        open={open.has('rendering')}
+        onOpenChange={(next) => onOpenChange('rendering', next)}
+        className="si-card"
+      >
+        <RenderingFields form={form} onChange={onChange} onTouch={onTouch} errors={errors} mode="simple" />
+      </Fold>
+      <Fold
         name="shopify"
         level={3}
         title={SIMPLE_WORDS.shopify.label}
@@ -415,6 +431,7 @@ function AdvancedSections({
               {toggle('crawlPagination')}
             </>,
           )}
+          {fold('rendering', <RenderingFields form={form} onChange={onChange} onTouch={onTouch} errors={errors} mode="advanced" />)}
           {fold(
             'limits',
             <>
@@ -493,6 +510,118 @@ function AdvancedSections({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+const RENDERING_CHOICES: { value: JavaScriptRendering; title: string; text: string }[] = [
+  { value: 'automatic', title: 'On', text: 'Where a page is built by a script.' },
+  { value: 'off', title: 'Off', text: 'Read every page as it was sent.' },
+  { value: 'matching', title: 'Only these URLs', text: 'Render the addresses listed below.' },
+];
+
+/** JavaScript rendering, and the include and exclude patterns beside it. The same fields in both modes. */
+function RenderingFields({
+  form,
+  onChange,
+  onTouch,
+  errors,
+  mode,
+}: {
+  form: CrawlForm;
+  onChange: (form: CrawlForm) => void;
+  onTouch?: ((field: CrawlFormField) => void) | undefined;
+  errors: FormErrors;
+  mode: 'simple' | 'advanced';
+}) {
+  const words = mode === 'simple' ? SIMPLE_WORDS.rendering : FIELD_WORDS.javaScriptRendering;
+  return (
+    <div className="flex flex-col gap-4">
+      {mode === 'simple' ? <p className="text-13">{words.help}</p> : null}
+      <ChoiceCards
+        legend={words.label}
+        description={mode === 'advanced' ? words.help : undefined}
+        options={RENDERING_CHOICES}
+        value={form.javaScriptRendering}
+        onValueChange={(value) => {
+          onChange({ ...form, javaScriptRendering: value as JavaScriptRendering });
+          onTouch?.('javaScriptRendering');
+        }}
+      />
+      {form.javaScriptRendering === 'matching' || form.renderPatterns.trim() !== '' ? (
+        <PatternBox
+          field="renderPatterns"
+          form={form}
+          onChange={onChange}
+          onTouch={onTouch}
+          error={first(errors, 'renderPatterns')}
+          placeholder="catalogue"
+        />
+      ) : null}
+      <PatternBox
+        field="includePatterns"
+        form={form}
+        onChange={onChange}
+        onTouch={onTouch}
+        error={first(errors, 'includePatterns')}
+        placeholder="/products/"
+      />
+      <PatternBox
+        field="excludePatterns"
+        form={form}
+        onChange={onChange}
+        onTouch={onTouch}
+        error={first(errors, 'excludePatterns')}
+        placeholder="sort="
+      />
+    </div>
+  );
+}
+
+function PatternBox({
+  field,
+  form,
+  onChange,
+  onTouch,
+  error,
+  placeholder,
+}: {
+  field: 'renderPatterns' | 'includePatterns' | 'excludePatterns';
+  form: CrawlForm;
+  onChange: (form: CrawlForm) => void;
+  onTouch?: ((field: CrawlFormField) => void) | undefined;
+  error: string | null;
+  placeholder: string;
+}) {
+  const id = useId();
+  return (
+    <div className="si-field-wrap" data-setting={field}>
+      <label htmlFor={id} className="si-field-label">
+        {FIELD_WORDS[field].label}
+      </label>
+      <div className="si-field">
+        <textarea
+          id={id}
+          rows={3}
+          spellCheck={false}
+          data-setting={field}
+          className="si-field__input resize-y font-mono"
+          aria-invalid={error ? true : undefined}
+          aria-describedby={`${error ? `${id}-error ` : ''}${id}-help`}
+          placeholder={placeholder}
+          value={form[field]}
+          onChange={(event) => onChange({ ...form, [field]: event.target.value })}
+          onBlur={() => onTouch?.(field)}
+        />
+      </div>
+      {error ? (
+        <p id={`${id}-error`} className="si-field-error">
+          {error}
+        </p>
+      ) : null}
+      <p id={`${id}-help`} className="si-field-description">
+        {FIELD_WORDS[field].help}
+      </p>
     </div>
   );
 }

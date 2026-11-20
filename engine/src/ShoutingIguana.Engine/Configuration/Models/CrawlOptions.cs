@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using ShoutingIguana.Engine.Fetching;
 using ShoutingIguana.Engine.Urls;
 
@@ -77,6 +78,22 @@ public sealed record CrawlOptions
     public IReadOnlyList<string> ExtraSitemaps { get; init; } = [];
     public bool StoreHtml { get; init; }
     public bool UseCookies { get; init; } = true;
+
+    /// <summary>
+    /// When a page is rendered in a browser and that HTML is parsed. A new crawl renders a client-rendered shell.
+    /// A crawl file from before this was stored reads as <see cref="JavaScriptRendering.Off"/>: the property is absent.
+    /// </summary>
+    [JsonPropertyName("javaScriptRendering")]
+    public JavaScriptRendering Rendering { get; init; } = JavaScriptRendering.Automatic;
+
+    /// <summary>Regular expressions matched against the whole URL. Used when <see cref="Rendering"/> is <see cref="JavaScriptRendering.Matching"/>.</summary>
+    public IReadOnlyList<string> RenderPatterns { get; init; } = [];
+
+    /// <summary>When any are set, a URL is fetched only if one matches. Empty fetches every URL the rest of the crawl would.</summary>
+    public IReadOnlyList<string> IncludePatterns { get; init; } = [];
+
+    /// <summary>A URL that matches any of these is recorded and not fetched, so a rendered crawl can stay out of a filter trap.</summary>
+    public IReadOnlyList<string> ExcludePatterns { get; init; } = [];
 
     /// <summary>http://, https:// or socks5:// proxy. Credentials may be given as user:password@host.</summary>
     public string? ProxyUrl { get; init; }
@@ -254,7 +271,39 @@ public sealed record CrawlOptions
                 yield return (Field(nameof(ExtraSitemaps)), $"Sitemap '{WithoutUserInfo(sitemap)}' can't include a user name or password. {CREDENTIALS_ADVICE}");
             }
         }
+
+        foreach (var (property, patterns) in new[]
+        {
+            (nameof(RenderPatterns), RenderPatterns),
+            (nameof(IncludePatterns), IncludePatterns),
+            (nameof(ExcludePatterns), ExcludePatterns)
+        })
+        {
+            if (!UrlPatterns.TryCompile(patterns, out _, out var error))
+            {
+                yield return (Field(property), error ?? "The pattern can't be used.");
+            }
+        }
+
+        if (Rendering == JavaScriptRendering.Matching && NoPatterns(RenderPatterns))
+        {
+            yield return (Field(nameof(RenderPatterns)), "Say which URLs to render, one regular expression a line.");
+        }
+
+        if (UrlNormalizer.TryNormalize(StartUrl, out var start) &&
+            UrlPatterns.TryCompile(IncludePatterns, out var include, out _) &&
+            UrlPatterns.TryCompile(ExcludePatterns, out var exclude, out _) &&
+            (exclude.Matches(start, whenUnsure: true) || (include.Any && !include.Matches(start, whenUnsure: false))))
+        {
+            var byExclude = exclude.Matches(start, whenUnsure: true);
+            yield return (
+                Field(byExclude ? nameof(ExcludePatterns) : nameof(IncludePatterns)),
+                "The start URL is left out by these patterns, so the crawl would have nowhere to start.");
+        }
     }
+
+    /// <summary>A list a crawl file from before the property existed deserialises as null.</summary>
+    private static bool NoPatterns(IReadOnlyList<string>? patterns) => patterns is null || patterns.Count == 0;
 
     /// <summary>
     /// Each crawler signature must be for a host, one per host, in the form Shopify gives, and not expired: an expired one

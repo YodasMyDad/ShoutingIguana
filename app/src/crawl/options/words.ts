@@ -1,7 +1,7 @@
 // What the crawl settings form says (docs/v2-ui-simple.md, New crawl in each mode; docs/v2-ui-ia.md, New crawl):
 // each setting's name and its one line on what it does, the speed presets in each mode's words, and each folded
 // section's values in a line. Pure.
-import type { SpeedPreset, UserAgentPreset } from '../../api/types';
+import type { JavaScriptRendering, SpeedPreset, UserAgentPreset } from '../../api/types';
 import { formatCount } from '../../lib/format';
 import type { CrawlForm, CrawlFormField, FormSection, SpeedId } from './form';
 import { endsOn, signatureHost, signatureState } from './shopifySignature';
@@ -89,6 +89,22 @@ export const FIELD_WORDS: Record<CrawlFormField, FieldWords> = {
   storeHtml: {
     label: 'Store HTML',
     help: 'Keep each page’s HTML in the crawl file, for its source in the inspector. The file grows.',
+  },
+  javaScriptRendering: {
+    label: 'JavaScript rendering',
+    help: 'On renders a page in a browser when its HTML is a shell and the content is built by a script. Off never does. Only these URLs renders just the addresses listed below, so a crawl can render the catalogue and leave the rest as it was sent.',
+  },
+  renderPatterns: {
+    label: 'URLs to render',
+    help: 'One regular expression a line, matched against the whole URL. Used when rendering is “Only these URLs”. `catalogue` renders every URL that says catalogue.',
+  },
+  includePatterns: {
+    label: 'Only crawl',
+    help: 'One regular expression a line, matched against the whole URL. When any are set, a URL is fetched only if one matches. Empty crawls every URL.',
+  },
+  excludePatterns: {
+    label: 'Don’t crawl',
+    help: 'One regular expression a line, matched against the whole URL. A match is recorded and not fetched, so a rendered crawl stays out of a filter or a parameter trap. `sort=` leaves out every URL that says sort=.',
   },
 };
 
@@ -178,7 +194,17 @@ export const SIMPLE_WORDS = {
     label: 'A Shopify shop?',
     help: 'Shopify turns away checks that don’t carry a signature, so many product pages can’t be read without one. A signature is a pass the shop’s owner makes in Shopify.',
   },
+  rendering: {
+    label: 'Pages built by JavaScript',
+    help: 'Some pages send an empty shell and fill it in with a script. On reads those in a browser. The two lists keep the check out of filter and parameter traps.',
+  },
 } as const;
+
+const RENDERING_WORDS: Record<JavaScriptRendering, string> = {
+  off: 'Off',
+  automatic: 'On, where a page is built in the browser',
+  matching: 'Only the URLs listed',
+};
 
 export const SPEED_TITLES: Record<SpeedId, string> = { polite: 'Polite', standard: 'Standard', fast: 'Fast' };
 
@@ -228,6 +254,10 @@ function plural(count: number, one: string, many: string): string {
   return `${formatCount(count)} ${count === 1 ? one : many}`;
 }
 
+function patternCount(text: string): number {
+  return text.split(/\r?\n/).filter((line) => line.trim() !== '').length;
+}
+
 function sitemapCount(text: string): number {
   return text.split(/\r?\n/).filter((line) => line.trim() !== '').length;
 }
@@ -262,6 +292,18 @@ export function sectionSummary(
         Number.isFinite(depth) && depth > 0 ? `${plural(depth, 'click', 'clicks')} deep` : 'any depth',
         `HTML up to ${readableMb(form.maxHtmlMb)} MB`,
       ].join(', ');
+    }
+    case 'rendering': {
+      const rendering =
+        form.javaScriptRendering === 'off'
+          ? 'JavaScript off'
+          : form.javaScriptRendering === 'matching'
+            ? 'JavaScript on listed URLs'
+            : 'JavaScript where a page needs it';
+      const excluded = patternCount(form.excludePatterns);
+      return [rendering, excluded > 0 ? `${plural(excluded, 'pattern', 'patterns')} excluded` : 'nothing excluded'].join(
+        ', ',
+      );
     }
     case 'robots': {
       const extra = sitemapCount(form.extraSitemaps);
@@ -341,10 +383,15 @@ export function settingValue(field: CrawlFormField, form: CrawlForm): string {
       const names = form.headers.map((row) => row.name).filter(Boolean);
       return names.length === 0 ? 'None' : names.join(', ');
     }
-    case 'extraSitemaps': {
-      const lines = form.extraSitemaps.split('\n').filter((line) => line.trim() !== '');
+    case 'extraSitemaps':
+    case 'renderPatterns':
+    case 'includePatterns':
+    case 'excludePatterns': {
+      const lines = form[field].split('\n').filter((line) => line.trim() !== '');
       return lines.length === 0 ? 'None' : lines.join('\n');
     }
+    case 'javaScriptRendering':
+      return RENDERING_WORDS[form.javaScriptRendering];
     case 'proxyUrl':
       return form.proxyUrl.trim() || 'None';
     case 'signatures': {

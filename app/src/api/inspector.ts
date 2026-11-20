@@ -44,7 +44,14 @@ export type LinkKind =
  * reasons doesn't name it. An unknown stored value is null, not this.
  */
 export type NotFetchedBecause =
-  'none' | 'noFollow' | 'notFollowedByOption' | 'resourcesDisabled' | 'externalsDisabled' | 'depthLimit' | 'urlLimit';
+  | 'none'
+  | 'noFollow'
+  | 'notFollowedByOption'
+  | 'resourcesDisabled'
+  | 'externalsDisabled'
+  | 'depthLimit'
+  | 'urlLimit'
+  | 'excluded';
 
 export const LINK_KINDS = [
   'hyperlink',

@@ -28,8 +28,42 @@ v2 is a fresh solution that ports the useful logic.
 | 2 | SEO rules and issue catalog (84 checks), `si analyze` / `si issues`, exact-match proof on the synthetic site | Done: `1489adb`, then a real-site crawl and two full reviews ([Status](#status)) |
 | 3 | Desktop UI: React + TypeScript in a Tauri 2 shell, with the engine as a sidecar behind a token-protected localhost API. Enterprise-grade UX: the bar is in [the UI brief](v2-ui-brief.md). Since 2026-11-10 it opens in Simple, with Advanced one switch away, and ends in a report: [Simple first](#simple-first-advanced-on-a-switch-2026-11-10) | C and D are done on `master`. E and F are left. Pick up at [Where step 3 stands](#where-step-3-stands-2026-11-15) |
 | 3b | The check audit: every check proven against real sites and worded for a non-expert, then the old app's checks worth keeping and those a comparison with Screaming Frog shows are missing | Planned on 2026-11-10: [Simple first](#simple-first-advanced-on-a-switch-2026-11-10) |
-| 4 | Missing basics: JavaScript rendering, a browser fallback for blocked sites, include/exclude rules, auth and cookies, list mode, custom extraction | Later |
+| 4 | Missing basics: JavaScript rendering, a browser fallback for blocked sites, include/exclude rules, auth and cookies, list mode, custom extraction | First slice on `step4/js-rendering`: JavaScript rendering and include/exclude. Custom extraction and list mode are next. [Where step 4 stands](#where-step-4-stands-2026-11-20) |
 | 5 | Integrations: Search Console, then GA4, Bing Webmaster, Google Ads and Microsoft Advertising | Later |
+
+## Where step 4 stands (2026-11-20)
+
+The owner asked for the first slice only, on a branch off `master`: JavaScript rendering, with include and exclude
+patterns beside it. Custom extraction and list mode are next and are not started. Nothing here is pushed.
+
+**Built, on `step4/js-rendering` (local only):**
+
+- A page is fetched by HTTP first. It is rendered in headless Chromium only when the crawl's setting says so:
+  off, on (a client-rendered shell: a script, an empty app mount, almost no visible text), or only the URLs a list of
+  regular expressions names. The rendered HTML replaces the HTTP body and is parsed once, into `PageFacts`. Only
+  `Storage/` writes the crawl file.
+- Include and exclude patterns are regular expressions matched against the whole URL. A match on an exclude, or a miss
+  of every include when includes are set, is recorded and not fetched (`SkipReason.Excluded`), so a rendered crawl can
+  be kept out of a filter or parameter trap. The start URL has to pass, or the crawl is refused.
+- Each request the browser makes takes a slot on that host's gate, images and fonts are not fetched, and a private
+  address is not requested. Chromium won't log in to a SOCKS5 proxy, so a crawl that uses one renders through a
+  loopback relay that does the login. A crawl file from before this reads as rendering off.
+- The synthetic site plants `/plants/js-shell`: the raw HTML has neither the link to `/plants/js-rendered-product` nor
+  the image without an alt. Both are built by `/plants/js-shell.js`. The expected issues are `image-missing-alt` on
+  the shell and `not-in-sitemap` on the product. `AnalysisFreshness.VERSION` is **23**. Issue ids are unchanged.
+- Settings in both modes, on the New crawl form and on a crawl's own settings: on, off, or only these URLs, with the
+  include and exclude patterns beside that. The sidecar's crawl options carry the same fields. `si crawl` takes
+  `--render`, `--render-url`, `--include` and `--exclude`.
+
+**Checked:** `dotnet test engine/ShoutingIguana.Engine.slnx` passed: 2,450 engine, 334 sidecar, 45 CLI. A crawl of a
+two-page site found `/rendered-only`, a link the raw HTML does not contain, and `image-missing-alt`, which the raw
+HTML does not have either. The same crawl with rendering off did not find the URL. `si bench --pages 100000` found
+every planted issue, 101,221 pages in 54.9 s, working set 215 MB at 10–30% of the crawl and 192 MB at 70–100%
+(−289 bytes a URL).
+
+**Not this slice:** custom extraction, list mode, a browser fallback for a site that blocks the plain fetch, and
+signing in with cookies. A page that already has its text is not rendered. A content security policy is enforced, so
+the planted script is a file on the site, which `default-src 'self'` allows.
 
 **Step 3 starts with a design conversation with the owner, not with code.** The owner wants a "super slick,
 enterprise level" UI and UX. The old app was "clunky and a bit all over the place". **[The UI brief](v2-ui-brief.md)

@@ -43,10 +43,26 @@ internal sealed record CrawlOptionsDto
     public IReadOnlyList<string>? ExtraSitemaps { get; init; }
     public bool? StoreHtml { get; init; }
     public bool? UseCookies { get; init; }
+
+    /// <summary>When a page is rendered in a browser. Left out, a new crawl renders a client-rendered shell.</summary>
+    [JsonPropertyName("javaScriptRendering")]
+    public JavaScriptRendering? Rendering { get; init; }
+
+    /// <summary>Regular expressions matched against the whole URL. Used when <see cref="JavaScriptRendering"/> is Matching.</summary>
+    public IReadOnlyList<string>? RenderPatterns { get; init; }
+
+    /// <summary>When any are set, a URL is fetched only if one matches.</summary>
+    public IReadOnlyList<string>? IncludePatterns { get; init; }
+
+    /// <summary>A URL that matches any of these is recorded and not fetched.</summary>
+    public IReadOnlyList<string>? ExcludePatterns { get; init; }
     public string? ProxyUrl { get; init; }
     public int? RequestTimeoutSeconds { get; init; }
     public int? MaxRetries { get; init; }
     public int? MaxHtmlBytes { get; init; }
+
+    /// <summary>A list a crawl file from before the property existed reads back as null.</summary>
+    private static IReadOnlyList<string> List(IReadOnlyList<string>? values) => values ?? [];
 
     /// <summary>Given in responses: the proxy's user name and password were removed, so they must be given again. Ignored in requests.</summary>
     public bool? HasRedactedProxyCredentials { get; init; }
@@ -79,6 +95,10 @@ internal sealed record CrawlOptionsDto
         ExtraSitemaps = [.. options.ExtraSitemaps],
         StoreHtml = options.StoreHtml,
         UseCookies = options.UseCookies,
+        Rendering = options.Rendering,
+        RenderPatterns = List(options.RenderPatterns),
+        IncludePatterns = List(options.IncludePatterns),
+        ExcludePatterns = List(options.ExcludePatterns),
         ProxyUrl = options.ProxyUrl,
         RequestTimeoutSeconds = options.RequestTimeoutSeconds,
         MaxRetries = options.MaxRetries,
@@ -120,6 +140,10 @@ internal sealed record CrawlOptionsDto
             ExtraSitemaps = ExtraSitemaps is null ? defaults.ExtraSitemaps : [.. ExtraSitemaps],
             StoreHtml = StoreHtml ?? defaults.StoreHtml,
             UseCookies = UseCookies ?? defaults.UseCookies,
+            Rendering = this.Rendering ?? defaults.Rendering,
+            RenderPatterns = RenderPatterns is null ? defaults.RenderPatterns : [.. RenderPatterns],
+            IncludePatterns = IncludePatterns is null ? defaults.IncludePatterns : [.. IncludePatterns],
+            ExcludePatterns = ExcludePatterns is null ? defaults.ExcludePatterns : [.. ExcludePatterns],
             ProxyUrl = ProxyUrl ?? defaults.ProxyUrl,
             RequestTimeoutSeconds = RequestTimeoutSeconds ?? defaults.RequestTimeoutSeconds,
             MaxRetries = MaxRetries ?? defaults.MaxRetries,

@@ -388,6 +388,8 @@ redirect to another host. Validation refuses one not in RFC 9421's form, two for
 `signatures`, never repeating a value. It is taken in requests only: no response gives one back, a crawl file keeps
 none (not even the host), and saved defaults drop it. Continue and a recheck take `signatures` too.
 
+`javaScriptRendering` is `automatic` (the default of a new crawl: render a page whose HTML is a client-rendered shell, and parse that HTML), `off`, or `matching`. `renderPatterns`, `includePatterns` and `excludePatterns` are regular expressions matched against the whole URL. `matching` renders only URLs `renderPatterns` name, and needs at least one. When `includePatterns` has any, a URL is fetched only if one matches. A URL that matches an `excludePatterns` entry is recorded and not fetched, so a rendered crawl can be kept out of a filter or parameter trap. A pattern that doesn't compile, or a start URL the patterns leave out, is `invalid-options` under that field. A crawl file from before this reads as `off` with empty lists. Left out of a request, a new crawl takes the engine's defaults (`automatic`, no patterns).
+
 `speedPresets` sets concurrency and a rate. These values are provisional until the IA sign-off:
 
 | Preset | Concurrency | Rate |

@@ -68,6 +68,7 @@ internal sealed class CrawlSession
     private readonly RunClock _crawling;
     private readonly CrawlWriter _writer;
     private readonly HttpFetcher _fetcher;
+    private readonly JavaScriptRenderer _renderer;
     private readonly OutLinkFactory _links;
     private readonly PageProcessor _processor;
     private readonly RobotsCache _robots;
@@ -145,12 +146,14 @@ internal sealed class CrawlSession
         // Every notice is kept with the crawl, then handed on: the host hears of it with the id the file keeps it under.
         _observer = new NoticeRecorder(new SafeCrawlObserver(observer, _logger), _writer, timeProvider);
         _fetcher = new HttpFetcher(_options, userAgent, scope, timeProvider);
+        _renderer = new JavaScriptRenderer(_options, userAgent, scope, _fetcher.Guard, _gates, _observer, timeProvider,
+            loggerFactory.CreateLogger<JavaScriptRenderer>());
         var fetcher = new RetryingFetcher(_fetcher, _gates, scope, _options.MaxRetries, _observer, timeProvider);
         _robots = new RobotsCache(fetcher, _gates, _writer, scope, _options, userAgent.RobotsToken, _observer,
             timeProvider, loggerFactory.CreateLogger<RobotsCache>(), _stop.Token);
         _links = new OutLinkFactory(scope);
         _favicon = new FaviconFetcher(_options, _fetcher, _gates, _robots, _writer, scope, _pause, timeProvider, loggerFactory.CreateLogger<FaviconFetcher>(), _stop.Token);
-        _processor = new PageProcessor(_options, userAgent, fetcher, _robots, _links, _observer, scope, _gates, _favicon, timeProvider);
+        _processor = new PageProcessor(_options, userAgent, fetcher, _robots, _links, _observer, scope, _gates, _favicon, _renderer, timeProvider);
         _trickle = new SectionTrickle(_gates, _processor, scope, _observer, _pause, timeProvider, loggerFactory.CreateLogger<SectionTrickle>(),
             () => TimeSpan.FromMilliseconds(_crawling.ElapsedMs));
         _sitemaps = new SitemapDiscoverer(_options, _fetcher, _gates, _robots, _writer, _links, _observer, _pause, timeProvider,
@@ -577,6 +580,7 @@ internal sealed class CrawlSession
             finally
             {
                 _fetcher.Dispose();
+                await _renderer.DisposeAsync().ConfigureAwait(false);
             }
         }
 
