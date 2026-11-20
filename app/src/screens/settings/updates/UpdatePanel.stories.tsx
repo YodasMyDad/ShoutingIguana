@@ -61,7 +61,7 @@ const STATES: { label: string; state: UpdateState; busy?: boolean }[] = [
       step: 'failed' as const,
       update: null,
       message: 'The shell’s own sentence.',
-      failure: { problem, message: 'The shell’s own sentence.', currentVersion: '2.0.0-alpha.1' },
+      failure: { problem, message: 'The shell’s own sentence.', currentVersion: '2.0.0-beta.1' },
     },
   })),
   {

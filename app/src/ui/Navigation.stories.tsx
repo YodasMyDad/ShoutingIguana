@@ -429,8 +429,8 @@ export const Headers: Story = {
       />
       <GridHeader title="Links" count={<ResultCount shown={21_914} total={21_914} noun="link" />} />
       <Facts>
-        <Fact label="App">2.0.0-alpha.1</Fact>
-        <Fact label="Engine">2.0.0-alpha.1 (sidecar)</Fact>
+        <Fact label="App">2.0.0-beta.1</Fact>
+        <Fact label="Engine">2.0.0-beta.1 (sidecar)</Fact>
         <Fact label="Data folder">
           <span className="font-mono text-12">C:\Users\lee\AppData\Local\ShoutingIguana</span>
         </Fact>

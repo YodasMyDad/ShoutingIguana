@@ -1,8 +1,7 @@
 # Shouting Iguana engine (v2)
 
-The cross-platform crawl engine that replaces the WPF app in `src/`. It is headless .NET 10: today it runs from
-the command line, and it becomes the backend for the desktop app (Tauri + React) and the Search Console /
-Analytics / Ads integrations later.
+The cross-platform crawl engine behind the desktop app. It is headless .NET 10: the `si` command line, and the
+sidecar the Tauri shell starts. Search Console, Analytics and Ads integrations come later.
 
 ## Projects
 
@@ -106,7 +105,7 @@ line it writes to stdout, and calls it with a bearer token. The contract (endpoi
 
 ```bash
 dotnet run --project src/ShoutingIguana.Sidecar -- --data-dir ./crawls --state-dir ./si-state
-# {"event":"ready","port":53123,"version":"2.0.0-alpha.1","token":"<made up, as no SI_SIDECAR_TOKEN was set>"}
+# {"event":"ready","port":53123,"version":"2.0.0-beta.1","token":"<made up, as no SI_SIDECAR_TOKEN was set>"}
 curl -H "Authorization: Bearer <token>" http://127.0.0.1:53123/api/health
 ```
 

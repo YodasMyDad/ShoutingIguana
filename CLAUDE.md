@@ -1,242 +1,73 @@
 # CLAUDE.md
 
-Guidance for Claude / agents working in this repo. Read this before making changes.
+Guidance for agents working in this repo. Read this before making changes.
 
 ## What this is
 
-**Shouting Iguana** — a Windows desktop SEO crawler & site auditor. WPF on .NET 10, SQLite per project, Playwright (headless Chromium) for JS rendering, plugin-based analysis. Think "self-hosted Screaming Frog with a plugin SDK."
+**Shouting Iguana** `2.0.0-beta.1` — a cross-platform desktop SEO crawler and site auditor.
 
-## v2 rebuild (branch `v2`, folder `engine/`)
+- `engine/` — headless .NET 10 crawl engine, the `si` CLI, and the localhost sidecar. One SQLite file per crawl.
+- `app/` — React and TypeScript UI in a Tauri 2 shell. The shell starts the engine as a sidecar.
+- `docs/` — the rebuild plan and the UI notes. **Where step 3 stands** in [`docs/v2-rebuild.md`](docs/v2-rebuild.md) is the only status. Update that section before you stop, and commit it.
 
-The WPF app in `src/` is being replaced by a cross-platform engine in `engine/` (read `engine/README.md`). New work
-goes there; `src/` is legacy and only gets critical fixes. **Start with `docs/v2-rebuild.md`**: the plan, decisions,
-status and open owner decisions. Update it at the end of each step.
+The WPF app is not in this branch. It is the tag `legacy-v1`. Do not move or delete that tag. v2 has no plugin system. The `ShoutingIguana.PluginSdk` NuGet package is unused here and stays published.
 
-### Current work
+## Do not push
 
-Step 3, the UI, is on branch `ui/step-3`. The folder you were opened in is often `v2`, which does not
-contain that work. Before any UI or engine work, read `docs/v2-rebuild.md` on `ui/step-3`, section **Where step 3
-stands**. That section is the only status. Update it before you stop, including what is left, and commit it.
+Never push to GitHub (no branch, tag or backup) until the owner says it is time to deploy. Pushes ran CI and used up their GitHub minutes. Commit locally. Run every check locally: `dotnet test engine/ShoutingIguana.Engine.slnx`, and the app checks in [`app/README.md`](app/README.md) (`smoke:shell` included). The app and engine workflows are manual-only (`workflow_dispatch`). The release workflow runs only on a tag `app-v*`.
 
-**Never push to GitHub** (no branch, tag or backup) until the owner says it is time to deploy: pushes ran CI and used
-up their GitHub minutes. Commit locally; run every check locally (the verify scripts in
-`docs/handoff/2026-11-13/tools/`, `smoke:shell`, the Linux Docker check in `docs/handoff/2026-11-14/tools/`). The app
-and engine workflows are manual-only (`workflow_dispatch`).
-Do not treat the October status in `v2`'s copy of the doc as the current task, and do not redo work the section
-lists as done.
+This beta's one push is the exception already authorised and not yet done: `master` and the tag `app-v2.0.0-beta.1` (step E in [`docs/v2-rebuild.md`](docs/v2-rebuild.md)). Do not make that push as part of ordinary work. After it, the never-push rule stands again.
 
-On this machine the branch is checked out at `.claude/worktrees/ui-step-3`. If that folder is missing, check the
-branch out. Do not commit UI work onto `v2` or `master`. Pushing `master`, or releasing, still needs an explicit yes.
+Do not force-push.
 
-- Solution: `engine/ShoutingIguana.Engine.slnx`. Test with `dotnet test engine/ShoutingIguana.Engine.slnx`.
-- CLI: `dotnet run --project engine/src/ShoutingIguana.Cli -- crawl <url>` (also `analyze`, `issues`, `stats`, `testsite`, `bench`).
-- Gate: `si bench --pages 100000` must find every planted page and issue, flag nothing else, and keep memory flat; CI
-  runs it (`.github/workflows/engine.yml`).
-- `engine/Directory.Build.props` targets `net10.0` with warnings as errors. Package versions live only in
-  `engine/Directory.Packages.props` (central package management), never in a csproj.
-- Engine rules: one SQLite file per crawl. Only `Storage/` writes to it: `CrawlWriter` while a crawl runs, `IssueWriter`
-  for analysis (never both at once). Never open a write path anywhere else. HTML is parsed once
-  (`Parsing/HtmlPageParser`): add new facts to `PageFacts` instead of re-parsing.
-- SEO checks live in `Analysis/Rules`, and every issue is defined in `Analysis/IssueCatalog.cs`. Issue ids are stored
-  in crawl files: never rename one. A new check also needs a planted case on the synthetic site (`TestSite`, products
-  or `SyntheticSite.Plants.cs`) with its expected count, because the tests compare the whole issues table.
-- The conventions below apply to the engine too.
-
-## Working style with this user
-
-- Be casual, terse, concise. Treat the user as an expert — no moral lectures, no "Here's how you can…" preamble.
-- Give the answer first, then explanation if needed. If asked for a fix or explanation, provide actual code or the actual explanation — not high-level theory.
-- Anticipate needs — suggest solutions the user didn't ask for when they're clearly better.
-- Value good arguments over authority; flag speculation explicitly.
-- Cite sources at the end, never inline. No knowledge-cutoff disclaimers, no "I'm an AI" disclosure.
-- Split long answers across multiple responses rather than truncating.
-- Fully implement requested functionality — no TODOs, placeholders, or "missing pieces."
-- Readability wins over micro-optimization.
-- **Never rename existing functions without asking permission.**
-
-## Tech stack
-
-| Area | Choice |
-| --- | --- |
-| Language / runtime | C# 12, .NET 10 (`net10.0` for libs, `net10.0-windows` for the WPF app) |
-| UI | WPF + MVVM via `CommunityToolkit.Mvvm` 8.4.0 |
-| Persistence | EF Core 10 + SQLite (one `.db` file per project) |
-| Browser automation | `Microsoft.Playwright` 1.56.0 (Chromium, headless) |
-| HTML parsing | HtmlAgilityPack + Fizzler (CSS selectors) |
-| Resilience | Polly 8.x |
-| Logging | Serilog 4.3 → `%LocalAppData%\ShoutingIguana\logs\shouting-iguana.log` |
-| Export | ClosedXML (Excel), CsvHelper |
-| Installer | Inno Setup 6 (x86 + x64) |
-
-Windows-only. Several Core/Data types are marked `[SupportedOSPlatform("windows")]`.
-
-## Solution layout
+## Layout and commands
 
 ```
-ShoutingIguana.sln
-└── src/
-    ├── ShoutingIguana/              WPF app — Views, ViewModels, App.xaml.cs, Styles.xaml
-    ├── ShoutingIguana.Core/         Domain: Models, Services (CrawlEngine, LinkExtractor, Playwright, Robots), Repository INTERFACES, Configuration
-    ├── ShoutingIguana.Data/         EF Core: DbContext, Repository IMPLEMENTATIONS, Migrations, entity Configurations
-    ├── ShoutingIguana.PluginSdk/    NuGet-published SDK — IPlugin, IUrlTask, UrlContext, ReportSchema, UrlHelper
-    └── ShoutingIguana.Plugins/      18 built-in plugins (BrokenLinks, Canonical, Hreflang, ... see README)
+engine/ShoutingIguana.Engine.slnx
+engine/src/ShoutingIguana.Engine/      crawler, parsing, storage, SEO checks
+engine/src/ShoutingIguana.Cli/         si
+engine/src/ShoutingIguana.Sidecar/     si-sidecar, the localhost API
+engine/src/ShoutingIguana.TestSite/    synthetic site
+engine/tests/
+app/                                   React UI
+app/src-tauri/                         Tauri 2 shell
 ```
-
-Plugins are built into `bin/{Config}/net10.0-windows/plugins/{AssemblyName}/` and loaded at runtime via `PluginLoadContext` (per-plugin `AssemblyLoadContext`).
-
-## Build, run, migrate
 
 ```bash
-# Build
-dotnet build ShoutingIguana.sln
-
-# Run the desktop app
-dotnet run --project src/ShoutingIguana/ShoutingIguana.csproj
-
-# Release build
-dotnet build -c Release ShoutingIguana.sln
+dotnet test engine/ShoutingIguana.Engine.slnx
+dotnet run --project engine/src/ShoutingIguana.Cli -- crawl <url>
 ```
 
-```powershell
-# EF Core migration (interactive, prompts for name)
-.\migrations.ps1
-# or directly:
-dotnet ef migrations add <Name> `
-    --context SqliteShoutingIguanaDbContext `
-    -o Migrations `
-    --project src/ShoutingIguana.Data `
-    --startup-project src/ShoutingIguana
+The desktop app: see [`app/README.md`](app/README.md). `npm run tauri dev` from `app/` runs the shell.
 
-# Inno Setup installers (Release, x86 + x64) → publish/installer/
-.\build-installer.ps1 -Platform Both -Configuration Release
+`engine/Directory.Build.props` targets `net10.0` with warnings as errors, and sets `Version` and `InformationalVersion`. Package versions live only in `engine/Directory.Packages.props` (central package management), never in a csproj. The app version is the same string in `app/package.json`, `app/src-tauri/tauri.conf.json` and `app/src-tauri/Cargo.toml`.
 
-# Wipe Playwright browser cache if it gets stuck
-.\cleanplaywright.ps1
-```
+Gate: `si bench --pages 100000` must find every planted page and issue, flag nothing else, and keep memory flat.
 
-Tests live in `src/ShoutingIguana.Tests` (**xUnit + Moq**, `net10.0-windows`). Mirror the `src/` layout when adding new suites.
+## Engine rules
 
-## Entry point and bootstrapping
+- One SQLite file per crawl. Only `engine/src/ShoutingIguana.Engine/Storage/` writes to it: `CrawlWriter` while a crawl runs, `IssueWriter` for analysis, never both at once. Never open a write path anywhere else.
+- HTML is parsed once (`Parsing/HtmlPageParser`). Add new facts to `PageFacts` instead of re-parsing.
+- SEO checks live in `Analysis/Rules`. Every issue is defined in `Analysis/IssueCatalog.cs`. Issue ids are stored in crawl files: never rename one. A new check needs a planted case on the synthetic site (`TestSite`, products or `SyntheticSite.Plants.cs`) with its expected count, because the tests compare the whole issues table.
+- The sidecar contract is [`docs/v2-sidecar-api.md`](docs/v2-sidecar-api.md).
 
-`src/ShoutingIguana/App.xaml.cs` does everything at startup:
+## Coding conventions
 
-1. Serilog file/debug/console sinks.
-2. Global exception handlers (Dispatcher, AppDomain, TaskScheduler).
-3. `Host.CreateDefaultBuilder()` → loads `appsettings.json`.
-4. Registers DI: `SqliteDbContextFactory`, `ProjectDbContextProvider`, all repositories, `CrawlEngine`, `PluginRegistry`, `IPlaywrightService`, `ExcelExportService`, `NavigationService`, `ToastService`, all ViewModels (transient).
-5. Background-initializes Playwright (auto-installs Chromium on first run) and loads plugins.
-6. Shows `MainWindow`.
+Match the engine.
 
-Shutdown disposes Playwright with a 5-second timeout and flushes Serilog.
+- Primary constructors for DI: `class Foo(ILogger<Foo> logger, IBar bar) : IFoo`.
+- `.ConfigureAwait(false)` on every `await` in `engine/`.
+- File-scoped namespaces.
+- Nullable reference types on. Use `?` for nullable; `null!` only when the value is set before first read.
+- Collection expressions: `[]` for empties and literals.
+- `var` when the right-hand side makes the type obvious.
+- LINQ for collection work, unless a loop is clearer.
+- No AutoMapper. Hand-written mapping, next to the type it produces.
+- One model or record per file, named after the type, in a `Models/` folder. Don't define a model in the same file as a service or command.
+- Never rename an existing function without asking.
+- Logging is `ILogger<T>` with structured templates, not interpolated strings.
+- Exceptions for exceptional cases. Validate at boundaries (user input, deserialized JSON). Trust internal callers.
 
-## How a crawl works (the mental model)
+## Working style
 
-`CrawlEngine` (`src/ShoutingIguana.Core/Services/CrawlEngine.cs`) runs in **two phases**:
-
-1. **Discovery** — pulls URLs from `CrawlQueueItem`, opens each in a Playwright page, captures rendered HTML + headers, runs `LinkExtractor` to find more URLs, persists `Url` / `Link` / `Header` / `Image` / `Redirect` / `Hreflang` / `StructuredData` rows. Has an **adaptive loader**: starts with `waitForNetworkIdle`, falls back to a faster strategy when success rate drops.
-2. **Analysis** — replays each crawled URL's stored HTML + headers through enabled `IUrlTask`s in priority order via `PluginExecutor`. No live browser. Tasks emit `Finding` rows (Severity Error/Warning/Info) and plugin-specific `ReportRow`s through the `ReportSink`.
-
-State is thread-safe: `Interlocked` flags for `IsCrawling` / `IsPaused`, `ConcurrentDictionary` for shared maps, `ManualResetEventSlim` for pause gating. Default concurrency is 4 workers. Pause/resume works via `CrawlCheckpoint` snapshots.
-
-URL normalization happens in `CrawlEngine.NormalizeUrl` and `PluginSdk/Helpers/UrlHelper.Normalize` — lowercase scheme/host, drop fragment, **keep trailing slash** (this matches what's stored, so dedup checks line up).
-
-## Data layer — the per-project DB pattern
-
-Each Project has its **own SQLite file**. The active context is resolved per scope:
-
-```csharp
-services.AddScoped<IShoutingIguanaDbContext>(sp =>
-    sp.GetRequiredService<IProjectDbContextProvider>().GetDbContext());
-```
-
-`ProjectDbContextProvider` (singleton) holds the "current project" and hands back a context bound to that project's `.db`. Switching projects swaps the provider's target — every scoped resolution after that hits the new DB. **Don't cache `DbContext` references across project switches.**
-
-Migrations live in `src/ShoutingIguana.Data/Migrations/`. The base context is `ShoutingIguanaDbContextBase`; the concrete one is `SqliteShoutingIguanaDbContext` (uses Split Query strategy).
-
-## Plugin system
-
-Plugins implement `IPlugin` (descriptor) + one or more `IUrlTask`s (per-URL work). They publish:
-
-- A `ReportSchema` describing their output columns.
-- Findings via `ctx.Reports.ReportAsync(...)` inside `ExecuteAsync(UrlContext, CancellationToken)`.
-
-`PluginRegistry` discovers plugin assemblies on disk, loads each in its own `PluginLoadContext`, syncs schemas to the DB before a crawl, and exposes hot load/unload. `PluginExecutor` orders tasks by `Priority` and feeds them a `UrlContext` (URL row + rendered HTML + headers + project settings; **no live Playwright page in Phase 2**).
-
-Build a new plugin against `ShoutingIguana.PluginSdk` (it's a NuGet package — `GeneratePackageOnBuild=true`). See `src/ShoutingIguana.PluginSdk/README.md`. Add the project to `src/ShoutingIguana.Plugins/` to ship it built-in.
-
-## Coding conventions (match these)
-
-- **Primary constructors** for DI everywhere — `class Foo(ILogger<Foo> logger, IBar bar) : IFoo`. Don't write old-style constructor bodies that just assign fields.
-- **`.ConfigureAwait(false)` on every `await` in Core / Data / PluginSdk.** UI-layer code (ViewModels, Views) does not need it. This is enforced by precedent — commit `6b34691` was a sweep to fix violations.
-- **File-scoped namespaces** (`namespace Foo;`).
-- **Nullable reference types enabled** in every project. Use `?` for nullable; `null!` only when you can prove the value is set before first read (typical for EF nav properties).
-- **Collection expressions** — prefer `[]` over `new List<T>()` / `Array.Empty<T>()` / `new T[0]` for empties and literals.
-- **Pattern matching** — use it where it reads clearly, including multi-type `is` checks: `x is Url or Link or Redirect`.
-- **C# 10+ features** — records, pattern matching, null-conditional/null-coalescing-assignment where they improve clarity.
-- **`var`** for implicit typing when the right-hand side makes the type obvious.
-- **LINQ + lambdas** for collection work, not hand-rolled loops, unless the loop is clearer.
-- **Descriptive identifiers** — `IsUserSignedIn`, `CalculateTotalDepth` over short or cryptic names.
-- **Object mapping is hand-written** — no AutoMapper or similar. Keep mapping helpers next to the type they produce.
-- MVVM via `[ObservableProperty]` / `[RelayCommand]` / `[NotifyCanExecuteChangedFor(...)]`. Don't write manual `INotifyPropertyChanged`.
-- Background work from the UI thread: `Task.Run(async () => { ... })`. Marshal back with `Application.Current.Dispatcher.InvokeAsync(...)`.
-- ViewModels that subscribe to events implement `IDisposable` and unsubscribe in `Dispose()` (see `MainViewModel`).
-- Naming: `PascalCase` types/methods/public members, `camelCase` locals, `_camelCase` private fields, `UPPERCASE` for constants, `I*` for interfaces, `*ViewModel` / `*View` / `*Dialog` / `*Service` / `*Repository` suffixes.
-- Logging is `ILogger<T>` injected via DI; structured templates (`"... {Path}"`), not interpolated strings.
-- Thread safety: `ConcurrentDictionary`, `Interlocked`, `lock(_lock)` are all in active use — pick the right one for the access pattern, don't lock everything.
-
-There is **no `.editorconfig` or `Directory.Build.props`** today. Conventions live in code and in this file.
-
-## Class / file layout
-
-- Don't define models or records in the same file as a service, command, or handler.
-- One model / record per file, named after the type.
-- Put models/records in a nested `Models/` folder — inside the owning Service folder, feature folder, or alongside the handler that returns them.
-- Apply this to new code. Don't retroactively split existing files unless asked.
-
-## Error handling
-
-- Exceptions for exceptional cases, never control flow.
-- Log through injected `ILogger<T>` with structured templates.
-- Global unhandled-exception handlers are already wired in `App.xaml.cs` (Dispatcher / AppDomain / TaskScheduler) — don't duplicate them; let exceptions surface so those handlers catch and log.
-- Validate at boundaries (user input, deserialized JSON, plugin inputs). Trust internal callers — don't pad internal methods with defensive null-checks for values that can't be null.
-
-## Configuration
-
-- `src/ShoutingIguana/appsettings.json` — connection string + Serilog log levels (CrawlEngine + Data are `Debug`).
-- Per-project crawl config: `ProjectSettings` (BaseUrl, MaxCrawlDepth, MaxUrlsToCrawl, CrawlDelaySeconds, ConcurrentRequests, UA, ProxyOverride, timeouts) — persisted to that project's SQLite.
-- Global defaults: `CrawlSettings`, `BrowserSettings`, `ProxySettings` (in `src/ShoutingIguana.Core/Configuration/`).
-- Recent-projects MRU stored in `appsettings.json` under `%LocalAppData%`.
-
-## Gotchas worth knowing
-
-- **First run installs Chromium.** `App.xaml.cs` calls Playwright's installer in the background. If it fails the user sees a toast — don't silently swallow.
-- **Phase 2 has no live page.** Plugin tasks must work from stored `RenderedHtml` + `Header` rows. Don't write a task that assumes `ctx.Page` is non-null.
-- **`Finding.DataJson` is JSON-in-a-string.** Use `GetDetails()` / `SetDetails()` on `Finding` — they handle the legacy dictionary shape.
-- **Per-project SQLite isolation** sidesteps SQLite's writer-concurrency issues. Don't try to consolidate into one shared DB without redesigning the locking model.
-- **Adaptive loader** in `CrawlEngine` switches strategies based on success counters. If you change loader behavior, update both branches and the counter logic, or the heuristic gets confused.
-- **Styles.xaml is the design system.** Use the spacing tokens (`SpacingXs/M/L/...`) and named brushes; don't hardcode colors. High-contrast mode is supported via `SystemColors` — don't break it.
-- **Plugin assemblies live in their own load contexts.** Don't share mutable static state between the host and a plugin — it won't be the same instance the plugin sees.
-- **Old `net9.0` artefacts exist under `bin/`** from a prior target. Current target is `net10.0`; ignore the stale folders or `dotnet clean`.
-- **Avoid N+1 EF Core queries.** Use `.Include()` / projections to `Select(...)` DTOs. Per-project SQLite makes round-trips cheap but not free, and report queries over crawled URLs blow up fast.
-- **Paginate large result sets** in UI-bound repositories — don't materialize the whole Url / Finding table to the grid.
-
-## Where things live (cheat sheet)
-
-| Need | File |
-| --- | --- |
-| App startup / DI | `src/ShoutingIguana/App.xaml.cs` |
-| Main window + keybindings | `src/ShoutingIguana/MainWindow.xaml` |
-| Design system | `src/ShoutingIguana/Styles/Styles.xaml` |
-| Crawl orchestration | `src/ShoutingIguana.Core/Services/CrawlEngine.cs` |
-| Link extraction | `src/ShoutingIguana.Core/Services/LinkExtractor.cs` |
-| Playwright wrapper | `src/ShoutingIguana.Core/Services/IPlaywrightService.cs` (+ impl) |
-| URL helpers | `src/ShoutingIguana.PluginSdk/Helpers/UrlHelper.cs` |
-| Plugin loading | `src/ShoutingIguana.Core/Services/PluginRegistry.cs`, `PluginExecutor.cs` |
-| EF context | `src/ShoutingIguana.Data/SqliteShoutingIguanaDbContext.cs` (+ `Base`) |
-| Per-project context resolution | `src/ShoutingIguana.Data/ProjectDbContextProvider.cs` |
-| Excel export | `src/ShoutingIguana/Services/ExcelExportService.cs` |
-| Repository interfaces | `src/ShoutingIguana.Core/Repositories/` |
-| Repository implementations | `src/ShoutingIguana.Data/Repositories/` |
-| Domain models | `src/ShoutingIguana.Core/Models/` |
-| Built-in plugins | `src/ShoutingIguana.Plugins/<PluginName>/` |
-| Plugin SDK guide | `src/ShoutingIguana.PluginSdk/README.md` |
+Be casual, terse, and concise. The owner is an expert. Give the answer first, then the code or the explanation. Fully implement what was asked: no TODOs, placeholders, or missing pieces. Readability over micro-optimisation.

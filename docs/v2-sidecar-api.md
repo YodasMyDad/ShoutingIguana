@@ -97,7 +97,7 @@ Built in stages:
   to stdout:
 
   ```json
-  {"event":"ready","port":53123,"version":"2.0.0-alpha.1"}
+  {"event":"ready","port":53123,"version":"2.0.0-beta.1"}
   ```
 
   `"token"` is added only when the sidecar made one up, which happens only in development mode (`--dev`). Nothing else
