@@ -1,88 +1,91 @@
 # Shouting Iguana
 
-A desktop app that crawls a website the way a search engine does, and tells you what to fix in plain words.
+<img src="Assets/logo.png" alt="Shouting Iguana" width="100">
 
-**2.0.0-beta.1.** Unsigned beta for Windows, macOS and Linux.
+**See your site the way a search engine does. Know exactly what to fix.**
+
+Shouting Iguana is a desktop SEO crawler. It crawls every URL it can reach, scores the site, and puts the issues that move the needle at the top. Broken links, redirect chains, pages search engines will not index, duplicate content, titles and descriptions that get cut off in the results. Each one says what is wrong, why it matters, and how to fix it.
+
+Hand the report to a client. Or fix it yourself, then recheck just those pages and watch the score move.
+
+**2.0.0-beta.1** for Windows, macOS and Linux. Your crawl stays on your machine. No account. No plugin to install.
 
 **[Download 2.0.0-beta.1](https://github.com/YodasMyDad/ShoutingIguana/releases/tag/app-v2.0.0-beta.1)**
 
-## What it is
+## Why people download it
 
-Paste an address. Shouting Iguana reads the site, gives it one score, and lists the problems worth fixing first. Each problem says what is wrong, why it matters, and how to fix it. The report at the end is that same check as a page you can save or print.
+- **A crawl you can act on.** Not a spreadsheet of ten thousand rows. A score, then the issues worth fixing first, with the fix written out.
+- **The full audit when you need it.** Simple is the client view. Advanced is one switch away: every URL, the link graph, XML sitemaps, robots.txt, and an inspector for a single address.
+- **Prove the fix.** Recheck the pages you changed. The score and the issue list update against the previous crawl.
+- **Yours, offline.** One `.sicrawl` file per site. Nothing is uploaded.
 
-It opens in Simple. Advanced is one switch away: every URL, the links, the sitemaps, robots.txt, and an inspector for a single address.
-
-A crawl is one file on this computer (`.sicrawl`). The app keeps the list of sites you have checked.
-
-It reads the HTML the server sends. A page that is built in the browser, after JavaScript runs, is missing from the check.
+The crawler reads the HTML the server returns. Pages that only exist after JavaScript runs are not in this beta. JavaScript rendering is next.
 
 ## Screenshots
 
-The beta, light and dark.
+### Start a crawl in seconds
 
-### Home
-
-Paste an address, or open a site you have already checked. The score and what is left to fix are on the row.
+Enter a URL, or reopen a site you already audited. The score and what is still outstanding are on the row.
 
 | Light | Dark |
 | --- | --- |
-| ![Simple Home, light. Paste a site address, with sites you have already checked underneath.](docs/readme/02-simple-home-light.png) | ![Simple Home, dark.](docs/readme/02-simple-home-dark.png) |
+| ![Simple Home, light. Start a crawl, with sites already audited underneath.](docs/readme/02-simple-home-light.png) | ![Simple Home, dark.](docs/readme/02-simple-home-dark.png) |
 
-### Where to fix it
+### The issues worth fixing first
 
-Serious problems first, then the ones worth fixing, then the ones worth a look. One line says how many pages, and what it does to the score.
-
-| Light | Dark |
-| --- | --- |
-| ![Where to fix it, light. Serious problems, then worth fixing, then worth a look.](docs/readme/14-simple-what-to-fix-light.png) | ![Where to fix it, dark.](docs/readme/14-simple-what-to-fix-dark.png) |
-
-### A problem, and how to fix it
-
-Open one problem and the fix is words: what to change, and where. The same link in the header of every page is one fix, not hundreds.
+Errors, then warnings, then notices. Each line is the issue, how many URLs it hits, and what fixing it does to the score.
 
 | Light | Dark |
 | --- | --- |
-| ![One problem with its fix, light. Links with nothing to read, where they are, and how to fix them.](docs/readme/15-simple-problem-one-fix-light.png) | ![One problem with its fix, dark.](docs/readme/15-simple-problem-one-fix-dark.png) |
+| ![What to fix first, light. Errors, then warnings, then notices.](docs/readme/14-simple-what-to-fix-light.png) | ![What to fix first, dark.](docs/readme/14-simple-what-to-fix-dark.png) |
 
-### The URL inspector
+### A fix you can hand to a developer
 
-Advanced. Pick an address and see how it answered, its title and headings, what it links to, and which checks fired.
+Open an issue and the fix is at the top: what to change, and where. A header link repeated across the site is one fix, not one ticket per page.
+
+| Light | Dark |
+| --- | --- |
+| ![An issue and its fix, light. Links with no anchor text, where they are, and how to fix them.](docs/readme/15-simple-problem-one-fix-light.png) | ![An issue and its fix, dark.](docs/readme/15-simple-problem-one-fix-dark.png) |
+
+### Inspect any URL
+
+Advanced. Open a crawled URL and see the response, whether search engines can index it, the title and headings, the links in and out, and the issues on that URL alone.
 
 | Light | Dark |
 | --- | --- |
 | ![URL inspector, light. The URL list with one page open beside it.](docs/readme/53-advanced-inspector-light.png) | ![URL inspector, dark.](docs/readme/53-advanced-inspector-dark.png) |
 
-### The report
+### A report you can send
 
-The check as a page: the score, what to fix first, and how the score was worked out. Save it, or print it.
+The audit as a document: the score, what to fix first, and how the score was calculated. Save it, or print it for the client.
 
 | Light | Dark |
 | --- | --- |
-| ![The report, light. Score 84, and the problems to fix first.](docs/readme/20-simple-report-light.png) | ![The report, dark.](docs/readme/20-simple-report-dark.png) |
+| ![The report, light. The score, and the issues to fix first.](docs/readme/20-simple-report-light.png) | ![The report, dark.](docs/readme/20-simple-report-dark.png) |
 
 ## Downloads
 
-The installers are on the GitHub release [app-v2.0.0-beta.1](https://github.com/YodasMyDad/ShoutingIguana/releases/tag/app-v2.0.0-beta.1).
+Installers are on the GitHub release [app-v2.0.0-beta.1](https://github.com/YodasMyDad/ShoutingIguana/releases/tag/app-v2.0.0-beta.1).
 
 | System | File |
 | --- | --- |
-| Windows | NSIS installer, 64-bit, for the current user |
+| Windows | NSIS installer, 64-bit, per user |
 | macOS | Disk image for Apple silicon (arm64), and one for Intel (x64) |
 | Linux | `.deb` and AppImage, 64-bit |
 
-Each installer is attached with a SHA256 checksum (`SHA256SUMS-*.txt` on the release). Check the sum before you run it.
+Each file has a SHA256 checksum (`SHA256SUMS-*.txt` on the release).
 
 ## Opening an unsigned build
 
-This beta is not signed. Windows and macOS will say so the first time you open it.
+This beta is not code-signed. Windows and macOS warn the first time you open it.
 
 ### Windows (SmartScreen)
 
 1. If the installer is blocked because it came from the internet: right-click it, **Properties**, tick **Unblock**, then **OK**.
 2. Run it. If SmartScreen says Windows protected your PC, choose **More info**, then **Run anyway**.
-3. The app itself can get the same prompt the first time it starts. **More info**, then **Run anyway**.
+3. The app can show the same prompt the first time it starts. **More info**, then **Run anyway**.
 
-Some managed PCs refuse an unsigned installer. That is the organisation's policy.
+Some managed PCs block unsigned installers. That is the organisation's policy.
 
 ### macOS (Gatekeeper)
 
@@ -93,43 +96,43 @@ Some managed PCs refuse an unsigned installer. That is the organisation's policy
 
 ### Linux
 
-The `.deb` and the AppImage are unsigned. Install the `.deb` with your package manager, or mark the AppImage executable and run it. Both include the libraries the crawler needs to start.
+The `.deb` and the AppImage are unsigned. Install the `.deb` with your package manager, or mark the AppImage executable and run it. The `.deb` needs the system's `libicu`, which apt installs with WebKit. The AppImage already contains it.
 
 ## A first crawl
 
 1. Open the app. It starts in Simple.
-2. Paste the site address and choose **Check site**. The default pace is polite. A small site takes a few minutes.
-3. When it finishes, open the site. **What to fix** puts serious problems first.
-4. Open one problem. The text says what to change and where. **Recheck these pages** reads those addresses again.
-5. **Report** is the check as a page you can save or print.
-6. **Advanced**, at the top right, is the URL list. Select an address to open the inspector.
+2. Enter the site address and choose **Check site**. The default crawl rate is polite.
+3. When the crawl finishes, **What to fix** lists errors first.
+4. Open an issue. The text says what to change and where. **Recheck these pages** fetches those URLs again.
+5. **Report** is the audit as a page you can save or print.
+6. **Advanced**, at the top right, is the full URL list. Select a URL to open the inspector.
 
-## What it checks
+## What the crawl finds
 
-The same checks run in Simple and in Advanced. Each one explains what to change, and where, in words.
+The same checks run in Simple and in Advanced. This is the technical SEO audit: response codes, indexability, links, content, and the signals search engines actually use.
 
-- Pages and files that error, time out, or refuse the crawler, and files sent as the wrong type
-- Redirect chains, and redirects that do not land where they should
-- Broken links, on the site and to other sites
-- Pages a search engine is told not to index, and pages nothing links to
-- Canonical addresses that disagree, or that point at a page which does not work
-- Sitemaps: pages missing from them, and addresses in them that cannot appear in search
-- Titles and meta descriptions that are missing, shared, or the wrong length
-- Headings that are missing, duplicated, or out of order
-- Thin pages, and pages that repeat each other
-- Images that are broken, too large, missing a description, still in an older format, or missing a width and height
-- Language and region tags (hreflang) that do not line up
+- Response codes: 4xx and 5xx, timeouts, URLs that refuse the crawler, and resources served as the wrong content type
+- Redirect chains, loops, and redirects that do not land on the final URL
+- Broken internal and external links
+- Indexability: noindex, robots.txt blocks, canonicals that disagree, and canonicals that point at a URL which does not resolve
+- Orphan URLs, and pages a sitemap should list but does not
+- XML sitemaps: unreadable files, URLs on another host, invalid lastmod, and URLs listed more than once
+- Page titles and meta descriptions: missing, duplicate, or the wrong length in pixels, the way the search result cuts them
+- Heading structure: missing H1, duplicates, and skipped levels
+- Thin content, and near-duplicate pages
+- Images: broken, oversized, missing alt text, legacy formats, missing dimensions
+- Hreflang and language tags that do not agree
 - Structured data that is missing or invalid
 - HTTPS, mixed content, insecure forms, and weak security headers
-- Addresses that are too long, duplicated, or easy to confuse
+- URLs that are too long, duplicated, or easy to confuse
 - Slow responses and heavy pages
-- HTML problems that change how the page is read (language, character set, and broken markup)
+- HTML issues that change how the page is parsed: language, charset, and broken markup
 
-The app flags the problem and explains the fix. It does not edit the site.
+Shouting Iguana flags the issue and explains the fix. It does not change the site.
 
 ## Building from source
 
-You need the [.NET 10 SDK](https://dotnet.microsoft.com/download), [Node.js 24](https://nodejs.org/), and Rust (rustup; on Windows, the MSVC toolchain). The app's own notes are in [`app/README.md`](app/README.md). The engine's are in [`engine/README.md`](engine/README.md).
+You need the [.NET 10 SDK](https://dotnet.microsoft.com/download), [Node.js 24](https://nodejs.org/), and Rust (rustup; on Windows, the MSVC toolchain). App notes are in [`app/README.md`](app/README.md). Engine notes are in [`engine/README.md`](engine/README.md).
 
 The engine, from the repo root:
 
