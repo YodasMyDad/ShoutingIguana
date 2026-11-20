@@ -1,15 +1,15 @@
 import { createMemoryHistory } from '@tanstack/react-router';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { TransportRequest } from '../../api/transport';
 import { setTransport } from '../../api/transport';
-import type { AnalysisLimit, AnalysisSettings } from '../../api/types';
+import type { AnalysisLimit, AnalysisSettings, CrawlListItem } from '../../api/types';
 import { App } from '../../app/App';
 import { createQueryClient } from '../../app/queryClient';
 import { createAppRouter } from '../../app/router';
 import { onAnnounce } from '../../feedback/announce';
 import { replaceSettings } from '../../settings/settingsStore';
-import { fakeSidecar, json, problem, standardRoutes } from '../../test/fakeSidecar';
+import { fakeSidecar, json, problem, standardRoutes, testCrawlItem, type FakeRoute } from '../../test/fakeSidecar';
 import {
   approximateCharacters,
   changeOf,
@@ -21,6 +21,11 @@ import {
   splitErrors,
   unitWords,
   valueWords,
+  convertedError,
+  engineValue,
+  groupedLimits,
+  limitDescription,
+  shownValue,
 } from './analysisLimits';
 
 const LIMITS: AnalysisLimit[] = [
@@ -64,7 +69,9 @@ describe('the limits’ words', () => {
     expect(limitName('someNewLimit')).toBe('Some new limit');
     expect(rangeWords(LIMITS[1]!)).toBe('From 1 to 100,000 px. The engine’s is 580 px (about 60 characters).');
     expect(rangeWords(LIMITS[0]!)).toBe('From 0 to 100,000 px. The engine’s is 200 px (about 20 characters).');
-    expect(rangeWords(LIMITS[2]!)).toBe('From 1 to 10,737,418,240 bytes (10 GB). The engine’s is 200 KB.');
+    // A size in the unit typed, never bytes (the audit of 2026-11-19, H-15).
+    expect(rangeWords(LIMITS[2]!)).toBe('Up to 10 GB. The engine’s is 200 KB.');
+    expect(unitWords('bytes')).toBe('KB');
     expect(valueWords(1, 'words')).toBe('1 word');
     expect(valueWords(580, 'pixels')).toBe('580 px');
     expect(unitWords('pixels')).toBe('px');
@@ -105,6 +112,65 @@ describe('the limits’ words', () => {
     expect(sameAsSaved({ ...draftOf(LIMITS), titleMaxPixels: '581' }, LIMITS)).toBe(false);
   });
 
+  it('holds a size in KB and sends it in bytes, with MB or GB written after it too (H-15)', () => {
+    const image = LIMITS[2]!;
+    expect(draftOf(LIMITS).largeImageBytes).toBe('200');
+    expect(shownValue(1_048_576, 'bytes')).toBe('1024');
+    expect(shownValue(1_536, 'bytes')).toBe('1.5');
+    expect(changeOf({ largeImageBytes: '250' }, LIMITS)).toEqual({ largeImageBytes: 256_000 });
+    expect(changeOf({ largeImageBytes: '1 MB' }, LIMITS)).toEqual({ largeImageBytes: 1_048_576 });
+    expect(changeOf({ largeImageBytes: '1.5mb' }, LIMITS)).toEqual({ largeImageBytes: 1_572_864 });
+    expect(changeOf({ largeImageBytes: '2 GB' }, LIMITS)).toEqual({ largeImageBytes: 2_147_483_648 });
+    expect(changeOf({ largeImageBytes: '1,024' }, LIMITS)).toEqual({ largeImageBytes: 1_048_576 });
+    // Not a size: as typed, for the field to say so; empty is the engine's own.
+    expect(changeOf({ largeImageBytes: 'big' }, LIMITS)).toEqual({ largeImageBytes: 'big' });
+    expect(changeOf({ largeImageBytes: '' }, LIMITS)).toEqual({ largeImageBytes: null });
+    expect(sameAsSaved({ ...draftOf(LIMITS), largeImageBytes: '200 KB' }, LIMITS)).toBe(true);
+    expect(convertedError(image)).toBe('Type a size up to 10 GB, in KB: 200, or 1.5 MB.');
+    expect(convertedError(LIMITS[0]!)).toBeNull();
+  });
+
+  it('holds the near-duplicate distance as how alike two pages are, and sends it in bits (H-15)', () => {
+    const near: AnalysisLimit = {
+      id: 'nearDuplicateMaxBits',
+      value: 24,
+      default: 24,
+      unit: 'bits',
+      min: 0,
+      max: 32,
+      description: 'How far apart two pages’ content fingerprints may be, of 256 bits.',
+    };
+    // 24 bits apart is cos(24π/256): about 96% alike, as the engine's own words say.
+    expect(shownValue(24, 'bits')).toBe('95.7');
+    expect(valueWords(24, 'bits')).toBe('95.7% the same');
+    expect(unitWords('bits')).toBe('% the same');
+    expect(rangeWords(near)).toBe('From 92.4% to 100%. The engine’s is 95.7%.');
+    expect(limitDescription(near)).not.toMatch(/bits/);
+    expect(limitDescription(LIMITS[0]!)).toBe(LIMITS[0]!.description);
+    // Every distance the engine takes reads back as itself from what its field shows.
+    for (let bits = near.min; bits <= near.max; bits++) {
+      expect(engineValue(shownValue(bits, 'bits'), 'bits')).toBe(bits);
+    }
+    expect(changeOf({ nearDuplicateMaxBits: '96%' }, [near])).toEqual({ nearDuplicateMaxBits: 23 });
+    expect(changeOf({ nearDuplicateMaxBits: '100' }, [near])).toEqual({ nearDuplicateMaxBits: 0 });
+    expect(changeOf({ nearDuplicateMaxBits: 'lots' }, [near])).toEqual({ nearDuplicateMaxBits: 'lots' });
+    expect(convertedError(near)).toBe('Type a percentage from 92.4 to 100.');
+  });
+
+  it('lists the limits by what they judge, and one no group names under Other', () => {
+    const groups = groupedLimits([
+      { id: 'largeImageBytes' },
+      { id: 'titleMaxPixels' },
+      { id: 'someNewLimit' },
+      { id: 'titleMinPixels' },
+    ]);
+    expect(groups.map((group) => [group.title, group.limits.map((limit) => limit.id)])).toEqual([
+      ['Titles and descriptions', ['titleMinPixels', 'titleMaxPixels']],
+      ['Images', ['largeImageBytes']],
+      ['Other', ['someNewLimit']],
+    ]);
+  });
+
   it('puts a limit’s error beside it, and the whole set’s and a reset’s above the form', () => {
     expect(
       splitErrors({ titleMaxPixels: ['Too narrow.'], settings: ['Together, no.'], 'limits[0]': ['No such limit.'] }, [
@@ -124,7 +190,7 @@ function settingsOf(values: Record<string, number>): AnalysisSettings {
 }
 
 /** The engine's limits, kept as a save leaves them; a widest title not above the narrowest is refused. */
-function sidecar() {
+function sidecar(library?: CrawlListItem[]) {
   let saved: Record<string, number> = {};
   const errorsOf = (body: Record<string, unknown>) => {
     const max = body.titleMaxPixels ?? 580;
@@ -134,6 +200,7 @@ function sidecar() {
       : {};
   };
   const transport = fakeSidecar([
+    ...(library ? ([['GET', /^\/api\/crawls$/, () => json(library)]] as FakeRoute[]) : []),
     ...standardRoutes(),
     ['GET', /^\/api\/analysis-settings$/, () => json(settingsOf(saved))],
     [
@@ -188,7 +255,15 @@ describe('Settings, Analysis', () => {
     expect(field).toHaveAccessibleDescription(
       /A title wider than this in search results is flagged as too long\. From 1 to 100,000 px\. The engine’s is 580 px \(about 60 characters\)\./,
     );
-    expect(screen.getByRole('textbox', { name: 'Largest image' })).toHaveValue('204800');
+    // A size is typed in KB, and says so beside it: 204,800 bytes is 200 (H-15).
+    const image = screen.getByRole('textbox', { name: 'Largest image' });
+    expect(image).toHaveValue('200');
+    expect(image).toHaveAccessibleDescription(/Up to 10 GB\. The engine’s is 200 KB\./);
+    expect(screen.getAllByText('KB', { exact: true }).length).toBeGreaterThan(0);
+    expect(screen.queryByText('bytes', { exact: true })).toBeNull();
+    // Grouped by what they judge.
+    expect(screen.getByRole('region', { name: 'Titles and descriptions' })).toContainElement(field);
+    expect(screen.getByRole('region', { name: 'Images' })).toContainElement(image);
     expect(screen.getByRole('textbox', { name: 'Largest image' })).not.toHaveAccessibleDescription(/ordinary text/);
   });
 
@@ -196,7 +271,9 @@ describe('Settings, Analysis', () => {
     sidecar();
     await open();
     const field = await screen.findByRole('textbox', { name: 'Widest title' });
-    expect(field).toHaveAccessibleDescription(/About 60 characters of ordinary text\.$/);
+    // At the engine's own width the range's words say its characters already: not twice (H-15).
+    expect(field).toHaveAccessibleDescription(/\(about 60 characters\)\.$/);
+    expect(field).not.toHaveAccessibleDescription(/ordinary text/);
     // Its unit beside it.
     expect(screen.getAllByText('px', { exact: true }).length).toBeGreaterThan(0);
     fireEvent.change(field, { target: { value: '700' } });
@@ -205,6 +282,35 @@ describe('Settings, Analysis', () => {
     expect(field).not.toHaveAccessibleDescription(/ordinary text/);
     fireEvent.change(field, { target: { value: '' } });
     expect(field).not.toHaveAccessibleDescription(/ordinary text/);
+  });
+
+  it('saves a size typed in KB as bytes', async () => {
+    const transport = sidecar();
+    await open();
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Largest image' }), { target: { value: '300' } });
+    await waitFor(() =>
+      expect(
+        transport.requests.find((request) => request.method === 'PUT' && request.path === '/api/analysis-settings')
+          ?.body,
+      ).toMatchObject({ largeImageBytes: 307_200 }),
+    );
+  });
+
+  it('says how many crawls in the library are out of date, with the way to them, and nothing while none is', async () => {
+    sidecar([
+      testCrawlItem({ outOfDate: true }),
+      testCrawlItem({ id: 'aaaa00000000000b', fileName: 'b.sicrawl', outOfDate: true }),
+      testCrawlItem({ id: 'aaaa00000000000c', fileName: 'c.sicrawl' }),
+    ]);
+    await open();
+    expect(await screen.findByText('2 crawls were analysed with other limits, and are out of date')).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Analyse them again from Home' })).toHaveAttribute('href', '/');
+    cleanup();
+
+    sidecar();
+    await open();
+    await screen.findByRole('textbox', { name: 'Widest title' });
+    expect(screen.queryByText(/and (is|are) out of date$/)).toBeNull();
   });
 
   it('says what the engine refuses beside the limit, and saves nothing until it’s put right', async () => {

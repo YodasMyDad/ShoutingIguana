@@ -1,3 +1,4 @@
+import clsx from 'clsx';
 // The crawl settings form (docs/v2-ui-simple.md, New crawl in each mode): Simple's four questions, or Advanced's start
 // card and folded sections with every setting the engine's crawl options have. One set of values for both: what is
 // typed in one goes with the user to the other. New crawl and Settings > Crawl defaults both draw it.
@@ -57,6 +58,11 @@ export interface CrawlOptionsFormProps {
    * with the proxy in Advanced; in Simple, which shows neither, only when the form holds one (from the defaults).
    */
   remember?: RememberSecretsProps | undefined;
+  /**
+   * Advanced's six sections in two columns once the window is wide (New crawl, H-21). Left out, they're one column:
+   * Settings > Crawl defaults sits in a section page's measure.
+   */
+  columns?: boolean | undefined;
 }
 
 /** The start URL's field, with focus put on it as the form opens when asked: the one field every crawl needs. */
@@ -289,6 +295,7 @@ function AdvancedSections({
   now,
   shopifyLastRefused,
   shopifySaved,
+  columns = false,
 }: CrawlOptionsFormProps) {
   const set = <K extends CrawlFormField>(field: K, value: CrawlForm[K]) => {
     onChange({ ...form, [field]: value });
@@ -388,86 +395,103 @@ function AdvancedSections({
         </div>
       </div>
 
-      <div className="si-card">
-        {fold(
-          'scope',
-          <>
-            {toggle('stayInStartFolder')}
-            {toggle('includeSubdomains')}
-            {toggle('followNofollow')}
-            {toggle('crawlCanonicals')}
-            {toggle('crawlHreflang')}
-            {toggle('crawlPagination')}
-          </>,
-        )}
-        {fold(
-          'limits',
-          <>
-            {number('maxUrls')}
-            {number('maxDepth')}
-            {number('maxHtmlMb')}
-          </>,
-        )}
-        {fold(
-          'robots',
-          <>
-            {toggle('respectRobotsTxt')}
-            {toggle('respectCrawlDelay')}
-            {toggle('discoverSitemaps')}
-            <SitemapList form={form} onChange={onChange} error={first(errors, 'extraSitemaps')} onTouch={onTouch} />
-          </>,
-        )}
-        {fold(
-          'network',
-          <>
-            <UserAgent form={form} set={set} />
-            {form.userAgent === 'custom' ? text('customUserAgent') : null}
-            {text('acceptLanguage')}
-            <HeaderRows
-              rows={form.headers}
-              onChange={(headers) => onChange({ ...form, headers })}
-              error={first(errors, 'headers')}
-              onTouch={() => onTouch?.('headers')}
-            />
-            {text('proxyUrl', { mono: true, placeholder: 'http://proxy.example.com:8080' })}
-            <ProxyTest proxyUrl={form.proxyUrl} startUrl={withStartUrl ? form.startUrl : null} />
-            {remember ? <RememberSecrets {...remember} /> : null}
-            {toggle('useCookies')}
-          </>,
-        )}
-        {fold(
-          'shopify',
-          <>
-            <p className="text-13 text-text-secondary">{FIELD_WORDS.signatures.help}</p>
-            <ShopifyAccessFields
-              value={form.signatures}
-              onChange={(signatures) => onChange({ ...form, signatures })}
-              startUrl={form.startUrl}
-              error={first(errors, 'signatures')}
-              mode="advanced"
-              onTouch={() => onTouch?.('signatures')}
-              now={now}
-              lastRefused={shopifyLastRefused}
-              saved={shopifySaved}
-            />
-            {remember && formHasSecrets({ ...form, proxyUrl: '', headers: [] }) ? (
-              <RememberSecrets {...remember} subject="signature" />
-            ) : null}
-          </>,
-        )}
-        {fold(
-          'advanced',
-          <>
-            {number('requestTimeoutSeconds')}
-            {number('maxRetries')}
-            {number('concurrency')}
-            {number('maxRequestsPerSecond')}
-            {number('externalConcurrency')}
-            {toggle('checkResources')}
-            {toggle('checkExternalLinks')}
-            {toggle('storeHtml')}
-          </>,
-        )}
+      {/* One card. Wide, with `columns`, its sections are two columns side by side: what the crawl covers on the
+          left, how it asks on the right. The first group's rule under it is the divider between the two when stacked. */}
+      <div className={clsx('si-card', columns && 'wide:grid wide:grid-cols-2 wide:items-start')}>
+        <div
+          className={clsx(
+            'border-b border-border-subtle',
+            columns && 'wide:self-stretch wide:border-r wide:border-b-0',
+          )}
+        >
+          {fold(
+            'scope',
+            <>
+              {toggle('stayInStartFolder')}
+              {toggle('includeSubdomains')}
+              {toggle('followNofollow')}
+              {toggle('crawlCanonicals')}
+              {toggle('crawlHreflang')}
+              {toggle('crawlPagination')}
+            </>,
+          )}
+          {fold(
+            'limits',
+            <>
+              {number('maxUrls')}
+              {number('maxDepth')}
+              {number('maxHtmlMb')}
+            </>,
+          )}
+          {fold(
+            'robots',
+            <>
+              {toggle('respectRobotsTxt')}
+              {toggle('respectCrawlDelay')}
+              {toggle('discoverSitemaps')}
+              <SitemapList form={form} onChange={onChange} error={first(errors, 'extraSitemaps')} onTouch={onTouch} />
+            </>,
+          )}
+        </div>
+        <div>
+          {fold(
+            'network',
+            <>
+              <UserAgent form={form} set={set} />
+              {form.userAgent === 'custom' ? text('customUserAgent') : null}
+              {text('acceptLanguage')}
+              <HeaderRows
+                rows={form.headers}
+                onChange={(headers) => onChange({ ...form, headers })}
+                error={first(errors, 'headers')}
+                onTouch={() => onTouch?.('headers')}
+              />
+              {text('proxyUrl', { mono: true, placeholder: 'http://proxy.example.com:8080' })}
+              <ProxyTest proxyUrl={form.proxyUrl} startUrl={withStartUrl ? form.startUrl : null} />
+              {remember ? <RememberSecrets {...remember} /> : null}
+              {toggle('useCookies')}
+            </>,
+          )}
+          {fold(
+            'shopify',
+            <>
+              <p className="text-13 text-text-secondary">{FIELD_WORDS.signatures.help}</p>
+              <ShopifyAccessFields
+                value={form.signatures}
+                onChange={(signatures) => onChange({ ...form, signatures })}
+                startUrl={form.startUrl}
+                error={first(errors, 'signatures')}
+                mode="advanced"
+                onTouch={() => onTouch?.('signatures')}
+                now={now}
+                lastRefused={shopifyLastRefused}
+                saved={shopifySaved}
+              />
+              {/* There from the start (H-21: the words above say "if you tick Remember", and the tick appeared only
+                once a signature was typed), and not to be ticked until there's a signature to remember. */}
+              {remember ? (
+                <RememberSecrets
+                  {...remember}
+                  subject="signature"
+                  disabled={!formHasSecrets({ ...form, proxyUrl: '', headers: [] })}
+                />
+              ) : null}
+            </>,
+          )}
+          {fold(
+            'advanced',
+            <>
+              {number('requestTimeoutSeconds')}
+              {number('maxRetries')}
+              {number('concurrency')}
+              {number('maxRequestsPerSecond')}
+              {number('externalConcurrency')}
+              {toggle('checkResources')}
+              {toggle('checkExternalLinks')}
+              {toggle('storeHtml')}
+            </>,
+          )}
+        </div>
       </div>
     </div>
   );

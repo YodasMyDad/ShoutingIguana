@@ -1,5 +1,5 @@
 import { createMemoryHistory } from '@tanstack/react-router';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 import { drawAsTheAppForTests } from '../crawl/fileOpening';
@@ -41,6 +41,16 @@ describe('Home’s URL field', () => {
     const crawl = await screen.findByRole('button', { name: 'Crawl' });
     expect(crawl).toHaveTextContent('CrawlEnter');
     expect(crawl).toHaveAttribute('aria-keyshortcuts', 'Enter');
+  });
+
+  it('is dimmed until an address is typed, and pressed empty still says what is missing (H-21)', async () => {
+    await open(() => json([]));
+    const crawl = await screen.findByRole('button', { name: 'Crawl' });
+    expect(crawl).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(crawl);
+    expect(await screen.findByText('Paste the address of the site to crawl.')).toBeVisible();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Start URL' }), { target: { value: 'example.com' } });
+    expect(crawl).not.toHaveAttribute('aria-disabled');
   });
 
   it('has a palette button named by its words, its keys given as aria-keyshortcuts', async () => {

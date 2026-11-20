@@ -153,7 +153,8 @@ export function ShopifyAccessFields({
         <code className="font-mono text-text">Signature-Agent: {SHOPIFY_AGENT}</code>
       </p>
       <SignatureLife state={state} host={host} simple={simple} />
-      {error ? (
+      {/* A signature that has ended is said once, above, with what to do: not again in the engine's words (H-21). */}
+      {error && !(state.kind === 'expired' && /expired|has ended/i.test(error)) ? (
         <p className="si-field-error" role="alert">
           {error}
         </p>

@@ -11,6 +11,7 @@ import { ENGINE_DEFAULTS } from '../crawl/options/engineDefaults';
 import { keptSecrets, setSecretsStore, type SecretsStore } from '../crawl/secrets';
 import { VALIDATE_DELAY_MS } from '../crawl/options/useValidation';
 import { installKeyboard } from '../keyboard/registry';
+import { pageWords } from './newCrawlWords';
 import type { Mode } from '../mode/mode';
 import { getSettings, replaceSettings } from '../settings/settingsStore';
 import {
@@ -502,5 +503,56 @@ describe('a Shopify signature remembered for the store (lane shopify, phase B)',
     fireEvent.click(screen.getByRole('button', { name: /^Start crawl/ }));
     await waitFor(() => expect(sent(transport, 'POST', /^\/api\/crawls$/)).toBeDefined());
     expect(signatures(transport) ?? {}).toEqual({});
+  });
+});
+
+describe('New crawl, the audit of 2026-11-19 (H-09, H-21)', () => {
+  it('says whose settings fill the form when it crawls a site again', async () => {
+    sidecar();
+    await open(`/new?from=${TEST_CRAWL_ID}`, 'advanced');
+    expect(await screen.findByRole('heading', { level: 1, name: 'Crawl example.com again' })).toBeVisible();
+    expect(screen.getByText(/^These are the settings of the crawl of /)).toBeVisible();
+  });
+
+  it('is plainly a new crawl otherwise, in each mode’s words', async () => {
+    sidecar();
+    await open('/new', 'advanced');
+    expect(await screen.findByRole('heading', { level: 1, name: 'New crawl' })).toBeVisible();
+    expect(pageWords('simple', null).title).toBe('Check a website');
+    expect(pageWords('simple', { site: 'example.com', date: null })).toEqual({
+      title: 'Check example.com again',
+      subtitle: 'These are the choices of the check. Change what you want, then start it.',
+    });
+  });
+
+  it('says in Advanced that pages’ JavaScript isn’t run', async () => {
+    sidecar();
+    await open('/new', 'advanced');
+    expect(await screen.findByText(/their JavaScript isn’t run/)).toBeVisible();
+  });
+
+  it('keeps Start crawl in view: its row sticks to the foot of the pane in Advanced, not in Simple’s short form', async () => {
+    sidecar();
+    await open('/new', 'advanced');
+    await screen.findByRole('button', { name: /^Start crawl/ });
+    expect(screen.getByTestId('start-row')).toHaveClass('sticky', 'bottom-0');
+  });
+
+  it('shows Remember with the Shopify signature from the start, not to be ticked until one is pasted', async () => {
+    sidecar();
+    await open('/new', 'advanced');
+    fireEvent.click(await screen.findByRole('button', { name: /^Shopify/ }));
+    const shopify = document.querySelector<HTMLElement>('[data-fold="shopify"]');
+    if (!shopify) throw new Error('no Shopify section');
+    const remember = within(shopify).getByRole('checkbox', { name: /^Remember in Windows Credential Manager/ });
+    expect(remember).toBeDisabled();
+    expect(within(shopify).getByText(/Paste a signature above/)).toBeVisible();
+    fireEvent.change(within(shopify).getByRole('textbox', { name: 'Signature-Input' }), {
+      target: { value: 'sig1=("@authority" "signature-agent");created=1;expires=4102444800;keyid="k"' },
+    });
+    fireEvent.change(within(shopify).getByRole('textbox', { name: 'Signature' }), { target: { value: 'sig1=:abc=:' } });
+    await waitFor(() =>
+      expect(within(shopify).getByRole('checkbox', { name: /^Remember in Windows Credential Manager/ })).toBeEnabled(),
+    );
   });
 });

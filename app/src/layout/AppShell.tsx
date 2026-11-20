@@ -15,6 +15,7 @@ import { useModeGuard } from '../mode/useModeGuard';
 import { useSettings } from '../settings/settingsStore';
 import { InspectorSlot } from './InspectorSlot';
 import { paletteChunk, preloadOverlays, shortcutsChunk } from './overlayChunks';
+import { useScrollMemory } from './scrollMemory';
 import { SidecarBanner } from './SidecarBanner';
 import { Sidebar } from './Sidebar';
 import { StoppingOverlay } from './StoppingOverlay';
@@ -28,6 +29,8 @@ import { useDocumentTitle } from './documentTitle';
  *
  * - While anything modal is open (the palette, the `?` sheet, "Stopping crawls…"), everything behind it is inert:
  *   neither the keyboard nor a screen reader can reach it. Toasts and the live regions stay outside, so they're heard.
+ * - The main area is the scroller, and each history entry remembers where it was left (scrollMemory.ts): Back returns
+ *   there, a new place starts at the top.
  * - Each part of the shell has its own error boundary, as each screen does (its route's): a part that fails shows
  *   why in its place, and the rest keeps working.
  */
@@ -36,6 +39,7 @@ export function AppShell() {
   useShellIntegration();
   useDocumentTitle();
   useFocusAfterNavigation();
+  useScrollMemory();
   useModeGuard();
   useCrawlSettingsOpener();
   // Simple has no inspector: a page's detail is Advanced's. Its `inspect` param stays in the address, for the switch back.

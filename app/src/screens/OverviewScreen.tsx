@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
+import { Link, useNavigate, useParams, useRouterState, useSearch } from '@tanstack/react-router';
 import { Play } from 'lucide-react';
-import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   alertsQuery,
   analysisQuery,
@@ -30,12 +30,13 @@ import { Banner } from '../ui/Banner';
 import { Button } from '../ui/Button';
 import { Card, CardBody, CardHeader } from '../ui/Card';
 import { EmptyState } from '../ui/EmptyState';
+import { Badge } from '../ui/Badge';
 import { LiveBadge } from '../ui/LiveBadge';
 import { PageHeader } from '../ui/PageHeader';
 import { RefreshLine } from '../ui/ProgressBar';
 import { TextLink } from '../ui/TextLink';
+import { siteOriginOf } from '../ui/urlText';
 import { AnalysisNotes, AnalysisProgress, NotAnalysed } from './issues/AnalysisState';
-import { AnswerHeadline } from './issues/AnswerHeadline';
 import {
   analysisTotals,
   checkEntries,
@@ -52,11 +53,14 @@ import type { CrawlCounts } from '../crawl/checkSubject';
 import { useAnalysisControl } from './issues/useAnalysisControl';
 import { AlertList } from './overview/AlertList';
 import { alertEntries } from './overview/alerts';
+import { skippedGroups } from './overview/answer';
 import { Categories, FixFirst, SeverityFigures, SkippedChecks } from './overview/AnswerSections';
 import { DepthCard, IndexabilityCard, ResponseCard, StatusCodesCard } from './overview/CrawlSections';
 import { emptyCrawl, isEmptyCrawl, type EmptyCrawl } from './overview/emptyCrawl';
 import { LiveOverview } from './overview/LiveOverview';
-import { linkProps } from './overview/overviewLinks';
+import { ANSWERED_SITE_PAGES } from './overview/links';
+import { CRAWL_FACTS_HASH, linkProps } from './overview/overviewLinks';
+import { OverviewHeadline } from './overview/OverviewHeadline';
 import { OverviewScore } from './overview/OverviewScore';
 import { ScoreBreakdownFromRoute } from '../simple/ScoreBreakdownDialog';
 import { OverviewSkeleton } from './overview/OverviewSkeleton';
@@ -67,10 +71,10 @@ import { useHiddenChecks } from '../settings/hiddenChecks';
 import type { CheckChange } from '../api/fixLoop';
 import { checkChangeOf } from '../changes/changes';
 import { rechecksCountWords } from '../changes/recheckWords';
-import { ComparisonCard, type ChangeLink } from './compare/ComparisonCard';
+import { ComparisonCard, type ChangeLink, type ComparisonLinks } from './compare/ComparisonCard';
 import { CompareWithMenu } from './compare/CompareWithMenu';
 import { useComparison } from './compare/useComparison';
-import { RechecksCard } from './rechecks/RechecksCard';
+import { RECHECKS_CARD_ID, RechecksCard } from './rechecks/RechecksCard';
 import { useThingsMoved } from './compare/useThingsMoved';
 
 const ROUTE = '/crawls/$crawl/overview';
@@ -113,6 +117,15 @@ export function OverviewScreen() {
   // focus that was on something the screen took away goes to its title, never to the page. After the analysis's own
   // moves (to its Cancel), which the hook above makes.
   const screenRef = useRef<HTMLDivElement>(null);
+  // The top bar's status pill leads to "The crawl" (`#the-crawl`): scrolled to each time it's asked for, once it's drawn.
+  const crawlFactsRef = useRef<HTMLElement>(null);
+  const askedForCrawlFacts = useRouterState({
+    select: (state) => (state.location.hash === CRAWL_FACTS_HASH ? state.location.state.__TSR_key : null),
+  });
+  const crawlFactsDrawn = item !== undefined && !crawling;
+  useEffect(() => {
+    if (askedForCrawlFacts !== null && crawlFactsDrawn) crawlFactsRef.current?.scrollIntoView({ block: 'start' });
+  }, [askedForCrawlFacts, crawlFactsDrawn]);
   useFocusRescue(screenRef, () => control.titleRef.current);
   // How many URLs it crawled, as the URL grid counts them (which is where the figure leads): the library's
   // `crawledUrlCount` (E3c). From an earlier engine, the status breakdown's total; its `fetchedUrlCount` has the URLs
@@ -151,6 +164,47 @@ export function OverviewScreen() {
       {children}
     </TextLink>
   );
+  // Every other figure of the card that names something opens it (H-06): a moved check its check, "Since 17 Nov" that
+  // crawl, the score how it's worked out, the things to fix and worth a look the checks of those severities that moved.
+  const comparisonLinks: ComparisonLinks = {
+    check: (checkId, children) => (
+      <TextLink to="/crawls/$crawl/issues/{-$check}" params={{ crawl: crawlId, check: checkId }}>
+        {children}
+      </TextLink>
+    ),
+    crawl: (otherId, children) => (
+      <Link
+        to="/crawls/$crawl/overview"
+        params={{ crawl: otherId }}
+        className="si-link si-link--subtle si-link--inline"
+        title="Open that crawl"
+      >
+        {children}
+      </Link>
+    ),
+    score: (children) => (
+      <Link
+        to="/crawls/$crawl/overview"
+        params={{ crawl: crawlId }}
+        search={(previous) => ({ ...previous, score: 1 })}
+        className="si-link si-link--subtle si-link--inline block"
+        title="How the score is worked out"
+      >
+        {children}
+      </Link>
+    ),
+    things: (kind, children) => (
+      <Link
+        to="/crawls/$crawl/issues/{-$check}"
+        params={{ crawl: crawlId }}
+        search={{ change: 'changed', severity: kind === 'fix' ? ['error', 'warning'] : ['notice'] }}
+        className="si-link si-link--subtle si-link--inline block"
+        title={kind === 'fix' ? 'The errors and warnings that moved' : 'The notices that moved'}
+      >
+        {children}
+      </Link>
+    ),
+  };
   const titleOf = useCallback(
     (checkId: string) => checks.data?.checks.find((check) => check.id === checkId)?.title ?? null,
     [checks.data],
@@ -163,6 +217,9 @@ export function OverviewScreen() {
   // hidden ones came to is said after the sentence, never left to read as clean.
   const counted = useMemo(() => (entries ? countedEntries(entries) : null), [entries]);
   const totals = counted ? analysisTotals(counted) : null;
+  const skipped = counted ? skippedGroups(counted) : [];
+  const skippedReasons = skipped.length;
+  const firstSkipped = skipped[0]?.checks[0]?.id ?? null;
   const hiddenChecks = entries ? hiddenTotals(entries) : null;
   // The engine's order to fix them in (the analysis's `fixFirst`), the app's own for an earlier engine's analysis.
   const first = entries ? firstCheckToFix(entries, analysis.data?.fixFirst) : null;
@@ -220,13 +277,15 @@ export function OverviewScreen() {
     : empty
       ? undefined
       : totals
-        ? answer(crawlId, totals, hiddenChecks)
+        ? answer(crawlId, totals, hiddenChecks, firstSkipped)
         : analysing
           ? 'The crawl is being analysed: the answer shows here as soon as it’s done.'
           : neverAnalysed
             ? 'No issues to show yet: this crawl hasn’t been analysed.'
             : undefined;
 
+  // The answer is on screen: the sentence, the severities and Fix first.
+  const answered = !empty && !neverAnalysed && !checks.error && !analysis.error && counted !== null && totals !== null;
   let body: ReactNode;
   if (crawling) {
     body = <LiveOverview crawlId={crawlId} item={item} status={status} />;
@@ -244,8 +303,10 @@ export function OverviewScreen() {
   } else {
     body = (
       <>
-        {/* The totals before anything else (round 5, gap 16), whatever the crawl's state: they need no analysis. */}
-        <TotalsRow crawlId={crawlId} />
+        {/* The totals lead only while there's no answer to lead with (never analysed, nothing crawled): they need no
+            analysis. With an answer they're the first line of "The crawl", below it, so what to fix is on the first
+            screen of a 720 px window (the audit of 2026-11-19, H-19). */}
+        {answered ? null : <TotalsRow crawlId={crawlId} />}
         {/* Not compared, with a crawl of the site to pick (after Don't compare, or a first crawl with later ones): a line
             with Compare with…, where the card would be. A site's only crawl has nothing to pick: no line. */}
         {!empty && analysis.data && comparison.comparing.kind === 'none' && comparison.candidates.length > 0 ? (
@@ -266,6 +327,7 @@ export function OverviewScreen() {
             crawlId={crawlId}
             comparison={comparison}
             linkTo={compareLink}
+            links={comparisonLinks}
             pickerOpen={pickerOpen || askedToCompare}
             onPickerOpenChange={onPickerOpenChange}
             things={things}
@@ -293,6 +355,10 @@ export function OverviewScreen() {
             analysing={analysing}
             canAnalyse={controls.canAnalyse}
             onAnalyse={control.analyse}
+            // The "Not checked on this crawl" card says what was skipped and why, with what to do: the banner says
+            // it again only when the analysis left more notes than the card has reasons (H-11).
+            notes={skippedReasons === 0 || analysis.data.notes.length > skippedReasons}
+            crawlId={crawlId}
           />
         ) : null}
 
@@ -338,11 +404,29 @@ export function OverviewScreen() {
             order={analysis.data?.fixFirst}
             counts={analysis.data ?? null}
             changeOf={shownComparison ? changeOf : undefined}
+            siteOrigin={siteOriginOf(item.startUrl)}
           />
         )}
-        {empty ? null : <RechecksCard crawlId={crawlId} titleOf={titleOf} />}
+        {empty ? null : (
+          <RechecksCard
+            crawlId={crawlId}
+            titleOf={titleOf}
+            siteOrigin={siteOriginOf(item.startUrl)}
+            checkLink={comparisonLinks.check}
+            // A recheck's URL, inspected where it was judged: its check in Issues, or the URL grid for a list of URLs.
+            onInspect={(checkId, urlId) =>
+              void (checkId
+                ? navigate({
+                    to: '/crawls/$crawl/issues/{-$check}',
+                    params: { crawl: crawlId, check: checkId },
+                    search: { inspect: urlId },
+                  })
+                : navigate({ to: '/crawls/$crawl/urls', params: { crawl: crawlId }, search: { inspect: urlId } }))
+            }
+          />
+        )}
 
-        <section aria-labelledby="overview-crawl-title" className="flex flex-col gap-4 pt-2">
+        <section ref={crawlFactsRef} aria-labelledby="overview-crawl-title" className="flex flex-col gap-4 pt-2">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <h2 id="overview-crawl-title" className="text-16 font-semibold text-text">
               The crawl
@@ -350,12 +434,13 @@ export function OverviewScreen() {
             <CrawlFacts crawlId={crawlId} item={item} crawled={crawled} />
           </div>
           <ShopifyPrompt crawlId={crawlId} mode="advanced" />
+          {answered ? <TotalsRow crawlId={crawlId} /> : null}
           {empty ? (
-            <StatusCodesCard crawlId={crawlId} facets={facets} />
+            <StatusCodesCard crawlId={crawlId} facets={facets} crawled={crawled} />
           ) : (
             <div className="grid grid-cols-2 gap-4 @max-split:grid-cols-1">
-              <StatusCodesCard crawlId={crawlId} facets={facets} />
-              <IndexabilityCard crawlId={crawlId} facets={facets} />
+              <StatusCodesCard crawlId={crawlId} facets={facets} crawled={crawled} />
+              <IndexabilityCard crawlId={crawlId} facets={facets} pagesRead={item.pageCount} />
               <DepthCard crawlId={crawlId} facets={facets} />
               <ResponseCard crawlId={crawlId} facets={facets} />
             </div>
@@ -375,7 +460,8 @@ export function OverviewScreen() {
         {refreshing ? <RefreshLine label="Refreshing the overview" /> : null}
         <PageHeader
           title="Overview"
-          badge={crawling ? <LiveBadge /> : null}
+          // Paused, its figures stand still: the badge says so, not "Live" (H-22).
+          badge={crawling ? status === 'paused' ? <Badge>Paused</Badge> : <LiveBadge /> : null}
           subtitle={subtitle}
           titleRef={control.titleRef}
           actions={
@@ -408,11 +494,16 @@ export function OverviewScreen() {
 }
 
 /**
- * The answer in a sentence, from the counts, then what it leaves out: the hidden checks, with what they found, the
+ * The answer in a sentence, from the counts, each count a link to what it counts, then what it leaves out: the hidden checks, with what they found, the
  * count opening Issues, where they can be shown.
  */
-function answer(crawlId: string, totals: AnalysisTotals, hidden: HiddenTotals | null): ReactNode {
-  const sentence = <AnswerHeadline totals={totals} />;
+function answer(
+  crawlId: string,
+  totals: AnalysisTotals,
+  hidden: HiddenTotals | null,
+  firstSkipped: string | null,
+): ReactNode {
+  const sentence = <OverviewHeadline totals={totals} targets={{ crawlId, firstSkipped }} />;
   if (!hidden) return sentence;
   const words = hiddenWords(hidden);
   return (
@@ -436,8 +527,11 @@ function Answer({
   order,
   counts,
   changeOf,
+  siteOrigin,
 }: {
   crawlId: string;
+  /** The crawl's own scheme and host: Fix first's example URLs on it show their path. */
+  siteOrigin: string | null;
   checks: Checks;
   /** The checks that aren't hidden: what every figure here counts. */
   entries: readonly CheckEntry[];
@@ -467,6 +561,7 @@ function Answer({
           order={order}
           totals={counts}
           changeOf={changeOf}
+          siteOrigin={siteOrigin}
         />
         <div className="flex min-w-0 flex-col gap-4">
           <SkippedChecks crawlId={crawlId} entries={entries} />
@@ -666,9 +761,30 @@ function CrawlFacts({ crawlId, item, crawled }: { crawlId: string; item: CrawlLi
       >
         {formatCountOf(crawled, 'URL')}
       </TextLink>{' '}
-      crawled, {formatCountOf(item.pageCount, 'page')} read
+      crawled,{' '}
+      <TextLink {...linkProps(crawlId, { to: 'urls', filters: [...ANSWERED_SITE_PAGES] })} variant="inline">
+        {formatCountOf(item.pageCount, 'page')}
+      </TextLink>{' '}
+      read
       {item.startedAt ? `, started ${formatExactTime(item.startedAt)}` : ''}.{crawlingWords(item.crawlingMs)}
-      {item.rechecks ? ` ${rechecksCountWords(item.rechecks.count, item.rechecks.last.endedAt)}.` : ''}
+      {item.rechecks ? (
+        <>
+          {' '}
+          {/* The Rechecks card is on this screen, just above: the count goes to it. */}
+          <button
+            type="button"
+            className="si-link si-link--inline"
+            onClick={() => {
+              const card = document.getElementById(RECHECKS_CARD_ID);
+              card?.scrollIntoView({ block: 'center' });
+              card?.focus({ preventScroll: true });
+            }}
+          >
+            {rechecksCountWords(item.rechecks.count, item.rechecks.last.endedAt)}
+          </button>
+          .
+        </>
+      ) : null}
     </p>
   );
 }

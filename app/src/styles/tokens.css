@@ -22,6 +22,8 @@
 
 /* Below 1360 px wide (1280 x 800): the frame narrows. */
 @custom-variant narrow (@media (max-width: 1360px));
+/* A wide window (the owner's is 2560 px): room for a second column of a form. */
+@custom-variant wide (@media (min-width: 1700px));
 
 @theme static {
   /* Tailwind's defaults are cleared: only these tokens exist. */
@@ -398,6 +400,8 @@
   --overview-card-min: 96px; /* a breakdown card's body while it loads */
   --overview-figure-min: 116px; /* a severity figure, while it loads */
   --overview-list-min: 320px; /* Fix first and the categories, while they load */
+  --dialog-rows-width: 1120px; /* a dialog listing URLs with their details: a recheck's rows */
+  --name-column-min: 220px; /* a column of check names, in a list set in columns (the skipped checks) */
   /* The inspector's rows: a mark, then the words. */
   --check-row-columns: var(--leading-13) minmax(0, 1fr);
   --chain-columns: var(--icon-box) minmax(0, 1fr); /* a redirect chain's rail, then each step */
@@ -529,6 +533,7 @@
   --choice-card-min: 200px; /* a choice card's least width (the speed presets): narrower, they stack */
   --choice-columns: repeat(auto-fit, minmax(var(--choice-card-min), 1fr)); /* as many cards a row as fit */
   --form-max: 760px; /* the crawl settings form and a settings section: lines a reader can follow */
+  --form-max-wide: 1440px; /* New crawl in a wide window: its sections in two columns, each a form's measure */
   --limit-field-width: 480px; /* one of Settings > Analysis's limits: a number and its unit */
   --number-field-width: 96px; /* a count typed inline in a sentence: "Stop after [5,000] addresses" */
   --number-row-width: 320px; /* a setting's own field for a number or a short choice */
@@ -621,6 +626,13 @@
   --grid-mono-size: var(--text-13);
   --grid-cell-x: var(--space-3);
   --list-row-height: 36px;
+}
+
+/* Wide windows (the audit of 2026-11-19 was at 2560 x 1380): the top bar's search shows its whole label. */
+@media (min-width: 1700px) {
+  :root {
+    --search-width: 280px;
+  }
 }
 
 /* Smaller windows (1280 x 800): a narrower frame, the same components. */

@@ -76,7 +76,8 @@ export interface TooltipProps {
 
 /**
  * A tooltip: after a short rest of the pointer, or at once on keyboard focus, and gone with Esc (which still does the
- * app's Esc) or a click. Its text is the trigger's description for screen readers while it shows, less what the
+ * app's Esc), a click, or the pointer leaving its trigger. It never takes the pointer itself, so it can't take a
+ * click meant for what it covers. Its text is the trigger's description for screen readers while it shows, less what the
  * trigger's name (`triggerName`) already says; the name stays its own. Shortcuts come from the command registry, as
  * `Button`'s `command` does.
  */
@@ -104,6 +105,10 @@ function ShownTooltip({
   const triggerRef = useRef<HTMLButtonElement>(null);
   // Followed here as well as in Radix, so the trigger's description can be put right each time it opens or closes.
   const [shown, setShown] = useState(false);
+  // Pressed, the tooltip has said its piece: it stays shut until the pointer or the focus has left the trigger. Focus
+  // the app gives back to what was clicked (a route change, a menu closing) used to open it again, over whatever sat
+  // beside the trigger, with the pointer nowhere near (the audit of 2026-11-19, H-01).
+  const pressed = useRef(false);
   const keys = chord ?? commandChord;
 
   // Read as the trigger's description: only what its name doesn't say already (the hint, the keys), or nothing.
@@ -132,12 +137,29 @@ function ShownTooltip({
   const tooltip = (
     <TooltipPrimitive.Root
       open={open ?? shown}
+      // The tooltip is never something to move the pointer onto: it closes as the pointer leaves its trigger, and
+      // (`.si-tooltip`) lets every click through to what it covers.
+      disableHoverableContent
       onOpenChange={(next) => {
-        setShown(next);
-        onOpenChange?.(next);
+        const allowed = next && pressed.current ? false : next;
+        setShown(allowed);
+        onOpenChange?.(allowed);
       }}
     >
-      <TooltipPrimitive.Trigger ref={triggerRef} asChild onFocus={stayShutOnQuietFocus}>
+      <TooltipPrimitive.Trigger
+        ref={triggerRef}
+        asChild
+        onFocus={stayShutOnQuietFocus}
+        onPointerDown={() => {
+          pressed.current = true;
+        }}
+        onPointerLeave={() => {
+          pressed.current = false;
+        }}
+        onBlur={() => {
+          pressed.current = false;
+        }}
+      >
         {children}
       </TooltipPrimitive.Trigger>
       <TooltipPrimitive.Portal>
@@ -147,6 +169,7 @@ function ShownTooltip({
           sideOffset={TOOLTIP_OFFSET}
           collisionPadding={COLLISION_PADDING}
           className="si-tooltip"
+          data-hoverable="false"
           onEscapeKeyDown={giveEscapeBack}
           {...(spoken ? { 'aria-label': spoken } : {})}
         >

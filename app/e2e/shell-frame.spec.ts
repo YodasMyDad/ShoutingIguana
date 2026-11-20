@@ -118,7 +118,7 @@ function routes(mode: Mode): { name: string; path: string; ready: (page: Page) =
     { name: 'Links', path: `${crawl}/links`, ready: main },
     { name: 'Sitemaps', path: `${crawl}/sitemaps`, ready: main },
     { name: 'robots.txt', path: `${crawl}/robots`, ready: main },
-    { name: 'Crawl settings', path: `${crawl}/settings`, ready: main },
+    { name: 'This crawl’s settings', path: `${crawl}/settings`, ready: main },
   ];
 }
 

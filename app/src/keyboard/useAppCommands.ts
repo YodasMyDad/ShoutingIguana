@@ -10,7 +10,9 @@ import { SIMPLE_SCREENS } from '../app/simpleScreens';
 import { getOverlay, setOverlay } from '../app/overlays';
 import { analyseCrawl, continueCrawl, pauseOrResume, stopCrawl } from '../crawl/actions';
 import { pickAndOpenCrawls } from '../crawl/openFiles';
+import { isCrawling } from '../api/types';
 import { crawlControls, effectiveStatus } from '../crawl/status';
+import { useSidebarCrawl } from '../layout/contextCrawl';
 import { toggleSidebar } from '../layout/sidebarState';
 import { isTauri } from '../lib/platform';
 import { useLiveCrawl } from '../live/liveStore';
@@ -19,6 +21,7 @@ import { switchMode } from '../mode/switchMode';
 import type { Density, ThemePreference } from '../settings/schema';
 import { getSettings, updateSettings } from '../settings/settingsStore';
 import { ZOOM_LEVELS, quitApp } from '../shell/os';
+import { SEVERITIES, type Severity } from '../ui/severity';
 import { setPaletteMode } from './paletteMode';
 import { useCommands, type Command } from './registry';
 
@@ -80,6 +83,9 @@ const THEMES: readonly { value: ThemePreference; title: string }[] = [
   { value: 'dark', title: 'Theme: dark' },
 ];
 
+/** Issues narrowed to one severity, as the sidebar names them. */
+const SEVERITY_WORDS: Record<Severity, string> = { error: 'Errors', warning: 'Warnings', notice: 'Notices' };
+
 const DENSITIES: readonly { value: Density; title: string }[] = [
   { value: 'compact', title: 'Density: compact' },
   { value: 'standard', title: 'Density: standard' },
@@ -108,6 +114,9 @@ export function useAppCommands(): void {
   const live = useLiveCrawl(crawlId);
   const status = crawlId ? effectiveStatus(item, live) : null;
   const controls = crawlControls(status, item);
+  const crawling = status !== null && isCrawling(status);
+  // The crawl the sidebar lists the sections of: on the app's Settings, the one they were opened from (H-10).
+  const sectionCrawl = useSidebarCrawl();
 
   // The crawl's sections in this mode: Simple's three (the Report once it exists), or Advanced's seven and the Report.
   const reportExists = SIMPLE_SCREENS.report !== null;
@@ -193,7 +202,7 @@ export function useAppCommands(): void {
         group: 'Go to',
         keys: ['mod+,'],
         inInputs: true,
-        keywords: ['preferences'],
+        keywords: ['preferences', 'app', 'options'],
         run: () => navigate({ to: '/settings/{-$section}', params: {} }),
       },
       {
@@ -214,12 +223,15 @@ export function useAppCommands(): void {
       },
       ...sections.map<Command>((section) => ({
         id: `section.${section.id}`,
-        title: `Go to ${(simple ? section.simpleTitle : undefined) ?? section.title}`,
+        title:
+          section.id === 'settings'
+            ? 'Go to this crawl’s settings'
+            : `Go to ${(simple ? section.simpleTitle : undefined) ?? section.title}`,
         group: 'Go to',
         keys: [(simple ? section.simpleKey : undefined) ?? section.key],
         inInputs: true,
-        enabled: () => crawlId !== undefined,
-        run: () => (crawlId ? goToSection(navigate, section.id, crawlId) : undefined),
+        enabled: () => sectionCrawl !== undefined,
+        run: () => (sectionCrawl ? goToSection(navigate, section.id, sectionCrawl) : undefined),
       })),
       {
         id: 'crawl.pauseResume',
@@ -248,6 +260,46 @@ export function useAppCommands(): void {
         enabled: () => controls.canContinue,
         run: () => (crawlId ? continueCrawl(crawlId) : undefined),
       },
+      // What the screens recommend in words, as a command (H-04, H-08): the palette finds "crawl again".
+      {
+        id: 'crawl.again',
+        title: simple ? 'Check this site again…' : 'Crawl again…',
+        group: 'Crawl',
+        keywords: ['recrawl', 'rerun', 'fresh crawl', 'new crawl', 'same settings', 'recheck', 'check again'],
+        enabled: () => crawlId !== undefined && item !== undefined && !item.missing && status !== 'unreadable',
+        run: () => (crawlId ? navigate({ to: '/new', search: { from: crawlId } }) : undefined),
+      },
+      // Advanced's: the comparison card and Issues' severities are its screens'.
+      ...(simple
+        ? []
+        : [
+            {
+              id: 'crawl.compare',
+              title: 'Compare with…',
+              group: 'Crawl',
+              keywords: ['comparison', 'diff', 'since', 'changes', 'previous crawl', 'earlier crawl', 'what changed'],
+              enabled: () => crawlId !== undefined && !crawling,
+              run: () =>
+                crawlId
+                  ? navigate({ to: '/crawls/$crawl/overview', params: { crawl: crawlId }, search: { compare: 1 } })
+                  : undefined,
+            } satisfies Command,
+            ...SEVERITIES.map<Command>((severity) => ({
+              id: `go.issues.${severity}`,
+              title: `Go to Issues: ${SEVERITY_WORDS[severity]}`,
+              group: 'Go to',
+              keywords: [severity, 'severity', 'checks'],
+              enabled: () => sectionCrawl !== undefined,
+              run: () =>
+                sectionCrawl
+                  ? navigate({
+                      to: '/crawls/$crawl/issues/{-$check}',
+                      params: { crawl: sectionCrawl, check: undefined },
+                      search: { severity: [severity] },
+                    })
+                  : undefined,
+            })),
+          ]),
       {
         id: 'crawl.analyse',
         title: simple ? 'Work out the results again' : 'Analyse again',
@@ -320,7 +372,10 @@ export function useAppCommands(): void {
       navigate,
       queryClient,
       crawlId,
+      sectionCrawl,
       status,
+      item,
+      crawling,
       controls.canPause,
       controls.canResume,
       controls.canStop,

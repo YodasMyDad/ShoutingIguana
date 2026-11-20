@@ -48,8 +48,11 @@ export function severityFigures(entries: readonly CheckEntry[]): SeverityFigure[
 
 // ----------------------------------------------------------------------------------------------------------- Fix first
 
-/** How many checks "Fix first" lists before it points to Issues for the rest. */
-export const FIX_FIRST_LIMIT = 8;
+/**
+ * How many checks "Fix first" lists before it points to Issues for the rest. Twelve: eight left the card a third
+ * blank beside its neighbours at 2560 x 1380 (the audit of 2026-11-19, H-18).
+ */
+export const FIX_FIRST_LIMIT = 12;
 
 /** A check another's fix clears entirely, listed with it: its pages, every one it flagged. */
 export interface ClearedWith {
@@ -204,6 +207,26 @@ export function skippedGroups(entries: readonly CheckEntry[]): SkippedGroup[] {
     group.checks.push({ id: entry.check.id, title: entry.check.title, link: { to: 'issues', check: entry.check.id } });
   }
   return [...groups.values()];
+}
+
+/** Whether a skip reason's or a note's remedy is a fresh crawl: what says it then carries "Crawl again…" as a control. */
+export function asksForACrawl(reason: string | null): boolean {
+  return reason !== null && /crawl again/i.test(reason);
+}
+
+/**
+ * A group's reason as the card says it (the audit of 2026-11-19, H-11). The engine writes each reason for one check
+ * ("what this check needs. Crawl again to check it."): over several checks it reads in the plural. And "an earlier
+ * version" says whose: Shouting Iguana's.
+ */
+export function skippedReasonWords(reason: string, checks: number): string {
+  const whose = reason.replace(/earlier version(?! of)/g, 'earlier version of Shouting Iguana');
+  if (checks === 1) return whose;
+  return whose
+    .replace(/\b(this|the) check needs\b/g, 'these checks need')
+    .replace(/\bthis check\b/g, 'these checks')
+    .replace(/\bto check it\b/g, 'to check them')
+    .replace(/\bto run it\b/g, 'to run them');
 }
 
 // -------------------------------------------------------------------------------------------------------- Indexability

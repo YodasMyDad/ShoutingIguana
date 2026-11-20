@@ -1,11 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams, useSearch } from '@tanstack/react-router';
-import { Play, RotateCcw } from 'lucide-react';
+import { Play, RefreshCw, RotateCcw } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { isProblem } from '../api/errors';
 import { crawlOptionDefaultsQuery, crawlOptionsQuery, crawlQuery } from '../api/queries';
-import type { ContinueCrawlRequest, CrawlOptions, SpeedPreset } from '../api/types';
+import type { ContinueCrawlRequest, CrawlListItem, CrawlOptions, CrawlStatus, SpeedPreset } from '../api/types';
+import { analyseCrawl } from '../crawl/actions';
+import { ENGINE_DEFAULTS } from '../crawl/options/engineDefaults';
 import { HeaderRows } from '../crawl/options/CrawlOptionsForm';
 import {
   FIELD_SECTIONS,
@@ -29,6 +31,7 @@ import { ErrorState } from '../feedback/ErrorState';
 import { notifyError, notifyResult } from '../feedback/notify';
 import { Skeleton } from '../feedback/Skeleton';
 import { useDelayedLoading } from '../feedback/useDelayedLoading';
+import { formatCountOf, formatExactTime } from '../lib/format';
 import { useLiveCrawl } from '../live/liveStore';
 import type { SettingFocus } from '../routing/search';
 import { Button } from '../ui/Button';
@@ -38,6 +41,8 @@ import { ChoiceCards } from '../ui/ChoiceCards';
 import { Fact, Facts } from '../ui/Facts';
 import { PageHeader } from '../ui/PageHeader';
 import { TextField } from '../ui/TextField';
+import { TextLink } from '../ui/TextLink';
+import { analyseWords } from './home/library';
 
 /** The settings each section lists, in the form's order. */
 const LISTED: Record<Exclude<FormSection, 'start'>, CrawlFormField[]> = {
@@ -66,9 +71,11 @@ const LISTED: Record<Exclude<FormSection, 'start'>, CrawlFormField[]> = {
 };
 
 /**
- * The settings this crawl used (docs/v2-ui-ia.md, Routes: `/crawls/:crawl/settings`), read-only, from its file. A
- * stopped crawl can be continued with a few of them changed (the speed, the timeout, its headers and proxy), and asks
- * again for what its file doesn't keep (header values, a proxy's password); any crawl can be crawled again with them.
+ * The settings this crawl used (docs/v2-ui-ia.md, Routes: `/crawls/:crawl/settings`), read-only, from its file: a
+ * record of how it was made, which is what the sidebar calls it, "This crawl's settings" (the audit of 2026-11-19,
+ * H-10, H-20). A stopped crawl can be continued with a few of them changed (the speed, the timeout, its headers and
+ * proxy), and asks again for what its file doesn't keep (header values, a proxy's password); any crawl can be crawled
+ * again with them. What differs from the defaults is marked, and its analysis is said, with Analyse again.
  * `focus` opens on one setting: an alert's "Continue more slowly" or "Add headers".
  */
 export function CrawlSettingsScreen() {
@@ -86,8 +93,12 @@ export function CrawlSettingsScreen() {
   return (
     <div className="mx-auto flex w-full max-w-(--form-max) flex-col gap-6 px-(--page-gutter) py-6">
       <PageHeader
-        title="Crawl settings"
-        subtitle="What this crawl used. Continue it with a few of them changed, or crawl the site again with them."
+        title="This crawl’s settings"
+        subtitle={
+          controls.canContinue
+            ? 'How this crawl was made, from its file. Continue it with a few settings changed, or crawl the site again with them.'
+            : 'How this crawl was made, from its file. They can’t be changed here: crawl the site again with them, or with some changed.'
+        }
         actions={
           options.data ? (
             <Button asChild icon={RotateCcw}>
@@ -120,6 +131,15 @@ export function CrawlSettingsScreen() {
             focus={focus}
           />
           <UsedSettings stored={options.data} />
+          {item && status ? (
+            <AnalysedWith
+              crawlId={crawlId}
+              item={item}
+              status={status}
+              canAnalyse={controls.canAnalyse}
+              analysing={status === 'analyzing'}
+            />
+          ) : null}
         </>
       ) : (
         <div role="status" aria-busy="true" aria-label="Loading the crawl’s settings" className="flex flex-col gap-4">
@@ -143,9 +163,23 @@ function UsedSettings({ stored }: { stored: CrawlOptions }) {
     ...formFromOptions(stored),
     proxyUrl: stored.proxyUrl ? withoutCredentials(stored.proxyUrl) : '',
   };
+  // What the engine uses when nothing is set: a value that differs is marked, with the default beside it.
+  const defaults = formFromOptions(ENGINE_DEFAULTS);
+  const changed = (field: CrawlFormField) => settingValue(field, form) !== settingValue(field, defaults);
+  const changedCount = Object.values(LISTED)
+    .flat()
+    .filter((field) => field !== 'customUserAgent' && changed(field)).length;
   return (
     <Card as="section" aria-labelledby="used-title">
-      <CardHeader title="What it used" titleId="used-title" />
+      <CardHeader
+        title="What it used"
+        titleId="used-title"
+        meta={
+          changedCount === 0
+            ? 'Every setting at its default'
+            : `${formatCountOf(changedCount, 'setting')} changed from the default`
+        }
+      />
       <CardBody className="flex flex-col gap-5">
         <Facts auto>
           <Fact label="Start URL" className="font-mono text-12 break-all">
@@ -162,7 +196,19 @@ function UsedSettings({ stored }: { stored: CrawlOptions }) {
                 .filter((field) => field !== 'customUserAgent' || form.userAgent === 'custom')
                 .map((field) => (
                   <Fact key={field} label={FIELD_WORDS[field].label} className="break-words whitespace-pre-line">
-                    {settingValue(field, form)}
+                    {changed(field) ? (
+                      <>
+                        <strong className="font-semibold text-text">{settingValue(field, form)}</strong>
+                        {field === 'customUserAgent' ? null : (
+                          <span className="text-text-muted" data-changed="">
+                            {' '}
+                            · default: {settingValue(field, defaults) || 'none'}
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      settingValue(field, form)
+                    )}
                     {field === 'headers' && form.headers.length > 0 ? (
                       <span className="text-text-muted"> (values aren’t in the crawl file)</span>
                     ) : null}
@@ -295,20 +341,9 @@ function ContinuePanel({
     }
   };
 
-  // A crawl that ended has nothing to continue: the card says so, and Crawl again is the way on.
-  if (!canContinue && !running) {
-    return (
-      <Card as="section" aria-labelledby="continue-title">
-        <CardHeader title="Continue" titleId="continue-title" meta="Only a stopped crawl can be continued" />
-        <CardBody>
-          <p className="text-13 text-text-secondary">
-            This crawl isn’t stopped part-way, so there’s nothing to continue. Crawl the site again with these settings
-            instead, or with some of them changed.
-          </p>
-        </CardBody>
-      </Card>
-    );
-  }
+  // A crawl that ended has nothing to continue: no card about it (H-20: "Only a stopped crawl can be continued" led a
+  // finished crawl's record). The page's first line says what can be done, and Crawl again is beside it.
+  if (!canContinue && !running) return null;
 
   const message = (field: CrawlFormField) =>
     errors[field]?.[0] ?? (CONTINUED.has(field) ? checked[field]?.[0] : null) ?? null;
@@ -455,6 +490,57 @@ function ContinuePanel({
         </CardBody>
       </Card>
     </div>
+  );
+}
+
+/**
+ * How the crawl's issues were worked out (H-20): when, whether that still stands, and Analyse again. The limits the
+ * checks judge by are the app's, not the crawl's, so they're linked, not listed twice.
+ */
+function AnalysedWith({
+  crawlId,
+  item,
+  status,
+  canAnalyse,
+  analysing,
+}: {
+  crawlId: string;
+  item: CrawlListItem;
+  status: CrawlStatus;
+  canAnalyse: boolean;
+  analysing: boolean;
+}) {
+  const when = item.analyzedAt ? formatExactTime(item.analyzedAt) : null;
+  return (
+    <Card as="section" aria-labelledby="analysed-title">
+      <CardHeader
+        title="Analysis"
+        titleId="analysed-title"
+        meta={when ? (item.outOfDate ? `Analysed ${when} · out of date` : `Analysed ${when}`) : 'Not analysed yet'}
+        actions={
+          canAnalyse ? (
+            <Button size="sm" icon={RefreshCw} loading={analysing} onClick={() => void analyseCrawl(crawlId)}>
+              {analyseWords(item, status)}
+            </Button>
+          ) : null
+        }
+      />
+      <CardBody>
+        <p className="max-w-(--measure-text) text-13 text-text-secondary">
+          {when
+            ? item.outOfDate
+              ? 'Its issues were worked out before a limit or the app’s checks changed, so they’re out of date. '
+              : 'Its issues are worked out from what the crawl stored, with no request to the site. '
+            : 'Its issues haven’t been worked out. '}
+          The limits the checks judge by (title and description lengths, thin content, image sizes) are the app’s, the
+          same for every crawl:{' '}
+          <TextLink variant="inline" to="/settings/{-$section}" params={{ section: 'analysis' }}>
+            Settings › Analysis
+          </TextLink>
+          . Change one, and this crawl is analysed again without being crawled again.
+        </p>
+      </CardBody>
+    </Card>
   );
 }
 

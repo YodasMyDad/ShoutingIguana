@@ -13,6 +13,7 @@ import { Kbd } from '../ui/Kbd';
 import { Spinner } from '../ui/Spinner';
 import { GoToUrl } from './GoToUrl';
 import { groupTitle, listedIn } from './modeWords';
+import { NEW_CRAWL_PLACES, SETTINGS_PLACES, checkKeywords } from './paletteIndex';
 import { setPaletteMode, usePaletteMode } from './paletteMode';
 import { looksLikeUrl, searchPalette, type PaletteEntry } from './paletteSearch';
 import { COMMAND_GROUPS, commands, useRegistryVersion } from './registry';
@@ -85,10 +86,37 @@ export function CommandPalette() {
           id: `check:${check.id}`,
           group: 'Checks',
           title: appMode === 'simple' && plain ? plain : check.title,
-          keywords: [check.id, check.severity, check.category, ...(plain ? [plain, check.title] : [])],
+          // Found by the codes its title names as a class too: "404" finds "Internal URL returns 4xx" (H-08).
+          keywords: [
+            check.id,
+            check.severity,
+            check.category,
+            ...(plain ? [plain, check.title] : []),
+            ...checkKeywords(check.title),
+          ],
           run: () => navigate({ to: '/crawls/$crawl/issues/{-$check}', params: { crawl: crawlId, check: check.id } }),
         });
       }
+    }
+    // A setting typed by its words leads to the place that holds it (H-08): the app's Settings section, or New crawl
+    // with focus on it.
+    for (const place of SETTINGS_PLACES) {
+      list.push({
+        id: `settings:${place.section ?? 'general'}`,
+        group: 'Go to',
+        title: appMode === 'simple' ? (place.simpleTitle ?? place.title) : place.title,
+        keywords: place.keywords,
+        run: () => navigate({ to: '/settings/{-$section}', params: { section: place.section } }),
+      });
+    }
+    for (const place of NEW_CRAWL_PLACES) {
+      list.push({
+        id: `new:${place.focus}`,
+        group: 'Crawl',
+        title: appMode === 'simple' ? place.simpleTitle : place.title,
+        keywords: place.keywords,
+        run: () => navigate({ to: '/new', search: { focus: place.focus } }),
+      });
     }
     for (const item of (library ?? []).slice(0, RECENT_CRAWLS)) {
       list.push({
@@ -158,6 +186,7 @@ export function CommandPalette() {
               }
               // A URL or a path typed here is offered as somewhere to go, in the open crawl.
               onUrl={crawlId ? (text) => setPaletteMode({ kind: 'url', text }) : undefined}
+              inCrawl={crawlId !== undefined}
             />
           )}
         </Dialog.Content>
@@ -172,6 +201,7 @@ export function PaletteBody({
   onUrl,
   urlSearch,
   initialQuery = '',
+  inCrawl = true,
 }: {
   entries: readonly PaletteItem[];
   onChoose: (entry: PaletteItem) => void;
@@ -188,6 +218,8 @@ export function PaletteBody({
     | undefined;
   /** What the field holds as it opens: a story's search. */
   initialQuery?: string | undefined;
+  /** False outside a crawl: finding nothing, it says checks and URLs are searched in an open crawl. */
+  inCrawl?: boolean | undefined;
 }) {
   const id = useId();
   const appMode = useMode();
@@ -350,6 +382,11 @@ export function PaletteBody({
       ) : results.length === 0 ? (
         <p aria-hidden="true" className="px-3 pb-6 text-center text-13 text-text-muted">
           Nothing matches that.
+          {inCrawl
+            ? null
+            : appMode === 'simple'
+              ? ' Problems are found by name once a site is open: open one from Home.'
+              : ' Checks and URLs are searched in the crawl that’s open: open one from Home.'}
         </p>
       ) : null}
       {/* Always mounted, so what changes in it is read: how many results there are, once typing pauses. */}

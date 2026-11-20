@@ -1,4 +1,5 @@
-import { Link } from '@tanstack/react-router';
+import { useQueries } from '@tanstack/react-query';
+import { Link, useNavigate } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 import type { CheckChange } from '../../api/fixLoop';
 import type { Checks } from '../../api/types';
@@ -9,12 +10,23 @@ import { ListRow } from '../../ui/ListRow';
 import { Num } from '../../ui/Num';
 import { SeverityCounts } from '../../ui/SeverityCount';
 import { SeverityMark } from '../../ui/SeverityMark';
-import { Stat, StatLink, Stats } from '../../ui/Stat';
+import { StatLink, Stats } from '../../ui/Stat';
 import { TextLink } from '../../ui/TextLink';
+import { Url } from '../../ui/Url';
 import { outcomeWord } from '../../ui/severity';
 import { causeWords, type AnalysisTotals, type CheckEntry } from '../issues/checkList';
 import { CountWithReach } from '../issues/CountWithReach';
-import { categoryFigures, clearedWords, fixFirst, severityFigures, skippedGroups } from './answer';
+import {
+  asksForACrawl,
+  categoryFigures,
+  clearedWords,
+  fixFirst,
+  severityFigures,
+  skippedGroups,
+  skippedReasonWords,
+} from './answer';
+import { CrawlAgainButton } from './CrawlAgain';
+import { fixFirstExampleQuery } from './fixFirstExample';
 import { linkProps } from './overviewLinks';
 
 const SEVERITY_LABELS = { error: 'Errors', warning: 'Warnings', notice: 'Notices' } as const;
@@ -48,8 +60,8 @@ function wasWords(change: CheckChange | null | undefined): string | null {
 }
 
 /**
- * Issues by severity: the checks that found issues, and their issues, each opening Issues at that severity; then what
- * passed and what was skipped, which is never left to read as clean.
+ * Issues by severity: the checks that found issues, and what they come to, each opening Issues at that severity; then
+ * what passed, opening Issues with the passed checks listed, and what was skipped, which is never left to read as clean.
  */
 export function SeverityFigures({
   crawlId,
@@ -76,16 +88,27 @@ export function SeverityFigures({
               </>
             }
             value={<Num value={figure.checks} noun="check" />}
+            // One figure and one line each (H-19): the things to change, the unit the headline counts in; how many
+            // issues they come from is on hover.
             context={
               figure.checks === 0
                 ? 'None found an issue'
                 : figure.causes === null
                   ? `${formatCountOf(figure.issues, 'issue')} between them`
-                  : `${capitalised(causeWords(figure.causes, figure.templateCauses, figure.severity === 'notice' ? 'change' : 'fix'))}, from ${formatCountOf(figure.issues, 'issue')}`
+                  : capitalised(
+                      causeWords(figure.causes, figure.templateCauses, figure.severity === 'notice' ? 'change' : 'fix'),
+                    )
+            }
+            title={
+              figure.checks > 0 && figure.causes !== null ? `From ${formatCountOf(figure.issues, 'issue')}` : undefined
             }
           />
         ))}
-        <Stat
+        {/* What passed opens Issues with the passed checks listed (`passed=1`); what was skipped is its own card. */}
+        <StatLink
+          to="/crawls/$crawl/issues/{-$check}"
+          params={{ crawl: crawlId }}
+          search={{ passed: 1 }}
           label={
             <>
               <SeverityMark severity="passed" decorative />
@@ -95,7 +118,7 @@ export function SeverityFigures({
           value={<Num value={totals.passed} noun="check" />}
           context={
             totals.skipped > 0
-              ? `${formatCount(totals.skipped)} ${totals.skipped === 1 ? 'was' : 'were'} skipped, with why below`
+              ? `${formatCount(totals.skipped)} ${totals.skipped === 1 ? 'was' : 'were'} skipped`
               : 'Every check ran'
           }
         />
@@ -125,6 +148,10 @@ const affected = (entry: CheckEntry, totals: CrawlCounts | null) => {
 /**
  * Fix first (docs/v2-ui-ia.md, flow 3): the checks that found issues, the most severe first, then the most pages or
  * URLs affected, each opening its check in Issues, where it says what's wrong, why it matters and how to fix it.
+ *
+ * Under each check's name is the first URL it flags and what's wrong with it (the audit of 2026-11-19, H-18): the URL
+ * is a link like any other (it opens the check with that URL inspected) with its open-in-browser directly after it.
+ * The catalogue's description shows only until the URL is read, and for a check whose first row can't be.
  */
 export function FixFirst({
   crawlId,
@@ -133,9 +160,12 @@ export function FixFirst({
   order,
   totals,
   changeOf,
+  siteOrigin,
 }: {
   crawlId: string;
   entries: readonly CheckEntry[];
+  /** The crawl's own scheme and host: the example URLs on it show their path. */
+  siteOrigin?: string | null | undefined;
   /** Hidden checks that found issues: with nothing else to fix, the card says they're why it's empty. */
   hiddenFound?: number;
   /** The analysis's `fixFirst`: the engine's order. Absent from an earlier engine's analysis: then the app's. */
@@ -146,6 +176,10 @@ export function FixFirst({
   changeOf?: ((checkId: string) => CheckChange | null) | undefined;
 }) {
   const list = fixFirst(entries, undefined, order);
+  const navigate = useNavigate();
+  const examples = useQueries({
+    queries: list.checks.map(({ entry }) => fixFirstExampleQuery(crawlId, entry.check.id)),
+  });
   return (
     <Card as="section" aria-labelledby="overview-fix-title">
       <CardHeader
@@ -166,32 +200,54 @@ export function FixFirst({
           </p>
         ) : (
           <ol className="-mx-2.5 flex flex-col">
-            {list.checks.map(({ entry, link, cleared }) => (
-              <li key={entry.check.id}>
-                <ListRow
-                  asChild
-                  icon={<SeverityMark severity={entry.check.severity} decorative />}
-                  title={
-                    <>
-                      <span className="sr-only">{outcomeWord(entry.check.severity)}: </span>
-                      {entry.check.title}
-                    </>
-                  }
-                  meta={withWas(affected(entry, totals ?? null), wasWords(changeOf?.(entry.check.id)))}
-                  description={
-                    <>
-                      <span className="line-clamp-1">{entry.check.description}</span>
-                      {cleared.length > 0 ? (
-                        // One job: what its fix also clears, named here rather than listed as another thing to do.
-                        <span className="block text-text-secondary">{clearedWords(cleared)}</span>
-                      ) : null}
-                    </>
-                  }
-                >
-                  <Link {...linkProps(crawlId, link)} />
-                </ListRow>
-              </li>
-            ))}
+            {list.checks.map(({ entry, link, cleared }, index) => {
+              const example = examples[index]?.data ?? null;
+              return (
+                <li key={entry.check.id} className="flex flex-col">
+                  <ListRow
+                    asChild
+                    icon={<SeverityMark severity={entry.check.severity} decorative />}
+                    title={
+                      <>
+                        <span className="sr-only">{outcomeWord(entry.check.severity)}: </span>
+                        {entry.check.title}
+                      </>
+                    }
+                    meta={withWas(affected(entry, totals ?? null), wasWords(changeOf?.(entry.check.id)))}
+                    description={
+                      example || cleared.length > 0 ? (
+                        cleared.length > 0 ? (
+                          // One job: what its fix also clears, named here rather than listed as another thing to do.
+                          <span className="block text-text-secondary">{clearedWords(cleared)}</span>
+                        ) : undefined
+                      ) : (
+                        <span className="line-clamp-1">{entry.check.description}</span>
+                      )
+                    }
+                  >
+                    <Link {...linkProps(crawlId, link)} />
+                  </ListRow>
+                  {example ? (
+                    // Outside the row's own link: a link of its own, and a button after it.
+                    <div className="si-fix-example">
+                      <Url
+                        url={example.url}
+                        siteOrigin={siteOrigin}
+                        onGo={() =>
+                          void navigate({
+                            to: '/crawls/$crawl/issues/{-$check}',
+                            params: { crawl: crawlId, check: entry.check.id },
+                            search: { inspect: example.id },
+                          })
+                        }
+                        goHint="Inspect it in this check"
+                      />
+                      {example.detail ? <span className="si-fix-example__detail">{example.detail}</span> : null}
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
           </ol>
         )}
         {list.more > 0 ? (
@@ -258,50 +314,60 @@ export function Categories({
   );
 }
 
-/** "A, B and C". */
-function listed(items: readonly React.ReactNode[]): React.ReactNode[] {
-  return items.flatMap((item, index) => (index === 0 ? [item] : [index === items.length - 1 ? ' and ' : ', ', item]));
-}
-
 /**
- * The checks that didn't run, grouped by why, in the engine's plain words. Always shown when there are any: a skipped
- * check is not a clean one.
+ * The checks that didn't run, grouped by why. Always shown when there are any: a skipped check is not a clean one.
+ * Each group leads with how many checks and the reason (in the plural where it's several), then their names as a
+ * list of links in columns; and where the reason's remedy is a fresh crawl, the card carries it as a control, with
+ * this crawl's settings (the audit of 2026-11-19, H-04 and H-11: one sentence of 22 names, and "Crawl again" as plain
+ * text three times).
  */
 export function SkippedChecks({ crawlId, entries }: { crawlId: string; entries: readonly CheckEntry[] }) {
   const groups = skippedGroups(entries);
-  if (groups.length === 0) return null;
+  const first = groups[0]?.checks[0];
+  if (!first) return null;
   const count = groups.reduce((sum, group) => sum + group.checks.length, 0);
+  const again = groups.some((group) => asksForACrawl(group.reason));
   return (
     <Card as="section" aria-labelledby="overview-skipped-title">
       <CardHeader
         title="Not checked on this crawl"
         titleId="overview-skipped-title"
-        meta={`${formatCountOf(count, 'check')} skipped`}
+        meta={
+          <TextLink {...linkProps(crawlId, first.link)} variant="subtle">
+            {formatCountOf(count, 'check')} skipped
+          </TextLink>
+        }
+        actions={again ? <CrawlAgainButton crawlId={crawlId} /> : null}
       />
       <CardBody>
-        <ul className="flex flex-col gap-3">
-          {groups.map((group) => (
-            <li key={group.reason ?? ''} className="flex gap-2.5 text-13">
-              <span className="pt-0.5">
-                <SeverityMark severity="skipped" decorative />
-              </span>
-              <div className="flex min-w-0 flex-col gap-0.5">
-                <span className="font-medium text-text">
+        <ul className="flex flex-col gap-4">
+          {groups.map((group) => {
+            const many = formatCountOf(group.checks.length, 'check');
+            return (
+              <li key={group.reason ?? ''} className="flex flex-col gap-2 text-13">
+                <p className="text-text">
                   <span className="sr-only">Skipped: </span>
-                  {listed(
-                    group.checks.map((check) => (
-                      <TextLink key={check.id} {...linkProps(crawlId, check.link)} variant="subtle">
+                  <span className="font-semibold">{many}</span>
+                  <span className="text-text-muted"> · </span>
+                  <span>
+                    {group.reason
+                      ? skippedReasonWords(group.reason, group.checks.length)
+                      : 'The analysis didn’t record why: its notes say what it couldn’t check.'}
+                  </span>
+                </p>
+                <ul aria-label={`The ${many}`} className="si-name-columns">
+                  {group.checks.map((check) => (
+                    <li key={check.id}>
+                      {/* 24 px tall with its padding: each name a target of its own in the list (WCAG 2.5.8). */}
+                      <TextLink {...linkProps(crawlId, check.link)} className="inline-block py-1">
                         {check.title}
                       </TextLink>
-                    )),
-                  )}
-                </span>
-                <span className="text-text-secondary">
-                  {group.reason ?? 'The analysis didn’t record why: its notes say what it couldn’t check.'}
-                </span>
-              </div>
-            </li>
-          ))}
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            );
+          })}
         </ul>
       </CardBody>
     </Card>

@@ -12,6 +12,7 @@ import {
   foundSplit,
   paceOf,
   sparkOf,
+  queueLeft,
   timeLeft,
 } from './liveFigures';
 
@@ -169,6 +170,22 @@ describe('the time left', () => {
     expect(timeLeft('running', { maxUrls: null, internalFound: 5_722, internalFetched: fetched }, trail)).toBeNull();
     expect(
       timeLeft('running', { maxUrls: undefined, internalFound: 5_722, internalFetched: fetched }, trail),
+    ).toBeNull();
+  });
+
+  it('without a limit, says how long what it has found so far takes at least (the audit of 2026-11-19, H-22)', () => {
+    // 5,722 found, 2,713 fetched, 2 a second: 3,009 to go.
+    const queue = queueLeft('running', { maxUrls: null, internalFound: 5_722, internalFetched: fetched }, trail);
+    expect(queue?.urls).toBe(3_009);
+    expect(queue?.ms).toBeCloseTo((3_009 / 2) * 1000);
+    // Not with a limit (the time left says that), not paused, not before a pace, not with nothing left.
+    const limited = { maxUrls: 10_000, internalFound: 5_722, internalFetched: fetched };
+    expect(queueLeft('running', limited, trail)).toBeNull();
+    expect(queueLeft('paused', { ...limited, maxUrls: null }, trail)).toBeNull();
+    expect(queueLeft('running', { ...limited, maxUrls: null }, steady(1, 2))).toBeNull();
+    expect(queueLeft('running', { maxUrls: null, internalFound: fetched, internalFetched: fetched }, trail)).toBeNull();
+    expect(
+      queueLeft('running', { maxUrls: undefined, internalFound: 5_722, internalFetched: fetched }, trail),
     ).toBeNull();
   });
 

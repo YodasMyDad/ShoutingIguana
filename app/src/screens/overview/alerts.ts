@@ -44,6 +44,11 @@ export interface AlertEntry {
   tally: string | null;
   /** What to do about it. Null for one that needs nothing done. */
   advice: string | null;
+  /**
+   * Where the facts themselves lead, when they name a list ("1 sitemap lists 240 URLs." opens Sitemaps): the sentence
+   * is then the link, and no "Open …" is repeated under it (fix-common's rule 5).
+   */
+  detailLink?: AlertAction;
   action: AlertAction | null;
   /** More ways to do something about it, after `action`: a blocked crawl's three. */
   more?: AlertAction[];
@@ -175,16 +180,18 @@ function words(
         advice: 'Continue the crawl once the site is back: it carries on from where it stopped.',
         action: { kind: 'continue', label: 'Continue' },
       };
-    case 'sitemaps':
+    case 'sitemaps': {
+      const counted = data.count !== undefined && data.urlCount !== undefined;
       return {
         title: 'Sitemaps read',
-        detail:
-          data.count !== undefined && data.urlCount !== undefined
-            ? `${formatCountOf(data.count, 'sitemap')} ${data.count === 1 ? 'lists' : 'list'} ${formatCountOf(data.urlCount, 'URL')}.`
-            : null,
+        detail: counted
+          ? `${formatCountOf(data.count ?? 0, 'sitemap')} ${data.count === 1 ? 'lists' : 'list'} ${formatCountOf(data.urlCount ?? 0, 'URL')}.`
+          : null,
         advice: null,
-        action: SITEMAPS,
+        // The figure names the list, so it opens it; without a figure, "Open Sitemaps" does.
+        ...(counted ? { detailLink: SITEMAPS, action: null } : { action: SITEMAPS }),
       };
+    }
     case 'sitemaps-not-read':
       return {
         title: 'A sitemap was left out',

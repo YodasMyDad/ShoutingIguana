@@ -90,6 +90,13 @@ const filtersOf = (link: HTMLElement): GridFilter[] =>
   JSON.parse(new URL((link as HTMLAnchorElement).href).searchParams.get('filter') ?? '[]') as GridFilter[];
 const searchOf = (link: HTMLElement) => new URL((link as HTMLAnchorElement).href).searchParams;
 const pathOf = (link: HTMLElement) => new URL((link as HTMLAnchorElement).href).pathname;
+/** The crawl in a line, beside "The crawl": its counts are links, as the cards' headers under it are. */
+const crawlFacts = async () => {
+  const heading = await main().findByRole('heading', { level: 2, name: 'The crawl' });
+  return heading.parentElement!.querySelector('p')!;
+};
+/** The answer under the title: one sentence, each count in it a link. */
+const answerLine = async () => (await main().findByRole('link', { name: /checks? found .* issues?$/ })).closest('p')!;
 
 const NOT_BLOCKED: GridFilter = { column: 'outcome', op: 'notIn', values: ['blocked'] };
 // The site's page URLs, without the crawler's probes of its other versions.
@@ -122,7 +129,7 @@ describe('the Overview of an analysed crawl', () => {
     // Started 10:15, finished 10:20, but crawled for 41 s: it was paused, and stopped and continued.
     sidecar({ item: { crawlingMs: 41_250 } });
     await open();
-    const facts = (await main().findByRole('link', { name: '4,521 URLs' })).closest('p');
+    const facts = await crawlFacts();
     expect(facts).toHaveTextContent(
       /^4,521 URLs crawled, 265 pages read, started .+ 2026.*\. It spent 41 s crawling, not counting pauses or the time between runs\.$/,
     );
@@ -132,7 +139,7 @@ describe('the Overview of an analysed crawl', () => {
   it('says it doesn’t know how long a crawl an earlier version made spent crawling, and doesn’t guess', async () => {
     sidecar({ item: { crawlingMs: null } });
     await open();
-    const facts = (await main().findByRole('link', { name: '4,521 URLs' })).closest('p');
+    const facts = await crawlFacts();
     expect(facts).toHaveTextContent(
       'How long it spent crawling isn’t known: an earlier version of Shouting Iguana crawled it, or part of it, and didn’t keep the time.',
     );
@@ -142,9 +149,18 @@ describe('the Overview of an analysed crawl', () => {
   it('answers first, in one sentence built from the counts', async () => {
     sidecar();
     await open();
-    expect(
-      await main().findByText('3 checks found 11 issues on this crawl. 1 passed and 1 was skipped.'),
-    ).toBeVisible();
+    const answer = await answerLine();
+    expect(answer).toHaveTextContent('3 checks found 11 issues on this crawl. 1 passed and 1 was skipped.');
+    // Each count in it opens what it counts (the audit of 2026-11-19, H-07): the checks that found something, the list
+    // with the passed checks shown, and the first skipped check.
+    const line = within(answer);
+    const found = line.getByRole('link', { name: '3 checks found 11 issues' });
+    expect(pathOf(found)).toBe(`/crawls/${TEST_CRAWL_ID}/issues`);
+    expect(searchOf(found).get('severity')).toBeNull();
+    expect(searchOf(line.getByRole('link', { name: '1 passed' })).get('passed')).toBe('1');
+    expect(pathOf(line.getByRole('link', { name: '1 was skipped' }))).toBe(
+      `/crawls/${TEST_CRAWL_ID}/issues/orphan-page`,
+    );
     expect(main().getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible();
     // Done, not running: no "Live".
     expect(main().queryByText('Live')).toBeNull();
@@ -161,8 +177,11 @@ describe('the Overview of an analysed crawl', () => {
     expect(searchOf(errors).get('severity')).toBe('["error"]');
     expect(figures.getByRole('link', { name: /Notices/ })).toHaveTextContent('2 checks');
     expect(figures.getByRole('link', { name: /Warnings/ })).toHaveTextContent('None found an issue');
-    // What passed and what was skipped is said, never left to read as clean.
-    expect(figures.getByText('1 was skipped, with why below')).toBeVisible();
+    // What passed and what was skipped is said, never left to read as clean; Passed opens Issues with them listed.
+    const passed = figures.getByRole('link', { name: /Passed/ });
+    expect(passed).toHaveTextContent('1 was skipped');
+    expect(pathOf(passed)).toBe(`/crawls/${TEST_CRAWL_ID}/issues`);
+    expect(searchOf(passed).get('passed')).toBe('1');
   });
 
   it('leads with the things to fix when the analysis counts them, then the notices, and each severity says its own', async () => {
@@ -180,18 +199,24 @@ describe('the Overview of an analysed crawl', () => {
     await open();
     // What moves the score leads (the 404s' 2 things to fix), then, quieter, the notices' 4 things in the same unit, then
     // the counts of checks and issues.
-    const fix = await main().findByText('About 2 things to fix');
-    expect(fix.parentElement).toHaveTextContent(
+    const answer = await answerLine();
+    expect(answer).toHaveTextContent(
       'About 2 things to fix · about 4 more worth a look · 3 checks found 11 issues on this crawl. 1 passed and 1 was skipped.',
     );
-    expect(main().getByText('· about 4 more worth a look')).toHaveClass('text-text-muted');
+    // The things to fix open the errors and warnings, the things worth a look the notices.
+    const fix = within(answer).getByRole('link', { name: 'About 2 things to fix' });
+    expect(searchOf(fix).get('severity')).toBe('["error","warning"]');
+    const look = within(answer).getByRole('link', { name: 'about 4 more worth a look' });
+    expect(searchOf(look).get('severity')).toBe('["notice"]');
+    expect(look.parentElement).toHaveClass('text-text-muted');
+    // Each severity's figure says one thing under it, in the headline's unit; its issues are on hover (H-19).
     const figures = region('Issues by severity');
-    expect(await figures.findByRole('link', { name: /Errors/ })).toHaveTextContent(
-      'About 2 things to fix, from 2 issues',
-    );
-    expect(figures.getByRole('link', { name: /Notices/ })).toHaveTextContent(
-      'About 4 things to change, 1 of them in the site’s template, from 9 issues',
-    );
+    const errors = await figures.findByRole('link', { name: /Errors/ });
+    expect(errors).toHaveTextContent(/About 2 things to fix$/);
+    expect(errors).toHaveAttribute('title', 'From 2 issues');
+    const notices = figures.getByRole('link', { name: /Notices/ });
+    expect(notices).toHaveTextContent(/About 4 things to change, 1 of them in the site’s template$/);
+    expect(notices).toHaveAttribute('title', 'From 9 issues');
   });
 
   it('lists what to fix first, the most severe then the most pages or URLs, each opening its check', async () => {
@@ -352,7 +377,12 @@ describe('the Overview of an analysed crawl', () => {
       NOT_BLOCKED,
       { column: 'source', op: 'notIn', values: ['siteVersion'] },
     ]);
-    expect(status.getByText('4,519 URLs')).toBeVisible();
+    // Fewer than the crawl's "Crawled": the header says of how many, and opens exactly those (H-07, H-19).
+    const counted = status.getByRole('link', { name: '4,519 of the 4,521 URLs crawled' });
+    expect(filtersOf(counted)).toEqual([
+      { column: 'fetched', op: 'is', value: true },
+      { column: 'source', op: 'notIn', values: ['siteVersion'] },
+    ]);
     const probes = status.getByRole('link', { name: '2 URLs' });
     expect(probes.closest('p')).toHaveTextContent(/^2 URLs the crawler tried for the site’s other versions/);
     // The stats' reasons are the site's own too: the probes' refusals come out.
@@ -403,7 +433,7 @@ describe('the Overview of an analysed crawl', () => {
       { column: 'outcome', op: 'isEmpty' },
     ]);
     // The crawl's own line and its banner say what the grid opens, not the library's count with the 5 in it.
-    const crawled = main().getByRole('link', { name: '6,909 URLs' });
+    const crawled = within(await crawlFacts()).getByRole('link', { name: '6,909 URLs' });
     expect(filtersOf(crawled)).toEqual([{ column: 'fetched', op: 'is', value: true }]);
     expect(main().getByText(/This crawl was stopped after 6,909 URLs/)).toBeVisible();
     expect(main().queryByText(/6,914/)).toBeNull();
@@ -1107,6 +1137,11 @@ describe('the Overview while the crawl runs', () => {
     await open();
     await heard(message('progress', progressAt(100, { ...POLITE, status: 'paused' })));
     expect(main().getByText(/The crawl is paused\./)).toBeVisible();
+    // Paused, the title's badge says so, not "Live", and nothing is being fetched: 0 a second (H-22).
+    const title = main().getByRole('heading', { level: 1 });
+    expect(within(title).getByText('Paused')).toBeVisible();
+    expect(within(title).queryByText('Live')).toBeNull();
+    expect(cell('URLs a second')).toHaveTextContent(/^URLs a second0(\.0)?\b/);
     fireEvent.click(main().getByRole('button', { name: /Resume/ }));
     await waitFor(() => expect(resume).toHaveBeenCalledTimes(1));
   });
@@ -1242,6 +1277,12 @@ describe('the Overview while the crawl runs', () => {
     // The same log, with the alert added to it.
     expect(alerts.getByRole('log')).toBe(log);
     expect(within(log).getByText('Sitemaps read')).toBeVisible();
+    // Its figure names a list, so the figure is the link to it, and no "Open Sitemaps" repeats it (H-07).
+    expect(within(log).getByRole('link', { name: '4 sitemaps list 6,146 URLs.' })).toHaveAttribute(
+      'href',
+      `/crawls/${TEST_CRAWL_ID}/sitemaps`,
+    );
+    expect(within(log).queryByRole('link', { name: 'Open Sitemaps' })).toBeNull();
     expect(alerts.queryByText('None so far')).toBeNull();
     // Its age is rewritten by the clock every minute ("1 minute ago", "2 minutes ago"): no part of what the log reads.
     const age = log.querySelector('time');
@@ -1310,9 +1351,7 @@ describe('the Overview while the crawl runs', () => {
     setStatus(queryClient, 'completed', { analyzedAt: '2026-11-01T10:21:00Z' });
     await heard(message('crawl', { crawlId: TEST_CRAWL_ID, status: 'completed' }));
     await act(() => queryClient.invalidateQueries({ queryKey: queryKeys.crawl(TEST_CRAWL_ID) }));
-    expect(
-      await main().findByText('3 checks found 11 issues on this crawl. 1 passed and 1 was skipped.'),
-    ).toBeVisible();
+    expect(await answerLine()).toHaveTextContent('3 checks found 11 issues on this crawl. 1 passed and 1 was skipped.');
     expect(region('Fix first').getByRole('link', { name: /Error:\s?Internal URL returns 4xx/ })).toBeVisible();
     expect(frames.seen()).toBe(0);
     frames.stop();

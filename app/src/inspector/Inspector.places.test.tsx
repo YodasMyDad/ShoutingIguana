@@ -99,7 +99,8 @@ describe('an alert about one sitemap', () => {
       alert({ id: 1, code: 'sitemaps-not-read', data: { url: 'https://example.com/big.xml', reason: 'too many' } }),
       alert({ id: 2, code: 'sitemaps', data: { count: 2, urlCount: 40 } }),
     ]);
-    const actions = [left, read].map((entry) => entry?.action);
+    // Where each leads: its action, or its own sentence when the figure in it names the list (the shell lane's H-07).
+    const actions = [left, read].map((entry) => entry?.action ?? entry?.detailLink);
     expect(actions).toContainEqual({
       kind: 'sitemaps',
       label: 'Open this sitemap',

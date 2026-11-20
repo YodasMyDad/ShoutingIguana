@@ -14,6 +14,7 @@ import { getSettings, replaceSettings } from '../settings/settingsStore';
 import { TEST_CRAWL_ID, fakeSidecar, problem, standardRoutes } from '../test/fakeSidecar';
 import { issuesRoutes } from '../test/issuesSidecar';
 import type { Mode } from './mode';
+import { resetSwitchForTests } from './switchMode';
 
 const CRAWL = `/crawls/${TEST_CRAWL_ID}`;
 
@@ -35,6 +36,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   uninstall();
+  resetSwitchForTests();
   setTransport(fakeSidecar([]));
 });
 
@@ -89,6 +91,49 @@ describe('the switch', () => {
     expect(getSettings().mode).toBe('simple');
   });
 
+  // The audit of 2026-11-19 (H-03): from URLs, Links, Sitemaps, robots.txt and the crawl's settings the switch landed on
+  // the Summary without a word, and Advanced again stayed on Overview: the filter and the place were gone.
+  it('from an Advanced-only screen, says where it took you, and Advanced again is the exact place left', async () => {
+    const router = await open(`${CRAWL}/urls?view=all&q=chairs`, 'advanced');
+    const left = router.state.location.href;
+    fireEvent.click(within(modeSwitch()).getByRole('radio', { name: 'Simple' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe(`${CRAWL}/overview`));
+    await waitFor(() => expect(screen.getByText('Simple doesn’t show URLs')).toBeVisible());
+    expect(screen.getByText('This is the Summary. Advanced takes you back to where you were.')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Back to URLs' })).toBeVisible();
+
+    fireEvent.click(within(modeSwitch()).getByRole('radio', { name: 'Advanced' }));
+    await waitFor(() => expect(router.state.location.href).toBe(left));
+    await waitFor(() => expect(getSettings().mode).toBe('advanced'));
+    // It went back, as Back does: the Summary is ahead, not behind.
+    expect(router.history.canGoBack()).toBe(false);
+    // The switch said it: no "Advanced is on" toast as for a screen arrived at by surprise.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+    expect(screen.queryByText('Simple doesn’t show URLs.')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Back to Simple' })).toBeNull();
+  });
+
+  it('the toast’s own button goes back to the place left too', async () => {
+    const router = await open(`${CRAWL}/links`, 'advanced');
+    fireEvent.click(within(modeSwitch()).getByRole('radio', { name: 'Simple' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe(`${CRAWL}/overview`));
+    fireEvent.click(await screen.findByRole('button', { name: 'Back to Links' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe(`${CRAWL}/links`));
+    await waitFor(() => expect(getSettings().mode).toBe('advanced'));
+  });
+
+  it('Advanced chosen from anywhere else in Simple stays on that screen', async () => {
+    const router = await open(`${CRAWL}/urls`, 'advanced');
+    fireEvent.click(within(modeSwitch()).getByRole('radio', { name: 'Simple' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe(`${CRAWL}/overview`));
+    await screen.findByText('Simple doesn’t show URLs');
+    await act(() => router.navigate({ to: '/crawls/$crawl/issues/{-$check}', params: { crawl: TEST_CRAWL_ID } }));
+    fireEvent.click(within(modeSwitch()).getByRole('radio', { name: 'Advanced' }));
+    expect(getSettings().mode).toBe('advanced');
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+    expect(router.state.location.pathname.startsWith(`${CRAWL}/issues`)).toBe(true);
+  });
+
   it('from an Advanced-only screen, goes to the nearest one Simple has, and Back returns', async () => {
     const router = await open(`${CRAWL}/urls?view=all`, 'advanced');
     fireEvent.click(within(modeSwitch()).getByRole('radio', { name: 'Simple' }));
@@ -99,7 +144,8 @@ describe('the switch', () => {
     act(() => router.history.back());
     await waitFor(() => expect(router.state.location.pathname).toBe(`${CRAWL}/urls`));
     await waitFor(() => expect(getSettings().mode).toBe('advanced'));
-    expect(await screen.findByText('Advanced is on')).toBeVisible();
+    // Waited for: a toast is in the page one render before it is shown (Sonner mounts it at opacity 0).
+    await waitFor(() => expect(screen.getByText('Advanced is on')).toBeVisible());
   });
 
   // Settings is the same in both modes, every section (docs/v2-ui-simple.md, Settings in each mode).

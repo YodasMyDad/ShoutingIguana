@@ -7,9 +7,9 @@ import { useEffect } from 'react';
 import { crawlQuery } from '../api/queries';
 import { advancedOnlyScreen, crawlIdOf } from '../app/modeRoutes';
 import type { RouterContext } from '../app/router';
-import { notifyResult } from '../feedback/notify';
+import { dismissToast, notifyResult } from '../feedback/notify';
 import { getMode, setMode } from './mode';
-import { ADVANCED_ON_TOAST, switchMode } from './switchMode';
+import { ADVANCED_ON_TOAST, SIMPLE_LANDING_TOAST, switchMode } from './switchMode';
 
 /**
  * Turns Advanced on for what Simple doesn't show (`what`, mid-sentence: "URLs", "the user agent"), with the one toast
@@ -17,6 +17,8 @@ import { ADVANCED_ON_TOAST, switchMode } from './switchMode';
  */
 export function showAdvancedFor(router: AnyRouter, what: string): void {
   setMode('advanced', { announce: false });
+  // One toast about the mode at a time: where Simple landed no longer matters.
+  dismissToast(SIMPLE_LANDING_TOAST);
   notifyResult('Advanced is on', {
     id: ADVANCED_ON_TOAST,
     description: `Simple doesn’t show ${what}.`,

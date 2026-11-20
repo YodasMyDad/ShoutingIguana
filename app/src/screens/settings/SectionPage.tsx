@@ -1,3 +1,4 @@
+import clsx from 'clsx';
 import { Check, Copy } from 'lucide-react';
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import { announce } from '../../feedback/announce';
@@ -8,10 +9,25 @@ import { PageHeader } from '../../ui/PageHeader';
 /** How long a copy button says "Copied". */
 const COPIED_MS = 2_000;
 
-/** A section of Settings: its title, what it's for, and its settings. */
-export function SectionPage({ title, purpose, children }: { title: string; purpose: ReactNode; children: ReactNode }) {
+/**
+ * A section of Settings: its title, what it's for, and its settings. A form's measure wide, so the list of sections
+ * and the section together are centred in the pane as New crawl and Overview are (the audit of 2026-11-19, H-24:
+ * three layouts for three sibling screens). `wide`: a section of many fields takes two columns' width in a wide
+ * window (Analysis).
+ */
+export function SectionPage({
+  title,
+  purpose,
+  wide = false,
+  children,
+}: {
+  title: string;
+  purpose: ReactNode;
+  wide?: boolean | undefined;
+  children: ReactNode;
+}) {
   return (
-    <div className="flex max-w-(--form-max) flex-col gap-7">
+    <div className={clsx('flex w-(--form-max) max-w-full flex-col gap-7', wide && 'wide:w-(--form-max-wide)')}>
       <PageHeader title={title} subtitle={purpose} />
       {children}
     </div>

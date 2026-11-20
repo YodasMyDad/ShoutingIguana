@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useLocation, useParams, useRouter } from '@tanstack/react-router';
+import { useLocation, useParams, useRouter, useRouterState } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { ChevronLeft, ChevronRight, Ellipsis, Pause, Play, RefreshCw, Search, Square } from 'lucide-react';
 import { useRef, type ReactNode } from 'react';
@@ -23,7 +23,10 @@ import { DropdownMenu, MenuItem } from '../ui/Menu';
 import { StatusPill } from '../ui/StatusPill';
 import { TextLink } from '../ui/TextLink';
 import { Tooltip } from '../ui/Tooltip';
+import { CRAWL_FACTS_HASH } from '../screens/overview/overviewLinks';
+import { siteName } from '../simple/home/sites';
 import { ModeSwitch } from './ModeSwitch';
+import { setSwitcherOpen } from './switcherOpen';
 import { useGiveWay } from './useGiveWay';
 
 /** A crawl control's words: once the bar is short of room (step 6), read but not shown, so the button keeps its name. */
@@ -53,7 +56,9 @@ function pageTitle(pathname: string, mode: Mode): string | null {
 /**
  * The top bar (docs/v2-ui-ia.md, The shell; docs/v2-ui-simple.md, Top bar): back and forward, where you are, the
  * crawl's status and controls, search, and the switch. The same on every screen, so a running crawl is always visible
- * and controllable.
+ * and controllable. Every crumb leads somewhere (the audit of 2026-11-19, H-17): Home, the site to its crawl's
+ * Overview, the crawl's date to the switcher that lists the site's other crawls, the status to what the crawl did.
+ * Back and Forward are dimmed where there's nowhere to go.
  *
  * Short of room, its parts give way in a fixed order, measured on the bar's own width (useGiveWay): the keys inside
  * buttons, the crawl's date, the search field (to its icon), Home, the status pill's count, the controls' words (to
@@ -76,6 +81,11 @@ export function TopBar() {
   const onHome = pathname === '/';
   const barRef = useRef<HTMLElement>(null);
   useGiveWay(barRef);
+  // Where this entry is in the window's history: Back has nowhere to go from the first, Forward from the last. The
+  // count is the window's own, so a page opened before the app only ever leaves Forward lit, never dims a way that works.
+  const historyIndex = useRouterState({ select: (state) => state.location.state.__TSR_index });
+  const canGoBack = historyIndex > 0;
+  const canGoForward = historyIndex < router.history.length - 1;
   // A control pressed goes once it has worked (Pause becomes Resume, Stop goes while the crawl stops): focus goes to
   // the control that took its place, or to the view when none did, never to the page.
   const controlsRef = useRef<HTMLDivElement>(null);
@@ -89,7 +99,9 @@ export function TopBar() {
   });
 
   const date = crawl?.startedAt ? formatExactTime(crawl.startedAt) : null;
-  const site = crawlId ? crawlName(crawl) : null;
+  // The site as Home and the switcher name it, with a port of its own: two test sites on one host are two names
+  // (H-22: both read "127.0.0.1" here).
+  const site = crawlId ? (crawl ? siteName(crawl) : crawlName(crawl)) : null;
   // The whole trail, for the tooltip, whatever has given way.
   const trail = ['Home', site, date, here ?? page].filter(Boolean).join(' › ');
   const fetched = crawledUrls(crawl, live?.progress);
@@ -118,7 +130,10 @@ export function TopBar() {
           icon={ChevronLeft}
           size="sm"
           command="nav.back"
-          onClick={() => router.history.back()}
+          aria-disabled={canGoBack ? undefined : true}
+          onClick={() => {
+            if (canGoBack) router.history.back();
+          }}
         />
         <span className="flex group-data-give-9/topbar:sr-only group-data-give-9/topbar:focus-within:not-sr-only">
           <IconButton
@@ -126,7 +141,10 @@ export function TopBar() {
             icon={ChevronRight}
             size="sm"
             command="nav.forward"
-            onClick={() => router.history.forward()}
+            aria-disabled={canGoForward ? undefined : true}
+            onClick={() => {
+              if (canGoForward) router.history.forward();
+            }}
           />
         </span>
       </div>
@@ -155,16 +173,32 @@ export function TopBar() {
             <>
               <Separator className="group-data-give-4/topbar:hidden" />
               <li
-                className="flex max-w-(--topbar-site-max) items-center gap-2 px-1.5 font-medium text-text group-data-give-7/topbar:min-w-(--topbar-site-min) group-data-give-7/topbar:shrink group-data-give-8/topbar:sr-only"
+                className="flex max-w-(--topbar-site-max) font-medium text-text group-data-give-7/topbar:min-w-(--topbar-site-min) group-data-give-7/topbar:shrink group-data-give-8/topbar:sr-only"
                 title={crawl?.startUrl ?? site ?? undefined}
               >
-                <CrawlFavicon item={crawl} site={site ?? ''} size="md" />
-                <span className="min-w-0 truncate">{site}</span>
+                {/* The site is the crawl: its name opens the crawl's first screen, the Overview (the Summary). */}
+                <OverviewLink
+                  crawlId={crawlId}
+                  className="flex min-w-0 items-center gap-2 rounded-sm px-1.5 py-1 hover:bg-surface-hover"
+                >
+                  <CrawlFavicon item={crawl} site={site ?? ''} size="md" />
+                  <span className="min-w-0 truncate">{site}</span>
+                </OverviewLink>
               </li>
               {date ? (
                 <>
                   <Separator className="group-data-give-2/topbar:hidden" />
-                  <li className="px-1.5 group-data-give-2/topbar:sr-only">{date}</li>
+                  <li className="flex group-data-give-2/topbar:sr-only">
+                    {/* Which crawl of the site this is: it opens the list of them, the sidebar's switcher. */}
+                    <button
+                      type="button"
+                      aria-label={`${date}: ${mode === 'simple' ? 'switch site check' : 'switch crawl'}`}
+                      className="rounded-sm px-1.5 py-1 hover:bg-surface-hover hover:text-text"
+                      onClick={() => setSwitcherOpen(true)}
+                    >
+                      {date}
+                    </button>
+                  </li>
                 </>
               ) : null}
               {here ? (
@@ -188,9 +222,10 @@ export function TopBar() {
           ref={controlsRef}
           className="flex items-center gap-2 group-data-give-5/topbar:[&_.si-status-pill\_\_count]:sr-only group-data-give-11/topbar:[&_.si-status-pill\_\_word]:sr-only group-data-give-1/topbar:[&_kbd]:hidden"
         >
-          <span className="flex" title={pillWords}>
+          {/* What the crawl did is on its Overview, under "The crawl": the status leads there. */}
+          <OverviewLink crawlId={crawlId} hash={CRAWL_FACTS_HASH} className="flex rounded-full" title={pillWords}>
             <StatusPill status={status} fetched={fetched} words={mode} />
-          </span>
+          </OverviewLink>
           <span data-controls="" className="flex items-center gap-2 group-data-give-10/topbar:hidden">
             {controls.canPause ? (
               <ControlButton
@@ -248,6 +283,51 @@ export function TopBar() {
       </span>
       <ModeSwitch />
     </header>
+  );
+}
+
+/**
+ * A way to the crawl's Overview from the bar: the site's crumb, and the status (to "The crawl", by `hash`). An anchor
+ * of its own, not the router's `Link`: on the Overview that marks itself `aria-current="page"`, and the bar has one
+ * current place, the section's crumb.
+ */
+function OverviewLink({
+  crawlId,
+  hash,
+  className,
+  title,
+  children,
+}: {
+  crawlId: string;
+  hash?: string | undefined;
+  className: string;
+  title?: string | undefined;
+  children: ReactNode;
+}) {
+  const router = useRouter();
+  const to = { to: '/crawls/$crawl/overview', params: { crawl: crawlId }, ...(hash ? { hash } : {}) } as const;
+  return (
+    <a
+      href={router.buildLocation(to).href}
+      className={className}
+      title={title}
+      onClick={(event) => {
+        // A plain click goes there in the app; with a modifier or another button it's the browser's to open.
+        if (
+          event.defaultPrevented ||
+          event.button !== 0 ||
+          event.metaKey ||
+          event.ctrlKey ||
+          event.shiftKey ||
+          event.altKey
+        )
+          return;
+        event.preventDefault();
+        void router.navigate(to);
+      }}
+    >
+      {children}
+    </a>
   );
 }
 

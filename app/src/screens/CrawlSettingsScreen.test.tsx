@@ -82,6 +82,32 @@ describe('the crawl’s settings', () => {
     expect(within(used).getByText(/values aren’t in the crawl file/)).toBeVisible();
   });
 
+  it('mark what differs from the defaults, with the default beside it, and count them (H-20)', async () => {
+    sidecar('completed');
+    await open(SETTINGS);
+    const used = await screen.findByRole('region', { name: 'What it used' });
+    // The URL limit was 5,000: the engine's own is none.
+    const limit = within(used).getByText('5,000');
+    expect(limit.tagName).toBe('STRONG');
+    expect(limit.parentElement).toHaveTextContent('5,000 · default: No limit');
+    expect(within(used).getByText(/settings? changed from the default$/)).toBeVisible();
+    // A setting left alone says only its value.
+    const marked = used.querySelectorAll('[data-changed]').length;
+    expect(marked).toBeGreaterThan(0);
+    expect(marked).toBeLessThan(used.querySelectorAll('dd').length);
+  });
+
+  it('say when its issues were worked out, with Analyse again and the way to the limits (H-20)', async () => {
+    sidecar('completed');
+    await open(SETTINGS);
+    const analysis = await screen.findByRole('region', { name: 'Analysis' });
+    expect(within(analysis).getByRole('link', { name: 'Settings › Analysis' })).toHaveAttribute(
+      'href',
+      '/settings/analysis',
+    );
+    expect(within(analysis).getByText(/^(Analysed |Not analysed yet)/)).toBeVisible();
+  });
+
   it('crawl again with these, from the crawl’s own start URL', async () => {
     sidecar('completed');
     await open(SETTINGS);
@@ -89,8 +115,10 @@ describe('the crawl’s settings', () => {
       'href',
       `/new?from=${TEST_CRAWL_ID}&url=https%3A%2F%2Fexample.com%2F`,
     );
-    // A crawl that ended has nothing to continue.
-    expect(continueCard().queryByRole('button', { name: 'Continue the crawl' })).toBeNull();
+    // A crawl that ended has nothing to continue, and no card saying so leads its record (H-20).
+    expect(screen.queryByRole('region', { name: 'Continue' })).toBeNull();
+    expect(screen.getByRole('heading', { level: 1, name: 'This crawl’s settings' })).toBeVisible();
+    expect(screen.getByText(/They can’t be changed here/)).toBeVisible();
   });
 
   it('continue a stopped crawl, asking again for the header values its file doesn’t keep', async () => {
@@ -148,7 +176,10 @@ describe('the crawl’s settings, the review’s findings', () => {
     const used = await screen.findByRole('region', { name: 'What it used' });
     const proxy = within(used).getByText('Proxy').nextElementSibling;
     expect(proxy).toHaveTextContent(/^http:\/\/proxy\.example\.com:8080/);
-    expect(proxy).not.toHaveTextContent(/None/);
+    // Its value is the proxy, never "None"; "None" is only what the default beside it says (H-20).
+    expect(proxy?.querySelector('strong')).toHaveTextContent('http://proxy.example.com:8080');
+    expect(proxy).not.toHaveTextContent(/^None/);
+    expect(proxy).toHaveTextContent('default: None');
   });
 
   it('never continue with a speed that isn’t a number: it’s said beside it, and nothing is sent', async () => {

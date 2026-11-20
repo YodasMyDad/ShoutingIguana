@@ -11,11 +11,20 @@ import { RechecksCard } from './RechecksCard';
 
 const titleOf = (id: string) => ({ 'broken-internal-links': 'Broken internal links' })[id] ?? null;
 
+const inspected: { checkId: string | null; urlId: number }[] = [];
+
 function show(rechecks: Recheck[]) {
   setTransport(fakeSidecar(recheckRoutes({ rechecks })));
+  inspected.length = 0;
   return render(
     <QueryClientProvider client={createQueryClientWithoutBackoff()}>
-      <RechecksCard crawlId={TEST_CRAWL_ID} titleOf={titleOf} />
+      <RechecksCard
+        crawlId={TEST_CRAWL_ID}
+        titleOf={titleOf}
+        siteOrigin="https://www.gardenfurnituresets.co.uk"
+        checkLink={(checkId, children) => <a href={`/issues/${checkId}`}>{children}</a>}
+        onInspect={(checkId, urlId) => inspected.push({ checkId, urlId })}
+      />
     </QueryClientProvider>,
   );
 }
@@ -51,7 +60,11 @@ describe('Overview’s Rechecks card (Advanced)', () => {
 
   it('opens a recheck’s URLs, judged first, each with its outcome', async () => {
     show([recheckRecord()]);
-    await userEvent.click(await screen.findByRole('button', { name: 'URLs of recheck 1' }));
+    // What it found is the control, beside its words (the audit of 2026-11-19, H-23: a "URLs" button at the far end of
+    // an 1,800 px row).
+    await userEvent.click(
+      await screen.findByRole('button', { name: '4 of 5 fixed · 1 still · 0 new · Score 86 → 88, its URLs' }),
+    );
     const dialog = await screen.findByRole('dialog', { name: 'Recheck 1: Broken internal links' });
     const rows = await within(dialog).findAllByRole('row');
     expect(rows[1]).toHaveTextContent('/sofas/');
@@ -60,6 +73,28 @@ describe('Overview’s Rechecks card (Advanced)', () => {
     expect(rows[2]).toHaveTextContent('Fixed');
     await userEvent.click(within(dialog).getByRole('radio', { name: /^Still/ }));
     expect(await within(dialog).findAllByRole('row')).toHaveLength(2);
+  });
+
+  // H-07, H-23: the check's name was dead text, and the dialog's URLs were cut with "…" and weren't links.
+  it('names the check as a link to it', async () => {
+    show([recheckRecord()]);
+    const card = await screen.findByRole('region', { name: 'Rechecks' });
+    expect(await within(card).findByRole('link', { name: 'Broken internal links' })).toHaveAttribute(
+      'href',
+      '/issues/broken-internal-links',
+    );
+  });
+
+  it('lists the recheck’s URLs as links that inspect them in their check, each with its open-in-browser', async () => {
+    show([recheckRecord()]);
+    await userEvent.click(await screen.findByRole('button', { name: /^4 of 5 fixed.*its URLs$/ }));
+    const dialog = await screen.findByRole('dialog', { name: 'Recheck 1: Broken internal links' });
+    const first = (await within(dialog).findAllByRole('row'))[1]!;
+    const url = within(first).getByRole('button', { name: /\/sofas\/$/ });
+    expect(within(first).getByRole('button', { name: /^Open .*\/sofas\/ in your browser$/ })).toBeInTheDocument();
+    await userEvent.click(url);
+    expect(inspected).toHaveLength(1);
+    expect(inspected[0]?.checkId).toBe('broken-internal-links');
   });
 
   it('isn’t there for a crawl never rechecked', async () => {

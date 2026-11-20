@@ -105,7 +105,16 @@ function StartCrawlForm() {
         error={error}
         className="flex-1"
         end={
-          <Button variant="primary" size="lg" type="submit" loading={starting} aria-keyshortcuts="Enter">
+          <Button
+            variant="primary"
+            size="lg"
+            type="submit"
+            loading={starting}
+            aria-keyshortcuts="Enter"
+            // Dimmed until there's an address (H-21: it looked ready with an empty field). Pressed anyway, it still
+            // says what's missing, so it's never a dead button.
+            aria-disabled={url.trim() === '' ? true : undefined}
+          >
             Crawl
             {/* Shown, not read: the button is named Crawl, and Enter is its aria-keyshortcuts. */}
             <Kbd chord="enter" size="sm" aria-hidden />

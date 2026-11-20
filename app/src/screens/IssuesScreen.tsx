@@ -108,7 +108,8 @@ export function IssuesScreen() {
 
   const hiddenIds = useHiddenChecks(crawlId);
   const hidden = useMemo(() => new Set(hiddenIds), [hiddenIds]);
-  const [showPassed, setShowPassed] = useState(false);
+  // Asked for in the address (`passed=1`, from Overview's "118 passed"): shown from the start.
+  const [showPassed, setShowPassed] = useState(search.passed === 1);
   const [showHidden, setShowHidden] = useState(false);
   // The copies running, by what they copy (a check, or one of its groups): another check's isn't held up by one.
   const [copies, setCopies] = useState<ReadonlySet<string>>(() => new Set());
@@ -703,6 +704,7 @@ export function IssuesScreen() {
             analysing={analysing}
             canAnalyse={canAnalyse}
             onAnalyse={analyse}
+            crawlId={crawlId}
           />
         </div>
         <div

@@ -221,7 +221,8 @@ async function landsOn(page: Page, link: Locator): Promise<number> {
     })
     .toBe(true);
   await page.goBack();
-  await expect(main(page).getByText('Live', { exact: true })).toBeVisible();
+  // The crawl is paused while these are read: the title's badge says so, not "Live" (the UX round's H-22).
+  await expect(main(page).locator('h1').getByText('Paused', { exact: true })).toBeVisible();
   return last;
 }
 
@@ -232,6 +233,7 @@ test('while a crawl is paused, every live figure lands on exactly its count in t
   await expect.poll(() => crawled(page), { timeout: 60_000 }).toBeGreaterThan(200);
   await page.keyboard.press('F7');
   await expect(main(page).getByText('The crawl is paused.', { exact: false })).toBeVisible();
+  await expect(main(page).getByText('Live', { exact: true })).toBeHidden();
   // The requests on their way when it paused land: then nothing moves.
   let before = -1;
   await expect

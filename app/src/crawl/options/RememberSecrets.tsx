@@ -9,17 +9,27 @@ export interface RememberSecretsProps {
   mode: 'simple' | 'advanced';
   /** What is remembered: the crawl's secrets, or a Shopify signature alone (said of it). */
   subject?: 'secrets' | 'signature' | undefined;
+  /** Nothing to remember yet (no signature typed): shown, so the form's words about it hold, and not to be ticked. */
+  disabled?: boolean | undefined;
 }
 
 /**
  * The option to remember the secrets a crawl is given (docs/v2-ui-architecture.md, "Secrets"): off until the user
  * ticks it, and saying what happens either way: kept in Windows Credential Manager, or for this session only.
  */
-export function RememberSecrets({ checked, onCheckedChange, mode, subject }: RememberSecretsProps) {
+export function RememberSecrets({ checked, onCheckedChange, mode, subject, disabled = false }: RememberSecretsProps) {
   const words = rememberWords(mode, checked, subject);
   return (
     <div data-setting="rememberSecrets">
-      <Checkbox label={words.label} description={words.help} checked={checked} onCheckedChange={onCheckedChange} />
+      <Checkbox
+        label={words.label}
+        description={
+          disabled ? 'Paste a signature above, and it can be remembered for the next crawl of this store.' : words.help
+        }
+        checked={disabled ? false : checked}
+        disabled={disabled}
+        onCheckedChange={onCheckedChange}
+      />
     </div>
   );
 }

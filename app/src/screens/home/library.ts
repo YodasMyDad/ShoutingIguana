@@ -2,10 +2,10 @@
 // each site showing its latest crawl with the older ones folded under it, and the crawls running now pinned above as
 // cards. What a row says of its crawl and which actions it offers, from the library's item and its live status. Pure.
 import type { CrawlListItem, CrawlStatus } from '../../api/types';
-import { crawlControls, type CrawlControls } from '../../crawl/status';
+import { crawlControls, crawledUrls, type CrawlControls } from '../../crawl/status';
 import { formatCountOf } from '../../lib/format';
 import type { CompareChoice } from '../../settings/compareWith';
-import { siteGroups, type SiteGroup } from '../../simple/home/sites';
+import { siteGroups, siteName, type SiteGroup } from '../../simple/home/sites';
 import { notComparableReason } from '../compare/comparing';
 
 export interface LibraryView {
@@ -187,4 +187,63 @@ export function compareAction(
     latestId: latest.id,
     choice: item.id === latest.previous?.id ? 'previous' : item.id,
   };
+}
+
+// ------------------------------------------------------------------------------------------------------------ Sorting
+
+/** The library's columns that sort (the audit of 2026-11-19, H-05): each site by its latest crawl. */
+export type LibrarySortKey = 'site' | 'urls' | 'score' | 'started';
+
+export interface LibrarySort {
+  key: LibrarySortKey;
+  descending: boolean;
+}
+
+/** As the library has always opened: the site whose latest crawl is newest first. */
+export const DEFAULT_LIBRARY_SORT: LibrarySort = { key: 'started', descending: true };
+
+/**
+ * The sort after a header is pressed: its column in the order that's asked for first (a name A to Z; a number largest
+ * first, a score best first, a date newest first), and the other way round when it's pressed again.
+ */
+export function librarySort(current: LibrarySort, key: LibrarySortKey): LibrarySort {
+  if (current.key === key) return { key, descending: !current.descending };
+  return { key, descending: key !== 'site' };
+}
+
+function sortValue(item: CrawlListItem, key: LibrarySortKey): string | number | null {
+  switch (key) {
+    case 'site':
+      return siteName(item).toLowerCase();
+    case 'urls':
+      return crawledUrls(item);
+    case 'score':
+      return item.score?.value ?? null;
+    default: {
+      const started = item.startedAt ? Date.parse(item.startedAt) : Number.NaN;
+      return Number.isNaN(started) ? null : started;
+    }
+  }
+}
+
+/**
+ * The sites in a sort's order, by their latest crawl. A site with nothing to sort by (no score, never started) is
+ * last whichever way the column runs; ties keep the library's own order. The default sort is that order itself.
+ */
+export function sortSites(sites: readonly SiteGroup[], sort: LibrarySort): SiteGroup[] {
+  if (sort.key === DEFAULT_LIBRARY_SORT.key && sort.descending === DEFAULT_LIBRARY_SORT.descending) return [...sites];
+  const valued = sites.map((group, index) => ({ group, index, value: sortValue(group.latest, sort.key) }));
+  valued.sort((a, b) => {
+    if (a.value === null || b.value === null) {
+      if (a.value === b.value) return a.index - b.index;
+      return a.value === null ? 1 : -1;
+    }
+    const order =
+      typeof a.value === 'string' && typeof b.value === 'string'
+        ? a.value.localeCompare(b.value)
+        : (a.value as number) - (b.value as number);
+    if (order === 0) return a.index - b.index;
+    return sort.descending ? -order : order;
+  });
+  return valued.map((entry) => entry.group);
 }
