@@ -13,7 +13,7 @@ import {
   type GroupPlace,
 } from '../../api/queries';
 import type { Check } from '../../api/types';
-import { affectedWords, partOfAffected, showInUrlsWords } from '../../crawl/checkSubject';
+import { affectedCount, affectedWords, partOfAffected, showInUrlsWords } from '../../crawl/checkSubject';
 import { ErrorState } from '../../feedback/ErrorState';
 import { notifyResult } from '../../feedback/notify';
 import { NO_DETAIL } from '../../grid/filterSentence';
@@ -41,15 +41,12 @@ import { revealInScrollParent } from '../../lib/scroll';
 import { useFontsLoaded } from '../../lib/useFontsLoaded';
 import { Badge } from '../../ui/Badge';
 import { Callout } from '../../ui/Callout';
-import { FilterChip } from '../../ui/FilterChip';
 import { Icon } from '../../ui/Icon';
 import { ImageThumb } from '../../ui/ImageThumb';
 import { isBrokenImage } from '../../ui/imageFacts';
 import { ShareBar } from '../../ui/ShareBar';
 import { TextLink } from '../../ui/TextLink';
-import { Url } from '../../ui/Url';
 import { urlDisplay } from '../../ui/urlText';
-import { followWords } from '../../inspector/links';
 import { StatusCode } from '../../ui/StatusCode';
 import { linkTextMeasure } from '../links/linkColumns';
 import { linksOfUrl } from '../links/linkPlaces';
@@ -72,16 +69,28 @@ import { checkUrlsReader, copyUrls } from './copyUrls';
 import { evidenceOf, groupRowColumns } from './evidenceColumns';
 import { saysShownAt, useGroupShownAt } from './useShownAt';
 import { useTemplateLink, useWhereFoundOf } from './useWhereFound';
-import { WhereFoundLine } from './WhereFoundLine';
+import { groupColumnWidths } from './groupColumns';
+import { GRID_FOOT_HEIGHT, ISSUE_KEY_HINTS, leastFrameHeight } from './issueGrid';
+import { IssueUrl } from './IssueUrl';
+import { URL_OPEN_ROOM } from './issueUrlWidth';
+import { checkPlace, keepCheckPlace } from './issuesPlace';
+import { useKeptScroll } from './useKeptScroll';
+import { MoreToggle, ReferenceFacts, ReferenceOther, type ReferenceView } from './ReferenceCells';
+import { openAtLink } from './referenceWords';
+import { OPEN_ALL_ROWS } from './rowsTree';
 import {
+  SAME_PAGE,
   SOURCES_SHOWN,
-  allWords,
   detailSaysMore,
   foundOnRows,
-  linkPlaceWords,
+  groupUrlHeader,
+  linkFactsOnly,
+  moreReferences,
   referencesOf,
+  targetLead,
   targetRows,
-  templateLinkWords,
+  sameLink,
+  templateThingWords,
   whereRowText,
   type WhereRow,
 } from './whereFound';
@@ -104,8 +113,6 @@ type TreeRow =
 const groupRows = new WeakMap<IssueGroup, TreeRow>();
 const pageRows = new WeakMap<IssueRow, TreeRow>();
 
-/** What a page's address keeps beside it in its group's row: its open button and the gap before it. */
-const URL_OPEN_ROOM = 26;
 const whereTreeRows = new WeakMap<WhereRow, TreeRow>();
 const moreRows = new WeakMap<IssueGroup, TreeRow>();
 
@@ -124,9 +131,6 @@ export interface GroupsCompare {
   compareWith: string;
   period: ComparedPeriod;
 }
-
-const THEN_WIDTH = 88;
-const MOVE_WIDTH = 104;
 
 function treeRowKey(row: TreeRow): string {
   switch (row.kind) {
@@ -153,28 +157,10 @@ function wrap<K extends object>(cache: WeakMap<K, TreeRow>, key: K, make: () => 
 /** The placement query's stand-in while no group is open (it doesn't run then). */
 const NO_GROUP: CheckGroupRef = { detail: null, relatedUrlId: null };
 
-const PAGES_WIDTH = 88;
-const SHARE_WIDTH = 176;
-/** A group's file size, for a check of oversized files: "1.8 MB". */
-const SIZE_WIDTH = 88;
-/** An image's own pixels, "4000×3000", and the size its pages show it at, "400×300 (10×)": figures, never cut. */
-const PIXELS_WIDTH = 112;
-const SHOWN_AT_WIDTH = 124;
-/** Beside an image's figures, the count and the share bar take less, so the image's address keeps some room. */
-const IMAGE_PAGES_WIDTH = 68;
-const IMAGE_SHARE_WIDTH = 120;
-/**
- * A grid of images narrower than this leaves out the share bar: the count beside it says as much, and the image's
- * address and figures need the room (a 1280 px window at 150%).
- */
-const IMAGE_SHARE_FROM = 760;
 /** An image's group's words narrower than this say its address alone: its type is in its tooltip and the callout. */
 const IMAGE_FACTS_ROOM = 280;
 /** A group's words narrower than this: its "Likely template" badge is said, not drawn (the callout shows it). */
 const NARROW_ROOM = 420;
-const MIN_TEXT_WIDTH = 200;
-/** The frame's edges and the room a scrollbar may take. */
-const FRAME_SLACK = 24;
 /**
  * A group without a detail, in the grid's Detail column: the chips' "Detail is none", in a cell's case; for a check
  * whose detail names what a page has, what the page lacks.
@@ -182,15 +168,13 @@ const FRAME_SLACK = 24;
 function noDetailShown(check: Pick<Check, 'id'>): string {
   return check.id === 'h1-missing' ? 'No H1' : 'None';
 }
-/** A group's chip this short keeps its words beside the check's. */
-const SHORT_CHIP = 32;
+/** A group that names no URL (a link to nowhere, a page that names none): said in place of one. */
+const NO_URL = 'No URL named';
 
-/** What the "Related URL" means here is the check's to say; the column says only that it's the other URL involved. */
-function relatedWords(group: IssueGroup, siteOrigin: string | null): string {
-  return group.relatedUrl ? urlDisplay(group.relatedUrl, siteOrigin).shown : 'No other URL';
-}
+/** A header inside a sentence: its first letter small, the rest as written ("linked URL", never "linked url"). */
+const lowerFirst = (words: string) => words.charAt(0).toLowerCase() + words.slice(1);
 
-/** The first column's header for a check grouped by URL: the image, the shared title, or the other URL. */
+/** The first column's header for a check grouped by URL: the image, the shared title, or what the other URL is. */
 function relatedHeader(check: Check, shared: boolean): string {
   if (shared) {
     const evidence = evidenceOf(check);
@@ -199,7 +183,7 @@ function relatedHeader(check: Check, shared: boolean): string {
     if (evidence.includes('h1')) return 'Shared H1';
     return 'Shared text';
   }
-  return check.id.startsWith('image-') ? 'Image' : 'Related URL';
+  return groupUrlHeader(check);
 }
 
 /**
@@ -280,6 +264,8 @@ export interface IssueGroupsProps {
   onFollow?: ((urlId: number) => void) | undefined;
   /** The fix loop: each group's URLs then and how it moved. Left out, none. */
   compare?: GroupsCompare | null | undefined;
+  /** The keys said under the rows; false in a window too short to spare a row for them. */
+  legend?: boolean | undefined;
 }
 
 /**
@@ -300,6 +286,7 @@ export function IssueGroups({
   onInspect,
   onFollow,
   compare = null,
+  legend = true,
 }: IssueGroupsProps) {
   const compareWith = compare?.compareWith ?? null;
   const queryClient = useQueryClient();
@@ -351,9 +338,10 @@ export function IssueGroups({
     if (missing) dropMissing(missing);
   }, [missing, openRef?.detail, openRef?.relatedUrlId]);
 
-  // A check's only group is what there is to see: it opens by itself, once, as the route names no group. Closed after,
-  // it stays closed.
-  const onlyGroup = groupCount === 1 ? groups.firstPage?.rows[0] : undefined;
+  // A check of a few groups opens its first by itself (the largest, or the one in the template), once, as the route
+  // names no group, so its rows are in view on arrival (A-06). Closed after, it stays closed.
+  const onlyGroup =
+    groupCount !== null && groupCount >= 1 && groupCount <= OPEN_ALL_ROWS ? groups.firstPage?.rows[0] : undefined;
   const openedByItself = useRef(open !== undefined);
   useEffect(() => {
     if (openedByItself.current || open !== undefined || !onlyGroup) return;
@@ -383,7 +371,17 @@ export function IssueGroups({
   // One of the open group's pages opened to show where it's found (a check whose URLs are referred to) or what it names
   // (a check whose pages hold the bad references): its rows follow it, read when it opens.
   const references = referencesOf(check);
-  const [expanded, setExpanded] = useState<ExpandedPage | null>(null);
+  const [expanded, setExpandedState] = useState<ExpandedPage | null>(
+    () => checkPlace(crawlId, check.id).expanded ?? null,
+  );
+  // Kept with the check for the session, so Back from Links finds the row open as it was left (A-07).
+  const setExpanded = useCallback(
+    (next: ExpandedPage | null) => {
+      setExpandedState(next);
+      keepCheckPlace(crawlId, check.id, { expanded: next });
+    },
+    [crawlId, check.id],
+  );
   const openKey = openGroup ? groupKey(openGroup.group) : null;
   const expandedId = openKey !== null && expanded?.group === openKey ? expanded.page : null;
   const expandedAt = expandedId !== null && loadedRows ? loadedRows.findIndex((row) => row.id === expandedId) : -1;
@@ -451,12 +449,14 @@ export function IssueGroups({
   // is already in view, so this moves nothing.
   const model = useRef<RowWindowModel | null>(null);
   const frame = useRef<HTMLDivElement | null>(null);
+  const keepScroll = useKeptScroll(crawlId, check.id, queryKey.join('|'));
   const measureFrame = useCallback(
     (element: HTMLDivElement | null) => {
       frame.current = element;
       measure(element);
+      keepScroll(element);
     },
-    [measure],
+    [measure, keepScroll],
   );
   useEffect(() => {
     if (openIndex === null) return undefined;
@@ -592,6 +592,7 @@ export function IssueGroups({
       openKey,
       ownTarget,
       namesOthers,
+      setExpanded,
     ],
   );
 
@@ -601,8 +602,15 @@ export function IssueGroups({
       const { where: entry, page } = row;
       if (entry.kind === 'source') onInspect(entry.link.id);
       else if (entry.kind === 'target') onInspect(entry.target.id);
-      else if (entry.kind === 'start' || (entry.kind === 'all' && entry.of === 'targets')) onInspect(page.id);
-      else if (entry.kind === 'sitemap') {
+      else if (entry.kind === 'start') onInspect(page.id);
+      else if (entry.kind === 'all' && entry.of === 'targets') {
+        void navigate({
+          to: '/crawls/$crawl/links',
+          params: { crawl: crawlId },
+          search:
+            check.category === 'images' ? imagesOfPage(page.id) : { filter: linksOfUrl('outlinks', page.id, 'all') },
+        });
+      } else if (entry.kind === 'sitemap') {
         void navigate({
           to: '/crawls/$crawl/sitemaps/{-$sitemap}',
           params: { crawl: crawlId, sitemap: String(entry.sitemap.id) },
@@ -615,7 +623,7 @@ export function IssueGroups({
         });
       }
     },
-    [onInspect, navigate, crawlId],
+    [onInspect, navigate, crawlId, check.category],
   );
 
   const showAll = useCallback(
@@ -637,34 +645,30 @@ export function IssueGroups({
   // A check of oversized files: each group's file size, the order its groups come in; an image's own pixels, and the
   // size its pages show it at, each in a column of its own so no figure is ever cut.
   const showSize = grouping === 'relatedUrl' && namesFileSize(check.targetFacts);
-  const showPixels = grouping === 'relatedUrl' && (check.targetFacts ?? []).includes('pixelWidth');
+  // An image's pixels, where the crawl recorded any: a column of dashes says nothing (A-16).
+  const pixelsRecorded = (groups.firstPage?.rows ?? []).some((group) => group.related?.pixelWidth != null);
+  const namesPixels = grouping === 'relatedUrl' && (check.targetFacts ?? []).includes('pixelWidth');
+  const showPixels = namesPixels && (pixelsRecorded || groups.firstPage === undefined);
   const showShownAt = grouping === 'relatedUrl' && saysShownAt(check);
   const images = groupsAreImages(check);
-  const pagesWidth = images ? IMAGE_PAGES_WIDTH : PAGES_WIDTH;
   // A share bar compares groups: with one group, or groups of one page each, every bar says the same and none says
   // anything the count doesn't.
   const firstGroups = groups.firstPage?.rows ?? [];
   const sharesSaySomething = groupCount !== 1 && firstGroups.some((group) => group.pages > 1);
-  const shareWidth = !sharesSaySomething
-    ? 0
-    : images
-      ? (width ?? 720) < IMAGE_SHARE_FROM
-        ? 0
-        : IMAGE_SHARE_WIDTH
-      : SHARE_WIDTH;
+  // The words get what the figures leave, the comparison's two columns among them (A-02).
+  const sized = groupColumnWidths({
+    width: width ?? 720,
+    images,
+    share: sharesSaySomething,
+    size: showSize,
+    pixels: showPixels,
+    shownAt: showShownAt,
+    compare: compare !== null,
+  });
+  const { words: room, pages: pagesWidth, share: shareWidth } = sized;
   const inColumns = useMemo(
     () => [...(showSize ? ['sizeBytes'] : []), ...(showPixels ? ['pixelWidth', 'pixelHeight'] : [])],
     [showSize, showPixels],
-  );
-  const room = Math.max(
-    images ? MIN_TEXT_WIDTH - 60 : MIN_TEXT_WIDTH,
-    (width ?? 720) -
-      pagesWidth -
-      shareWidth -
-      (showSize ? SIZE_WIDTH : 0) -
-      (showPixels ? PIXELS_WIDTH : 0) -
-      (showShownAt ? SHOWN_AT_WIDTH : 0) -
-      FRAME_SLACK,
   );
   const columns = useMemo<GridColumn<TreeRow>[]>(() => {
     const text = (row: TreeRow) => (row.kind === 'group' ? row.group : null);
@@ -691,7 +695,8 @@ export function IssueGroups({
     const relatedCell = (group: IssueGroup) => {
       // What the pages share names the group: its first page is one of the pages under it, said there.
       if (group.sharedText) return <span className="min-w-0 truncate">{quoted(group.sharedText, 120)}</span>;
-      if (!group.relatedUrl) return <span className="text-text-muted">No other URL</span>;
+      if (!group.relatedUrl) return <span className="text-text-muted">{NO_URL}</span>;
+      const relatedId = group.relatedUrlId;
       const status = relatedStatus(group, check);
       const facts = images && room < IMAGE_FACTS_ROOM ? '' : relatedFactsWords(group, check, siteOrigin, inColumns);
       // The URL first, as much of it as fits in three fifths; what it is takes the rest, cut at its end. An image's
@@ -699,14 +704,13 @@ export function IssueGroups({
       return (
         <span className="flex min-w-0 items-center gap-2">
           {images ? <GroupThumb group={group} /> : null}
-          <Url
+          <IssueUrl
             url={group.relatedUrl}
             siteOrigin={siteOrigin}
-            copyable={false}
-            tabbable={false}
+            onInspect={relatedId === null ? undefined : () => onInspect(relatedId)}
             // An image is named by its file: its name leads, never cut in the middle.
             label={images ? 'file' : 'address'}
-            className={(facts || status) && !images ? 'max-w-3/5 min-w-0 shrink-0' : 'min-w-0 flex-1'}
+            className={(facts || status) && !images ? 'max-w-3/5 shrink-0' : undefined}
           />
           {status ? (
             <StatusCode code={status.code} {...(status.reason ? { reason: status.reason } : {})} className="shrink-0" />
@@ -744,7 +748,7 @@ export function IssueGroups({
               cell: (row) => {
                 const group = text(row);
                 if (!group) return null;
-                return groupTitle(row, relatedCell(group), relatedText(group) || 'No other URL');
+                return groupTitle(row, relatedCell(group), relatedText(group) || NO_URL);
               },
               text: (row) =>
                 row.kind === 'group'
@@ -780,7 +784,7 @@ export function IssueGroups({
               ? [
                   {
                     id: 'relatedUrl',
-                    header: 'Related URL',
+                    header: groupUrlHeader(check),
                     width: room - Math.round(room * 0.55),
                     cell: (row: TreeRow) => (row.kind === 'group' ? relatedCell(row.group) : null),
                     text: (row: TreeRow) =>
@@ -796,7 +800,7 @@ export function IssueGroups({
             {
               id: 'pixels',
               header: 'Pixels',
-              width: PIXELS_WIDTH,
+              width: sized.pixels,
               numeric: true,
               headerHint: 'The image file’s own width and height, read from the file',
               cell: (row: TreeRow) =>
@@ -818,7 +822,7 @@ export function IssueGroups({
             {
               id: 'shownAt',
               header: 'Shown at',
-              width: SHOWN_AT_WIDTH,
+              width: sized.shownAt,
               numeric: true,
               headerHint:
                 'The largest size the group’s first pages show the image at, from their width and height attributes, and how many times wider the file is',
@@ -833,7 +837,7 @@ export function IssueGroups({
             {
               id: 'size',
               header: 'File size',
-              width: SIZE_WIDTH,
+              width: sized.size,
               numeric: true,
               headerHint: 'The image file’s size where its redirects end: the groups come largest first',
               cell: (row: TreeRow) =>
@@ -866,7 +870,7 @@ export function IssueGroups({
             {
               id: 'then',
               header: changeDate(compare.period.iso) || 'Then',
-              width: THEN_WIDTH,
+              width: sized.then,
               numeric: true,
               cell: (row: TreeRow) =>
                 row.kind === 'group' && row.group.change
@@ -880,7 +884,7 @@ export function IssueGroups({
             {
               id: 'move',
               header: 'Change',
-              width: MOVE_WIDTH,
+              width: sized.move,
               cell: (row: TreeRow) => {
                 if (row.kind !== 'group' || !row.group.change) return null;
                 const cell = groupChangeCell(row.group.change, row.group.pages, compare.period);
@@ -931,6 +935,8 @@ export function IssueGroups({
     total,
     words,
     compare,
+    sized,
+    onInspect,
   ]);
   // The columns as the user laid them out (resized, moved, pinned), kept for this grid with the preferences.
   const laid = useColumnLayout('issues.groups', columns);
@@ -956,16 +962,19 @@ export function IssueGroups({
     const px = (width: number) => `${Math.ceil(width) + 1}px`;
     return [
       references === 'none' ? null : 'calc(var(--chevron-box) - var(--space-2))',
-      `minmax(min(${px(url)}, 33%), min(${px(url)}, 60%))`,
+      `minmax(min(${px(url)}, 30%), min(${px(url)}, 45%))`,
       facts > 0 ? `minmax(min(${px(facts)}, 10%), min(${px(facts)}, 30%))` : '0px',
       'minmax(0, 1fr)',
       'fit-content(25%)',
-      'auto',
     ]
       .filter((track) => track !== null)
       .join(' ');
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the fonts arriving change what's measured
   }, [loadedRows, check, siteOrigin, references, fontsLoaded]);
+  const view = useMemo<ReferenceView>(
+    () => ({ crawlId, check, siteOrigin, onInspect }),
+    [crawlId, check, siteOrigin, onInspect],
+  );
   const spanRow = useCallback(
     (row: TreeRow): ReactNode => {
       if (row.kind === 'group') return null;
@@ -982,12 +991,13 @@ export function IssueGroups({
             ) : (
               <span aria-hidden="true" />
             )}
-            <Url
-              url={row.row.url ?? ''}
+            <PageUrl
+              crawlId={crawlId}
+              check={check}
+              row={row.row}
+              group={row.group}
               siteOrigin={siteOrigin}
-              copyable={false}
-              tabbable={false}
-              className="min-w-0"
+              onInspect={onInspect}
             />
             <span className="si-row-evidence min-w-0 truncate text-text-secondary" title={evidence || undefined}>
               {evidence}
@@ -995,12 +1005,13 @@ export function IssueGroups({
             {references === 'none' ? (
               <span aria-hidden="true" />
             ) : (
-              <WhereFoundLine
-                crawlId={crawlId}
-                check={check}
-                urlId={row.row.id}
-                siteOrigin={siteOrigin}
+              <PageWhere
+                view={view}
+                row={row.row}
                 first={row.group.relatedUrlId}
+                template={row.group.likelyTemplate ? row.group : null}
+                opens={opens}
+                open={row.row.id === expandedId}
               />
             )}
             {row.row.detail &&
@@ -1013,30 +1024,12 @@ export function IssueGroups({
             ) : (
               <span aria-hidden="true" />
             )}
-            {/* Inspects the page, as Enter and a double-click on its row do. */}
-            <button
-              type="button"
-              tabIndex={-1}
-              aria-label={`Inspect ${row.row.url ?? 'the page'}`}
-              title="Inspect it"
-              className="-me-1 inline-flex shrink-0 cursor-pointer rounded-sm p-0.5 text-text-muted hover:bg-surface-hover hover:text-text"
-              onClick={() => onInspect(row.row.id)}
-            >
-              <Icon icon={ChevronRight} size="sm" />
-            </button>
           </span>
         );
       }
-      if (row.kind === 'where') return <WhereCell row={row} crawlId={crawlId} siteOrigin={siteOrigin} />;
+      if (row.kind === 'where') return <WhereCell row={row} view={view} />;
       const { group } = row;
-      // The group's own parts, as the URL grid's chips will read them: its related URL, or its detail and any URL.
-      const parts =
-        grouping === 'relatedUrl'
-          ? [{ field: 'Related URL', value: relatedWords(group, siteOrigin) }]
-          : [
-              { field: 'Detail', value: group.detail ?? NO_DETAIL },
-              ...(group.relatedUrl ? [{ field: 'Related URL', value: relatedWords(group, siteOrigin) }] : []),
-            ];
+      // The way to all of the group's rows, in URLs: the link says what it opens (A-13).
       return (
         <span className="flex min-w-0 items-center gap-2 overflow-hidden">
           <TextLink
@@ -1048,23 +1041,22 @@ export function IssueGroups({
           >
             {showInUrlsWords(check, group.pages)}
           </TextLink>
-          <FilterChip field="Check" value={check.title} variant="preview" size="sm" truncate />
-          {/* The group's chips are usually short ("/", "HTTP 404"): they keep their words, and the check's gives way. */}
-          {parts.map((part) => (
-            <FilterChip
-              key={part.field}
-              field={part.field}
-              value={part.value}
-              variant="preview"
-              size="sm"
-              truncate
-              className={part.value.length <= SHORT_CHIP ? 'shrink-0' : undefined}
-            />
-          ))}
         </span>
       );
     },
-    [crawlId, check, grouping, siteOrigin, references, linesSayDetail, ownTarget, namesOthers, onInspect, pageColumns],
+    [
+      crawlId,
+      check,
+      siteOrigin,
+      references,
+      linesSayDetail,
+      ownTarget,
+      namesOthers,
+      onInspect,
+      pageColumns,
+      view,
+      expandedId,
+    ],
   );
 
   // The insight: the open group when it's probably the template's, else the largest group that is.
@@ -1077,24 +1069,44 @@ export function IssueGroups({
   // The row as it was when the menu opened: rows can move under a running crawl while it is open.
   const menuRow = rowMenu.state?.menu.row;
   const shown = groupCount === null ? Math.min(Math.max(total, 1), 6) : Math.max(rows, 1);
-  const height = shown * rowHeight + headerHeight + 2;
+  const height = shown * rowHeight + headerHeight + (legend ? GRID_FOOT_HEIGHT : 0) + 2;
+  // Where the cursor was when the check was left, in this tree.
+  const treeKey = queryKey.join('|');
+  const start = checkPlace(crawlId, check.id).cursor;
+  const startAt = start?.grid === treeKey ? start : null;
 
   if (groups.error && groupCount === null) {
     return <ErrorState error={groups.error} onRetry={groups.refetch} compact />;
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex min-h-0 flex-col gap-3">
       {insight ? (
-        <TemplateCallout crawlId={crawlId} group={insight} total={total} check={check} siteOrigin={siteOrigin} />
+        <div data-template-callout>
+          <TemplateCallout
+            crawlId={crawlId}
+            group={insight}
+            total={total}
+            check={check}
+            siteOrigin={siteOrigin}
+            onInspect={onInspect}
+          />
+        </div>
       ) : null}
       {rowsFailed ? (
         <ErrorState error={firstRows.error} title={words.unread} onRetry={() => void firstRows.refetch()} compact />
       ) : null}
-      <div ref={measureFrame} className={evidenceFrameClass(shown)} style={{ height }}>
+      {namesPixels && !showPixels ? (
+        <p className="text-13 text-text-secondary">The images’ pixel sizes weren’t recorded on this crawl.</p>
+      ) : null}
+      <div
+        ref={measureFrame}
+        className={evidenceFrameClass(shown)}
+        style={{ height, minHeight: Math.min(height, leastFrameHeight(rowHeight, headerHeight, legend)) }}
+      >
         <GridCore<TreeRow>
-          key={queryKey.join('|')}
-          label={`${check.title}: ${words.named}, grouped by ${grouping === 'relatedUrl' ? 'related URL' : 'detail'}`}
+          key={treeKey}
+          label={`${check.title}: ${words.named}, grouped by ${grouping === 'relatedUrl' ? lowerFirst(relatedHeader(check, shared)) : 'cause'}`}
           columns={laid.columns}
           columnLayout={laid.columnLayout}
           rowCount={groupCount === null ? null : rows}
@@ -1113,14 +1125,23 @@ export function IssueGroups({
             else if (row?.kind === 'more') showAll(row.group);
           }}
           onActiveRowChange={(index) => {
-            const row = onFollow && index !== null ? getRow(index) : undefined;
-            const followed = row ? urlIdOf(row) : null;
+            const row = index !== null ? getRow(index) : undefined;
+            if (index !== null) {
+              keepCheckPlace(crawlId, check.id, {
+                cursor: { grid: treeKey, row: index, key: row ? treeRowKey(row) : undefined },
+              });
+            }
+            const followed = row && onFollow ? urlIdOf(row) : null;
             if (followed !== null) onFollow?.(followed);
           }}
           rowKey={treeRowKey}
-          openUrlOf={(row) => pageOf(row)?.url ?? null}
+          {...(startAt
+            ? { startRow: startAt.row, ...(startAt.key === undefined ? {} : { startKey: startAt.key }) }
+            : {})}
+          openUrlOf={(row) => pageOf(row)?.url ?? groupUrlOf(row)?.url ?? null}
           onContextMenu={rowMenu.onContextMenu}
           busy={groups.isRefreshing}
+          {...(legend ? { keyHints: ISSUE_KEY_HINTS } : {})}
           className="si-issue-tree flex-1 rounded-md border border-border"
         />
       </div>
@@ -1133,6 +1154,12 @@ export function IssueGroups({
         foundIn={
           menuRow?.kind === 'page' && references === 'sources' ? linksOfUrl('inlinks', menuRow.row.id, 'all') : null
         }
+        linksOf={
+          menuRow?.kind === 'page' && references === 'targets' && check.category !== 'images'
+            ? linksOfUrl('outlinks', menuRow.row.id, 'all')
+            : null
+        }
+        isPage={check.subject !== 'url'}
         imagesIn={menuRow?.kind === 'page' && check.category === 'images' ? imagesOfPage(menuRow.row.id) : null}
         recheck={{ checkId: check.id, idOf: urlIdOf, fullCheck: !recheckable(check) }}
         group={
@@ -1141,6 +1168,7 @@ export function IssueGroups({
                 words: showInUrlsWords(check, menuRow.group.pages),
                 filter: groupFilter(check.id, groupRefOf(menuRow.group)),
                 urls: menuRow.group.pages,
+                url: menuRow.kind === 'group' ? groupUrlOf(menuRow) : null,
                 onCopyUrls: () =>
                   void copyUrls({
                     read: checkUrlsReader(crawlId, check.id, groupRefOf(menuRow.group)),
@@ -1170,119 +1198,161 @@ function urlIdOf(row: TreeRow): number | null {
   return pageOf(row)?.id ?? null;
 }
 
-/**
- * A row under a page expanded to show where it's found: the page linking to it with where on that page the link is,
- * what it says and whether it's followed; the sitemap listing it; its being the start URL; a URL the page names, with
- * its status; or the way on to all of them.
- */
-function WhereCell({
-  row,
-  crawlId,
-  siteOrigin,
-}: {
-  row: Extract<TreeRow, { kind: 'where' }>;
-  crawlId: string;
-  siteOrigin: string | null;
-}) {
-  const { where, page } = row;
-  switch (where.kind) {
-    case 'source': {
-      const place = linkPlaceWords(where.link);
-      const follow = followWords(where.link);
-      return (
-        <span className="flex min-w-0 items-center gap-3" data-where="source">
-          <span className="shrink-0 text-text-muted">Linked from</span>
-          <Url
-            url={where.link.url}
-            siteOrigin={siteOrigin}
-            copyable={false}
-            tabbable={false}
-            className="min-w-0 flex-1"
-          />
-          {place ? (
-            <span className="max-w-1/2 shrink truncate text-text-muted" title={place}>
-              {place}
-            </span>
-          ) : null}
-          {follow ? <span className="shrink-0 text-text-muted">{follow}</span> : null}
-        </span>
-      );
-    }
-    case 'target': {
-      // The check's facts where it says them (evidence), else where on the page the link is.
-      const place = where.facts ?? linkPlaceWords(where.target);
-      return (
-        <span className="flex min-w-0 items-center gap-3" data-where="target">
-          <span className="shrink-0 text-text-muted">Names</span>
-          <Url
-            url={where.target.url}
-            siteOrigin={siteOrigin}
-            copyable={false}
-            tabbable={false}
-            className="min-w-0 flex-1"
-          />
-          <StatusCode
-            code={where.target.statusCode}
-            {...(where.target.statusCode === null ? { reason: noStatusWords(where.target.outcome) } : {})}
-            className="shrink-0"
-          />
-          {place ? (
-            <span className="max-w-3/5 shrink truncate text-text-muted" title={place}>
-              {place}
-            </span>
-          ) : null}
-        </span>
-      );
-    }
-    case 'sitemap':
-      return (
-        <span className="flex min-w-0 items-center gap-3" data-where="sitemap">
-          <span className="shrink-0 text-text-muted">Listed in the sitemap</span>
-          <Url
-            url={where.sitemap.url}
-            siteOrigin={siteOrigin}
-            copyable={false}
-            tabbable={false}
-            className="min-w-0 flex-1"
-          />
-        </span>
-      );
-    case 'start':
-      return (
-        <span className="text-text-muted" data-where="start">
-          The URL the crawl started from
-        </span>
-      );
-    case 'all':
-      return (
-        <span className="flex min-w-0 items-center" data-where="all">
-          {where.of === 'links' ? (
-            <TextLink
-              to="/crawls/$crawl/links"
-              params={{ crawl: crawlId }}
-              search={{ filter: linksOfUrl('inlinks', page.id, 'all') }}
-              tabIndex={-1}
-            >
-              {allWords(where)}
-            </TextLink>
-          ) : (
-            <span className="text-text-muted">{allWords(where)}</span>
-          )}
-        </span>
-      );
-    case 'nothing':
-      return (
-        <span className="text-text-muted" data-where="nothing">
-          {where.words}
-        </span>
-      );
-  }
+/** The URL a group is of (the broken link, the image), which its row's menu and Shift+Enter act on; null for any other row. */
+function groupUrlOf(row: TreeRow): { id: number; url: string } | null {
+  if (row.kind !== 'group' || row.group.sharedText) return null;
+  const { relatedUrl, relatedUrlId } = row.group;
+  return relatedUrl && relatedUrlId !== null ? { id: relatedUrlId, url: relatedUrl } : null;
 }
 
 /**
- * "The same related URL on 264 of 265 pages, so it's likely in the site's template: one fix clears the group." Built
- * from what the engine says (`likelyTemplate`, the group's count and the check's total), never more, and in pages only
- * for a check that flags nothing else.
+ * A page's address in its group's row: a link that inspects it. Under a group of the URL its issue names, its open
+ * button opens the page at its link to that URL (rule 4), once that link's words are read.
+ */
+function PageUrl({
+  crawlId,
+  check,
+  row,
+  group,
+  siteOrigin,
+  onInspect,
+}: {
+  crawlId: string;
+  check: Check;
+  row: IssueRow;
+  group: IssueGroup;
+  siteOrigin: string | null;
+  onInspect: (urlId: number) => void;
+}) {
+  const targets = referencesOf(check) === 'targets';
+  const where = useWhereFoundOf(crawlId, check, targets ? row.id : null);
+  const own = targets ? where.targets?.targets.find((target) => target.id === group.relatedUrlId) : undefined;
+  return (
+    <IssueUrl
+      url={row.url ?? ''}
+      siteOrigin={siteOrigin}
+      onInspect={() => onInspect(row.id)}
+      {...(own && row.url ? openAtLink(row.url, own.text, own) : {})}
+    />
+  );
+}
+
+/**
+ * Where a page of an open group is found, in its row, as parts (rule 3): for a URL other pages refer to, the first
+ * page linking to it (a link, opened at the link's words), what the link says and where it is, then "+2 more", which
+ * opens the rest under the row; for a page under a group of the URL it names, how it links to that URL.
+ */
+function PageWhere({
+  view,
+  row,
+  first,
+  template,
+  opens,
+  open,
+}: {
+  view: ReferenceView;
+  row: IssueRow;
+  /** Under a group of one URL the page names: that URL. */
+  first: number | null;
+  /** The row's group when it's likely the site's template (one thing on many pages), else null. */
+  template: IssueGroup | null;
+  /** The row opens to show more. */
+  opens: boolean;
+  open: boolean;
+}) {
+  const { crawlId, check, siteOrigin } = view;
+  const where = useWhereFoundOf(crawlId, check, row.id);
+  // Under a group that's likely the template's: the link its pages share, as its callout reads it (the same read).
+  const shared = useTemplateLink(crawlId, check, template);
+  const ownLink = first === null ? undefined : where.targets?.targets.find((target) => target.id === first);
+  const same = ownLink !== undefined && sameLink(ownLink, shared);
+  if (where.error) return <span className="min-w-0 truncate text-text-muted">Where it’s found couldn’t be read</span>;
+  if (where.foundOn) {
+    const [lead] = foundOnRows(where.foundOn);
+    if (!lead) return <span aria-hidden="true" />;
+    return (
+      <span className="flex min-w-0 items-center gap-3" data-where-found="read">
+        <ReferenceOther
+          where={lead}
+          subject={row}
+          view={view}
+          lead={lead.kind === 'source' ? 'Linked from' : undefined}
+          more={opens ? <MoreToggle count={moreReferences(where)} open={open} /> : null}
+        />
+        <ReferenceFacts where={lead} view={view} />
+      </span>
+    );
+  }
+  if (where.targets) {
+    // Under a group of the URL it names, the group's row says the URL: the page's row says its link to it.
+    const own = first === null ? undefined : where.targets.targets.find((target) => target.id === first);
+    if (own && same && own.id !== row.id && !opens) {
+      // The template's one link again: its callout and its group say what and where, once. Not a fault of its own.
+      return (
+        <span className="min-w-0 truncate text-text-muted" data-where-found="read" data-same-link>
+          The same link
+        </span>
+      );
+    }
+    if (own) {
+      return (
+        <span className="flex min-w-0 items-center gap-3" data-where-found="read">
+          {own.id === row.id ? <span className="shrink-0 text-text-secondary">A link to {SAME_PAGE}</span> : null}
+          {/* How this page links to it: what the URL itself is, its group's row says. */}
+          <ReferenceFacts where={{ kind: 'target', target: own }} view={{ check: linkFactsOnly(check), siteOrigin }} />
+          {opens ? <MoreToggle count={moreReferences(where)} open={open} /> : null}
+        </span>
+      );
+    }
+    const [lead] = targetRows(where.targets, check, siteOrigin);
+    if (!lead) return <span aria-hidden="true" />;
+    return (
+      <span className="flex min-w-0 items-center gap-3" data-where-found="read">
+        <ReferenceOther
+          where={lead}
+          subject={row}
+          view={view}
+          lead={lead.kind === 'target' ? targetLead(check, lead.target) : undefined}
+          more={opens ? <MoreToggle count={moreReferences(where)} open={open} /> : null}
+        />
+        <ReferenceFacts where={lead} view={view} />
+      </span>
+    );
+  }
+  return (
+    <span className="min-w-0 truncate text-text-muted" data-where-found="pending">
+      {where.references === 'sources' ? 'Finding where it’s linked…' : 'Finding what it names…'}
+    </span>
+  );
+}
+
+/**
+ * A row under a page expanded to show where it's found, its parts left-aligned under the page (A-05): the page linking
+ * to it, a link like any other, with what the link says and where on that page it is; the sitemap listing it; its
+ * being the start URL; a URL the page names, led by how it names it ("Links to", "Embeds", "Canonical to"), with its
+ * status; or the way on to all of them.
+ */
+function WhereCell({ row, view }: { row: Extract<TreeRow, { kind: 'where' }>; view: ReferenceView }) {
+  const { where, page } = row;
+  const lead =
+    where.kind === 'source'
+      ? 'Linked from'
+      : where.kind === 'target'
+        ? targetLead(view.check, where.target)
+        : undefined;
+  return (
+    <span className="flex min-w-0 items-center gap-3">
+      <ReferenceOther where={where} subject={page} view={view} lead={lead} />
+      <ReferenceFacts where={where} view={view} />
+    </span>
+  );
+}
+
+/**
+ * "1 link, to /, in the header, repeated on 260 pages: one fix clears them." The count of things first, so a group of
+ * 260 pages never reads as 260 faults (the owner took it for one). Built from what the engine says (`likelyTemplate`,
+ * the group's count and the check's total) and the link the group's pages share, never more, and in pages only for a
+ * check that flags nothing else.
  */
 function TemplateCallout({
   crawlId,
@@ -1290,43 +1360,49 @@ function TemplateCallout({
   total,
   check,
   siteOrigin,
+  onInspect,
 }: {
   crawlId: string;
   group: IssueGroup;
   total: number;
   check: Check;
   siteOrigin: string | null;
+  onInspect: (urlId: number) => void;
 }) {
   const grouping = check.grouping;
-  const share = partOfAffected(check, group.pages, total);
-  // Where on the pages the shared link is, for a check whose pages hold it: "It’s a link in the footer."
-  const place = templateLinkWords(useTemplateLink(crawlId, check, group));
+  // "260 pages" for all of them, "5 of 6 pages" for a part.
+  const pages = group.pages < total ? partOfAffected(check, group.pages, total) : affectedCount(check, group.pages);
+  // What the shared thing is and where on the pages it is, for a check whose pages hold it: "1 link, to … in the header".
+  const thing = templateThingWords(useTemplateLink(crawlId, check, group), pages);
   const facts = relatedFactsWords(group, check, siteOrigin);
   // An oversized image: the size its pages show it at, against the file's.
   const shownAt = useGroupShownAt(crawlId, check, group);
+  const relatedId = group.relatedUrlId;
   return (
     <Callout tone="insight" title="Likely in the site’s template">
       {group.sharedText ? (
         <>
-          The same text, {quoted(group.sharedText, 120)}, on {share}, so it’s likely in the site’s template: one fix
-          clears the group.
+          1 text, {quoted(group.sharedText, 120)}, repeated on {pages}: one fix clears them.
         </>
       ) : grouping === 'relatedUrl' && group.relatedUrl ? (
-        <>
-          The same URL, <span className="font-mono text-12">{urlDisplay(group.relatedUrl, siteOrigin).shown}</span>
-          {facts ? ` (${facts})` : null}, on {share}, so it’s likely in the site’s template: one fix clears the group.
-          {place ? ` ${place}${shownAt ? `, ${shownAtInsight(shownAt, group.related, group.pages)}` : ''}.` : null}
-          {!place && shownAt ? ` It’s ${shownAtInsight(shownAt, group.related, group.pages)}.` : null}
-        </>
+        <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5" data-template-thing>
+          <span className="font-semibold text-text">{thing.lead}</span>
+          {relatedId !== null ? (
+            <IssueUrl url={group.relatedUrl} siteOrigin={siteOrigin} onInspect={() => onInspect(relatedId)} />
+          ) : (
+            <span className="font-mono text-12">{urlDisplay(group.relatedUrl, siteOrigin).shown}</span>
+          )}
+          <span>
+            {facts ? `(${facts}) ` : null}
+            {thing.tail}
+            {shownAt ? ` It’s ${shownAtInsight(shownAt, group.related, group.pages)}.` : null}
+          </span>
+        </span>
       ) : grouping === 'relatedUrl' ? (
-        <>
-          The same issue on {share}, naming no other URL, so it’s likely in the site’s template: one fix clears the
-          group.
-        </>
+        <>1 cause, with no URL named, repeated on {pages}: one fix clears them.</>
       ) : (
         <>
-          The same detail, “{group.detail ?? NO_DETAIL}”, on {share}, so it’s likely in the site’s template: one fix
-          clears the group.
+          1 cause, “{group.detail ?? NO_DETAIL}”, repeated on {pages}: one fix clears them.
         </>
       )}
     </Callout>

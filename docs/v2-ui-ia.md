@@ -219,13 +219,28 @@ found, 265 pages; the 100k crawl 110,251 and 112,577, and 101,106 pages, everywh
   things to change, 3 of them in the site's template: 19 checks found 933 issues on this crawl"), from each check's
   `causes` and `templateCauses`, a check another one's fix clears entirely left out as the same job; Overview's
   severity cards say the same of each severity.
-- The selected check shows its figures ("Things to change" too when its URLs share causes), what a fix of it also
+- The selected check's head is one block (the UX round of 2026-11-19, A-09): severity, title, its counts in one line
+  ("8 URLs · 0.2% of the 4,362 URLs crawled · the same as on 17 Nov · 5 causes to fix, 1 in the site's template": the
+  count opens them in URLs, the change opens the check on the crawl compared with), its actions, what a fix of it also
   clears and which fix clears its pages, each a link to that check ("Fixing this also clears Links to broken internal
-  URLs: all 3 pages it flags (4 points back)"), and what's wrong; then what it flags, the evidence; then why it
-  matters and how to fix it, which a button in the head brings into view (the UX audit, top 12 item 6).
-- Its rows are grouped by detail or by the other URL involved, as the catalog says for each check, so a template
-  fault is one row with its count; open a group for its first pages and all of them in URLs. A check whose detail is a
-  measurement lists its URLs flat. One group is open at a time.
+  URLs: all 3 pages it flags (+4 to the score)"), then what's wrong, why it matters and how to fix it, ahead of the
+  rows. The fix is never under the rows or a jump away: where the check has its fix as code (`fixExamples`), "How to
+  fix it" takes the wider column with the code now and fixed, the case the crawl's own links point to first and marked
+  "On this site" (from the links the rows have read, never a request of its own), and what's wrong and why it matters
+  sit one over the other beside it. In a pane too narrow for that, why and how fold behind one button in the head; in
+  a short window (1280 x 720) what's wrong folds with them, and opened there the explanation has the pane, the fix
+  first, with the rows behind "Show the rows".
+- One scroller per pane (A-10): the head gives way and the rows keep a least height and take the rest, so the card
+  never scrolls around a scrolling table.
+- Its rows are a list by default, one row a URL, with where each is found as links in the row (the page that holds
+  the fault, opened at the link's words, the link's text and where on the page it is). Grouping stays where it saves
+  work: an image's group, and a check with a cause in the site's template, which opens grouped. A template's group
+  says the count of things first ("1 link, to /, in the header, repeated on 260 pages: one fix clears them") and its
+  pages say "The same link", so 260 pages never read as 260 faults. One group is open at a time; open a group for its
+  first pages and all of them in URLs. An address in a row's detail (a robots.txt's sentence naming the sitemap) is a
+  link to its own screen.
+- Back keeps the place (A-07): the view chosen, the rows opened, the cursor's row and how far the rows were scrolled
+  are kept with the check for the session.
 - Actions: copy URLs (the check's, or the open group's), hide the check in this crawl or in every crawl (remembered,
   with Undo; its badge says which), and Export (Ctrl+E): this check, the open group's pages, the report and every
   check (the spreadsheet of everything), and with the list filtered, the spreadsheet of the checks it lists. Hidden

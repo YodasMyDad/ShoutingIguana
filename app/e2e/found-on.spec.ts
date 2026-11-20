@@ -3,18 +3,38 @@
 // how many pages link to a broken URL and the first, opens a row to list them (each to the inspector, all to Links); a
 // page holding the bad links says what it links to; Simple's problem page says "Linked from …"; and every grid's URL
 // has an open-in-browser button and Shift+Enter, which open the full URL (the opener stubbed: no browser opens).
-import { expect, test, type Page } from '@playwright/test';
-import { expectNoViolations, openSection, read, seededCrawl, showChecks } from './support';
+import { expect, test, type Locator, type Page } from '@playwright/test';
+import { urlAtText } from '../src/lib/textFragment';
+import { expectNoViolations, openSection, read, seededCrawl, showChecks, showGroups } from './support';
 
 interface FoundOn {
   urlId: number;
   links: number;
   pages: number;
   pagesExact: boolean;
-  sources: { id: number; url: string }[];
+  sources: SourceLink[];
   sitemaps: { total: number };
   start: boolean;
 }
+
+/** A link to a URL, as the sidecar says it: the page it is on, what kind of link it is, where, and what it says. */
+interface SourceLink {
+  id: number;
+  url: string;
+  kind: string | null;
+  position: string | null;
+  text: string | null;
+}
+
+/**
+ * What the open button beside a linking page opens: the page at the link's words (a text fragment) only where the
+ * page shows them, a hyperlink with text outside its head; the page's plain URL for any other link (a canonical or
+ * hreflang link, an og:image, an image's alt text, a link with no words), which a browser could only mislead with.
+ */
+const openedAt = (link: SourceLink) =>
+  link.kind === 'hyperlink' && link.position !== 'head' && (link.text ?? '').trim() !== ''
+    ? urlAtText(link.url, link.text)
+    : link.url;
 
 /** Every window.open the app makes, kept on the page instead of opening a window: the plain browser's opener. */
 async function stubOpener(page: Page) {
@@ -27,6 +47,8 @@ async function stubOpener(page: Page) {
     };
   });
 }
+
+const literal = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const opened = (page: Page) => page.evaluate(() => (window as unknown as { __opened: string[] }).__opened);
 
@@ -47,46 +69,113 @@ async function brokenUrls() {
 test('a broken URL says where it is found, opens to list the pages linking to it, and each opens in the inspector', async ({
   page,
 }) => {
-  const { found } = await brokenUrls();
+  const { rows, found } = await brokenUrls();
   expect([...found.values()].some((url) => url.pages > 0)).toBe(true);
+  // The seeded crawl's 404s are few enough for the list to open every row on arrival, and to draw them all.
+  expect(rows.length).toBeLessThanOrEqual(12);
   await openSection(page, /^Issues/);
   await showChecks(page);
   await page.getByRole('option', { name: /Internal URL returns 4xx/ }).click();
-  const groups = page.getByRole('treegrid', { name: /Internal URL returns 4xx/ });
-  await groups.focus();
-  await page.keyboard.press('ArrowRight');
-  await expect(groups.getByRole('row', { expanded: true }).first()).toBeVisible();
-  const line = groups.locator('.si-where-line').first();
-  await expect(line).toHaveText(
-    /^(Found on [\d,]+\+? pages? · .+|In a sitemap · .+|The start URL|Not linked from any page crawled)$/,
-  );
 
-  // The first URL linked from a page: Down onto it, Right opens it.
-  const pageRows = groups.locator('[role="row"][aria-level="2"]');
-  const count = await pageRows.count();
-  let at = -1;
-  for (let index = 0; index < count; index += 1) {
-    if (((await pageRows.nth(index).textContent()) ?? '').includes('Found on')) {
-      at = index;
-      break;
+  // It opens as a list, one row a broken URL, where it is found in columns: the page linking to it, the link's words
+  // and where on that page the link is.
+  const list = page.getByRole('treegrid', { name: 'Internal URL returns 4xx: affected URLs' });
+  const headers = list.getByRole('columnheader');
+  await expect(headers.first()).toBeVisible();
+  const columns = (await headers.allTextContents()).map((header) => header.trim());
+  expect(columns.slice(0, 5)).toEqual(['URL', 'Status', 'Linked from', 'Link text', 'Where on the page']);
+  const urlRows = list.locator('[role="row"][aria-level="1"]');
+  await expect(urlRows).toHaveCount(rows.length);
+  await expect(list.locator('[data-where-found="pending"]')).toHaveCount(0);
+  const cell = (row: Locator, column: string) => row.getByRole('gridcell').nth(columns.indexOf(column));
+  const fullUrl = (within: Locator) => within.locator('.si-url__full').first();
+
+  // Every row against the sidecar's own answer: its URL and status, then the first page linking to it (a link, with
+  // its open button), or, with no page linking to it, what else names it.
+  const opensAtLink: boolean[] = [];
+  for (const [index, row] of rows.entries()) {
+    const shown = urlRows.nth(index);
+    const where = found.get(row.id)!;
+    await expect(fullUrl(cell(shown, 'URL'))).toHaveText(row.url);
+    await expect(cell(shown, 'Status')).toHaveText(/^4\d\d\b/);
+    const other = cell(shown, 'Linked from').locator('[data-where]');
+    if (where.sources.length > 0) {
+      await expect(other).toHaveAttribute('data-where', 'source');
+      await expect(fullUrl(other)).toHaveText(where.sources[0]!.url);
+      const opensAt = openedAt(where.sources[0]!);
+      opensAtLink.push(opensAt !== where.sources[0]!.url);
+      await expect(other.locator('[data-open-url]')).toHaveAttribute('data-open-url', opensAt);
+      await expect(cell(shown, 'Where on the page')).toHaveText(/\S/);
+    } else {
+      await expect(other).toHaveAttribute('data-where', where.sitemaps.total > 0 ? 'sitemap' : /^(start|nothing)$/);
     }
   }
-  expect(at).toBeGreaterThanOrEqual(0);
-  for (let step = 0; step <= at; step += 1) await page.keyboard.press('ArrowDown');
+  // Both sides of the rule are on the crawl: a link in a page's words, and one a page only has in its markup.
+  expect(new Set(opensAtLink)).toEqual(new Set([true, false]));
+
+  // A URL more than one page links to: its other pages are open under it on arrival (a list this short opens them
+  // all), each a row of the second level. Its "Hide N" closes them to "+N more", and Right opens them again.
+  const at = rows.findIndex((row) => (found.get(row.id)?.sources.length ?? 0) > 1);
+  expect(at, 'a broken URL more than one page links to').toBeGreaterThanOrEqual(0);
+  const many = found.get(rows[at]!.id)!;
+  const more = many.sources.length - 1;
+  const manyRow = urlRows.nth(at);
+  const toggle = manyRow.locator('[data-tree-toggle]');
+  await expect(manyRow).toHaveAttribute('aria-expanded', 'true');
+  await expect(toggle).toHaveText(`Hide ${more}`);
+  const others = list.locator('[role="row"][aria-level="2"]');
+  const openOnArrival = await others.count();
+  await toggle.click();
+  await expect(manyRow).toHaveAttribute('aria-expanded', 'false');
+  await expect(toggle).toHaveText(`+${more} more`);
+  await expect(others).toHaveCount(openOnArrival - more);
   await page.keyboard.press('ArrowRight');
-  await expect(pageRows.nth(at)).toHaveAttribute('aria-expanded', 'true');
-  const sources = groups.locator('[role="row"][aria-level="3"]');
-  await expect(sources.first()).toContainText('Linked from');
-  await expect(sources.last()).toContainText(/Show (all [\d,]+ links|the link) in Links/);
+  await expect(manyRow).toHaveAttribute('aria-expanded', 'true');
+  await expect(others).toHaveCount(openOnArrival);
+  const second = list.locator(
+    `[role="row"][aria-rowindex="${Number(await manyRow.getAttribute('aria-rowindex')) + 1}"]`,
+  );
+  await expect(second).toHaveAttribute('aria-level', '2');
+  await expect(fullUrl(second.locator('[data-where="source"]'))).toHaveText(many.sources[1]!.url);
   await expectNoViolations(page);
 
-  // Enter on the first source: the page linking to it, in the inspector.
+  // Down onto that page and Enter: the page linking to it, in the inspector.
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('Enter');
-  await expect(page).toHaveURL(/inspect=\d+/);
+  await expect(page).toHaveURL(new RegExp(`inspect=${many.sources[1]!.id}(&|$)`));
   await page.keyboard.press('Escape');
+  await expect(page.getByRole('complementary', { name: 'Inspector' })).toBeHidden();
 
-  // Show all in Links: the links to that URL, every kind, a page's own left out.
+  // The row's menu goes on to Links: the links to that URL, every kind, a page's own left out.
+  await cell(manyRow, 'Status').click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Show where it’s found in Links' }).click();
+  await expect(page).toHaveURL(/\/links\?filter=/);
+  await expect(page.getByRole('grid', { name: 'Links' })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Filters' })).toContainText('Target');
+  await page.goBack();
+  await expect(page).toHaveURL(/\/issues\/internal-client-error/);
+
+  // Grouped by cause, a URL's row says the first page linking to it and opens to list them all, ending with the way
+  // on to every link to it in Links.
+  await showGroups(page);
+  const groups = page.getByRole('treegrid', { name: 'Internal URL returns 4xx: affected URLs, grouped by cause' });
+  await expect(groups.getByRole('row', { expanded: true }).first()).toBeVisible();
+  const pageRow = groups
+    .locator('[role="row"][aria-level="2"]')
+    .filter({ has: page.locator('.si-url__full', { hasText: new RegExp(`^${literal(rows[at]!.url)}$`) }) });
+  const whereRead = pageRow.locator('[data-where-found="read"]');
+  await expect(whereRead).toContainText('Linked from');
+  await expect(fullUrl(whereRead.locator('[data-where="source"]'))).toHaveText(many.sources[0]!.url);
+  await expect(whereRead.locator('[data-tree-toggle]')).toHaveText(/^\+[\d,]+ more$/);
+  await whereRead.locator('[data-tree-toggle]').click();
+  await expect(pageRow).toHaveAttribute('aria-expanded', 'true');
+  const sources = groups.locator('[role="row"][aria-level="3"]');
+  await expect(sources.first()).toContainText('Linked from');
+  await expect(sources.locator('[data-where="source"]')).toHaveCount(many.sources.length);
+  await expect(sources.last()).toHaveText(
+    many.links === 1 ? 'Show the link in Links' : `Show all ${many.links.toLocaleString('en-GB')} links in Links`,
+  );
+  await expectNoViolations(page);
   await sources.last().getByRole('link').click();
   await expect(page).toHaveURL(/\/links\?filter=/);
   await expect(page.getByRole('grid', { name: 'Links' })).toBeVisible();
@@ -97,18 +186,61 @@ test('a page holding broken links says which URL it links to', async ({ page }) 
   await openSection(page, /^Issues/);
   await showChecks(page);
   await page.getByRole('option', { name: /Links to broken internal URLs/ }).click();
-  const groups = page.getByRole('treegrid', { name: /Links to broken internal URLs/ });
+  await expect(page).toHaveURL(/\/issues\/broken-internal-links$/);
+  const crawl = await seededCrawl();
+  const flagged = await read<{ rows: { id: number; url: string }[] }>(
+    `/api/crawls/${crawl.id}/issues/broken-internal-links/rows`,
+    { columns: ['url'], limit: 25 },
+  );
+  const first = flagged.rows[0]!;
+  const named = await read<{ urls: { urlId: number; total: number; targets: { id: number; url: string }[] }[] }>(
+    `/api/crawls/${crawl.id}/issues/broken-internal-links/targets`,
+    { urlIds: [first.id], limit: 50 },
+  );
+  const targets = named.urls[0]?.targets ?? [];
+  expect(targets.length).toBeGreaterThan(0);
+  const status = /[345]\d\d|Blocked by robots\.txt|No response|Timed out/;
+  const place =
+    /^(Content|Navigation|Header|Footer|Sidebar|Head|.+ in the (content|navigation|header|footer|sidebar|head))( · .+)?$/;
+
+  // It opens as a list, one row a page that holds a bad link: the URL it links to with that URL's own status (a 4xx,
+  // or a 3xx whose redirects end broken, the crawl's planted /plants/redirect-broken), what the link says and where
+  // on the page it is, each in a column of its own.
+  const list = page.getByRole('treegrid', { name: 'Links to broken internal URLs: affected pages' });
+  const headers = list.getByRole('columnheader');
+  await expect(headers.first()).toBeVisible();
+  const columns = (await headers.allTextContents()).map((header) => header.trim());
+  expect(columns[0]).toBe('Page');
+  const whereColumns = ['Links to', 'Link text', 'Where on the page'];
+  expect(columns.filter((column) => whereColumns.includes(column))).toEqual(whereColumns);
+  const cell = (row: Locator, column: string) => row.getByRole('gridcell').nth(columns.indexOf(column));
+  const pageRows = list.locator('[role="row"][aria-level="1"]');
+  await expect(pageRows).toHaveCount(flagged.rows.length);
+  await expect(list.locator('[data-where-found="pending"]')).toHaveCount(0);
+  const firstRow = pageRows.first();
+  await expect(cell(firstRow, 'Page').locator('.si-url__full').first()).toHaveText(first.url);
+  const linksTo = cell(firstRow, 'Links to').locator('[data-where="target"]');
+  await expect(linksTo).toHaveText(status);
+  expect(targets.map((target) => target.url)).toContain(await linksTo.locator('.si-url__full').first().textContent());
+  await expect(cell(firstRow, 'Link text')).toHaveText(/^(“.+”|No text|–)$/);
+  await expect(cell(firstRow, 'Where on the page')).toHaveText(place);
+  // Every page's row names a URL, each with its status; a page with more than one says how many more.
+  await expect(pageRows.locator('[data-where="target"]')).toHaveCount(flagged.rows.length);
+  for (const text of await pageRows.locator('[data-where="target"]').allTextContents()) expect(text).toMatch(status);
+
+  // Grouped by linked URL, the group names the broken URL with its own status, and each page under it says what its
+  // link to it says and where on the page the link is.
+  await showGroups(page);
+  const groups = page.getByRole('treegrid', {
+    name: 'Links to broken internal URLs: affected pages, grouped by linked URL',
+  });
   await groups.focus();
-  await page.keyboard.press('ArrowRight');
-  // The group names the broken URL with its own status: a 4xx, or a 3xx whose redirects end broken (the crawl's
-  // planted /plants/redirect-broken). Each page under it says where its link to it is and what it says (evidence), or,
-  // where the page's link isn't among those read, what it links to.
-  await expect(groups.getByRole('row', { expanded: true }).first()).toContainText(
-    /[345]\d\d|Blocked by robots\.txt|No response|Timed out/,
-  );
-  await expect(groups.locator('.si-where-line').first()).toHaveText(
-    /^(in the (content|navigation|header|footer|sidebar|head)( · .+)?|“.+”( · .+)?|Links to .+ \(([345]\d\d|blocked by robots\.txt|no answer)\)( \+[\d,]+)?)$/,
-  );
+  if ((await groups.getByRole('row', { expanded: true }).count()) === 0) await page.keyboard.press('ArrowRight');
+  await expect(groups.getByRole('row', { expanded: true }).first()).toContainText(status);
+  const under = groups.locator('[role="row"][aria-level="2"] [data-where-found="read"]').first();
+  await expect(under).toContainText(/“.+”|No text/);
+  await expect(under).toContainText(/Content|Navigation|Header|Footer|Sidebar|Head|in the /);
+  await expect(groups.locator('[data-where-found="pending"]')).toHaveCount(0);
 });
 
 test('every grid’s URL opens in the browser from its button and from Shift+Enter, as its full address', async ({

@@ -21,9 +21,11 @@ import {
   ISSUES_CHECKS,
   ISSUES_CHECKS_WITHOUT_SUBJECTS,
   ISSUE_GROUPS,
+  ISSUE_TARGETS,
   issuesRoutes,
   type IssuesSidecarOptions,
 } from '../test/issuesSidecar';
+import { forgetCheckPlaces } from './issues/issuesPlace';
 
 const ISSUES = `/crawls/${TEST_CRAWL_ID}/issues`;
 
@@ -61,6 +63,13 @@ const mainArea = () => document.getElementById('main') ?? document.body;
 const options = () => screen.getAllByRole('option');
 const selectedOption = () =>
   screen.getAllByRole('option').find((option) => option.getAttribute('aria-selected') === 'true');
+/** The check's counts, in one line under its title: how many, of how much, how that moved, and its causes. */
+const counts = () => document.querySelector<HTMLElement>('[data-counts]');
+/** A grouped check opens as a list: its groups, once "Grouped by …" is chosen. */
+async function showGroups() {
+  fireEvent.click(await screen.findByRole('radio', { name: /^Grouped by/ }));
+  return screen.findByRole('treegrid', { name: /grouped by/ });
+}
 
 let uninstall: () => void = () => undefined;
 beforeEach(() => {
@@ -68,6 +77,8 @@ beforeEach(() => {
 });
 afterEach(() => {
   uninstall();
+  // Where each check was left (its view, its open rows, its cursor) is kept for the session: no test starts with it.
+  forgetCheckPlaces();
   updateSettings({
     hiddenChecks: [],
     hiddenChecksByCrawl: {},
@@ -298,13 +309,53 @@ describe('the Issues screen', () => {
     const { router } = await open(`${ISSUES}/internal-client-error`);
     await screen.findByRole('heading', { name: 'Internal URL returns 4xx', level: 2 });
     // A 404 is a thing to change a URL: nothing to say beyond the count.
-    expect(screen.queryByText('Things to change', { selector: '.si-stat__label' })).toBeNull();
+    expect(counts()).toHaveTextContent(/^2 URLs·5% of the 40 URLs crawled$/);
+    expect(counts()).not.toHaveTextContent(/to fix/);
     const related = screen.getByRole('list', { name: 'Related checks' });
     expect(related).toHaveTextContent(
-      'Fixing this also clears Links to broken internal URLs: all 3 pages it flags (4 points back).',
+      'Fixing this also clears Links to broken internal URLs: all 3 pages it flags (+4 to the score).',
     );
     fireEvent.click(within(related).getByRole('link', { name: 'Links to broken internal URLs' }));
     await waitFor(() => expect(path(router)).toBe(`${ISSUES}/broken-internal-links`));
+  });
+
+  it('says the first two checks a fix also clears and folds the rest behind a button, so the rows keep their room', async () => {
+    const others = ['broken-images', 'broken-resources', 'canonical-broken', 'hreflang-broken'].map((id, at) => ({
+      ...ISSUES_CHECKS.checks[2]!,
+      id,
+      severity: 'error' as const,
+      title: `Other check ${at + 1}`,
+    }));
+    sidecar({
+      checks: { ...ISSUES_CHECKS, checks: [...ISSUES_CHECKS.checks, ...others] },
+      analysis: {
+        ...ISSUES_ANALYSIS,
+        counts: [
+          ...ISSUES_ANALYSIS.counts.map((count) =>
+            count.checkId === 'internal-client-error'
+              ? {
+                  ...count,
+                  causes: 2,
+                  templateCauses: 0,
+                  clears: others.map((other) => ({ checkId: other.id, pages: 1, all: true })),
+                }
+              : count,
+          ),
+          ...others.map((other) => ({ checkId: other.id, count: 1, causes: 1, templateCauses: 0, clears: [] })),
+        ],
+      },
+    });
+    await open(`${ISSUES}/internal-client-error`);
+    await screen.findByRole('heading', { name: 'Internal URL returns 4xx', level: 2 });
+    const related = screen.getByRole('list', { name: 'Related checks' });
+    expect(
+      within(related)
+        .getAllByRole('link')
+        .map((link) => link.textContent),
+    ).toEqual(['Other check 1', 'Other check 2']);
+    fireEvent.click(within(related).getByRole('button', { name: 'Show the 2 more' }));
+    expect(within(related).getAllByRole('link')).toHaveLength(4);
+    expect(within(related).queryByRole('button')).toBeNull();
   });
 
   it('says the things to change when a check’s URLs share causes, with those in the template', async () => {
@@ -318,9 +369,13 @@ describe('the Issues screen', () => {
     });
     await open(`${ISSUES}/empty-anchor-text`);
     await screen.findByRole('heading', { name: 'Internal links without anchor text', level: 2 });
-    expect(screen.getByText('Things to change', { selector: '.si-stat__label' }).parentElement).toHaveTextContent(
-      /^Things to change21 in the site’s template$/,
+    // Last in the line of its counts: 6 pages come to 2 things to change, one of them the template's.
+    expect(counts()).toHaveTextContent(
+      /^6 pages·100% of the 6 pages analysed·2 causes to fix, 1 in the site’s template$/,
     );
+    // A cause in the template is one fix for its pages: the check opens grouped, with no asking.
+    expect(await screen.findByRole('radio', { name: 'Grouped by linked URL' })).toHaveAttribute('aria-checked', 'true');
+    expect(await screen.findByRole('treegrid', { name: /grouped by linked URL/ })).toBeVisible();
   });
 
   it('never shows a count over an empty list: a grouped check whose groups come back empty lists its URLs flat', async () => {
@@ -329,47 +384,173 @@ describe('the Issues screen', () => {
     sidecar({ groups: { ...ISSUE_GROUPS, 'internal-client-error': [] } });
     await open(`${ISSUES}/internal-client-error`);
     await screen.findByRole('heading', { name: 'Internal URL returns 4xx', level: 2 });
-    const grid = await screen.findByRole('grid', { name: /Internal URL returns 4xx: affected URLs/ });
-    expect(await within(grid).findByText('https://example.com/old/', { exact: false })).toBeVisible();
-    expect(within(grid).getByText('https://example.com/gone/', { exact: false })).toBeVisible();
+    // The list of a check whose URLs are referred to: its rows open in place, so it's a treegrid, and never the groups'.
+    const grid = await screen.findByRole('treegrid', { name: 'Internal URL returns 4xx: affected URLs' });
+    expect(await within(grid).findByRole('button', { name: 'https://example.com/old/' })).toBeVisible();
+    expect(within(grid).getByRole('button', { name: 'https://example.com/gone/' })).toBeVisible();
+    expect(within(grid).getAllByText('404 Not Found')).toHaveLength(2);
     expect(screen.queryByText(/in 0 groups/)).toBeNull();
-    expect(screen.queryByText('Groups', { selector: '.si-stat__label' })).toBeNull();
+    expect(screen.getByText('2 URLs, most used first')).toBeVisible();
+    // And no way to groups there are none of.
+    expect(screen.queryByRole('radiogroup', { name: 'How the rows are shown' })).toBeNull();
   });
 
-  it('puts what the check flags ahead of why it matters and how to fix it, a button away', async () => {
+  it('says what’s wrong, why it matters and how to fix it in the check’s head, ahead of what it flags, the last two folded behind a button where the pane is narrow', async () => {
     sidecar();
     await open(`${ISSUES}/title-too-long`);
     const affected = await screen.findByRole('heading', { name: 'Affected pages', level: 3 });
-    const why = screen.getByRole('heading', { name: 'Why it matters', level: 3 });
-    expect(affected.compareDocumentPosition(why) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const explain = document.querySelector<HTMLElement>('[data-explain]');
+    if (!explain) throw new Error('No explanation');
+    // All three in the head, in reading order, and the list after them: nothing to jump down to.
     expect(
-      screen.getByRole('heading', { name: 'What’s wrong', level: 3 }).compareDocumentPosition(affected) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+      within(explain)
+        .getAllByRole('heading', { level: 3 })
+        .map((heading) => heading.textContent),
+    ).toEqual(['What’s wrong', 'Why it matters', 'How to fix it']);
+    expect(explain.closest('header')).not.toBeNull();
+    expect(explain.compareDocumentPosition(affected) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(explain).getByText('Why Title too long matters.')).toBeInTheDocument();
+    expect(within(explain).getByText('How to fix Title too long.')).toBeInTheDocument();
+    // The button is a disclosure, for a pane too narrow to draw them beside what's wrong: it scrolls nowhere and
+    // moves no focus, it shows them in place.
+    const parts = [...explain.querySelectorAll<HTMLElement>('[data-explain-part]')];
+    expect(parts).toHaveLength(2);
     const scrolled = vi.spyOn(Element.prototype, 'scrollIntoView');
-    fireEvent.click(screen.getByRole('button', { name: 'Why it matters and how to fix it' }));
-    expect(scrolled).toHaveBeenCalled();
+    const button = screen.getByRole('button', { name: 'Why it matters and how to fix it' });
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+    for (const part of parts) expect(part).toHaveClass('@max-checks-beside:hidden');
+    fireEvent.click(button);
+    expect(button).toHaveAttribute('aria-expanded', 'true');
+    for (const part of parts) expect(part).not.toHaveClass('@max-checks-beside:hidden');
+    fireEvent.click(button);
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+    for (const part of parts) expect(part).toHaveClass('@max-checks-beside:hidden');
+    expect(scrolled).not.toHaveBeenCalled();
     scrolled.mockRestore();
-    expect(document.activeElement).toBe(why.closest('[tabindex="-1"]'));
   });
 
-  it('shows a check’s fix as code under How to fix it, a case at a time, and words alone where it has none', async () => {
+  it('folds what’s wrong away too in a short window, behind one button that names all it opens', async () => {
+    // 1280 × 720: the rows keep the room. Where the pane is wide the three still show (the classes are the narrow pane's).
+    const matchMedia = window.matchMedia.bind(window);
+    window.matchMedia = (query: string) =>
+      ({
+        matches: query === '(max-height: 800px)',
+        media: query,
+        onchange: null,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+        addListener: () => undefined,
+        removeListener: () => undefined,
+        dispatchEvent: () => false,
+      }) satisfies MediaQueryList;
+    try {
+      sidecar();
+      await open(`${ISSUES}/title-too-long`);
+      const button = await screen.findByRole('button', { name: 'What’s wrong, why it matters and how to fix it' });
+      const wrong = document.querySelector<HTMLElement>('[data-explain-wrong]');
+      expect(wrong).toHaveClass('@max-checks-beside:hidden');
+      fireEvent.click(button);
+      expect(wrong).not.toHaveClass('@max-checks-beside:hidden');
+      for (const part of document.querySelectorAll('[data-explain-part]')) {
+        expect(part).not.toHaveClass('@max-checks-beside:hidden');
+      }
+      // Opened there, the explanation has the pane (the fix first under the button) and the rows wait behind
+      // "Show the rows": never two half-height scrollers.
+      const how = screen.getByRole('heading', { name: 'How to fix it', level: 3 });
+      expect(how.closest('[data-explain-part]')).toHaveClass('@max-checks-beside:order-1');
+      expect(wrong).toHaveClass('@max-checks-beside:order-2');
+      const table = document.querySelector('[data-check-table]');
+      expect(table).toHaveClass('@max-checks-beside:@min-split:hidden');
+      fireEvent.click(screen.getByRole('button', { name: 'Show the rows' }));
+      expect(button).toHaveAttribute('aria-expanded', 'false');
+      expect(table).not.toHaveClass('@max-checks-beside:@min-split:hidden');
+      expect(screen.queryByRole('button', { name: 'Show the rows' })).toBeNull();
+    } finally {
+      window.matchMedia = matchMedia;
+    }
+  });
+
+  it('gives the check’s head and its rows one scroller each, never the card around them', async () => {
+    sidecar();
+    await open(`${ISSUES}/title-too-long`);
+    const affected = await screen.findByRole('heading', { name: 'Affected pages', level: 3 });
+    // The head gives way and scrolls by itself; the rows keep a least height (the token's) and take the rest.
+    const head = document.querySelector('[data-explain]')?.closest('header');
+    expect(head).toHaveClass('min-h-0', 'shrink', 'overflow-y-auto');
+    const rows = affected.closest('[data-check-rows]');
+    expect(rows).toHaveClass('grid-rows-(--check-rows)', 'flex-1');
+    expect(
+      within(rows as HTMLElement)
+        .getByRole('grid')
+        .closest('.contain-size'),
+    ).not.toBeNull();
+  });
+
+  it('shows a check’s fix as code in its head, beside what’s wrong, a case at a time, and words alone where it has none', async () => {
     sidecar();
     await open(`${ISSUES}/empty-anchor-text`);
     const how = await screen.findByRole('heading', { name: 'How to fix it', level: 3 });
-    const strip = how.closest('[tabindex="-1"]')!;
-    expect(within(strip).getByText('How to fix Internal links without anchor text.')).toBeTruthy();
+    // In the head with what's wrong and why it matters, ahead of the rows: never under them, a button away.
+    const explain = how.closest<HTMLElement>('[data-explain]');
+    if (!explain) throw new Error('The fix isn’t in the check’s head');
+    expect(explain.closest('header')).not.toBeNull();
+    const affected = screen.getByRole('heading', { name: 'Affected pages', level: 3 });
+    expect(explain.compareDocumentPosition(affected) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The code takes the wider column where the pane is wide; what's wrong and why it matters share the other.
+    expect(explain).toHaveClass('@min-checks-beside:grid-cols-(--how-to-fix-columns)');
+    expect(within(explain).getByText('How to fix Internal links without anchor text.')).toBeTruthy();
     expect(
-      within(strip).getByRole('tab', { name: 'The link wraps an icon or an inline SVG', selected: true }),
+      within(explain).getByRole('tab', { name: 'The link wraps an icon or an inline SVG', selected: true }),
     ).toBeTruthy();
-    expect(within(strip).getByRole('figure', { name: 'The fix as code' }).textContent).toContain(
+    expect(within(explain).getByRole('figure', { name: 'The fix as code' }).textContent).toContain(
       'aria-label="Example Furniture"',
     );
+    // Where the pane is narrow the fix is behind the head's own button, whole: its words, its cases and its code.
+    const fix = how.closest<HTMLElement>('[data-explain-part]');
+    expect(fix).toHaveClass('@max-checks-beside:hidden');
+    expect(fix).toContainElement(within(explain).getByRole('figure', { name: 'The fix as code' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Why it matters and how to fix it' }));
+    expect(fix).not.toHaveClass('@max-checks-beside:hidden');
     cleanup();
     sidecar();
     await open(`${ISSUES}/title-too-long`);
     await screen.findByRole('heading', { name: 'How to fix it', level: 3 });
     expect(screen.queryByRole('figure', { name: 'The fix as code' })).toBeNull();
+    // Words alone go three across, as they did.
+    expect(document.querySelector('[data-explain]')).toHaveClass('@min-checks-beside:grid-cols-(--explain-columns)');
+  });
+
+  it('shows the case of the fix the site’s own links point to first, marked “On this site”', async () => {
+    // Every link the check named wraps an image: the fix is the image's alt text, not an aria-label on the link.
+    const targets = Object.fromEntries(
+      Object.entries(ISSUE_TARGETS['empty-anchor-text'] ?? {}).map(([id, of]) => [
+        id,
+        { ...of, targets: of.targets.map((target) => ({ ...target, flags: ['imageLink' as const] })) },
+      ]),
+    );
+    const { requests } = sidecar({ targets: { 'empty-anchor-text': targets } });
+    await open(`${ISSUES}/empty-anchor-text`);
+    const image = await screen.findByRole('tab', { name: /^The link wraps an image/, selected: true });
+    expect(image).toHaveTextContent('On this site');
+    expect(screen.getByRole('figure', { name: 'The fix as code' }).textContent).toContain('alt="Example Furniture"');
+    const icon = screen.getByRole('tab', { name: /^The link wraps an icon/ });
+    expect(icon).not.toHaveTextContent('On this site');
+    // From the links the rows had read: the targets were asked for once, by the rows.
+    expect(requests.filter((request) => request.path.includes('/issues/empty-anchor-text/targets'))).toHaveLength(1);
+  });
+
+  it('marks no case “On this site” until some of the check’s links are read, and the icon case when they aren’t images', async () => {
+    sidecar();
+    await open(`${ISSUES}/empty-anchor-text`);
+    const icon = await screen.findByRole('tab', { name: /^The link wraps an icon/, selected: true });
+    await waitFor(() => expect(icon).toHaveTextContent('On this site'));
+    cleanup();
+    // Nothing read of what the pages name: the first case shows, unmarked.
+    sidecar({ targets: {} });
+    await open(`${ISSUES}/empty-anchor-text`);
+    await screen.findByRole('tab', { name: /^The link wraps an icon/, selected: true });
+    await screen.findByRole('treegrid');
+    expect(screen.queryByText('On this site')).toBeNull();
   });
 
   it('moves the selection with the arrow keys, replacing the address, and a click is a new place', async () => {
@@ -400,7 +581,7 @@ describe('the Issues screen', () => {
     fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'j' });
     await waitFor(() => expect(path(router)).toBe(`${ISSUES}/empty-anchor-text`));
     expect(document.activeElement).toHaveAccessibleName(/Internal links without anchor text/);
-    // From the check's groups grid, which goes with the check: to the new check's title.
+    // From the check's own grid (its list), which goes with the check: to the new check's title.
     const grid = await screen.findByRole('treegrid');
     act(() => grid.focus());
     fireEvent.keyDown(grid, { key: 'k' });
@@ -448,10 +629,10 @@ describe('the Issues screen', () => {
     const clear = screen.getByRole('button', { name: 'Clear the filters' });
     act(() => clear.focus());
     fireEvent.click(clear);
-    // The check's only group, opened by itself, stays open.
-    await waitFor(() =>
-      expect(router.state.location.search).toEqual({ group: { detail: '404 Not Found', relatedUrlId: null } }),
-    );
+    // Nothing is left in the address: the check is shown as a list, which opens no group of its own.
+    await waitFor(() => expect(router.state.location.search).toEqual({}));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(router.state.location.search).toEqual({});
     expect(options().length).toBeGreaterThan(3);
     // The button went with the filters: focus is on the filter field, not dropped.
     expect(clear.isConnected).toBe(false);
@@ -467,12 +648,8 @@ describe('the Issues screen', () => {
     const title = screen.getByRole('button', { name: 'Remove the filter Title contains anchor' });
     act(() => title.focus());
     fireEvent.click(title);
-    await waitFor(() =>
-      expect(router.state.location.search).toEqual({
-        severity: ['error'],
-        group: { detail: '404 Not Found', relatedUrlId: null },
-      }),
-    );
+    // The severity is all that's left: the check it lists is shown as a list, which opens no group of its own.
+    await waitFor(() => expect(router.state.location.search).toEqual({ severity: ['error'] }));
     // Errors alone lists a check, so the chips, the one for the severity that had taken focus among them, have gone.
     await waitFor(() => expect(title.isConnected).toBe(false));
     expect(screen.queryByText('No checks match these filters.')).toBeNull();
@@ -556,18 +733,22 @@ describe('the Issues screen', () => {
   it('opens a group to show its first pages and its link to all of them, then closes it', async () => {
     sidecar();
     const { router } = await open(`${ISSUES}/empty-anchor-text`);
-    const grid = await screen.findByRole('treegrid', { name: /grouped by related URL/ });
+    // It opens as a list; its groups are named by what their URL is, the URL each page links to.
+    const grid = await showGroups();
+    expect(grid).toHaveAccessibleName(/grouped by linked URL$/);
+    expect(within(grid).getByRole('columnheader', { name: 'Linked URL' })).toBeVisible();
     expect(await screen.findByText('Likely in the site’s template')).toBeVisible();
     await within(grid).findByText('5');
     const rows = () => within(grid).getAllByRole('row').slice(1);
-    expect(rows().map((row) => row.getAttribute('aria-expanded'))).toEqual(['false', 'false']);
-    fireEvent.pointerDown(grid.querySelector('[data-tree-toggle]')!, { button: 0 });
+    // The first of its two groups opens by itself, in the address.
     await waitFor(() =>
       expect(router.state.location.search).toMatchObject({ group: { detail: null, relatedUrlId: 1 } }),
     );
     expect(await within(grid).findByText('/page-2/')).toBeVisible();
     const link = within(grid).getByRole('link', { name: 'Show all 5 pages in URLs' });
     expect(decodeURIComponent(link.getAttribute('href') ?? '')).toContain('"group":{"detail":null,"relatedUrlId":1}');
+    // The link is all its row holds: no chips of the group's detail and URL beside it.
+    expect(link.closest('[role="row"]')).toHaveTextContent(/^Show all 5 pages in URLs$/);
     expect(rows()[0]).toHaveAttribute('aria-expanded', 'true');
     expect(rows().filter((row) => row.getAttribute('aria-level') === '2')).toHaveLength(6);
     // One stop for Tab: nothing in its rows takes focus of its own (the cursor reaches them; a URL's open-in-browser
@@ -585,6 +766,14 @@ describe('the Issues screen', () => {
     fireEvent.keyDown(grid, { key: 'ArrowLeft' });
     fireEvent.keyDown(grid, { key: 'ArrowLeft' });
     await waitFor(() => expect(router.state.location.search).not.toHaveProperty('group'));
+    // Closed, it stays closed: both groups are rows, and a press on the other's chevron opens that one.
+    await waitFor(() => expect(rows().map((row) => row.getAttribute('aria-expanded'))).toEqual(['false', 'false']));
+    fireEvent.pointerDown(rows()[1]!.querySelector('[data-tree-toggle]')!, { button: 0 });
+    await waitFor(() =>
+      expect(router.state.location.search).toMatchObject({ group: { detail: null, relatedUrlId: 9 } }),
+    );
+    expect(await within(grid).findByText('/page-7/')).toBeVisible();
+    expect(within(grid).getByRole('link', { name: 'Show the page in URLs' })).toBeVisible();
   });
 
   it('says so when an open group’s pages can’t be read, with Try again, instead of placeholders that never fill', async () => {
@@ -642,8 +831,10 @@ describe('the Issues screen', () => {
     }));
     sidecar({ groups: { ...ISSUE_GROUPS, 'empty-anchor-text': many } });
     await open(`${ISSUES}/empty-anchor-text`);
-    const grid = await screen.findByRole('treegrid');
+    const grid = await showGroups();
+    // More than 20 groups: none opens by itself, so every row is a group.
     await within(grid).findAllByRole('row', { expanded: false });
+    expect(within(grid).queryByRole('row', { expanded: true })).toBeNull();
     act(() => grid.focus());
     fireEvent.keyDown(grid, { key: 'a', ctrlKey: true });
     fireEvent.keyDown(grid, { key: 'c', ctrlKey: true });
@@ -672,15 +863,34 @@ describe('the Issues screen', () => {
       `${ISSUES}/internal-client-error?group=${encodeURIComponent('{"detail":"404 Not Found","relatedUrlId":9}')}`,
     );
     const grid = await screen.findByRole('treegrid');
-    // The check can flag any URL, so the one URL of its group isn't called a page.
+    // Both parts in the group's own row, each under its header: the detail, and the URL, a link that inspects it.
+    await waitFor(() =>
+      expect(
+        within(grid)
+          .getAllByRole('columnheader')
+          .map((header) => header.textContent),
+      ).toEqual(['Detail', 'Related URL', 'URLs']),
+    );
+    const group = await within(grid).findByRole('row', { expanded: true });
+    expect(
+      within(group)
+        .getAllByRole('gridcell')
+        .slice(0, 2)
+        .map((cell) => cell.textContent),
+    ).toEqual(['404 Not Found', 'https://example.com/garden//garden/']);
+    expect(within(group).getByRole('button', { name: 'https://example.com/garden/' })).toHaveClass('si-url__go');
+    // The check can flag any URL, so the one URL of its group isn't called a page; and the way to it is all the row
+    // under the group holds: the group's detail and URL aren't said again as chips beside it.
     const more = (await within(grid).findByRole('link', { name: 'Show it in URLs' })).closest<HTMLElement>(
       '[role="gridcell"]',
     );
     if (!more) throw new Error('No link row');
-    expect(more).toHaveTextContent('Detail is 404 Not Found');
-    expect(more).toHaveTextContent('Related URL is /garden/');
-    // The group without a detail reads as the URL grid's chip will: "none".
+    expect(more).toHaveTextContent(/^Show it in URLs$/);
+    expect(grid).not.toHaveTextContent(/Detail is|Related URL is/);
+    // The group without a detail reads as the URL grid's chip will, "none", and one that names no URL says so.
     expect(within(grid).getByText('None')).toBeVisible();
+    expect(within(grid).getByText('No URL named')).toBeVisible();
+    expect(within(grid).queryByText('No other URL')).toBeNull();
   });
 
   it('reopens the group the address names', async () => {
@@ -1163,10 +1373,8 @@ describe('the Issues screen', () => {
 });
 
 describe('a check’s count, worded by what the check flags', () => {
-  /** A figure of the check's header, by its label: the whole of what it says. */
-  const figure = (label: string) => screen.getByText(label, { selector: '.si-stat__label' }).parentElement;
-  /** The share figure, whatever it's of: null when the header has none. */
-  const share = () => screen.queryByText(/^Share of/, { selector: '.si-stat__label' });
+  /** The count itself, first in the line of the check's counts: the way to its URLs in the URL grid. */
+  const countLink = (name: string) => within(counts() ?? document.body).getByRole('link', { name });
   /** A check's row in the list, by the whole of its name (jsdom runs the count and its noun together). */
   const row = (name: RegExp) => screen.getByRole('option', { name });
   const facetReads = (requests: readonly { path: string }[]) =>
@@ -1177,15 +1385,23 @@ describe('a check’s count, worded by what the check flags', () => {
     const { requests } = sidecar();
     await open(`${ISSUES}/title-too-long`);
     await screen.findByRole('heading', { name: 'Title too long', level: 2 });
-    expect(figure('Pages affected')).toHaveTextContent(/^Pages affected3Open them in URLs$/);
-    // Of the 6 pages the analysis ran on, which is what its count of 3 is a part of: not of the 7 the file has.
-    expect(figure('Share of pages')).toHaveTextContent(/^Share of pages50%of the 6 pages analysed$/);
+    // One line, not a tile a figure: the count, then its share. Of the 6 pages the analysis ran on, which is what its
+    // count of 3 is a part of: not of the 7 the file has.
+    expect(counts()).toHaveTextContent(/^3 pages·50% of the 6 pages analysed$/);
+    expect(document.querySelector('.si-stat__label')).toBeNull();
+    // The count is the way to them: the URL grid, filtered by the check.
+    const link = countLink('3 pages');
+    expect(link).toHaveAttribute('title', 'Open them in URLs');
+    const href = decodeURIComponent(link.getAttribute('href') ?? '');
+    expect(href).toContain(`/crawls/${TEST_CRAWL_ID}/urls?`);
+    expect(href).toContain('"column":"check","op":"in","values":["title-too-long"]');
     expect(screen.getByRole('heading', { name: 'Affected pages', level: 3 }).parentElement).toHaveTextContent(
-      'Affected pages3 pages',
+      /^Affected pages3 pages, most linked first$/,
     );
     expect(await screen.findByRole('grid', { name: 'Title too long: affected pages' })).toBeVisible();
     expect(row(/^Notice Title too long 3 ?pages, 50% of the 6 pages analysed$/)).toBeVisible();
-    expect(screen.queryByText(/URLs affected|Share of URLs|Affected URLs/)).toBeNull();
+    expect(counts()).not.toHaveTextContent(/URLs/);
+    expect(screen.queryByText(/Affected URLs/)).toBeNull();
     // The pages analysed come with the analysis: nothing more is read for them.
     expect(facetReads(requests)).toBe(0);
   });
@@ -1194,19 +1410,29 @@ describe('a check’s count, worded by what the check flags', () => {
     const { requests } = sidecar();
     const { router } = await open(`${ISSUES}/internal-client-error`);
     await screen.findByRole('heading', { name: 'Internal URL returns 4xx', level: 2 });
-    expect(figure('URLs affected')).toHaveTextContent(/^URLs affected2Open them in URLs$/);
     // 2 of the 40 URLs the analysis saw crawled: a broken image or a redirect is no part of its 6 pages. The total
     // comes with the analysis, as its pages do: it's there at once, and nothing more is read for it.
-    expect(figure('Share of URLs')).toHaveTextContent(/^Share of URLs5%of the 40 URLs crawled$/);
+    expect(counts()).toHaveTextContent(/^2 URLs·5% of the 40 URLs crawled$/);
+    expect(countLink('2 URLs')).toHaveAttribute('title', 'Open them in URLs');
     expect(facetReads(requests)).toBe(0);
-    expect(screen.getByRole('heading', { name: 'Affected URLs', level: 3 })).toBeVisible();
-    const grid = await screen.findByRole('treegrid', {
-      name: 'Internal URL returns 4xx: affected URLs, grouped by detail',
-    });
+    expect(screen.getByRole('heading', { name: 'Affected URLs', level: 3 }).parentElement).toHaveTextContent(
+      /^Affected URLs2 URLs, most used first/,
+    );
+    // On arrival, its list: a URL a row, never called a page.
+    const list = await screen.findByRole('treegrid', { name: 'Internal URL returns 4xx: affected URLs' });
+    expect(within(list).getByRole('columnheader', { name: 'URL' })).toBeVisible();
+    expect(within(list).queryByRole('columnheader', { name: 'Page' })).toBeNull();
+    expect(row(/^Error Internal URL returns 4xx 2 ?URLs, 5% of the 40 URLs crawled$/)).toBeVisible();
+    expect(counts()).not.toHaveTextContent(/pages?/);
+    expect(screen.queryByText(/Affected pages/)).toBeNull();
+    // And its groups, counted in URLs.
+    const grid = await showGroups();
+    expect(grid).toHaveAccessibleName('Internal URL returns 4xx: affected URLs, grouped by cause');
     expect(within(grid).getByRole('columnheader', { name: 'URLs' })).toBeVisible();
     expect(within(grid).queryByRole('columnheader', { name: 'Pages' })).toBeNull();
-    expect(row(/^Error Internal URL returns 4xx 2 ?URLs, 5% of the 40 URLs crawled$/)).toBeVisible();
-    expect(screen.queryByText(/Pages affected|Share of pages|Affected pages/)).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Affected URLs', level: 3 }).parentElement).toHaveTextContent(
+      /^Affected URLs2 URLs in 1 group/,
+    );
     // Its group's link doesn't call them pages, nor say "URLs in URLs": its only group opens by itself.
     await waitFor(() => expect(router.state.location.search).toHaveProperty('group'));
     expect(await within(grid).findByRole('link', { name: 'Show all 2 in URLs' })).toBeVisible();
@@ -1221,14 +1447,15 @@ describe('a check’s count, worded by what the check flags', () => {
     sidecar({ checks: ISSUES_CHECKS_WITHOUT_SUBJECTS });
     const { router } = await open(`${ISSUES}/title-too-long`);
     await screen.findByRole('heading', { name: 'Title too long', level: 2 });
-    expect(figure('URLs affected')).toHaveTextContent(/^URLs affected3Open them in URLs$/);
-    expect(figure('Share of URLs')).toHaveTextContent(/^Share of URLs7\.5%of the 40 URLs crawled$/);
+    expect(counts()).toHaveTextContent(/^3 URLs·7\.5% of the 40 URLs crawled$/);
+    expect(countLink('3 URLs')).toHaveAttribute('title', 'Open them in URLs');
     expect(screen.getByRole('heading', { name: 'Affected URLs', level: 3 }).parentElement).toHaveTextContent(
-      'Affected URLs3 URLs',
+      /^Affected URLs3 URLs, /,
     );
     expect(await screen.findByRole('grid', { name: 'Title too long: affected URLs' })).toBeVisible();
     expect(row(/^Notice Title too long 3 ?URLs, 7\.5% of the 40 URLs crawled$/)).toBeVisible();
-    expect(screen.queryByText(/Pages affected|Share of pages|Affected pages|pages analysed/)).toBeNull();
+    expect(counts()).not.toHaveTextContent(/pages?/);
+    expect(screen.queryByText(/Affected pages|pages analysed/)).toBeNull();
     const all = screen.getByRole('radio', { name: /All/ });
     act(() => all.focus());
     fireEvent.keyDown(all, { key: 'k' });
@@ -1242,35 +1469,40 @@ describe('a check’s count, worded by what the check flags', () => {
     sidecar();
     await open(`${ISSUES}/empty-anchor-text${OPEN_GROUP}`);
     const grid = await screen.findByRole('treegrid', {
-      name: 'Internal links without anchor text: affected pages, grouped by related URL',
+      name: 'Internal links without anchor text: affected pages, grouped by linked URL',
     });
     expect(within(grid).getByRole('columnheader', { name: 'Pages' })).toBeVisible();
     expect(await within(grid).findByRole('link', { name: 'Show all 5 pages in URLs' })).toBeVisible();
     expect(screen.getByText('Likely in the site’s template').parentElement).toHaveTextContent('on 5 of 6 pages');
     // All 6 of the pages analysed.
-    expect(figure('Share of pages')).toHaveTextContent(/^Share of pages100%of the 6 pages analysed$/);
+    expect(counts()).toHaveTextContent(/^6 pages·100% of the 6 pages analysed$/);
+    expect(screen.getByRole('heading', { name: 'Affected pages', level: 3 }).parentElement).toHaveTextContent(
+      /^Affected pages6 pages in 2 groups/,
+    );
   });
 
   it('words the same group in URLs when the check doesn’t say it flags only pages', async () => {
     sidecar({ checks: ISSUES_CHECKS_WITHOUT_SUBJECTS });
     await open(`${ISSUES}/empty-anchor-text${OPEN_GROUP}`);
     const grid = await screen.findByRole('treegrid', {
-      name: 'Internal links without anchor text: affected URLs, grouped by related URL',
+      name: 'Internal links without anchor text: affected URLs, grouped by linked URL',
     });
     expect(within(grid).getByRole('columnheader', { name: 'URLs' })).toBeVisible();
     expect(await within(grid).findByRole('link', { name: 'Show all 5 in URLs' })).toBeVisible();
     expect(screen.getByText('Likely in the site’s template').parentElement).toHaveTextContent('on 5 of 6 URLs');
+    expect(screen.getByRole('heading', { name: 'Affected URLs', level: 3 }).parentElement).toHaveTextContent(
+      /^Affected URLs6 URLs in 2 groups/,
+    );
   });
 
   it('keeps both shares while the crawl runs: each is of the analysis’s own total, which doesn’t move', async () => {
     const { requests } = sidecar({ item: { status: 'running' } });
     await open(`${ISSUES}/internal-client-error`);
     await screen.findByRole('heading', { name: 'Internal URL returns 4xx', level: 2 });
-    expect(figure('URLs affected')).toHaveTextContent(/^URLs affected2/);
-    expect(figure('Share of URLs')).toHaveTextContent(/^Share of URLs5%of the 40 URLs crawled$/);
+    expect(counts()).toHaveTextContent(/^2 URLs·5% of the 40 URLs crawled$/);
     fireEvent.click(screen.getByRole('option', { name: /Title too long/ }));
     await screen.findByRole('heading', { name: 'Title too long', level: 2 });
-    expect(figure('Share of pages')).toHaveTextContent(/^Share of pages50%of the 6 pages analysed$/);
+    expect(counts()).toHaveTextContent(/^3 pages·50% of the 6 pages analysed$/);
     // Nothing of the running crawl is counted for either.
     expect(facetReads(requests)).toBe(0);
   });
@@ -1284,12 +1516,11 @@ describe('a check’s count, worded by what the check flags', () => {
     await open(`${ISSUES}/title-too-long`);
     await screen.findByRole('heading', { name: 'Title too long', level: 2 });
     // 3 of the 6 pages the analysis ran on: never 10% "of the 30 pages crawled".
-    expect(figure('Share of pages')).toHaveTextContent(/^Share of pages50%of the 6 pages analysed$/);
+    expect(counts()).toHaveTextContent(/^3 pages·50% of the 6 pages analysed$/);
     fireEvent.click(screen.getByRole('option', { name: /Internal URL returns 4xx/ }));
     await screen.findByRole('heading', { name: 'Internal URL returns 4xx', level: 2 });
-    expect(figure('URLs affected')).toHaveTextContent(/^URLs affected2/);
     // 2 of the 40 URLs crawled when it was analysed, which the analysis kept: never 0.5% of the 390 crawled now.
-    expect(figure('Share of URLs')).toHaveTextContent(/^Share of URLs5%of the 40 URLs crawled$/);
+    expect(counts()).toHaveTextContent(/^2 URLs·5% of the 40 URLs crawled$/);
     expect(screen.queryByText(/390/)).toBeNull();
     expect(facetReads(requests)).toBe(0);
   });
@@ -1308,14 +1539,14 @@ describe('a check’s count, worded by what the check flags', () => {
       });
       await open(`${ISSUES}/internal-client-error`);
       await screen.findByRole('heading', { name: 'Internal URL returns 4xx', level: 2 });
-      expect(figure('URLs affected')).toHaveTextContent(/^URLs affected2/);
-      expect(share()).toBeNull();
+      // The count alone: its line says no share after it.
+      expect(counts()).toHaveTextContent(/^2 URLs$/);
       expect(screen.queryByText(/URLs crawled|URLs found/)).toBeNull();
       // And none is made up from the crawl as it is now: nothing is read for one.
       expect(facetReads(requests)).toBe(0);
       fireEvent.click(screen.getByRole('option', { name: /Title too long/ }));
       await screen.findByRole('heading', { name: 'Title too long', level: 2 });
-      expect(figure('Share of pages')).toHaveTextContent(/^Share of pages50%of the 6 pages analysed$/);
+      expect(counts()).toHaveTextContent(/^3 pages·50% of the 6 pages analysed$/);
     },
   );
 
@@ -1324,11 +1555,10 @@ describe('a check’s count, worded by what the check flags', () => {
     sidecar({ analysis: { ...ISSUES_ANALYSIS, pagesAnalyzed: 2, crawledUrlCount: 1 } });
     await open(`${ISSUES}/title-too-long`);
     await screen.findByRole('heading', { name: 'Title too long', level: 2 });
-    expect(figure('Pages affected')).toHaveTextContent(/^Pages affected3/);
-    expect(share()).toBeNull();
+    // Each count alone, with no share after it.
+    expect(counts()).toHaveTextContent(/^3 pages$/);
     fireEvent.click(screen.getByRole('option', { name: /Internal URL returns 4xx/ }));
     await screen.findByRole('heading', { name: 'Internal URL returns 4xx', level: 2 });
-    expect(figure('URLs affected')).toHaveTextContent(/^URLs affected2/);
-    expect(share()).toBeNull();
+    expect(counts()).toHaveTextContent(/^2 URLs$/);
   });
 });

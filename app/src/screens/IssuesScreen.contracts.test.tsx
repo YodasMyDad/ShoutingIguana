@@ -2,7 +2,7 @@
 // fault, not the home page its issue is on (index X4); a check whose fix the platform owns says so quietly, with its
 // reason as given (Shopify).
 import { createMemoryHistory } from '@tanstack/react-router';
-import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Analysis, Check, CheckFile, Checks } from '../api/types';
 import { setTransport } from '../api/transport';
@@ -10,7 +10,7 @@ import { App } from '../app/App';
 import { createQueryClient } from '../app/queryClient';
 import { createAppRouter } from '../app/router';
 import { installKeyboard } from '../keyboard/registry';
-import { TEST_CRAWL_ID, fakeSidecar } from '../test/fakeSidecar';
+import { TEST_CRAWL_ID, fakeSidecar, json, problem } from '../test/fakeSidecar';
 import { ISSUE_ROWS, ISSUES_ANALYSIS, ISSUES_CHECKS, issuesRoutes } from '../test/issuesSidecar';
 
 const ISSUES = `/crawls/${TEST_CRAWL_ID}/issues`;
@@ -55,15 +55,35 @@ function analysisWith(files: Record<string, CheckFile[] | null>, extra: Partial<
 
 const HOME_ROW = [{ id: 1, url: `${SITE}/`, detail: 'Read, but it names no sitemap' }];
 
-async function open(path: string, analysis: Analysis, checks: Checks = CHECKS) {
+async function open(
+  path: string,
+  analysis: Analysis,
+  checks: Checks = CHECKS,
+  rows: { id: number; url: string; detail: string }[] = HOME_ROW,
+) {
   setTransport(
-    fakeSidecar(
-      issuesRoutes({
+    fakeSidecar([
+      // The crawl's sitemaps: a detail that names one links to it in Sitemaps.
+      [
+        'GET',
+        /^\/api\/crawls\/[0-9a-f]{16}\/sitemaps$/,
+        () => json({ sitemaps: [{ id: 4, url: `${SITE}/sitemap.xml` }] }),
+      ],
+      // An address looked up in the crawl: it has /shop/ and nothing else.
+      [
+        'POST',
+        /^\/api\/crawls\/[0-9a-f]{16}\/urls\/lookup$/,
+        (request) =>
+          (request.body as { url: string }).url === `${SITE}/shop/`
+            ? json({ id: 9, url: `${SITE}/shop/`, requested: null })
+            : problem({ type: 'not-found', title: 'The crawl doesn’t have this URL.', status: 404 }),
+      ],
+      ...issuesRoutes({
         checks,
         analysis,
-        rows: { ...ISSUE_ROWS, 'robots-txt-no-sitemap': HOME_ROW, 'sitemap-error': HOME_ROW },
+        rows: { ...ISSUE_ROWS, 'robots-txt-no-sitemap': rows, 'sitemap-error': rows },
       }),
-    ),
+    ]),
   );
   const queryClient = createQueryClient();
   const router = createAppRouter(queryClient, createMemoryHistory({ initialEntries: [path] }));
@@ -102,6 +122,52 @@ describe('a check of the site’s own files', () => {
     );
     expect(headers(grid).some((header) => /Used on|Inlinks/.test(header))).toBe(false);
     expect(screen.queryByText(/most used first/)).toBeNull();
+  });
+
+  it('makes an address its detail names a link, and says the file the row is about by its name', async () => {
+    // The engine's sentence names both files in full (A-18): the robots.txt is already the row's own column.
+    const router = await open(
+      `${ISSUES}/robots-txt-no-sitemap`,
+      analysisWith({ 'robots-txt-no-sitemap': [{ url: `${SITE}/robots.txt`, sitemapId: null }] }),
+      CHECKS,
+      [
+        {
+          id: 1,
+          url: `${SITE}/`,
+          detail: `${SITE}/robots.txt is empty, so it has no Sitemap: line; the sitemap was found at ${SITE}/sitemap.xml`,
+        },
+      ],
+    );
+    const grid = await screen.findByRole('grid', { name: /robots\.txt names no sitemap/ });
+    const row = await within(grid).findByRole('row', { name: /\/robots\.txt/ });
+    const detail = row.querySelector<HTMLElement>('[data-detail-words]');
+    if (!detail) throw new Error('No detail');
+    expect(detail).toHaveTextContent(/^robots\.txt is empty, so it has no Sitemap: line; the sitemap was found at/);
+    // The sitemap is a link to its own screen, with its open-in-browser button after it.
+    const sitemap = await within(detail).findByRole('button', { name: `${SITE}/sitemap.xml` });
+    expect(detail.querySelector('[data-open-url]')).toHaveAttribute('data-open-url', `${SITE}/sitemap.xml`);
+    fireEvent.click(sitemap);
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/crawls/${TEST_CRAWL_ID}/sitemaps/4`));
+  });
+
+  it('inspects any other address its detail names, looked up when it’s pressed, and says so when the crawl hasn’t it', async () => {
+    const router = await open(
+      `${ISSUES}/robots-txt-no-sitemap`,
+      analysisWith({ 'robots-txt-no-sitemap': [{ url: `${SITE}/robots.txt`, sitemapId: null }] }),
+      CHECKS,
+      [{ id: 1, url: `${SITE}/`, detail: `Names ${SITE}/shop/ and ${SITE}/gone/` }],
+    );
+    const grid = await screen.findByRole('grid', { name: /robots\.txt names no sitemap/ });
+    // Every address is a link (rule 1), never text with a copy cursor.
+    const shop = await within(grid).findByRole('button', { name: `${SITE}/shop/` });
+    const gone = within(grid).getByRole('button', { name: `${SITE}/gone/` });
+    expect(shop).toHaveClass('si-url__go');
+    expect(gone).toHaveClass('si-url__go');
+    fireEvent.click(shop);
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ inspect: 9 }));
+    fireEvent.click(gone);
+    expect(await screen.findByText('The crawl doesn’t have this URL')).toBeVisible();
+    expect(router.state.location.search).toMatchObject({ inspect: 9 });
   });
 
   it('names the first sitemap and how many more, with the way to it in Sitemaps', async () => {

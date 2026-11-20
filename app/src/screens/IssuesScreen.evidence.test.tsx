@@ -12,8 +12,10 @@ import { createAppRouter } from '../app/router';
 import { installKeyboard } from '../keyboard/registry';
 import { evidenceRoutes } from '../test/evidenceSidecar';
 import { TEST_CRAWL_ID, fakeSidecar } from '../test/fakeSidecar';
+import { forgetCheckPlaces } from './issues/issuesPlace';
 
 const ISSUES = `/crawls/${TEST_CRAWL_ID}/issues`;
+const SITE = 'https://example.com';
 const groupOf = (relatedUrlId: number | null, detail: string | null = null) =>
   `?group=${encodeURIComponent(JSON.stringify({ detail, relatedUrlId }))}`;
 
@@ -41,6 +43,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   uninstall();
+  forgetCheckPlaces();
   setTransport(fakeSidecar([]));
 });
 
@@ -86,7 +89,9 @@ describe('a flat check’s evidence', () => {
     await open(`${ISSUES}/viewport-missing`);
     expect(await screen.findByText('Likely in the site’s template')).toBeVisible();
     expect(
-      screen.getByText(/The same issue on 13 of the 14 pages analysed, so it’s likely in the site’s template/),
+      screen.getByText(
+        /On 13 of the 14 pages analysed, so it’s likely 1 cause in the site’s template: one fix clears them all\./,
+      ),
     ).toBeVisible();
   });
 
@@ -123,17 +128,33 @@ describe('a group’s evidence', () => {
     expect(within(hero).queryByRole('img', { name: 'hero.jpg' })).toBeNull();
     expect(hero.querySelector('.si-thumb')).toHaveAttribute('data-thumb', 'failed');
     expect(hero).toHaveTextContent('12');
-    expect(screen.getByText(/14 issues in 2 groups, by image, largest file first/)).toBeVisible();
-    // The callout names the file with what it is.
-    expect(screen.getByText(/The same URL, .*\(1\.8 MB · JPEG · 4000×3000 px\), on 12 of 14 pages/)).toBeVisible();
+    // An image check opens grouped by image, with no asking: its pages, in its groups, the largest file first.
+    expect(screen.getByText('14 pages in 2 groups, largest file first')).toBeVisible();
+    expect(screen.getByRole('radio', { name: 'Grouped by image' })).toHaveAttribute('aria-checked', 'true');
+    // The callout counts the thing, not its pages: one image, named with what it is, and where its pages show it.
+    await waitFor(() =>
+      expect(document.querySelector('[data-template-thing]')).toHaveTextContent(
+        /^1 image,.*hero\.jpg.*\(1\.8 MB · JPEG · 4000×3000 px\) in the content, shown on 12 of 14 pages: one fix clears them\./,
+      ),
+    );
     // The insight: the size its pages show it at, against the file's.
     expect(
       await screen.findByText(/shown at 400×300 on the first 10 pages read; the file is 4000×3000 \(10× wider\)\./),
     ).toBeVisible();
-    // Each page under it: how it shows the image, and the other image its issue names.
-    expect(await within(grid).findByText('shown at 400×300 · lazy · in the content · +1 other URL')).toBeVisible();
-    // The group's other first pages show it once each.
-    expect(within(grid).getAllByText('shown at 400×300 · lazy · in the content').length).toBeGreaterThan(1);
+    // Each page under it: where on the page the image is and how the page shows it, as parts, and that its issue
+    // names another image, a press away.
+    const first = await within(grid).findByRole('row', { name: /\/product-1\// });
+    expect(await within(first).findByText('Image in the content')).toBeVisible();
+    expect(first).toHaveTextContent('shown at 400×300 · lazy');
+    expect(within(first).getByText('+1 more')).toHaveAttribute('data-tree-toggle');
+    expect(first).toHaveAttribute('aria-expanded', 'false');
+    // The group's other first pages show it once each: nothing more to open.
+    const second = within(grid).getByRole('row', { name: /\/product-2\// });
+    expect(within(second).getByText('Image in the content')).toBeVisible();
+    expect(second).toHaveTextContent('shown at 400×300 · lazy');
+    expect(second).not.toHaveAttribute('aria-expanded');
+    expect(within(second).queryByText(/more$/)).toBeNull();
+    expect(within(grid).getAllByText('Image in the content').length).toBeGreaterThan(1);
     // The rows' targets in one read (the callout reads its first page's whole, to find where the image is).
     const reads = requests.filter(
       (request) =>
@@ -142,36 +163,92 @@ describe('a group’s evidence', () => {
     expect(reads).toHaveLength(1);
   });
 
-  it('says where a redirect ends on its group, and opens a page to say where its link is and what it says', async () => {
+  it('says where a redirect ends on its group, and on each page what its link says and where it is, opening a page to go on to its other links', async () => {
     sidecar();
-    await open(`${ISSUES}/links-to-redirects${groupOf(90)}`);
+    const router = await open(`${ISSUES}/links-to-redirects${groupOf(90)}`);
     const grid = await screen.findByRole('treegrid', { name: /Internal links to redirects/ });
-    const old = await within(grid).findByRole('row', { name: /\/old/ });
+    const old = await within(grid).findByRole('row', { name: /\/old/, expanded: true });
     expect(old).toHaveTextContent('301');
     expect(old).toHaveTextContent('→ /new/ 200');
-    const line = await within(grid).findByText('in the footer · “Old range” · 2 links · +1 other URL');
-    expect(line).toBeVisible();
-    const home = line.closest<HTMLElement>('[role="row"]')!;
+    // The home page's line: what its link to /old says, where on the page it is, how many of them, and that its issue
+    // names another URL.
+    const more = await within(grid).findByText('+1 more');
+    const home = more.closest<HTMLElement>('[role="row"]')!;
+    expect(within(home).getByText('“Old range”')).toBeVisible();
+    expect(within(home).getByText('Footer')).toBeVisible();
+    expect(home).toHaveTextContent('2 links');
+    // Its open button opens the page at that link's words.
+    expect(within(home).getByRole('button', { name: `Open ${SITE}/ in your browser` })).toHaveAttribute(
+      'data-open-url',
+      `${SITE}/#:~:text=Old%20range`,
+    );
     fireEvent.pointerDown(cellOf(home), { button: 0 });
     act(() => grid.focus());
     fireEvent.keyDown(grid, { key: 'ArrowRight' });
     await waitFor(() => expect(level3(grid).length).toBeGreaterThan(0));
+    expect(within(home).getByText('Hide 1')).toBeVisible();
     // Its line says its link to the group's URL: what opens under it is the other URL it names, never that link again.
     expect(
       level3(grid)
         .map((row) => row.textContent)
         .join(' '),
     ).not.toContain('Old range');
-    expect(level3(grid)[0]).toHaveTextContent('All 1 in the inspector');
+    // The other URL wasn't among those read: the way on is to the page's links in Links, not the inspector.
+    expect(level3(grid).map((row) => row.textContent)).toEqual(['Show it in Links']);
+    expect(within(grid).queryByText(/in the inspector/)).toBeNull();
+    fireEvent.click(within(level3(grid)[0]!).getByRole('link', { name: 'Show it in Links' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/crawls/${TEST_CRAWL_ID}/links`));
+    expect(router.state.location.search).toMatchObject({
+      filter: [
+        { column: 'from.id', op: 'eq', value: 1 },
+        { column: 'selfLink', op: 'is', value: false },
+      ],
+    });
   });
 
-  it('names a duplicate title’s group by the title its pages share', async () => {
+  // Both fail at 5a52c0ee, and are left failing on purpose (see the round's report): under a group of one URL, each
+  // page's row now repeats what the group's own row says of that URL (the file's size, type and pixels; where the
+  // redirect ends), which its line left out before the rework ("the group's row says the URL: the page's row says
+  // its link to it", IssueGroups.tsx `PageWhere`).
+  describe('a page under a group of the URL it names', () => {
+    it('says how it shows the group’s image, not the file’s own size, type and pixels again', async () => {
+      sidecar();
+      await open(`${ISSUES}/image-too-large${groupOf(812)}`);
+      const grid = await screen.findByRole('treegrid', { name: /Images over 200 KB/ });
+      const page = await within(grid).findByRole('row', { name: /\/product-2\// });
+      await within(page).findByText('Image in the content');
+      expect(within(page).getByText('shown at 400×300 · lazy')).toBeVisible();
+      expect(page).not.toHaveTextContent('1.8 MB · JPEG · 4000×3000 px');
+    });
+
+    it('says how it links to the group’s redirect, not where the redirect ends again', async () => {
+      sidecar();
+      await open(`${ISSUES}/links-to-redirects${groupOf(90)}`);
+      const grid = await screen.findByRole('treegrid', { name: /Internal links to redirects/ });
+      const page = await within(grid).findByRole('row', { name: /\/garden\// });
+      await within(page).findByText('“Shop the range”');
+      expect(page).not.toHaveTextContent('→ /new/ 200');
+    });
+  });
+
+  it('lists a duplicate title’s pages each with its title, and names its groups by the title their pages share', async () => {
     sidecar();
     await open(`${ISSUES}/title-duplicate`);
+    // On arrival, its list: a page a row, with the title it shares.
+    const list = await screen.findByRole('grid', { name: 'Duplicate titles: affected pages' });
+    expect(await within(list).findByRole('columnheader', { name: /^Title/ })).toBeInTheDocument();
+    expect(
+      within(await within(list).findByRole('row', { name: /\/sofas\/all\// })).getByText('Sofas | Example'),
+    ).toBeVisible();
+    // Grouped, by what they share.
+    fireEvent.click(screen.getByRole('radio', { name: 'Grouped by what they share' }));
     const grid = await screen.findByRole('treegrid', { name: /Duplicate titles/ });
     expect(await within(grid).findByRole('columnheader', { name: 'Shared title' })).toBeInTheDocument();
-    expect(within(grid).getByText('“Garden Furniture Sets | Shop”')).toBeVisible();
-    expect(within(grid).getByText('“Sofas | Example”')).toBeVisible();
+    expect(within(grid).getByText('“Garden Furniture Sets | Shop”', { selector: '[aria-level="1"] *' })).toBeVisible();
+    // The second group is below the first one's pages, which opened by themselves: closed, both are in view.
+    const first = await within(grid).findByRole('row', { expanded: true });
+    fireEvent.pointerDown(first.querySelector('[data-tree-toggle]') ?? first, { button: 0 });
+    await waitFor(() => expect(within(grid).getByText('“Sofas | Example”')).toBeVisible());
   });
 
   it('shows each redirecting URL’s chain hop by hop, and each refused URL its robots.txt rule', async () => {

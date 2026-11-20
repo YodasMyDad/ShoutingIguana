@@ -277,14 +277,15 @@ test('from a check’s pages: Enter inspects one, its issue leads back to the ch
   await openSection(page, /^Issues/);
   await showChecks(page);
   await page.getByRole('option', { name: /Invalid JSON-LD/ }).click();
-  // Its only group opens by itself, in the address.
-  await expect(page).toHaveURL(/\/issues\/structured-data-invalid\?group=/);
-  const groups = page.getByRole('treegrid', { name: /Invalid JSON-LD: affected pages/ });
-  await expect(groups.getByRole('row', { expanded: true })).toBeVisible();
-  await groups.focus();
-  // Its pages read first: ArrowDown pressed before they came found no row to move to (1 run in 5).
-  await expect(groups.getByRole('row', { level: 2 }).first()).toBeVisible();
-  await page.keyboard.press('ArrowDown');
+  // The check opens as a list of its pages, one row a page: no group in the address.
+  await expect(page).toHaveURL(/\/issues\/structured-data-invalid$/);
+  const pages = page
+    .locator('[data-check-detail]')
+    .locator('[role="grid"], [role="treegrid"]')
+    .and(page.getByLabel('Invalid JSON-LD: affected pages', { exact: true }));
+  // Its pages read first: a key pressed before they came found no row to act on (1 run in 5).
+  await expect(pages.getByRole('row').nth(1)).toContainText('/plants/jsonld-invalid');
+  await pages.focus();
   await page.keyboard.press('Enter');
   const inspector = inspectorOf(page);
   await expect(inspector).toBeVisible();
@@ -313,7 +314,8 @@ test('from a check’s pages: Enter inspects one, its issue leads back to the ch
 
   await page.keyboard.press('Escape');
   await expect(inspector).toBeHidden();
-  await expect(page).toHaveURL(/\/issues\/structured-data-invalid\?group=/);
+  await expect(page).toHaveURL(/\/issues\/structured-data-invalid$/);
+  await expect(pages.getByRole('row').nth(1)).toContainText('/plants/jsonld-invalid');
   await page.keyboard.press('Alt+ArrowLeft');
   await expect(page).not.toHaveURL(/inspect=/);
   await expect(inspector).toBeHidden();

@@ -460,7 +460,10 @@ export function categoryNamed(checks: Checks, id: string): { id: string; title: 
 
 function matchesText(entry: CheckEntry, category: string, words: readonly string[]): boolean {
   if (words.length === 0) return true;
-  const haystack = `${entry.check.title} ${category}`.toLowerCase();
+  // Its title and category, what it says is wrong ("404 Not Found" is in no title), and its id, as written and as
+  // words (A-11).
+  const { id, title, description } = entry.check;
+  const haystack = `${title} ${category} ${description} ${id} ${id.replace(/-/g, ' ')}`.toLowerCase();
   return words.every((word) => haystack.includes(word));
 }
 

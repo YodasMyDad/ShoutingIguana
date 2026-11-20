@@ -3,7 +3,7 @@
 // and axe at zero violations in both themes and under forced colours.
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { showChecks, siteRow } from './support';
+import { read, seededCrawl, showChecks, showGroups, siteRow } from './support';
 
 async function expectNoViolations(page: Page) {
   const results = await new AxeBuilder({ page })
@@ -33,6 +33,46 @@ async function openIssues(page: Page) {
   await showChecks(page);
 }
 
+interface CatalogCheck {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+}
+
+/** The checks the list shows, by their ids, in its order. */
+const listedChecks = (list: Locator) =>
+  list.getByRole('option').evaluateAll((options) => options.map((option) => option.getAttribute('data-check') ?? ''));
+
+/**
+ * The checks filter narrows the list to the checks that mention a word: in the title, the category, what the check
+ * says is wrong, or its id (as written, and as words). Worked out from the sidecar's own catalog: exactly those of the
+ * checks listed before stay, so one that names the word in its title is in, one that only describes it is in too
+ * ("Redirect chain" tells of sitemaps), and one that never mentions it is out.
+ */
+async function expectNarrowedTo(list: Locator, word: string, before: readonly string[]) {
+  const catalog = await read<{ checks: CatalogCheck[]; categories: { id: string; title: string }[] }>('/api/checks');
+  const byId = new Map(catalog.checks.map((check) => [check.id, check]));
+  const categoryOf = new Map(catalog.categories.map((category) => [category.id, category.title]));
+  const mentions = (id: string) => {
+    const check = byId.get(id);
+    if (!check) return false;
+    const category = categoryOf.get(check.category) ?? '';
+    return `${check.title} ${category} ${check.description} ${id} ${id.replace(/-/g, ' ')}`
+      .toLowerCase()
+      .includes(word);
+  };
+  const kept = before.filter(mentions);
+  // The list is narrowed, to something: some checks stay and some go.
+  expect(kept.length).toBeGreaterThan(0);
+  expect(kept.length).toBeLessThan(before.length);
+  await expect.poll(() => listedChecks(list)).toEqual(kept);
+  // Every check listed before with the word in its title is still listed, and there is one.
+  const titled = before.filter((id) => byId.get(id)?.title.toLowerCase().includes(word));
+  expect(titled.length).toBeGreaterThan(0);
+  for (const id of titled) await expect(list.locator(`[role="option"][data-check="${id}"]`)).toBeVisible();
+}
+
 test('triage: pick a check, read it, open a group, its URLs, inspect one, then Esc and Alt+Left', async ({ page }) => {
   await openIssues(page);
   // What moves the score leads the answer, then the notices' things in the same unit, then the counts (rounds 3 and 4).
@@ -41,18 +81,44 @@ test('triage: pick a check, read it, open a group, its URLs, inspect one, then E
   );
 
   await page.getByRole('option', { name: /Duplicate title/ }).click();
-  // A check's only group opens by itself, in the address.
-  await expect(page).toHaveURL(/\/issues\/title-duplicate(\?group=.*)?$/);
-  await expect(page.getByRole('heading', { name: 'Duplicate title', level: 2 })).toBeVisible();
-  // What's wrong in the check's head; why it matters and how to fix it after its evidence, a button away.
-  await expect(page.getByRole('heading', { name: 'What’s wrong', level: 3 })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Why it matters', level: 3 })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'How to fix it', level: 3 })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Why it matters and how to fix it' })).toBeVisible();
+  // The check opens as a list of its pages, one row a page: no group in the address.
+  await expect(page).toHaveURL(/\/issues\/title-duplicate$/);
+  const detail = page.locator('[data-check-detail]');
+  await expect(detail.getByRole('heading', { name: 'Duplicate title', level: 2 })).toBeVisible();
+  const views = detail.getByRole('radiogroup', { name: 'How the rows are shown' });
+  await expect(views.getByRole('radio', { name: 'List' })).toHaveAttribute('aria-checked', 'true');
+  const rows = detail.getByRole('grid', { name: 'Duplicate title: affected pages' });
+  await expect(rows.getByRole('row').nth(1)).toBeVisible();
 
-  // Its groups: open the first with the keyboard, as the treegrid pattern has it.
-  const groups = page.getByRole('treegrid', { name: /Duplicate title: affected pages/ });
+  // What's wrong, why it matters and how to fix it are in the check's head, before its rows. A window this short
+  // (1280 x 800) folds all three behind one button that names them; opened, they have the pane, and the rows wait
+  // behind "Show the rows".
+  const explain = detail.locator('header [data-explain]');
+  const fold = explain.getByRole('button', { name: 'What’s wrong, why it matters and how to fix it' });
+  await expect(fold).toHaveAttribute('aria-expanded', 'false');
+  const wrong = explain.getByRole('heading', { name: 'What’s wrong', level: 3 });
+  await expect(wrong).toBeHidden();
+  await fold.click();
+  await expect(fold).toHaveAttribute('aria-expanded', 'true');
+  await expect(wrong).toBeVisible();
+  await expect(explain.getByRole('heading', { name: 'Why it matters', level: 3 })).toBeVisible();
+  await expect(explain.getByRole('heading', { name: 'How to fix it', level: 3 })).toBeVisible();
+  await expect(rows).toBeHidden();
+  await detail.getByRole('button', { name: 'Show the rows' }).click();
+  await expect(rows.getByRole('row').nth(1)).toBeVisible();
+  await expect(wrong).toBeHidden();
+  await expect(fold).toHaveAttribute('aria-expanded', 'false');
+
+  // Its groups, from "Grouped by …": the first of a few opens by itself, in the address. It closes and opens with
+  // the keyboard, as the treegrid pattern has it.
+  await showGroups(page);
+  const groups = page.getByRole('treegrid', { name: /Duplicate title: affected pages, grouped by / });
+  await expect(page).toHaveURL(/group=/);
+  await expect(groups.getByRole('row', { expanded: true })).toBeVisible();
   await groups.focus();
+  await page.keyboard.press('ArrowLeft');
+  await expect(groups.getByRole('row', { expanded: true })).toHaveCount(0);
+  await expect(page).not.toHaveURL(/group=/);
   await page.keyboard.press('ArrowRight');
   await expect(page).toHaveURL(/group=/);
   await expect(groups.getByRole('row', { expanded: true })).toBeVisible();
@@ -83,6 +149,7 @@ test('back from a group’s URLs on a small window, the open group is in view in
   await page.setViewportSize({ width: 1280, height: 720 });
   await openIssues(page);
   await page.getByRole('option', { name: /Duplicate title/ }).click();
+  await showGroups(page);
   const groups = page.getByRole('treegrid', { name: /Duplicate title: affected pages/ });
   // The last group, opened from the keyboard.
   await groups.focus();
@@ -170,9 +237,9 @@ test('the checks list runs on the keyboard: arrows move the selection and the ro
   );
   await page.keyboard.press('Control+f');
   await expect(page.getByRole('searchbox', { name: 'Filter checks' })).toBeFocused();
+  const every = await listedChecks(list);
   await page.keyboard.type('sitemap');
-  await expect(list.getByRole('option')).not.toHaveCount(0);
-  for (const name of await list.getByRole('option').allTextContents()) expect(name.toLowerCase()).toContain('sitemap');
+  await expectNarrowedTo(list, 'sitemap', every);
 });
 
 test('a command chosen in the palette keeps the focus it takes: “Filter the checks” leaves the keyboard in its field', async ({
@@ -190,10 +257,11 @@ test('a command chosen in the palette keeps the focus it takes: “Filter the ch
   // the command had the field for a moment and the closing palette took the focus back to the page.
   const field = page.getByRole('searchbox', { name: 'Filter checks' });
   await expect(field).toBeFocused();
+  const every = await listedChecks(list);
   await page.keyboard.type('sitemap');
   await expect(field).toHaveValue('sitemap');
   await expect(field).toBeFocused();
-  for (const name of await list.getByRole('option').allTextContents()) expect(name.toLowerCase()).toContain('sitemap');
+  await expectNarrowedTo(list, 'sitemap', every);
 });
 
 test('a check that doesn’t group lists its URLs flat, sortable by its detail', async ({ page }) => {
@@ -234,9 +302,12 @@ for (const colorScheme of ['light', 'dark'] as const) {
     await page.emulateMedia({ colorScheme });
     await openIssues(page);
     await page.getByRole('option', { name: /Duplicate title/ }).click();
+    // The check opens as a list: its groups from "Grouped by …", the first of a few opening by itself.
+    await showGroups(page);
     const groups = page.getByRole('treegrid');
+    await expect(groups.getByRole('row', { expanded: true })).toBeVisible();
     await groups.focus();
-    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('ArrowDown');
     await expect(groups.getByRole('row', { expanded: true })).toBeVisible();
     await expectNoViolations(page);
   });
@@ -253,9 +324,74 @@ test('under forced colours, the selected check and the open group stay visible, 
   const ring = await selected.evaluate((element) => getComputedStyle(element, '::after').borderTopStyle);
   expect(ring).toBe('solid');
   await page.getByRole('option', { name: /Duplicate title/ }).click();
+  await showGroups(page);
   const groups = page.getByRole('treegrid');
+  await expect(groups.getByRole('row', { expanded: true })).toBeVisible();
   await groups.focus();
-  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowDown');
   await expect(groups.getByRole('row', { expanded: true })).toBeVisible();
   await expectNoViolations(page);
+});
+
+// The owner's task (the UX round of 2026-11-19, A-01, A-06, A-07): from a broken URL to the page that holds the link,
+// at the link, with no expanding and one click; and back from Links, the check is as it was left.
+test('the 404s name the page that holds each broken link, open it at the link in one click, and keep their place', async ({
+  page,
+}) => {
+  const crawl = await seededCrawl();
+  await page.goto(`/crawls/${crawl.id}/issues/internal-client-error`);
+  const grid = page.getByRole('treegrid', { name: /Internal URL returns 4xx: affected URLs/ });
+  // On arrival, a list: each broken URL with the page linking to it, the link's words and where on the page it is.
+  await expect(grid.getByRole('columnheader', { name: 'Linked from' })).toBeVisible();
+  await expect(grid.getByRole('columnheader', { name: 'Link text' })).toBeVisible();
+  const source = grid.locator('[data-where="source"]').first();
+  await expect(source).toBeVisible();
+  // The linking page is a link, with its open button directly after it, always there: it opens the page, at the
+  // link's words where the link has some.
+  const open = source.locator('[data-open-url]');
+  await expect(open).toBeVisible();
+  const target = (await open.getAttribute('data-open-url')) ?? '';
+  expect(target).toMatch(/^https?:\/\//);
+  const [popup] = await Promise.all([page.waitForEvent('popup'), open.click()]);
+  await popup.close();
+  // Its text inspects the linking page: one click, and the check stays.
+  await source.locator('.si-url__go').click();
+  await expect(page).toHaveURL(/\/issues\/internal-client-error\?.*inspect=\d+/);
+  await expect(page.getByRole('complementary', { name: 'Inspector' })).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  // One scroller: the rows' own. The card around them never scrolls.
+  const scrollers = await page.locator('[data-check-detail]').evaluate((card) =>
+    [card, ...card.querySelectorAll('*')]
+      .filter((element) => {
+        const style = getComputedStyle(element);
+        return /auto|scroll/.test(style.overflowY) && element.scrollHeight > element.clientHeight + 1;
+      })
+      .map((element): string => (element === card ? 'card' : (element.getAttribute('class') ?? ''))),
+  );
+  expect(scrollers.filter((name) => !name.includes('si-grid'))).toEqual([]);
+
+  // Away to Links and back: the rows are where they were left.
+  // The check with the most rows on the seeded crawl (the pages its sitemaps leave out): more than its pane holds.
+  const titles = page.getByRole('grid', { name: /Indexable page not in a sitemap: affected pages/ });
+  await page.goto(`/crawls/${crawl.id}/issues/not-in-sitemap`);
+  await expect(titles.getByRole('row').nth(2)).toBeVisible();
+  const rows = page.locator('[data-check-detail] .si-grid').first();
+  const most = await rows.evaluate((element) => element.scrollHeight - element.clientHeight);
+  expect(most, 'the check’s rows scroll in their own pane').toBeGreaterThanOrEqual(64);
+  const offset = Math.min(most, 96);
+  await rows.evaluate((element, top) => {
+    element.dispatchEvent(new WheelEvent('wheel'));
+    element.scrollTop = top;
+  }, offset);
+  await expect.poll(() => rows.evaluate((element) => element.scrollTop)).toBe(offset);
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('link', { name: /^Links/ })
+    .click();
+  await expect(page).toHaveURL(/\/links/);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/issues\/not-in-sitemap/);
+  await expect(titles.getByRole('row').nth(2)).toBeVisible();
+  await expect.poll(() => rows.evaluate((element) => element.scrollTop)).toBe(offset);
 });

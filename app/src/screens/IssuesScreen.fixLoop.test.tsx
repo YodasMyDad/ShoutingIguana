@@ -27,6 +27,7 @@ import {
   issueRowsPage,
   issuesRoutes,
 } from '../test/issuesSidecar';
+import { forgetCheckPlaces } from './issues/issuesPlace';
 
 /** The Issues fixture's catalog as a fix-loop sidecar serves it: each check says what a recheck reads again. */
 const CHECKS = {
@@ -223,6 +224,8 @@ afterEach(() => {
   uninstall();
   liveStore.reset();
   resetPendingRechecks();
+  // The view chosen for a check ("Grouped by cause") is kept for the session: the next test starts with none.
+  forgetCheckPlaces();
   updateSettings({ compareWithByCrawl: {}, checkSort: { advanced: 'fixFirst', simple: 'fixFirst' } });
   setTransport(fakeSidecar([]));
 });
@@ -275,14 +278,28 @@ describe('the checks list compared with the previous crawl (Advanced)', () => {
     expect(within(fixed).getByRole('option', { name: /Internal URL returns 5xx/ })).toHaveTextContent(/Fixed/);
   });
 
-  it('narrows to the checks that moved one way, as a chip that removes itself', async () => {
+  it('narrows to the checks that moved one way from a chip that stays pressed, the others still beside it (A-12)', async () => {
     const router = await open(`${ISSUES}/internal-client-error`);
     const group = await screen.findByRole('group', { name: 'Since 17 Oct' });
-    await userEvent.click(within(group).getByRole('button', { name: /^New/ }));
+    const chip = (name: RegExp) => within(group).getByRole('button', { name });
+    // Each says what it keeps, in words a first-time reader understands.
+    // Its tooltip (what it keeps, in a sentence) isn't pinned here yet: see docs/handoff/2026-11-19/state-issues.md.
+    expect(chip(/^More URLs/)).toBeVisible();
+    expect(chip(/^New/)).toBeVisible();
+    expect(chip(/^Fewer URLs/)).toBeVisible();
+    expect(chip(/^Any change/)).toBeVisible();
+    await userEvent.click(chip(/^New/));
     await waitFor(() => expect(router.state.location.search).toMatchObject({ change: 'new' }));
     await waitFor(() => expect(checksList().getAllByRole('option')).toHaveLength(1));
     expect(option(/Internal links without anchor text/)).toBeVisible();
-    await userEvent.click(screen.getByRole('button', { name: /Remove.*Since 17 Oct/ }));
+    // The chips are still there: the one in use is pressed, and another is one press away.
+    expect(chip(/^New/)).toHaveAttribute('aria-pressed', 'true');
+    expect(chip(/^Fixed/)).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.click(chip(/^Fixed/));
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ change: 'fixed' }));
+    expect(chip(/^Fixed/)).toHaveAttribute('aria-pressed', 'true');
+    // Pressed again, it lets go.
+    await userEvent.click(chip(/^Fixed/));
     await waitFor(() => expect(router.state.location.search).not.toHaveProperty('change'));
   });
 
@@ -310,11 +327,26 @@ describe('the Issues head compared with the previous crawl (Advanced)', () => {
 describe('a check’s detail compared with the previous crawl (Advanced)', () => {
   it('says its count then, offers Recheck beside Copy URLs, and gives its groups their URLs then and moves', async () => {
     await open(`${ISSUES}/internal-client-error`);
-    const detail = within(await screen.findByRole('article', { name: 'Internal URL returns 4xx' }));
+    const article = await screen.findByRole('article', { name: 'Internal URL returns 4xx' });
+    const detail = within(article);
+    // Its counts, in one line: how many, of how much, and how that moved since then.
     expect(await detail.findByText('7 fewer since 17 Oct')).toBeVisible();
+    expect(article.querySelector('[data-counts]')).toHaveTextContent(
+      /^2 URLs·5% of the 40 URLs crawled·7 fewer since 17 Oct$/,
+    );
+    // How it moved is a link to the same check on the crawl compared with (A-15), never dead words.
+    const then = detail.getByRole('link', { name: '7 fewer since 17 Oct' });
+    expect(then.getAttribute('href')).toMatch(/^\/crawls\/[0-9a-f]{16}\/issues\/internal-client-error$/);
+    expect(then.getAttribute('href')).not.toContain(TEST_CRAWL_ID);
     expect(await detail.findByRole('button', { name: 'Recheck 5 URLs' })).toBeVisible();
+    // Its list has no group to compare; its groups, once shown, each say their URLs then and how they moved.
+    expect(detail.queryByRole('columnheader', { name: 'Change' })).toBeNull();
+    await userEvent.click(detail.getByRole('radio', { name: 'Grouped by cause' }));
     expect(await detail.findByRole('columnheader', { name: 'Change' })).toBeVisible();
+    expect(detail.getByRole('columnheader', { name: '17 Oct' })).toBeVisible();
     // The group: 9 URLs then, 2 now.
+    const group = await detail.findByRole('row', { name: /404 Not Found/ });
+    expect(group).toHaveTextContent('404 Not Found29−77 fewer since 17 Oct');
     expect((await detail.findAllByText('7 fewer since 17 Oct')).length).toBe(2);
   });
 

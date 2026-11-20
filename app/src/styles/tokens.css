@@ -387,6 +387,10 @@
   --checks-height-stacked: max(50vh, 18rem); /* the checks list's rows above the selected check, when they stack */
   --evidence-max-height: 64vh; /* a check's affected pages past 100 rows: its grid scrolls inside this */
   --explain-columns: repeat(auto-fit, minmax(13rem, 1fr)); /* what's wrong, why it matters, how to fix it */
+  /* A check's rows under its head: their heading and callouts, then the list, which keeps this much (four rows; with
+     the template's callout over them, that too) however tall the head is, and takes the rest of the pane. */
+  --check-rows: auto minmax(10rem, 1fr);
+  --check-rows-callout: auto minmax(14.5rem, 1fr);
   --overview-live-columns: minmax(0, 1.7fr) minmax(0, 1fr); /* the live Overview: the chart, then codes and alerts */
   --overview-columns: minmax(0, 1.2fr) minmax(0, 1fr); /* the answer: Fix first, then categories and what was skipped */
   --overview-issues-width: 88px; /* a category's issue count, in a column */

@@ -348,6 +348,24 @@ describe('the list', () => {
     expect(ids(build({ q: 'titles' }).visible)).toEqual(['title-too-long']);
   });
 
+  it('finds a check by a word of what it says is wrong, or of its id, as well as its title (A-11: “404”)', () => {
+    const checks: Checks = {
+      ...CHECKS,
+      checks: CHECKS.checks.map((entry) =>
+        entry.id === 'internal-client-error'
+          ? { ...entry, description: 'This internal URL answered with a 4xx client error such as 404 Not Found.' }
+          : entry,
+      ),
+    };
+    const found = (q: string) => ids(buildCheckList(checks, checkEntries(checks, ANALYSIS), { ...FILTERS, q }).visible);
+    // "404" is in no title: the check's own description says it.
+    expect(found('404')).toEqual(['internal-client-error']);
+    expect(found('not found')).toEqual(['internal-client-error']);
+    // A check's id, as the address and an export name it, with its hyphens or as words.
+    expect(found('orphan-page')).toEqual(['orphan-page']);
+    expect(found('client error')).toEqual(['internal-client-error']);
+  });
+
   it('says it was filtered to nothing only when the filters did it', () => {
     expect(build({ q: 'nothing like this' }).filteredToNothing).toBe(true);
     expect(build({ severity: ['warning'], q: 'title' }).filteredToNothing).toBe(true);

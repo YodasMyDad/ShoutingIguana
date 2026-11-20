@@ -129,6 +129,21 @@ export async function showChecks(page: Page) {
   }).toPass({ timeout: 15_000 });
 }
 
+/**
+ * Shows the open check's rows as its groups (the tree), from the choice beside "Affected …": a check opens as a list
+ * unless grouping saves work (an image, a cause in the site's template), so a spec of the tree chooses it first. Where
+ * the groups are shown already, it changes nothing.
+ */
+export async function showGroups(page: Page) {
+  const grouped = page
+    .getByRole('radiogroup', { name: 'How the rows are shown' })
+    .getByRole('radio', { name: /^Grouped by / });
+  await expect(async () => {
+    if ((await grouped.getAttribute('aria-checked')) !== 'true') await grouped.click({ timeout: 2_000 });
+    await expect(grouped).toHaveAttribute('aria-checked', 'true', { timeout: 1_000 });
+  }).toPass({ timeout: 15_000 });
+}
+
 /** A count as written on screen ("101,081", "2,348 URLs"), as a number. */
 export const countOf = (text: string | null) => Number((text ?? '').replace(/[^\d]/g, ''));
 

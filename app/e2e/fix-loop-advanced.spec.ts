@@ -205,13 +205,34 @@ test('a second crawl is compared with the first: Overview’s card, Issues’ ch
   }
   await expectNoViolations(page);
 
-  // Issues narrowed to the checks fixed since: the chip, and each fixed check listed.
+  // Issues narrowed to the checks fixed since: "Fixed" is pressed in the row of changes, the others stay beside it
+  // unpressed, each with /changes' own count, and each fixed check is listed. Pressed again, it lets go.
   if (count('fixed') > 0) {
     await card.getByRole('link', { name: `${count('fixed')} fixed` }).click();
     await showChecks(page);
-    await expect(main(page).getByRole('button', { name: /^Remove .*Since / })).toBeVisible({ timeout: 20_000 });
-    await expect(main(page).getByRole('listbox', { name: 'Checks' }).getByRole('option')).toHaveCount(count('fixed'));
+    const since = main(page).getByRole('group', { name: /^Since / });
+    await expect(since).toBeVisible({ timeout: 20_000 });
+    const changes = {
+      New: count('new'),
+      Fixed: count('fixed'),
+      'Fewer URLs': count('fewer'),
+      'More URLs': count('more'),
+    };
+    for (const [label, checks] of Object.entries(changes)) {
+      const chip = since.getByRole('button', { name: new RegExp(`^${label}\\s*${checks}$`) });
+      await expect(chip).toBeVisible();
+      await expect(chip).toHaveAttribute('aria-pressed', label === 'Fixed' ? 'true' : 'false');
+    }
+    const any = since.getByRole('button', { name: /^Any change\s*\d+$/ });
+    await expect(any).toHaveAttribute('aria-pressed', 'false');
+    await expect(main(page).getByRole('button', { name: /^Remove .*Since / })).toHaveCount(0);
+    const options = main(page).getByRole('listbox', { name: 'Checks' }).getByRole('option');
+    await expect(options).toHaveCount(count('fixed'));
     await expectNoViolations(page);
+    const fixed = since.getByRole('button', { name: new RegExp(`^Fixed\\s*${count('fixed')}$`) });
+    await fixed.click();
+    await expect(fixed).toHaveAttribute('aria-pressed', 'false');
+    await expect(options).not.toHaveCount(count('fixed'));
   }
 
   // A check that moved: its head says its count then; its Fixed tab lists what it no longer flags.

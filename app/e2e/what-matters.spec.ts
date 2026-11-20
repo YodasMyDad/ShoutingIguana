@@ -3,7 +3,7 @@
 // of it also clears; the answer and Overview's cards as things to change; and Simple's What to fix ordered and
 // folded, a problem saying what fixing it also fixes. Every expectation is worked out from the sidecar's own answer.
 import { expect, test, type Page } from '@playwright/test';
-import { expectNoViolations, read, seededCrawl, showChecks } from './support';
+import { expectNoViolations, read, seededCrawl, showChecks, showGroups } from './support';
 
 interface Cleared {
   checkId: string;
@@ -132,13 +132,20 @@ test.describe('Advanced', () => {
     await expect(page.getByRole('list', { name: 'Related checks' })).toContainText(
       `Fixing ${byId.get(fix!.fixer.checkId)!.title} clears`,
     );
-    // The evidence comes before why it matters and how to fix it.
-    const why = page.getByRole('heading', { name: 'Why it matters', level: 3 });
-    const affected = page.getByRole('heading', { name: /^Affected (pages|URLs)$/, level: 3 });
+    // What's wrong, why it matters and how to fix it are in the check's head, ahead of its rows (the 2026-11-19 UX
+    // round): in a window this short they fold behind one button that names them, and open in the head.
+    const detail = page.locator('[data-check-detail]');
+    const explain = detail.locator('header [data-explain]');
+    await explain.getByRole('button', { name: /why it matters and how to fix it$/i }).click();
+    const why = explain.getByRole('heading', { name: 'Why it matters', level: 3 });
+    await expect(why).toBeVisible();
+    await expect(explain.getByRole('heading', { name: 'How to fix it', level: 3 })).toBeVisible();
+    const affected = detail.getByRole('heading', { name: /^Affected (pages|URLs)$/, level: 3 });
+    await expect(affected).toBeVisible();
     expect(
-      await affected.evaluate(
+      await why.evaluate(
         (heading, other) => Boolean(heading.compareDocumentPosition(other) & Node.DOCUMENT_POSITION_FOLLOWING),
-        await why.elementHandle(),
+        await affected.elementHandle(),
       ),
     ).toBe(true);
   });
@@ -151,22 +158,48 @@ test.describe('Never a count over an empty list (round 4)', () => {
     const { crawl, found } = await facts();
     const count = found.find((entry) => entry.checkId === 'internal-client-error')?.count ?? 0;
     test.skip(count === 0, 'The seeded crawl has no 404s');
-    const groups = await read<{ total: number; groups: { pages: number }[] }>(
+    const groups = await read<{ total: number; groupCount: number; groups: { pages: number }[] }>(
       `/api/crawls/${crawl.id}/issues/internal-client-error/groups`,
       { limit: 1000 },
     );
     expect(groups.groups.reduce((sum, group) => sum + group.pages, 0)).toBe(count);
+    expect(groups.groupCount).toBe(groups.groups.length);
     await page.goto(`/crawls/${crawl.id}/issues/internal-client-error`);
-    const grid = page.getByRole('treegrid', { name: /Internal URL returns 4xx: affected URLs/ });
+    const detail = page.locator('[data-check-detail]');
+    const affected = detail.getByRole('heading', { name: 'Affected URLs', level: 3 }).locator('xpath=..');
+    const urlsWords = `${number(count)} ${count === 1 ? 'URL' : 'URLs'}`;
+
+    // It opens as a list: every URL a row of its own (a row of the first level), as many as the count, each saying
+    // where it is found once that is read (the page linking to it, the sitemap listing it, or that nothing does).
+    const list = detail.getByRole('treegrid', { name: 'Internal URL returns 4xx: affected URLs' });
+    await expect(list).toBeVisible();
+    await expect(affected).toContainText(new RegExp(`^Affected URLs${urlsWords}, most (linked|used) first`));
+    const listed = list.locator('[role="row"][aria-level="1"]');
+    // The rows are drawn as they come into view: all of them here, the crawl's 404s being few.
+    test.skip(count > 12, 'The seeded crawl has more 404s than one window lists');
+    await expect(listed).toHaveCount(count);
+    await expect(list.locator('[data-where-found="pending"]')).toHaveCount(0);
+    await expect(listed.locator('[data-where]')).toHaveCount(count);
+    await expect(listed.locator('[data-where="source"]').first()).toBeVisible();
+
+    // Grouped, the groups add up to the count, and the line says both; never a count over no groups.
+    await showGroups(page);
+    const grid = detail.getByRole('treegrid', { name: /Internal URL returns 4xx: affected URLs, grouped by / });
     await expect(grid).toBeVisible();
+    await expect(affected).toContainText(
+      `Affected URLs${urlsWords} in ${number(groups.groupCount)} ${groups.groupCount === 1 ? 'group' : 'groups'}List`,
+    );
     await expect(page.getByText(/in 0 groups/)).toHaveCount(0);
+    // The first of a few groups opens by itself; of more than that, from the keyboard.
     await grid.focus();
-    await page.keyboard.press('ArrowRight');
+    if (groups.groupCount > 20) await page.keyboard.press('ArrowRight');
+    await expect(grid.getByRole('row', { expanded: true }).first()).toBeVisible();
     // The group's URLs, each a row with its address (the group's own link to all of them in URLs is a row of its own).
     const urls = grid.locator('[role="row"][aria-level="2"]').filter({ has: page.locator('.si-url') });
     await expect(urls.first()).toBeVisible();
-    expect(await urls.count()).toBe(Math.min(count, groups.groups[0]!.pages));
-    await expect(urls.filter({ hasText: /Found on/ }).first()).toBeVisible();
+    await expect(urls).toHaveCount(Math.min(count, groups.groups[0]!.pages));
+    // Each found where it is linked: the page linking to it, read and named in its row.
+    await expect(urls.locator('[data-where-found="read"] [data-where="source"]').first()).toBeVisible();
   });
 });
 

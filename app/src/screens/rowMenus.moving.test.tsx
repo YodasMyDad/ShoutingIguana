@@ -145,14 +145,24 @@ describe('a row menu open while a running crawl moves the rows', () => {
     const groups: Record<string, IssueGroup[]> = { ...ISSUE_GROUPS };
     groups['empty-anchor-text'] = [...(ISSUE_GROUPS['empty-anchor-text'] ?? [])];
     const { queryClient, user } = await open(`${CRAWL}/issues/empty-anchor-text`, issuesRoutes({ groups }));
+    // The check opens as a list (the UX round of 2026-11-19): its groups are a choice away.
+    await user.click(await screen.findByRole('radio', { name: /^Grouped by/ }));
     const grid = await screen.findByRole('treegrid', { name: /grouped by/ });
+    // Its first group opens by itself: closed again, the garden group is the second row, as it was.
+    const toggle = await waitFor(() => {
+      const found = grid.querySelector<HTMLElement>('[role="row"][aria-expanded="true"] [data-tree-toggle]');
+      if (!found) throw new Error('the first group hasn’t opened yet');
+      return found;
+    });
+    await user.click(toggle);
+    await waitFor(() => expect(grid.querySelector('[data-row="1"][data-col="0"]')?.textContent).toContain('/garden/'));
     await expectMenuHoldsItsRow({
       grid,
       index: 1,
       name: 'Menu for the group',
       // The garden group, opened on: its one page's URL. The group now at its number has five.
       url: 'https://example.com/page-7/',
-      copy: 'Copy the group’s URL',
+      copy: 'Copy its URL',
       move: () =>
         (groups['empty-anchor-text'] = [
           {
