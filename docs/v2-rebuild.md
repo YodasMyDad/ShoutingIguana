@@ -136,7 +136,23 @@ the owner says deploy); `origin/ui/step-3` is behind. `v2` and `master` were not
 resume. The owner gave the yes for `master` and the first release on 2026-11-20, for the one push described in
 "The v2 beta: everything left, in order" below.
 
-**PAUSED 2026-11-19, about 09:15, for usage, mid-way through a UX round (session `da833503`). Resume here.**
+**2026-11-20, the round is on `ui/step-3` at `2bbeef65` (fast-forward from `ui/ux-integrate`).** Local only. `master`
+was not moved. Nothing pushed.
+
+The five UX lanes are merged. Code samples are out of the fixes (`AnalysisFreshness.VERSION` 22). A legacy image inside
+a `<picture>` that offers a modern source is not `image-legacy-format`. Engine gate passed (100k bench correct, memory
+down 15 MB from 205 MB). App gate passed, including stories (670, both themes, plain, forced, reduced motion) and the
+full shell walk (19 Advanced, 9 Simple). The owner walk at 2560×1380 and 1280×720 matched the rules: Advanced 1 click
+from the 4xx check to the page at the link, Simple 3 clicks from Home, and the anchor-text fix is words with no code
+sample. The release workflow is on this branch (`93e36e25`, tag `app-v*` only). Linux `.deb` and AppImage were built
+in Docker; a real sidecar start needs system `libicu` (the `.deb` gets it through WebKit, the AppImage carries it).
+macOS was not built here.
+
+Still left, in order: a gallery shot at 2560×1380, the Windows installer, upgrade the owner's install while the app is
+closed, then C (this branch onto `master`, delete the WPF app, version `2.0.0-beta.1`), D (the README), E (the one
+push of `master` and `app-v2.0.0-beta.1`), F (installers and checksums for the owner).
+
+**PAUSED 2026-11-19, about 09:15, for usage, mid-way through a UX round (session `da833503`). History, not the resume.**
 Nothing is running: every agent stopped, every sidecar, Vite server and test site is down, every worktree is clean.
 Nothing was pushed. Nothing below is merged into `ui/step-3` except the two severity changes and, since about 09:45
 (session `90e68be9`), the fix as code, which has its own block below: **"The fix as code: merged, and what is
