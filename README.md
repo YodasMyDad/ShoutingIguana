@@ -12,7 +12,7 @@ Hand the report to a client. Or fix it yourself, then recheck just those pages a
 
 **[Download 2.0.0-beta.1](https://github.com/YodasMyDad/ShoutingIguana/releases/tag/app-v2.0.0-beta.1)**
 
-JavaScript rendering shipped in [2.0.0-beta.2](https://github.com/YodasMyDad/ShoutingIguana/releases/tag/app-v2.0.0-beta.2). Custom extraction is in the current source, after that release.
+JavaScript rendering shipped in [2.0.0-beta.2](https://github.com/YodasMyDad/ShoutingIguana/releases/tag/app-v2.0.0-beta.2). Custom extraction is on `master`, after that release.
 
 ## Why people download it
 
