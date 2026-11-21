@@ -4,11 +4,11 @@ Guidance for agents working in this repo. Read this before making changes.
 
 ## What this is
 
-**Shouting Iguana** `2.0.0-beta.1` — a cross-platform desktop SEO crawler and site auditor.
+**Shouting Iguana** `2.0.0-beta.3` — a cross-platform desktop SEO crawler and site auditor.
 
 - `engine/` — headless .NET 10 crawl engine, the `si` CLI, and the localhost sidecar. One SQLite file per crawl.
 - `app/` — React and TypeScript UI in a Tauri 2 shell. The shell starts the engine as a sidecar.
-- `docs/` — the rebuild plan and the UI notes. **Where step 3 stands** in [`docs/v2-rebuild.md`](docs/v2-rebuild.md) is the only status. Update that section before you stop, and commit it.
+- `docs/` — the rebuild plan and the UI notes. **Where step 4 stands** in [`docs/v2-rebuild.md`](docs/v2-rebuild.md) is the only status. Update that section before you stop, and commit it.
 
 The WPF app is not in this branch. It is the tag `legacy-v1`. Do not move or delete that tag. v2 has no plugin system. The `ShoutingIguana.PluginSdk` NuGet package is unused here and stays published.
 
