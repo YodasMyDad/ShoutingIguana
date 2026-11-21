@@ -1,6 +1,6 @@
 [package]
 name = "shouting-iguana"
-version = "2.0.0-beta.2"
+version = "2.0.0-beta.3"
 description = "Shouting Iguana: the desktop app's shell. It runs the engine as a sidecar and hosts the UI."
 authors = ["Aptitude"]
 edition = "2021"

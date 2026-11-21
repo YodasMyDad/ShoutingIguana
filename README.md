@@ -8,11 +8,11 @@ Shouting Iguana is a desktop SEO crawler. It crawls every URL it can reach, scor
 
 Hand the report to a client. Or fix it yourself, then recheck just those pages and watch the score move.
 
-**2.0.0-beta.1** for Windows, macOS and Linux. Your crawl stays on your machine. No account. No plugin to install.
+**2.0.0-beta.3** for Windows, macOS and Linux. Your crawl stays on your machine. No account. No plugin to install.
 
-**[Download 2.0.0-beta.1](https://github.com/YodasMyDad/ShoutingIguana/releases/tag/app-v2.0.0-beta.1)**
+**[Download 2.0.0-beta.3](https://github.com/YodasMyDad/ShoutingIguana/releases/tag/app-v2.0.0-beta.3)**
 
-JavaScript rendering shipped in [2.0.0-beta.2](https://github.com/YodasMyDad/ShoutingIguana/releases/tag/app-v2.0.0-beta.2). Custom extraction is on `master`, after that release.
+This release crawls a list of addresses instead of following links, and pulls out text you name with a CSS selector, an XPath expression, or a regular expression. JavaScript rendering shipped in [2.0.0-beta.2](https://github.com/YodasMyDad/ShoutingIguana/releases/tag/app-v2.0.0-beta.2).
 
 ## Why people download it
 
@@ -21,6 +21,7 @@ JavaScript rendering shipped in [2.0.0-beta.2](https://github.com/YodasMyDad/Sho
 - **Prove the fix.** Recheck the pages you changed. The score and the issue list update against the previous crawl.
 - **Yours, offline.** One `.sicrawl` file per site. Nothing is uploaded.
 - **Pages a script builds.** The default renders a page only when its HTML is an empty shell. Render every HTML page, only the URLs you name, or none. When every page is rendered, a link that was only in the raw HTML is still followed.
+- **A list, not the whole site.** Paste addresses, or a CSV with a Url column. Those pages are read. Links on them are recorded and not followed.
 - **Text you define.** Name a rule and give it a CSS selector, an XPath expression, or a regular expression. The crawl reads each page once and keeps what matches. Simple and Advanced both list the values.
 
 ## Screenshots

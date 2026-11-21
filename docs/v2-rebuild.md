@@ -7,7 +7,8 @@ only status. `v2`'s copy of this doc only points here. Update this section befor
 push** until the owner says it is time to deploy (2026-11-15: pushes ran CI and used up their GitHub minutes); every
 check runs locally, and the app and engine workflows are manual-only. The release workflow publishes only from a tag
 `app-v*` plus the version in `app/src-tauri/tauri.conf.json`. `app-v2.0.0-beta.1` shipped. `app-v2.0.0-beta.2` is the
-JavaScript rendering release, tagged 2026-11-20. After that tag, the never-push rule stands again.
+JavaScript rendering release, tagged 2026-11-20. `app-v2.0.0-beta.3` is list mode, and custom extraction, tagged
+2026-11-21. After that tag, the never-push rule stands again.
 
 ## Why
 
@@ -29,13 +30,13 @@ v2 is a fresh solution that ports the useful logic.
 | 2 | SEO rules and issue catalog (84 checks), `si analyze` / `si issues`, exact-match proof on the synthetic site | Done: `1489adb`, then a real-site crawl and two full reviews ([Status](#status)) |
 | 3 | Desktop UI: React + TypeScript in a Tauri 2 shell, with the engine as a sidecar behind a token-protected localhost API. Enterprise-grade UX: the bar is in [the UI brief](v2-ui-brief.md). Since 2026-11-10 it opens in Simple, with Advanced one switch away, and ends in a report: [Simple first](#simple-first-advanced-on-a-switch-2026-11-10) | Shipped. `app-v2.0.0-beta.1`, then `app-v2.0.0-beta.2`. History: [Where step 3 stands](#where-step-3-stands-2026-11-15) |
 | 3b | The check audit: every check proven against real sites and worded for a non-expert, then the old app's checks worth keeping and those a comparison with Screaming Frog shows are missing | Planned on 2026-11-10: [Simple first](#simple-first-advanced-on-a-switch-2026-11-10) |
-| 4 | Missing basics: JavaScript rendering, a browser fallback for blocked sites, include/exclude rules, auth and cookies, list mode, custom extraction | JavaScript rendering, include/exclude, custom extraction, and list mode are on `step4/list-mode` (list mode not merged). Next, still unbuilt: a browser fallback, then auth and cookies. [Where step 4 stands](#where-step-4-stands-2026-11-20) |
+| 4 | Missing basics: JavaScript rendering, a browser fallback for blocked sites, include/exclude rules, auth and cookies, list mode, custom extraction | JavaScript rendering, include/exclude, custom extraction, and list mode are on `master`. List mode and custom extraction ship as `app-v2.0.0-beta.3`. Next, still unbuilt: a browser fallback, then auth and cookies. [Where step 4 stands](#where-step-4-stands-2026-11-20) |
 | 5 | Integrations: Search Console, then GA4, Bing Webmaster, Google Ads and Microsoft Advertising | Later |
 
 ## Where step 4 stands (2026-11-20)
 
 The owner asked for the first slice only, on a branch off `master`: JavaScript rendering, with include and exclude
-patterns beside it. That shipped. Custom extraction is on `master` too. List mode is built on `step4/list-mode` and not merged. On 2026-11-20 they asked for JavaScript rendering on `master` as `2.0.0-beta.2`, published
+patterns beside it. That shipped. Custom extraction and list mode are on `master` as `2.0.0-beta.3`. On 2026-11-20 they asked for JavaScript rendering on `master` as `2.0.0-beta.2`, published
 by the tag `app-v2.0.0-beta.2`. There is no `main` branch.
 
 **Built, on `master` (`781cca13`, tag `app-v2.0.0-beta.2`):**
@@ -86,7 +87,7 @@ The benchmark sets no extraction rules.
 - Settings in both modes, on the New crawl form and on a crawl's own settings. The results are a crawl section in both
   modes: Custom data in Simple, Custom extraction in Advanced.
 
-**Built, on `step4/list-mode` (not merged):**
+**Built, on `master` (`8dca45ba`), shipped as `app-v2.0.0-beta.3`:**
 
 - List mode, carried over from the old app's ListMode plugin. A crawl's options hold the addresses. When any are set,
   those addresses and the start URL are fetched, and a link found on them is recorded and not fetched
@@ -509,10 +510,10 @@ rendering first, and neither is "later" any more. List mode and include/exclude 
 same day, and the owner's answer was "yes all those are needed". **Step 4, in the order agreed: JavaScript rendering
 with include/exclude rules alongside it (small, and it keeps a crawl out of filter and parameter traps), then custom
 extraction, then list mode.** The first of those shipped on `master` on 2026-11-20 (`781cca13`, `2.0.0-beta.2`).
-Custom extraction is on `master`. List mode is built on `step4/list-mode` and not merged. The status is [Where step 4 stands](#where-step-4-stands-2026-11-20).
+Custom extraction and list mode are on `master` as `2.0.0-beta.3`. The next is a browser fallback. The status is [Where step 4 stands](#where-step-4-stands-2026-11-20).
 
-*Left for the owner to decide (features, not UX fixes, so not in this round):* list mode is built on
-`step4/list-mode` (not merged). Still open: a
+*Left for the owner to decide (features, not UX fixes, so not in this round):* list mode shipped as
+`2.0.0-beta.3`. Still open: a
 per-URL new/gone comparison between crawls; a "worst pages" list in Simple. Also open: whether `image-legacy-format`
 should pass an image whose `<picture>` offers a modern source (`fix-lane.md`, "Found on the way").
 
