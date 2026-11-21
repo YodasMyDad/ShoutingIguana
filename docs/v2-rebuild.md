@@ -2,11 +2,12 @@
 
 The single place to pick up the rebuild. Technical detail lives in [engine/README.md](../engine/README.md) and the
 rules for working in the code in [CLAUDE.md](../CLAUDE.md). Update the status and open items here at the end of every
-step. For step 3, **Where step 3 stands** below is the only status. `v2`'s copy of this doc only points here. Update
-this section before you stop, then commit it. **Never push** until the owner says it is time to deploy (2026-11-15:
-pushes ran CI and used up their GitHub minutes); every check runs locally, and the app and engine workflows are
-manual-only. This beta's one push is the exception already authorised and not yet done: `master` and the tag
-`app-v2.0.0-beta.1` (step E). After that push, the rule stands again.
+step. For step 3, **Where step 3 stands** below is the history. For what to build next, **Where step 4 stands** is the
+only status. `v2`'s copy of this doc only points here. Update this section before you stop, then commit it. **Never
+push** until the owner says it is time to deploy (2026-11-15: pushes ran CI and used up their GitHub minutes); every
+check runs locally, and the app and engine workflows are manual-only. The release workflow publishes only from a tag
+`app-v*` plus the version in `app/src-tauri/tauri.conf.json`. `app-v2.0.0-beta.1` shipped. `app-v2.0.0-beta.2` is the
+JavaScript rendering release, tagged 2026-11-20. After that tag, the never-push rule stands again.
 
 ## Why
 
@@ -26,9 +27,9 @@ v2 is a fresh solution that ports the useful logic.
 | --- | --- | --- |
 | 1 | Headless engine, storage and CLI (`si`), proven on a generated 100k-page site, with the benchmark in CI | Done: `3e556be` |
 | 2 | SEO rules and issue catalog (84 checks), `si analyze` / `si issues`, exact-match proof on the synthetic site | Done: `1489adb`, then a real-site crawl and two full reviews ([Status](#status)) |
-| 3 | Desktop UI: React + TypeScript in a Tauri 2 shell, with the engine as a sidecar behind a token-protected localhost API. Enterprise-grade UX: the bar is in [the UI brief](v2-ui-brief.md). Since 2026-11-10 it opens in Simple, with Advanced one switch away, and ends in a report: [Simple first](#simple-first-advanced-on-a-switch-2026-11-10) | C and D are done on `master`. E and F are left. Pick up at [Where step 3 stands](#where-step-3-stands-2026-11-15) |
+| 3 | Desktop UI: React + TypeScript in a Tauri 2 shell, with the engine as a sidecar behind a token-protected localhost API. Enterprise-grade UX: the bar is in [the UI brief](v2-ui-brief.md). Since 2026-11-10 it opens in Simple, with Advanced one switch away, and ends in a report: [Simple first](#simple-first-advanced-on-a-switch-2026-11-10) | Shipped. `app-v2.0.0-beta.1`, then `app-v2.0.0-beta.2`. History: [Where step 3 stands](#where-step-3-stands-2026-11-15) |
 | 3b | The check audit: every check proven against real sites and worded for a non-expert, then the old app's checks worth keeping and those a comparison with Screaming Frog shows are missing | Planned on 2026-11-10: [Simple first](#simple-first-advanced-on-a-switch-2026-11-10) |
-| 4 | Missing basics: JavaScript rendering, a browser fallback for blocked sites, include/exclude rules, auth and cookies, list mode, custom extraction | First slice on `step4/js-rendering`: JavaScript rendering and include/exclude. Custom extraction and list mode are next. [Where step 4 stands](#where-step-4-stands-2026-11-20) |
+| 4 | Missing basics: JavaScript rendering, a browser fallback for blocked sites, include/exclude rules, auth and cookies, list mode, custom extraction | JavaScript rendering and include/exclude are on `master` (`781cca13`, `2.0.0-beta.2`). Next is custom extraction, then list mode. [Where step 4 stands](#where-step-4-stands-2026-11-20) |
 | 5 | Integrations: Search Console, then GA4, Bing Webmaster, Google Ads and Microsoft Advertising | Later |
 
 ## Where step 4 stands (2026-11-20)
@@ -37,7 +38,7 @@ The owner asked for the first slice only, on a branch off `master`: JavaScript r
 patterns beside it. Custom extraction and list mode are next and are not started. On 2026-11-20 they asked for it on
 `master` as `2.0.0-beta.2`, published by the tag `app-v2.0.0-beta.2`. There is no `main` branch.
 
-**Built, on `step4/js-rendering` (local only):**
+**Built, on `master` (`781cca13`, tag `app-v2.0.0-beta.2`):**
 
 - A page is fetched by HTTP first. It is rendered in headless Chromium only when the crawl's setting says so:
   off, on (a client-rendered shell: a script, an empty app mount, almost no visible text), or only the URLs a list of
@@ -62,9 +63,17 @@ HTML does not have either. The same crawl with rendering off did not find the UR
 every planted issue, 101,221 pages in 54.9 s, working set 215 MB at 10–30% of the crawl and 192 MB at 70–100%
 (−289 bytes a URL).
 
-**Not this slice:** custom extraction, list mode, a browser fallback for a site that blocks the plain fetch, and
-signing in with cookies. A page that already has its text is not rendered. A content security policy is enforced, so
-the planted script is a file on the site, which `default-src 'self'` allows.
+**Left, in this order.** Do the first. Do not start the later ones in the same session.
+
+1. **Custom extraction.** The old app's CustomExtraction plugin. Not started.
+2. **List mode.** The old app's ListMode plugin: crawl a list of URLs instead of following links. Not started.
+3. **Not in that agreed order, still in the step 4 plan, and not built:** a browser fallback when a site blocks the
+   plain HTTP fetch; auth and cookies. Step 5 (Search Console, then the other integrations) stays later.
+
+A page that already has its text is not rendered. A content security policy is enforced, so the planted script is a
+file on the site, which `default-src 'self'` allows. Automatic rendering is a shell test, not a guess that any script
+means the page is client-rendered: a script, an empty `#app`, `#root`, `#__next`, `#__nuxt` or `<app-root>`, and
+under 120 characters of visible text. Anything else stays the HTTP body unless the crawl lists its URL to render.
 
 **Step 3 starts with a design conversation with the owner, not with code.** The owner wants a "super slick,
 enterprise level" UI and UX. The old app was "clunky and a bit all over the place". **[The UI brief](v2-ui-brief.md)
@@ -454,11 +463,12 @@ properly crawl or check things") and **custom extraction is needed**. So step 4 
 rendering first, and neither is "later" any more. List mode and include/exclude rules were explained to the owner the
 same day, and the owner's answer was "yes all those are needed". **Step 4, in the order agreed: JavaScript rendering
 with include/exclude rules alongside it (small, and it keeps a crawl out of filter and parameter traps), then custom
-extraction, then list mode.** It starts when this UX round is merged and gated, not before.
+extraction, then list mode.** The first of those shipped on `master` on 2026-11-20 (`781cca13`, `2.0.0-beta.2`).
+The next is custom extraction. The status is [Where step 4 stands](#where-step-4-stands-2026-11-20).
 
-*Left for the owner to decide (features, not UX fixes, so not in this round):* URL include and exclude patterns,
-JavaScript rendering, a URL-list crawl mode (all three are step 4 of the plan and were asked about on 2026-11-19: the
-old app's ListMode and CustomExtraction plugins and its browser rendering are the only parts not yet carried over); a
+*Left for the owner to decide (features, not UX fixes, so not in this round):* a URL-list crawl mode and custom
+extraction (JavaScript rendering and include/exclude shipped on 2026-11-20; list mode and custom extraction are the
+old app's ListMode and CustomExtraction plugins and are not carried over yet); a
 per-URL new/gone comparison between crawls; a "worst pages" list in Simple. Also open: whether `image-legacy-format`
 should pass an image whose `<picture>` offers a modern source (`fix-lane.md`, "Found on the way").
 
