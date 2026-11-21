@@ -925,6 +925,11 @@ public sealed partial class SyntheticSite
         Other("blocked", 403, linked: true, ["internal-blocked"], () => new SyntheticResponse(403, HTML,
             RenderSimple("Checking your browser", "A bot challenge stands in the way.", PLANTS_PATH + "blocked"), null, null,
             new Dictionary<string, string> { ["cf-mitigated"] = "challenge" }));
+        // Plain HTTP is a challenge, so a crawl that doesn't use the browser records internal-blocked and never sees
+        // the link. A browser request is served the page instead (SyntheticSiteServer).
+        Other("browser-fallback", 403, linked: true, ["internal-blocked"], () => new SyntheticResponse(403, HTML,
+            RenderSimple("Checking your browser", "A bot challenge stands in the way.", BROWSER_FALLBACK_PATH), null, null,
+            new Dictionary<string, string> { ["cf-mitigated"] = "challenge" }));
         Other("unreachable", 0, linked: true, ["internal-unreachable"], () => new SyntheticResponse(0, HTML, null, null, null, Abort: true));
         Other("loop-a", 301, linked: true, ["redirect-loop"], () => Redirect(301, PLANTS_PATH + "loop-b"));
         Other("loop-b", 301, linked: false, ["redirect-loop"], () => Redirect(301, PLANTS_PATH + "loop-a"));
@@ -1058,6 +1063,28 @@ public sealed partial class SyntheticSite
         H1 = name,
         Content = $"<p>{Text("plant-" + slug, PLANT_WORDS)}</p>"
     };
+
+    /// <summary>What the browser is served for <see cref="SyntheticSite.BROWSER_FALLBACK_PATH"/>: no title, and one link.</summary>
+    internal SyntheticResponse BrowserFallbackDocument() => Html(Render(new PageSpec
+    {
+        Path = BROWSER_FALLBACK_PATH,
+        Title = null,
+        Description = "A page read in a browser after plain HTTP was challenged, part of the Synthetic Store crawler tests.",
+        H1 = "Browser fallback",
+        Chrome = false,
+        Content = $"<p>{Text("browser-fallback", PLANT_WORDS)}</p><p><a href=\"{BROWSER_FALLBACK_NEXT_PATH}\">The next page on this host</a></p>"
+    }));
+
+    /// <summary>The page that link names. Not linked from anywhere else, and not a plant, so a crawl that follows links never asks for it.</summary>
+    internal SyntheticResponse BrowserFallbackNextDocument() => Html(Render(new PageSpec
+    {
+        Path = BROWSER_FALLBACK_NEXT_PATH,
+        Title = "Browser fallback next | Synthetic Store planted page",
+        Description = "The next page on a host whose plain HTTP was blocked, read in the browser, part of the Synthetic Store crawler tests.",
+        H1 = "Browser fallback next",
+        Chrome = false,
+        Content = $"<p>{Text("browser-fallback-next", PLANT_WORDS)}</p>"
+    }));
 
     /// <summary>The raw HTML: the document's head, an empty mount, and the address of the script that fills it in.</summary>
     private static string ClientShell(string renderedDocument)

@@ -628,6 +628,16 @@ function RenderingFields({
         error={first(errors, 'excludePatterns')}
         placeholder="sort="
       />
+      <Switch
+        id="setting-browserFallback"
+        label={mode === 'simple' ? SIMPLE_WORDS.browserFallback.label : FIELD_WORDS.browserFallback.label}
+        description={mode === 'simple' ? SIMPLE_WORDS.browserFallback.help : FIELD_WORDS.browserFallback.help}
+        checked={form.browserFallback}
+        onCheckedChange={(checked) => {
+          onChange({ ...form, browserFallback: checked });
+          onTouch?.('browserFallback');
+        }}
+      />
     </div>
   );
 }

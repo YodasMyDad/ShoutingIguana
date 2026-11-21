@@ -45,6 +45,7 @@ public static class CrawlComparability
         (ComparisonDifferenceCode.Fetching, "discoverSitemaps", options => options.DiscoverSitemaps),
         (ComparisonDifferenceCode.Fetching, "extraSitemaps", options => Texts(options.ExtraSitemaps, StringComparer.Ordinal)),
         (ComparisonDifferenceCode.Fetching, "respectRobotsTxt", options => options.RespectRobotsTxt),
+        (ComparisonDifferenceCode.Fetching, "browserFallback", options => options.BrowserFallback),
 
         // Header values aren't stored, so only their names can differ, which HTTP reads whatever their case.
         (ComparisonDifferenceCode.Client, "userAgent", options => options.UserAgent == UserAgentPreset.Custom

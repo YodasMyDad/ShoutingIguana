@@ -67,6 +67,8 @@ export interface CrawlForm {
    * What is sent is `readList` of this text.
    */
   listUrls: string;
+  /** When a host blocks plain HTTP, read that host's pages in a browser. Not JavaScript rendering. */
+  browserFallback: boolean;
   /** With its user name and password when it has them: a secret, as header values are. */
   proxyUrl: string;
   /** Shopify crawler access: one signature, for one domain. A secret, as the proxy's password is. */
@@ -157,6 +159,7 @@ export function formFromOptions(options: CrawlOptions, startUrl = ''): CrawlForm
     excludePatterns: (options.excludePatterns ?? []).join('\n'),
     extractionRules: (options.extractionRules ?? []).map((rule) => extractionRow(rule)),
     listUrls: (options.listUrls ?? []).join('\n'),
+    browserFallback: options.browserFallback ?? defaults.browserFallback,
     proxyUrl: options.hasRedactedProxyCredentials ? '' : proxy,
     signatures: signatureFormOf(options.signatures, startUrl || (options.startUrl ?? '')),
     requestTimeoutSeconds: numberText(options.requestTimeoutSeconds, defaults.requestTimeoutSeconds),
@@ -265,6 +268,7 @@ export function optionsFromForm(form: CrawlForm, { secrets = true }: { secrets?:
     excludePatterns: lines(form.excludePatterns),
     extractionRules: filledRules(form.extractionRules),
     listUrls: list.error ? lines(form.listUrls) : list.urls,
+    browserFallback: form.browserFallback,
     proxyUrl: form.proxyUrl.trim() === '' ? null : secrets ? form.proxyUrl.trim() : withoutCredentials(form.proxyUrl),
     signatures: secrets ? signaturesOf(form.signatures, withScheme(form.startUrl)) : {},
     requestTimeoutSeconds: typed(form.requestTimeoutSeconds),
@@ -374,6 +378,7 @@ export const FIELD_SECTIONS: Record<CrawlFormField, FormSection> = {
   excludePatterns: 'rendering',
   extractionRules: 'extraction',
   listUrls: 'list',
+  browserFallback: 'rendering',
   maxUrls: 'limits',
   maxDepth: 'limits',
   maxHtmlMb: 'limits',
@@ -413,6 +418,7 @@ export const SIMPLE_FIELDS: ReadonlySet<CrawlFormField> = new Set<CrawlFormField
   'excludePatterns',
   'extractionRules',
   'listUrls',
+  'browserFallback',
 ]);
 
 /** Which of the form's settings differ from these defaults: by field, with the start URL left out. */

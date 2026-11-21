@@ -210,6 +210,7 @@ public sealed class SyntheticSiteServer : IAsyncDisposable
                 : store is not null && path == SyntheticShopify.AWAY_PATH
                     ? SyntheticShopifyStore.Away(sitePort)
                     : site.Handle(path, external: false, plainHttp: !context.Request.IsHttps));
+            response = BrowserPage(site, context.Request, path, response);
             await ServeAsync(context, store?.Dress(response, path, sitePort) ?? response).ConfigureAwait(false);
         }
         finally
@@ -240,6 +241,27 @@ public sealed class SyntheticSiteServer : IAsyncDisposable
 
         holder.Current = holder.Current.AtRevision(number);
         return StatusCodes.Status204NoContent;
+    }
+
+    /// <summary>
+    /// The planted browser-fallback page. Plain HTTP is the challenge <see cref="SyntheticSite.Handle"/> already
+    /// built. A browser request (Chromium's <c>Sec-Fetch-Mode</c>) is the page. The page it links is not a plant: a
+    /// crawl that never reads the first page in a browser never asks for it.
+    /// </summary>
+    private static SyntheticResponse BrowserPage(SyntheticSite site, HttpRequest request, string path, SyntheticResponse response)
+    {
+        if (path == SyntheticSite.BROWSER_FALLBACK_NEXT_PATH)
+        {
+            return site.BrowserFallbackNextDocument();
+        }
+
+        if (path == SyntheticSite.BROWSER_FALLBACK_PATH &&
+            (request.Headers.ContainsKey("Sec-Fetch-Mode") || request.Headers.ContainsKey("sec-ch-ua")))
+        {
+            return site.BrowserFallbackDocument();
+        }
+
+        return response;
     }
 
     private static async Task ServeAsync(HttpContext context, SyntheticResponse response)

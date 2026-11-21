@@ -49,7 +49,7 @@ public sealed class AnalysisFreshnessTests
     [Fact]
     public void AnAnalysisFromBeforeTheNewChecksIsOutOfDate()
     {
-        Assert.Equal(23, AnalysisFreshness.VERSION);
+        Assert.Equal(24, AnalysisFreshness.VERSION);
         Assert.Equal([OutOfDateReason.EngineChanged], AnalysisFreshness.Check(Current() with { AnalysisVersion = 12 }, CRAWLED, new AnalysisSettings()));
     }
 

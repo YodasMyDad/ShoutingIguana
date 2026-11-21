@@ -115,6 +115,10 @@ export const FIELD_WORDS: Record<CrawlFormField, FieldWords> = {
     label: 'Addresses to crawl',
     help: 'One address a line, or a CSV file with a Url column and an optional Priority column (a higher number is crawled first). These addresses are crawled instead of following links. The start address is crawled too. A redirect of one of them is still followed. Sitemaps are not read, so the crawl stays the list.',
   },
+  browserFallback: {
+    label: 'Browser fallback',
+    help: 'When a host blocks the plain HTTP fetch, a Cloudflare challenge or another firewall, read that host’s pages in a browser instead and parse that HTML once. This is not JavaScript rendering. Off leaves a block as a block.',
+  },
 };
 
 /** Simple's words for the settings it asks about (docs/v2-ui-simple.md, New crawl in each mode). */
@@ -206,6 +210,10 @@ export const SIMPLE_WORDS = {
   rendering: {
     label: 'Pages built by JavaScript',
     help: 'Some pages send an empty shell and fill it in with a script. On reads those in a browser. The two lists keep the check out of filter and parameter traps.',
+  },
+  browserFallback: {
+    label: 'If a site blocks the check',
+    help: 'Read that site’s pages in a browser instead. Off leaves them unread.',
   },
   extraction: {
     label: 'Pull out your own data',
@@ -344,6 +352,7 @@ export function sectionSummary(
       const excluded = patternCount(form.excludePatterns);
       return [
         rendering,
+        form.browserFallback ? 'browser fallback on' : 'browser fallback off',
         excluded > 0 ? `${plural(excluded, 'pattern', 'patterns')} excluded` : 'nothing excluded',
       ].join(', ');
     }

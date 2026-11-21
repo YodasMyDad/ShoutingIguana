@@ -15,7 +15,7 @@ namespace ShoutingIguana.Engine.Fetching;
 /// fetch, and images, fonts and media are not requested. A private address is not requested. The returned HTML is what
 /// the crawl parses, once; nothing here writes the crawl file.
 /// </summary>
-internal sealed class JavaScriptRenderer(
+internal sealed partial class JavaScriptRenderer(
     CrawlOptions options,
     ResolvedUserAgent userAgent,
     CrawlScope scope,
@@ -126,6 +126,7 @@ internal sealed class JavaScriptRenderer(
         await _launch.WaitAsync().ConfigureAwait(false);
         try
         {
+            await CloseFallbackAsync().ConfigureAwait(false);
             if (_browser is not null)
             {
                 await _browser.CloseAsync().ConfigureAwait(false);

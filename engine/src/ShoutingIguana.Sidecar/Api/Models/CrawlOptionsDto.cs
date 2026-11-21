@@ -65,6 +65,12 @@ internal sealed record CrawlOptionsDto
     /// addresses and the start URL are fetched, and a link found on them is recorded and not fetched.
     /// </summary>
     public IReadOnlyList<string>? ListUrls { get; init; }
+
+    /// <summary>
+    /// When a host blocks plain HTTP, read that host's pages in a browser. Left out, a new crawl leaves a block as a
+    /// block. This is not JavaScript rendering.
+    /// </summary>
+    public bool? BrowserFallback { get; init; }
     public string? ProxyUrl { get; init; }
     public int? RequestTimeoutSeconds { get; init; }
     public int? MaxRetries { get; init; }
@@ -110,6 +116,7 @@ internal sealed record CrawlOptionsDto
         ExcludePatterns = List(options.ExcludePatterns),
         ExtractionRules = (options.ExtractionRules ?? []).Select(ExtractionRuleDto.From).ToList(),
         ListUrls = List(options.ListUrls),
+        BrowserFallback = options.BrowserFallback,
         ProxyUrl = options.ProxyUrl,
         RequestTimeoutSeconds = options.RequestTimeoutSeconds,
         MaxRetries = options.MaxRetries,
@@ -157,6 +164,7 @@ internal sealed record CrawlOptionsDto
             ExcludePatterns = ExcludePatterns is null ? defaults.ExcludePatterns : [.. ExcludePatterns],
             ExtractionRules = ExtractionRules is null ? defaults.ExtractionRules : ExtractionRules.Select(rule => rule.ToRule()).ToList(),
             ListUrls = ListUrls is null ? defaults.ListUrls : [.. ListUrls],
+            BrowserFallback = BrowserFallback ?? defaults.BrowserFallback,
             ProxyUrl = ProxyUrl ?? defaults.ProxyUrl,
             RequestTimeoutSeconds = RequestTimeoutSeconds ?? defaults.RequestTimeoutSeconds,
             MaxRetries = MaxRetries ?? defaults.MaxRetries,

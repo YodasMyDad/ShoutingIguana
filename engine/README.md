@@ -72,7 +72,7 @@ and the first page of what the biggest check no longer flags, each held to 300 m
 `si crawl --help` lists every option: concurrency and rate cap, user agent presets, extra headers (for firewall
 allowlisting; they are only sent to the site being crawled, and never over plain HTTP when it starts on HTTPS),
 proxy, depth and URL limits, robots.txt, subdomains, start-folder scope, nofollow, stored HTML, JavaScript
-rendering, include and exclude patterns, custom extraction, list mode, and `--no-analyze`.
+rendering, include and exclude patterns, custom extraction, list mode, `--browser-fallback`, and `--no-analyze`.
 
 `--render` is `Off`, `Automatic` (the default: render a page whose HTML is a client-side shell, then parse that
 HTML), `JavaScript` (render every HTML page; a link that was only in the raw HTML is still followed), or `Matching`
@@ -86,6 +86,11 @@ the HTML, without backtracking when the pattern allows it, and stops after two s
 matches nothing on a page is not stored. A rule that fails is stored once and not tried on later pages. The values
 are in the crawl file's `extractions` table. `POST /api/crawls/{id}/extractions` reads the rules and one page of
 them. The desktop app sets the rules on a new crawl, in both modes, and lists the values there too.
+
+`--browser-fallback` reads a host in headless Chromium when plain HTTP is blocked (a Cloudflare challenge or another
+firewall `BlockDetector` names, not a 429). The first fetch is still HTTP. If the browser gets past the block, that
+host's later pages skip HTTP, and that HTML is parsed once. It is not JavaScript rendering. Off unless the flag is
+given. The desktop app has the same switch, in both modes.
 
 `--list <file>` crawls those addresses instead of following links. Repeat it for more than one file. A text file is
 one URL a line. A CSV file has a `Url` column and an optional `Priority` column; a higher number is crawled first.
@@ -1415,7 +1420,6 @@ network and your rate settings, not by the crawler.
 ## Not yet
 
 - The desktop UI (step 3).
-- A browser fallback when a site blocks the plain HTTP fetch, list mode, and auth and cookies (the rest of step 4).
-  `Blocked` responses are already detected. JavaScript rendering, include and exclude rules, and custom extraction
-  are built.
+- Auth and cookies (the rest of step 4). JavaScript rendering, include and exclude rules, custom extraction, list
+  mode, and the browser fallback are built. `Blocked` responses were already detected.
 - Search Console, Analytics, Bing and Ads data (step 5).

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Microsoft.AspNetCore.Http;
+using ShoutingIguana.TestSite.Models;
 
 namespace ShoutingIguana.TestSite;
 
@@ -10,6 +11,7 @@ namespace ShoutingIguana.TestSite;
 public sealed class SyntheticRequestLog
 {
     private readonly ConcurrentDictionary<string, ConcurrentQueue<string>> _watched = new(StringComparer.OrdinalIgnoreCase);
+    private ConcurrentQueue<SyntheticHit>? _hits;
     private int _open;
     private int _mostOpen;
 
@@ -18,6 +20,9 @@ public sealed class SyntheticRequestLog
 
     /// <summary>From now on, the value of <paramref name="header"/> in every request that sends it.</summary>
     public ConcurrentQueue<string> Watch(string header) => _watched.GetOrAdd(header, _ => new ConcurrentQueue<string>());
+
+    /// <summary>From now on, each request's path and whether it came from a browser. Nothing is kept until a test asks.</summary>
+    public ConcurrentQueue<SyntheticHit> WatchHits() => _hits ??= new ConcurrentQueue<SyntheticHit>();
 
     public void ResetMostOpen() => Interlocked.Exchange(ref _mostOpen, 0);
 
@@ -39,6 +44,9 @@ public sealed class SyntheticRequestLog
                 values.Enqueue(value.ToString());
             }
         }
+
+        _hits?.Enqueue(new SyntheticHit(request.Path.Value ?? "/",
+            request.Headers.ContainsKey("Sec-Fetch-Mode") || request.Headers.ContainsKey("sec-ch-ua")));
     }
 
     internal void Finished() => Interlocked.Decrement(ref _open);

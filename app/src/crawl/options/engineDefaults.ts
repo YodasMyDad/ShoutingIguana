@@ -35,6 +35,7 @@ export const ENGINE_DEFAULTS = {
   excludePatterns: [],
   extractionRules: [],
   listUrls: [],
+  browserFallback: false,
   proxyUrl: null,
   requestTimeoutSeconds: 20,
   maxRetries: 2,

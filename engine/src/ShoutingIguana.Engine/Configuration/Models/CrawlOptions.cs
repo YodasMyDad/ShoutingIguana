@@ -109,6 +109,13 @@ public sealed record CrawlOptions
     /// </summary>
     public IReadOnlyList<string> ListUrls { get; init; } = [];
 
+    /// <summary>
+    /// When a host blocks the plain HTTP fetch, read that host's pages in a headless browser instead and parse that
+    /// HTML once. Off, the default, leaves a block as a block. A crawl file from before this reads as off: the
+    /// property is absent. This is not <see cref="Rendering"/>.
+    /// </summary>
+    public bool BrowserFallback { get; init; }
+
     /// <summary>How many addresses a list may name. Past this, the crawl is refused rather than started half-read.</summary>
     public const int MAX_LIST_URLS = 100_000;
 

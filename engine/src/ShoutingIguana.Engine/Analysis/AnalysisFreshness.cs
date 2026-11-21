@@ -80,8 +80,12 @@ public static class AnalysisFreshness
     /// client-rendered shell or the crawl lists its URL to render, parses the HTML the browser produced. Analysing a
     /// stored crawl is unchanged: the checks read the facts the crawl stored. The version moves so an analysis stored
     /// before this engine is out of date.
+    /// 24 is the browser fallback. When a crawl turns it on, a host that blocks plain HTTP and whose browser fetch gets
+    /// past the block stores that HTML, parsed once, where an earlier engine stored the block. Analysing a stored crawl
+    /// is unchanged: the checks read the facts the crawl stored. The version moves so an analysis stored before this
+    /// engine is out of date.
     /// </summary>
-    public const int VERSION = 23;
+    public const int VERSION = 24;
 
     /// <summary>
     /// The catalog's check ids with their categories and severities, hashed. Titles, descriptions, fixes, why and

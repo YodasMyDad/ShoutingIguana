@@ -483,7 +483,7 @@ internal sealed class HttpFetcher : IDisposable
         return null;
     }
 
-    private static FetchOutcome Classify(int statusCode, string? blockReason) =>
+    internal static FetchOutcome Classify(int statusCode, string? blockReason) =>
         blockReason is not null
             ? FetchOutcome.Blocked
             : statusCode switch

@@ -46,6 +46,10 @@ internal static class CrawlCommand
         var exclude = new Option<string[]>("--exclude") { Description = "Regular expression matched against the whole URL. A match is recorded and not fetched. Repeatable." };
         var extract = new Option<string[]>("--extract") { Description = "Custom extraction rule: Name=css:selector, Name=xpath:expression or Name=regex:pattern. Repeatable." };
         var list = new Option<string[]>("--list") { Description = "Crawl these URLs instead of following links. A text file is one URL a line. A CSV file has a Url column and an optional Priority column (higher is crawled first). Repeatable." };
+        var browserFallback = new Option<bool>("--browser-fallback")
+        {
+            Description = "When a host blocks the plain HTTP fetch, read that host's pages in a headless browser instead. Not JavaScript rendering."
+        };
         var noAnalyze = new Option<bool>("--no-analyze") { Description = "Skip the SEO checks when the crawl completes." };
         var quiet = new Option<bool>("--quiet", "-q") { Description = "No progress line." };
         var verbose = new Option<bool>("--verbose", "-v") { Description = "Detailed engine logging." };
@@ -54,13 +58,13 @@ internal static class CrawlCommand
         {
             url, database, resume, maxUrls, maxDepth, concurrency, rate, userAgent, userAgentString, headers, proxy, signatureFiles, timeout,
             ignoreRobots, crawlDelay, noResources, noExternal, noSitemaps, subdomains, anyFolder, followNofollow, storeHtml,
-            render, renderUrls, include, exclude, extract, list,
+            render, renderUrls, include, exclude, extract, list, browserFallback,
             noAnalyze, quiet, verbose
         };
 
         // A resumed crawl keeps the scope and rules it started with; only how it talks to the site can change.
         Option[] fixedOnResume = [maxUrls, maxDepth, userAgent, userAgentString, ignoreRobots, crawlDelay, noResources, noExternal,
-            noSitemaps, subdomains, anyFolder, followNofollow, storeHtml, render, renderUrls, include, exclude, extract, list];
+            noSitemaps, subdomains, anyFolder, followNofollow, storeHtml, render, renderUrls, include, exclude, extract, list, browserFallback];
 
         command.SetAction((parse, cancellationToken) => CommandErrors.RunAsync(async () =>
         {
@@ -161,7 +165,8 @@ internal static class CrawlCommand
                     IncludePatterns = parse.GetValue(include) ?? [],
                     ExcludePatterns = parse.GetValue(exclude) ?? [],
                     ExtractionRules = extractionRules,
-                    ListUrls = listUrls
+                    ListUrls = listUrls,
+                    BrowserFallback = parse.GetValue(browserFallback)
                 };
                 databasePath ??= CrawlDatabase.DefaultDatabasePath(startUrl);
             }

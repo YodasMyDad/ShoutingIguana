@@ -51,6 +51,9 @@ internal sealed class PageProcessor(
 
     private readonly ConcurrentDictionary<string, bool> _blockedHostsReported = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, bool> _rateLimitedHostsReported = new(StringComparer.Ordinal);
+
+    /// <summary>Hosts whose plain HTTP was blocked and whose browser fetch got past it. Later pages skip HTTP.</summary>
+    private readonly ConcurrentDictionary<string, byte> _browserHosts = new(StringComparer.Ordinal);
     private int _internalFetches;
     private int _internalForbidden;
     private int _forbiddenReported;
@@ -135,8 +138,7 @@ internal sealed class PageProcessor(
         try
         {
             // The site's own URLs asked to slow down are held back by the session for its end, not retried here.
-            response = await fetcher.FetchAsync(uri, body, cancellationToken, singleAttempt: isRetry || isProbe, holdBackThrottled: item.IsInternal)
-                .ConfigureAwait(false);
+            response = await FetchWithFallbackAsync(item, uri, body, cancellationToken, isRetry, isProbe).ConfigureAwait(false);
         }
         finally
         {
@@ -186,13 +188,73 @@ internal sealed class PageProcessor(
     }
 
     /// <summary>
+    /// Plain HTTP first. When this crawl's browser fallback is on and the host answers with a block that isn't a 429,
+    /// the page is fetched in the browser. If that gets past the block, the host's later pages skip HTTP. A 429 is the
+    /// host asking the crawler to slow down, which the browser doesn't change. A browser fetch that is still blocked,
+    /// or that fails, leaves the HTTP response, and the host stays on HTTP.
+    /// </summary>
+    private async Task<FetchResponse> FetchWithFallbackAsync(FrontierItem item, Uri uri, FetchBody body, CancellationToken cancellationToken,
+        bool isRetry, bool isProbe)
+    {
+        var http = () => fetcher.FetchAsync(uri, body, cancellationToken, singleAttempt: isRetry || isProbe, holdBackThrottled: item.IsInternal);
+        if (!FallsBack(item))
+        {
+            return await http().ConfigureAwait(false);
+        }
+
+        var host = HostKey(uri);
+        if (_browserHosts.ContainsKey(host))
+        {
+            var again = await renderer.LoadAsync(uri, host, cancellationToken).ConfigureAwait(false);
+            if (again is { FromBrowser: true })
+            {
+                return again;
+            }
+        }
+
+        var response = await http().ConfigureAwait(false);
+        if (response is not { Outcome: FetchOutcome.Blocked } || response.IsRateLimited)
+        {
+            return response;
+        }
+
+        var viaBrowser = await renderer.LoadAsync(uri, host, cancellationToken).ConfigureAwait(false);
+        if (viaBrowser is not { FromBrowser: true } || viaBrowser.Outcome == FetchOutcome.Blocked || viaBrowser.IsRateLimited)
+        {
+            return response;
+        }
+
+        if (_browserHosts.TryAdd(host, 0))
+        {
+            var name = scope.HostName(UrlNormalizer.GetHost(uri));
+            observer.OnNotice(new CrawlNotice(
+                CrawlNoticeLevel.Info,
+                "browser-fallback",
+                $"{name} blocked plain HTTP ({response.BlockReason}), so its pages are being read in a browser.")
+            {
+                Data = new CrawlNoticeData(Host: name, Reason: response.BlockReason)
+            });
+        }
+
+        return viaBrowser;
+    }
+
+    /// <summary>Internal pages only. A status check is not parsed into page facts, and a 429 is not a firewall block.</summary>
+    private bool FallsBack(FrontierItem item) =>
+        options.BrowserFallback && item is { Mode: FetchMode.Crawl, IsInternal: true };
+
+    /// <summary>example.com and www.example.com share a gate, and they share this too.</summary>
+    private static string HostKey(Uri uri) => CrawlScope.SiteHost(UrlNormalizer.GetHost(uri));
+
+    /// <summary>
     /// A page this crawl renders is fetched again in the browser. The HTML that comes back replaces the HTTP body,
     /// and <see cref="Build"/> parses that once. JavaScript mode also keeps the raw body, for links the script removed.
-    /// A render that doesn't happen, or fails, leaves the HTTP body to be parsed.
+    /// A render that doesn't happen, or fails, leaves the HTTP body to be parsed. A page the browser fallback already
+    /// fetched is that HTML: it is not rendered again.
     /// </summary>
     private async Task<FetchResponse> RenderIfNeededAsync(FrontierItem item, Uri uri, FetchResponse response, CancellationToken cancellationToken)
     {
-        if (item.Mode != FetchMode.Crawl || !item.IsInternal ||
+        if (response.FromBrowser || item.Mode != FetchMode.Crawl || !item.IsInternal ||
             response is not { Outcome: FetchOutcome.Success, IsHtml: true, Body: { } html, BodyTruncated: false } ||
             !RenderNeed.ShouldRender(options.Rendering, _renderPatterns, item.Url, html))
         {

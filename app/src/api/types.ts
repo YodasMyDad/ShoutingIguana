@@ -270,6 +270,11 @@ export interface CrawlOptions {
    * addresses and the start URL are fetched, and a link found on them is recorded and not fetched.
    */
   listUrls?: string[] | null;
+  /**
+   * When a host blocks the plain HTTP fetch, read that host's pages in a browser instead.
+   * This is not JavaScript rendering. Off leaves a block as a block.
+   */
+  browserFallback?: boolean | null;
   proxyUrl?: string | null;
   requestTimeoutSeconds?: number | null;
   maxRetries?: number | null;

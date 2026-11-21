@@ -57,6 +57,13 @@ internal sealed record FetchResponse
     /// <summary>The request carried the crawl's signature for its host (<see cref="SignatureBook"/>).</summary>
     public bool Signed { get; init; }
 
+    /// <summary>
+    /// The body is the HTML a headless browser returned for a host that blocked plain HTTP. It is the page that gets
+    /// parsed, once. It is not JavaScript rendering: nothing here is fetched again, and a link that existed only in
+    /// an HTTP body the browser never saw is not kept.
+    /// </summary>
+    public bool FromBrowser { get; init; }
+
     /// <summary>A network-level failure that is worth retrying.</summary>
     public bool IsTransientFailure { get; init; }
 

@@ -445,6 +445,7 @@ const FIELD_NAMES: Record<string, string> = {
   headers: 'Headers',
   useCookies: 'Cookies',
   javaScriptRendering: 'JavaScript rendering',
+  browserFallback: 'Browser fallback',
   renderPatterns: 'URLs to render',
   includePatterns: 'Only crawl',
   excludePatterns: 'Don’t crawl',

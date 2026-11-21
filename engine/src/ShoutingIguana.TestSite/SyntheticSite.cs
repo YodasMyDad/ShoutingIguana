@@ -24,6 +24,16 @@ public sealed partial class SyntheticSite
     public const string CUSTOM_EXTRACT_SKU = "SKU-4401";
     public const string CUSTOM_EXTRACT_CODE = "ALPHA-9";
 
+    /// <summary>
+    /// Plain HTTP gets a Cloudflare challenge (<c>internal-blocked</c>). A browser request gets the page, which has no
+    /// title, and a link to <see cref="BROWSER_FALLBACK_NEXT_PATH"/>, which a crawl that follows links does not fetch
+    /// until the browser has read this one.
+    /// </summary>
+    public const string BROWSER_FALLBACK_PATH = PLANTS_PATH + "browser-fallback";
+
+    /// <inheritdoc cref="BROWSER_FALLBACK_PATH"/>
+    public const string BROWSER_FALLBACK_NEXT_PATH = PLANTS_PATH + "browser-fallback-next";
+
     /// <summary>The planted page a list crawl fetches, and the page it links to, which that crawl records and does not fetch.</summary>
     public const string LIST_MODE_PATH = PLANTS_PATH + "list-mode";
 
