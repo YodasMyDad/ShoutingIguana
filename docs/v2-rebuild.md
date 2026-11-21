@@ -75,6 +75,17 @@ file on the site, which `default-src 'self'` allows. Automatic rendering is a sh
 means the page is client-rendered: a script, an empty `#app`, `#root`, `#__next`, `#__nuxt` or `<app-root>`, and
 under 120 characters of visible text. Anything else stays the HTTP body unless the crawl lists its URL to render.
 
+**Not Screaming Frog's JavaScript mode.** Their Rendering setting is Text Only (raw HTML; the default) or JavaScript
+(headless Chromium renders the page and the crawl extracts from that HTML, and still sees links that were in the raw
+HTML). It does not decide per page. They tell you to turn JavaScript on only for a first look, a known client-rendered
+site, or a sample, because rendering every page is slow
+([Rendering](https://www.screamingfrog.co.uk/guides/rendering/),
+[How To Crawl JavaScript Websites](https://www.screamingfrog.co.uk/seo-spider/tutorials/crawl-javascript-seo/)).
+Our Off is their Text Only. Our On is not their JavaScript: a page that already has text, or a shell whose mount isn't
+one of those ids, is not rendered, so a category that injects products into an otherwise full page is missed. "Only
+these URLs" is the stand-in for rendering a sample. Parity with their JavaScript mode (render the HTML pages, keep the
+raw links as well) is not built. It is not next: custom extraction is.
+
 **Step 3 starts with a design conversation with the owner, not with code.** The owner wants a "super slick,
 enterprise level" UI and UX. The old app was "clunky and a bit all over the place". **[The UI brief](v2-ui-brief.md)
 sets the bar and the process**: discovery, sign-off on mockups and a clickable prototype, vertical slices, and a
