@@ -24,6 +24,7 @@ import {
   type FormSection,
   type HeaderRow,
 } from './form';
+import { ExtractionRulesField } from './ExtractionRulesField';
 import { ProxyTest } from './ProxyTest';
 import { RememberSecrets, type RememberSecretsProps } from './RememberSecrets';
 import { ShopifyAccessFields } from './ShopifyAccessFields';
@@ -250,6 +251,18 @@ function SimpleQuestions({
         <RenderingFields form={form} onChange={onChange} onTouch={onTouch} errors={errors} mode="simple" />
       </Fold>
       <Fold
+        name="extraction"
+        level={3}
+        title={SIMPLE_WORDS.extraction.label}
+        summary={sectionSummary('extraction', form, 'simple')}
+        attention={first(errors, 'extractionRules') ? '1 to change' : null}
+        open={open.has('extraction')}
+        onOpenChange={(next) => onOpenChange('extraction', next)}
+        className="si-card"
+      >
+        <ExtractionRulesField form={form} onChange={onChange} error={first(errors, 'extractionRules')} />
+      </Fold>
+      <Fold
         name="shopify"
         level={3}
         title={SIMPLE_WORDS.shopify.label}
@@ -431,7 +444,14 @@ function AdvancedSections({
               {toggle('crawlPagination')}
             </>,
           )}
-          {fold('rendering', <RenderingFields form={form} onChange={onChange} onTouch={onTouch} errors={errors} mode="advanced" />)}
+          {fold(
+            'rendering',
+            <RenderingFields form={form} onChange={onChange} onTouch={onTouch} errors={errors} mode="advanced" />,
+          )}
+          {fold(
+            'extraction',
+            <ExtractionRulesField form={form} onChange={onChange} error={first(errors, 'extractionRules')} />,
+          )}
           {fold(
             'limits',
             <>

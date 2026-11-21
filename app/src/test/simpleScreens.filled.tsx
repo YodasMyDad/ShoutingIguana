@@ -24,4 +24,5 @@ export const SIMPLE_SCREENS: SimpleScreens = {
   overview: stub('Summary (stub)'),
   issues: stub('What to fix (stub)'),
   report: stub('Report (stub)'),
+  extraction: stub('Custom data (stub)'),
 };

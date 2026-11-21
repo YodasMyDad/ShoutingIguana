@@ -43,6 +43,7 @@ describe('every IA route, opened with unusable search params', () => {
     [`${CRAWL}/sitemaps`, /Sitemaps/],
     [`${CRAWL}/robots`, /robots\.txt/],
     [`${CRAWL}/settings`, /settings/i],
+    [`${CRAWL}/extraction`, /Custom extraction/],
     ['/settings', /General/],
     ['/settings/shortcuts', /Shortcuts/],
   ];

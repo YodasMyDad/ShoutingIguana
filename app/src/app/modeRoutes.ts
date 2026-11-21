@@ -55,8 +55,8 @@ export function simpleLanding(pathname: string): SimpleLanding | null {
     : null;
 }
 
-/** The crawl's sections Simple has, in sidebar order: Summary, What to fix, and the Report once it exists. */
-export const SIMPLE_SECTIONS: readonly CrawlSection[] = ['overview', 'issues', 'report'];
+/** The crawl's sections Simple has, in sidebar order: Summary, What to fix, Custom data, and the Report once it exists. */
+export const SIMPLE_SECTIONS: readonly CrawlSection[] = ['overview', 'issues', 'extraction', 'report'];
 
 /** Whether Simple has a crawl's section: a crawl reopens on its last view only if the mode has it. */
 export function simpleHasSection(section: CrawlSection): boolean {

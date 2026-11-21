@@ -60,7 +60,9 @@ export function sameInBothModes(key: SimpleScreenKey, missing: Preloadable): Rou
 export function simpleScreenKeyOf(pathname: string): SimpleScreenKey | null {
   if (pathname === '/') return 'home';
   const section = sectionOf(pathname);
-  return section === 'overview' || section === 'issues' || section === 'report' ? section : null;
+  return section === 'overview' || section === 'issues' || section === 'report' || section === 'extraction'
+    ? section
+    : null;
 }
 
 /**

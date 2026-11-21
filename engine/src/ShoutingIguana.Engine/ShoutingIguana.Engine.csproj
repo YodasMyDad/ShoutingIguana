@@ -12,6 +12,7 @@
 
     <ItemGroup>
         <PackageReference Include="AngleSharp" />
+        <PackageReference Include="AngleSharp.XPath" />
         <PackageReference Include="Microsoft.Data.Sqlite" />
         <PackageReference Include="Microsoft.Playwright" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />

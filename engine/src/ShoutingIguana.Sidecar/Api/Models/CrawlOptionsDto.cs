@@ -56,6 +56,9 @@ internal sealed record CrawlOptionsDto
 
     /// <summary>A URL that matches any of these is recorded and not fetched.</summary>
     public IReadOnlyList<string>? ExcludePatterns { get; init; }
+
+    /// <summary>Custom extraction rules, applied while each HTML page is parsed. Empty extracts nothing.</summary>
+    public IReadOnlyList<ExtractionRuleDto>? ExtractionRules { get; init; }
     public string? ProxyUrl { get; init; }
     public int? RequestTimeoutSeconds { get; init; }
     public int? MaxRetries { get; init; }
@@ -99,6 +102,7 @@ internal sealed record CrawlOptionsDto
         RenderPatterns = List(options.RenderPatterns),
         IncludePatterns = List(options.IncludePatterns),
         ExcludePatterns = List(options.ExcludePatterns),
+        ExtractionRules = (options.ExtractionRules ?? []).Select(ExtractionRuleDto.From).ToList(),
         ProxyUrl = options.ProxyUrl,
         RequestTimeoutSeconds = options.RequestTimeoutSeconds,
         MaxRetries = options.MaxRetries,
@@ -144,6 +148,7 @@ internal sealed record CrawlOptionsDto
             RenderPatterns = RenderPatterns is null ? defaults.RenderPatterns : [.. RenderPatterns],
             IncludePatterns = IncludePatterns is null ? defaults.IncludePatterns : [.. IncludePatterns],
             ExcludePatterns = ExcludePatterns is null ? defaults.ExcludePatterns : [.. ExcludePatterns],
+            ExtractionRules = ExtractionRules is null ? defaults.ExtractionRules : ExtractionRules.Select(rule => rule.ToRule()).ToList(),
             ProxyUrl = ProxyUrl ?? defaults.ProxyUrl,
             RequestTimeoutSeconds = RequestTimeoutSeconds ?? defaults.RequestTimeoutSeconds,
             MaxRetries = MaxRetries ?? defaults.MaxRetries,

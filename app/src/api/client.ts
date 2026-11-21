@@ -78,6 +78,8 @@ import type {
   CrawlOptionDefaults,
   CrawlOptions,
   CrawlStats,
+  ExtractionPage,
+  ExtractionQuery,
   Health,
   IssuePage,
   StartCrawlRequest,
@@ -302,6 +304,8 @@ export const api = {
   resumeCrawl: (id: string) => post<undefined>(`${crawl(id)}/resume`),
   stopCrawl: (id: string) => post<undefined>(`${crawl(id)}/stop`),
   /** The stored options: header names with empty values, and hasRedactedProxyCredentials. */
+  extractions: (id: string, query: ExtractionQuery, signal?: Signal) =>
+    post<ExtractionPage>(`${crawl(id)}/extractions`, query, signal),
   crawlOptions: async (id: string, signal?: Signal) =>
     withSecrets(await get<CrawlOptions>(`${crawl(id)}/options`, signal), await keptSecrets(`crawl:${id}`)),
   /**

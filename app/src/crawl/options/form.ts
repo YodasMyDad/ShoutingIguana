@@ -4,7 +4,14 @@
 //
 // Numbers are held as typed, so a half-typed value stays on screen; the engine checks them (`validate`), and a value
 // that isn't a number reaches it as typed, so its message says so beside the field.
-import type { CrawlOptions, JavaScriptRendering, SpeedPreset, UserAgentPreset } from '../../api/types';
+import type {
+  CrawlOptions,
+  ExtractionRule,
+  ExtractionSelector,
+  JavaScriptRendering,
+  SpeedPreset,
+  UserAgentPreset,
+} from '../../api/types';
 import type { SettingFocus } from '../../routing/search';
 import { ENGINE_DEFAULTS } from './engineDefaults';
 import { signatureFormOf, signaturesOf, type ShopifySignatureForm } from './shopifySignature';
@@ -52,6 +59,8 @@ export interface CrawlForm {
   includePatterns: string;
   /** One regular expression a line. A match is recorded and not fetched. */
   excludePatterns: string;
+  /** The crawl's custom extraction rules. A blank row, still being typed, is not sent. */
+  extractionRules: ExtractionRuleRow[];
   /** With its user name and password when it has them: a secret, as header values are. */
   proxyUrl: string;
   /** Shopify crawler access: one signature, for one domain. A secret, as the proxy's password is. */
@@ -61,6 +70,28 @@ export interface CrawlForm {
 }
 
 export type CrawlFormField = keyof CrawlForm;
+
+/** A rule on the form: `key` is only for React, and is not sent. */
+export interface ExtractionRuleRow {
+  key: number;
+  name: string;
+  selectorType: ExtractionSelector;
+  selector: string;
+  enabled: boolean;
+}
+
+let nextExtractionKey = 1;
+
+/** A rule row. With no rule, a blank one, ready to type. */
+export function extractionRow(rule?: Partial<ExtractionRule>): ExtractionRuleRow {
+  return {
+    key: nextExtractionKey++,
+    name: rule?.name ?? '',
+    selectorType: rule?.selectorType ?? 'css',
+    selector: rule?.selector ?? '',
+    enabled: rule?.enabled ?? true,
+  };
+}
 
 const MB = 1024 * 1024;
 
@@ -118,6 +149,7 @@ export function formFromOptions(options: CrawlOptions, startUrl = ''): CrawlForm
     renderPatterns: (options.renderPatterns ?? []).join('\n'),
     includePatterns: (options.includePatterns ?? []).join('\n'),
     excludePatterns: (options.excludePatterns ?? []).join('\n'),
+    extractionRules: (options.extractionRules ?? []).map((rule) => extractionRow(rule)),
     proxyUrl: options.hasRedactedProxyCredentials ? '' : proxy,
     signatures: signatureFormOf(options.signatures, startUrl || (options.startUrl ?? '')),
     requestTimeoutSeconds: numberText(options.requestTimeoutSeconds, defaults.requestTimeoutSeconds),
@@ -130,6 +162,34 @@ function typed(text: string): number {
   const trimmed = text.trim().replace(/,/g, '');
   const value = trimmed === '' ? Number.NaN : Number(trimmed);
   return (Number.isFinite(value) ? value : text) as number;
+}
+
+/** Rules the crawl is given: a row still blank is left out. */
+function filledRules(rows: readonly ExtractionRuleRow[]): ExtractionRule[] {
+  return rows
+    .map((row) => ({
+      name: row.name.trim(),
+      selectorType: row.selectorType,
+      selector: row.selector.trim(),
+      enabled: row.enabled,
+    }))
+    .filter((row) => row.name !== '' || row.selector !== '');
+}
+
+/** Same rules, in order, ignoring the form's keys and a blank row. */
+function sameExtractionRules(left: readonly ExtractionRuleRow[], right: readonly ExtractionRuleRow[]): boolean {
+  const a = filledRules(left);
+  const b = filledRules(right);
+  return (
+    a.length === b.length &&
+    a.every(
+      (rule, index) =>
+        rule.name === b[index]?.name &&
+        rule.selectorType === b[index]?.selectorType &&
+        rule.selector === b[index]?.selector &&
+        rule.enabled === b[index]?.enabled,
+    )
+  );
 }
 
 /** The non-empty lines of a textarea, trimmed. */
@@ -195,6 +255,7 @@ export function optionsFromForm(form: CrawlForm, { secrets = true }: { secrets?:
     renderPatterns: lines(form.renderPatterns),
     includePatterns: lines(form.includePatterns),
     excludePatterns: lines(form.excludePatterns),
+    extractionRules: filledRules(form.extractionRules),
     proxyUrl: form.proxyUrl.trim() === '' ? null : secrets ? form.proxyUrl.trim() : withoutCredentials(form.proxyUrl),
     signatures: secrets ? signaturesOf(form.signatures, withScheme(form.startUrl)) : {},
     requestTimeoutSeconds: typed(form.requestTimeoutSeconds),
@@ -273,12 +334,14 @@ export function withSpeed(form: CrawlForm, preset: SpeedPreset): CrawlForm {
 // ------------------------------------------------------------------------------------------- What's changed
 
 /** The form's sections, in order: where each setting lives in Advanced. */
-export type FormSection = 'start' | 'scope' | 'rendering' | 'limits' | 'robots' | 'network' | 'shopify' | 'advanced';
+export type FormSection =
+  'start' | 'scope' | 'rendering' | 'extraction' | 'limits' | 'robots' | 'network' | 'shopify' | 'advanced';
 
 export const SECTION_TITLES: Record<FormSection, string> = {
   start: 'Start',
   scope: 'Scope',
   rendering: 'JavaScript and filters',
+  extraction: 'Custom extraction',
   limits: 'Limits',
   robots: 'Robots and sitemaps',
   network: 'Headers and network',
@@ -299,6 +362,7 @@ export const FIELD_SECTIONS: Record<CrawlFormField, FormSection> = {
   renderPatterns: 'rendering',
   includePatterns: 'rendering',
   excludePatterns: 'rendering',
+  extractionRules: 'extraction',
   maxUrls: 'limits',
   maxDepth: 'limits',
   maxHtmlMb: 'limits',
@@ -336,6 +400,7 @@ export const SIMPLE_FIELDS: ReadonlySet<CrawlFormField> = new Set<CrawlFormField
   'renderPatterns',
   'includePatterns',
   'excludePatterns',
+  'extractionRules',
 ]);
 
 /** Which of the form's settings differ from these defaults: by field, with the start URL left out. */
@@ -344,6 +409,7 @@ export function changedFields(form: CrawlForm, defaults: CrawlForm): CrawlFormFi
     if (field === 'startUrl') return false;
     if (field === 'headers') return Object.keys(headersOf(form.headers, false)).length > 0;
     if (field === 'signatures') return Object.keys(signaturesOf(form.signatures, withScheme(form.startUrl))).length > 0;
+    if (field === 'extractionRules') return !sameExtractionRules(form.extractionRules, defaults.extractionRules);
     if (field === 'customUserAgent') return form.userAgent === 'custom' && form[field] !== defaults[field];
     const a = form[field];
     const b = defaults[field];

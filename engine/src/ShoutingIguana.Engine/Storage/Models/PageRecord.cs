@@ -1,3 +1,5 @@
+using ShoutingIguana.Engine.Parsing.Models;
+
 namespace ShoutingIguana.Engine.Storage.Models;
 
 /// <summary>Everything the writer persists for one fetched URL, in one transaction.</summary>
@@ -17,4 +19,7 @@ internal sealed record PageRecord(
     /// writer keeps the first as a fact of the crawl (<see cref="Storage.SitePlatformReader"/>).
     /// </summary>
     public string? ShopifySignal { get; init; }
+
+    /// <summary>What the crawl's extraction rules found on this page. Empty with none, and for a page that wasn't parsed.</summary>
+    public IReadOnlyList<ExtractionMatch> Extractions { get; init; } = [];
 }

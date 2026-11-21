@@ -263,6 +263,8 @@ export interface CrawlOptions {
   includePatterns?: string[] | null;
   /** A URL that matches any of these is recorded and not fetched. */
   excludePatterns?: string[] | null;
+  /** Custom extraction rules, applied while each HTML page is parsed. Empty extracts nothing. */
+  extractionRules?: ExtractionRule[] | null;
   proxyUrl?: string | null;
   requestTimeoutSeconds?: number | null;
   maxRetries?: number | null;
@@ -273,6 +275,53 @@ export interface CrawlOptions {
 
 /** When a page is fetched again in a browser and that HTML is what gets parsed. The first fetch is always HTTP. */
 export type JavaScriptRendering = 'off' | 'automatic' | 'javaScript' | 'matching';
+
+/** How a custom extraction rule finds its text. `xPath` is the engine's camel-case spelling of XPath. */
+export type ExtractionSelector = 'css' | 'xPath' | 'regex';
+
+/** One custom extraction rule. A rule that is off is kept and not applied. */
+export interface ExtractionRule {
+  name: string;
+  selectorType: ExtractionSelector;
+  selector: string;
+  enabled: boolean;
+}
+
+/** One of the crawl's rules, and how many pages it matched or failed on. */
+export interface ExtractionRuleCount {
+  name: string;
+  selectorType: ExtractionSelector;
+  selector: string;
+  enabled: boolean;
+  matches: number;
+  errors: number;
+}
+
+/** One rule's result on one page. `value` is the matched texts, one a line. */
+export interface ExtractionRow {
+  url: string;
+  name: string;
+  selectorType: ExtractionSelector;
+  selector: string;
+  value: string | null;
+  count: number;
+  error: string | null;
+}
+
+/** The crawl's rules, and one page of what they found. */
+export interface ExtractionPage {
+  rules: ExtractionRuleCount[];
+  total: number;
+  rows: ExtractionRow[];
+}
+
+/** Which rows of the extracted values to read. */
+export interface ExtractionQuery {
+  rule?: string;
+  search?: string;
+  offset?: number;
+  limit?: number;
+}
 
 export type CrawlOptionField = keyof CrawlOptions;
 

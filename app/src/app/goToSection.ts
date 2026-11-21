@@ -23,6 +23,8 @@ export function goToSection(navigate: ReturnType<typeof useNavigate>, section: C
       return navigate({ to: '/crawls/$crawl/settings', params: { crawl } });
     case 'report':
       return navigate({ to: '/crawls/$crawl/report', params: { crawl } });
+    case 'extraction':
+      return navigate({ to: '/crawls/$crawl/extraction', params: { crawl } });
     default:
       return navigate({ to: '/crawls/$crawl/overview', params: { crawl } });
   }

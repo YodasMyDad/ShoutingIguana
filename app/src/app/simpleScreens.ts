@@ -19,6 +19,7 @@ export interface SimpleScreens {
   overview: SimpleScreen | null;
   issues: SimpleScreen | null;
   report: SimpleScreen | null;
+  extraction: SimpleScreen | null;
 }
 
 /** A Simple screen from its module, as the router's lazy route components are: `simpleScreen(() => import(…), 'Name')`. */
@@ -40,6 +41,9 @@ export const SIMPLE_SCREENS: SimpleScreens = {
   // `/crawls/:crawl/report`: the Report screen, the same in both modes. Its sidebar item (third in Simple, eighth in
   // Advanced), its key (Ctrl+3, Ctrl+8) and its route appear once this is set.
   report: simpleScreen(() => import('../screens/report/ReportScreen'), 'ReportScreen'),
+
+  // `/crawls/:crawl/extraction`: what the crawl's extraction rules found. The screen reads the mode itself.
+  extraction: simpleScreen(() => import('../screens/ExtractionScreen'), 'ExtractionScreen'),
 };
 
 export type SimpleScreenKey = keyof SimpleScreens;

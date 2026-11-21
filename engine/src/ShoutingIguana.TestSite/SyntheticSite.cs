@@ -17,6 +17,13 @@ public sealed partial class SyntheticSite
     public const int SITEMAP_CHUNK_SIZE = 10_000;
     public const string PLANTS_PATH = "/plants/";
 
+    /// <summary>The planted page custom extraction reads, and the three values its rules find there.</summary>
+    public const string CUSTOM_EXTRACT_PATH = PLANTS_PATH + "custom-extract";
+
+    public const string CUSTOM_EXTRACT_PRICE = "£12.50";
+    public const string CUSTOM_EXTRACT_SKU = "SKU-4401";
+    public const string CUSTOM_EXTRACT_CODE = "ALPHA-9";
+
     /// <summary>With <see cref="SyntheticSiteOptions.DeadTwin"/>, the dead twin's URLs the first orphan links: never checked.</summary>
     public const int DEAD_TWIN_UNCHECKED = 5;
 

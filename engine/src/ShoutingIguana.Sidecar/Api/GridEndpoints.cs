@@ -16,6 +16,10 @@ internal static class GridEndpoints
     {
         api.MapGet("/api/url-columns", () => TypedResults.Json(GridData.Columns, SidecarJsonContext.Default.IReadOnlyListUrlColumnDto));
 
+        api.MapPost("/api/crawls/{id}/extractions", async (string id, HttpRequest request, CrawlData data) =>
+            TypedResults.Json(data.Extractions(id, await RequestBody.ReadOptionalAsync(request, SidecarJsonContext.Default.ExtractionRequest).ConfigureAwait(false)),
+                SidecarJsonContext.Default.ExtractionPageDto));
+
         api.MapPost("/api/crawls/{id}/urls", async (string id, HttpRequest request, GridData data, CancellationToken cancellationToken) =>
             TypedResults.Json(await data.QueryAsync(id, await RequestBody.ReadOptionalAsync(request, SidecarJsonContext.Default.GridQueryRequest).ConfigureAwait(false),
                 cancellationToken).ConfigureAwait(false), SidecarJsonContext.Default.UrlPageDto));

@@ -57,12 +57,16 @@ public static class HtmlPageParser
     /// The encoding a byte-order mark at the start of the response's bytes declared (<see cref="PageFacts.ByteOrderMark"/>),
     /// or null with none. The fetch sees it, and the decoded <paramref name="html"/> no longer has it.
     /// </param>
-    public static ParsedPage Parse(string html, Uri pageUri, IReadOnlyList<ResponseHeader> headers, string robotsToken, string? byteOrderMark = null)
+    public static ParsedPage Parse(string html, Uri pageUri, IReadOnlyList<ResponseHeader> headers, string robotsToken, string? byteOrderMark = null) =>
+        Parse(html, pageUri, headers, robotsToken, byteOrderMark, extractions: null);
+
+    internal static ParsedPage Parse(string html, Uri pageUri, IReadOnlyList<ResponseHeader> headers, string robotsToken, string? byteOrderMark,
+        ExtractionSession? extractions)
     {
         var metaStarts = _metaStarts ??= new Dictionary<IElement, int>(ReferenceEqualityComparer.Instance);
         try
         {
-            return Parse(html, pageUri, headers, robotsToken, byteOrderMark, metaStarts);
+            return Parse(html, pageUri, headers, robotsToken, byteOrderMark, metaStarts, extractions);
         }
         finally
         {
@@ -72,7 +76,7 @@ public static class HtmlPageParser
     }
 
     private static ParsedPage Parse(string html, Uri pageUri, IReadOnlyList<ResponseHeader> headers, string robotsToken, string? byteOrderMark,
-        Dictionary<IElement, int> metaStarts)
+        Dictionary<IElement, int> metaStarts, ExtractionSession? extractions)
     {
         var (parser, headEnd) = PARSER.Value;
         headEnd.Reset();
@@ -149,7 +153,11 @@ public static class HtmlPageParser
 
         // A refresh the header made the page's leaves the meta tag's link out: it never runs.
         IEnumerable<ExtractedLink> links = refresh is { FromHttpHeader: true } ? walker.Links.Where(link => link.Kind != LinkKind.MetaRefresh) : walker.Links;
-        return new ParsedPage(facts, [.. links, .. signals.Links, .. refreshLink]);
+        // The rules read this document, and a regular expression reads the HTML already in hand. The document is not parsed again.
+        return new ParsedPage(facts, [.. links, .. signals.Links, .. refreshLink])
+        {
+            Extractions = extractions is { Any: true } ? extractions.Apply(document, html) : []
+        };
     }
 
     /// <summary>

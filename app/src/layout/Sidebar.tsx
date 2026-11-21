@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
 import {
   Bot,
+  Braces,
   FileText,
   House,
   LayoutDashboard,
@@ -47,12 +48,13 @@ const SECTION_ICONS: Record<CrawlSection, LucideIcon> = {
   sitemaps: Network,
   robots: Bot,
   settings: SlidersHorizontal,
+  extraction: Braces,
   report: FileText,
 };
 
 /**
  * The sidebar (docs/v2-ui-ia.md, The shell; docs/v2-ui-simple.md, The shell in Simple): Home, the open crawl's
- * sections, crawls running now, Settings. In Simple the crawl's sections are three: Summary, What to fix (counting the
+ * sections, crawls running now, Settings. In Simple the crawl's sections are Summary, What to fix (counting the
  * problems that are Serious or Worth fixing) and Report; in Advanced, the seven as built, and Report after a rule. The
  * Report is listed once its screen exists (app/simpleScreens.ts). The app's Settings, opened from a crawl, keeps that
  * crawl's switcher and sections here (layout/contextCrawl.ts): the way back is one click, on the item you came from.

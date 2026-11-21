@@ -24,6 +24,15 @@ const PRESETS: SpeedPreset[] = [
 ];
 
 describe('the crawl settings form', () => {
+  it('gives a custom extraction rule back as it was filled in', () => {
+    const options = {
+      ...ENGINE_DEFAULTS,
+      startUrl: 'https://example.com/',
+      extractionRules: [{ name: 'Price', selectorType: 'css' as const, selector: '.price', enabled: true }],
+    };
+    expect(optionsFromForm(formFromOptions(options)).extractionRules).toEqual(options.extractionRules);
+  });
+
   it('gives back the options it was filled from', () => {
     const options = {
       ...ENGINE_DEFAULTS,

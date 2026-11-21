@@ -241,7 +241,8 @@ public sealed class CrawlOptionsTests : IAsyncLifetime
             ProxyUrl = "http://proxy.example:8080/",
             RequestTimeoutSeconds = 45,
             MaxRetries = 4,
-            MaxHtmlBytes = 1024 * 1024
+            MaxHtmlBytes = 1024 * 1024,
+            ExtractionRules = [new ExtractionRule { Name = "Price", SelectorType = ExtractionSelector.Css, Selector = ".price", Enabled = false }]
         };
 
         var json = JsonSerializer.Serialize(CrawlOptionsDto.From(options), Serialization.SidecarJsonContext.Default.CrawlOptionsDto);
@@ -255,8 +256,14 @@ public sealed class CrawlOptionsTests : IAsyncLifetime
             RenderPatterns = roundTripped.RenderPatterns,
             IncludePatterns = roundTripped.IncludePatterns,
             ExcludePatterns = roundTripped.ExcludePatterns,
+            ExtractionRules = roundTripped.ExtractionRules,
             Signatures = roundTripped.Signatures
         }, roundTripped);
+        var rule = Assert.Single(roundTripped.ExtractionRules);
+        Assert.Equal("Price", rule.Name);
+        Assert.Equal(ExtractionSelector.Css, rule.SelectorType);
+        Assert.Equal(".price", rule.Selector);
+        Assert.False(rule.Enabled);
         Assert.Equal(options.ExtraHeaders, roundTripped.ExtraHeaders);
         Assert.Equal(options.ExtraSitemaps, roundTripped.ExtraSitemaps);
 

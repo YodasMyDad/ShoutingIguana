@@ -273,6 +273,11 @@ internal sealed partial class CrawlWriter
             _statements.UpsertHtml(item.Id, record.Html);
         }
 
+        foreach (var match in record.Extractions)
+        {
+            _statements.InsertExtraction(item.Id, match);
+        }
+
         _statements.UpdateUrlState(item.Id, UrlState.Done);
         _urls[key] = _urls[key] with { State = UrlState.Done };
         _counters.OnRecorded(new RecordedResponse(response.Outcome, response.StatusCode, IsPage(item.IsInternal, item.Url, response),

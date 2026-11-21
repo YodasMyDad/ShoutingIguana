@@ -2,6 +2,7 @@
 // what to refresh. Freshness comes from events (`library`, `crawl`), not polling: reads stay fresh until told.
 import { mutationOptions, queryOptions, type QueryFilters } from '@tanstack/react-query';
 import { api } from './client';
+import type { ExtractionQuery } from './types';
 import type { FixedQuery, RecheckAsk, RecheckRowsQuery } from './fixLoop';
 import { loadFoundOn, loadIssueTargets } from './whereFoundBatch';
 import type {
@@ -38,6 +39,8 @@ export const queryKeys = {
   /** A Shopify store's crawler access: under the crawl, so an analysis after a recheck reads it afresh. */
   shopifyAccess: (id: string) => ['crawl', id, 'shopify'] as const,
   crawlOptions: (id: string) => ['crawl', id, 'options'] as const,
+  /** Extracted values: under the crawl, so a finished crawl reads them again, and the live refresh reads them while it runs. */
+  extractions: (id: string) => ['crawl', id, 'extractions'] as const,
   alerts: (id: string) => ['crawl', id, 'alerts'] as const,
   history: (id: string) => ['crawl', id, 'history'] as const,
   /** Counts by value, for Overview's breakdowns: under the crawl, so whatever changes it refreshes them. */
@@ -196,6 +199,12 @@ export const shopifyAccessQuery = (id: string) =>
 
 export const statsQuery = (id: string) =>
   queryOptions({ queryKey: queryKeys.stats(id), queryFn: ({ signal }) => api.stats(id, signal), staleTime: Infinity });
+
+export const extractionsQuery = (id: string, query: ExtractionQuery) =>
+  queryOptions({
+    queryKey: [...queryKeys.extractions(id), query] as const,
+    queryFn: ({ signal }) => api.extractions(id, query, signal),
+  });
 
 export const crawlOptionsQuery = (id: string) =>
   queryOptions({

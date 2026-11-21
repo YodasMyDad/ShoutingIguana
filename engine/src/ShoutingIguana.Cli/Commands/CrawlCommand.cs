@@ -43,6 +43,7 @@ internal static class CrawlCommand
         var renderUrls = new Option<string[]>("--render-url") { Description = "Regular expression matched against the whole URL. With --render Matching, only these URLs are rendered. Repeatable." };
         var include = new Option<string[]>("--include") { Description = "Regular expression matched against the whole URL. When any are set, only matching URLs are fetched. Repeatable." };
         var exclude = new Option<string[]>("--exclude") { Description = "Regular expression matched against the whole URL. A match is recorded and not fetched. Repeatable." };
+        var extract = new Option<string[]>("--extract") { Description = "Custom extraction rule: Name=css:selector, Name=xpath:expression or Name=regex:pattern. Repeatable." };
         var noAnalyze = new Option<bool>("--no-analyze") { Description = "Skip the SEO checks when the crawl completes." };
         var quiet = new Option<bool>("--quiet", "-q") { Description = "No progress line." };
         var verbose = new Option<bool>("--verbose", "-v") { Description = "Detailed engine logging." };
@@ -51,13 +52,13 @@ internal static class CrawlCommand
         {
             url, database, resume, maxUrls, maxDepth, concurrency, rate, userAgent, userAgentString, headers, proxy, signatureFiles, timeout,
             ignoreRobots, crawlDelay, noResources, noExternal, noSitemaps, subdomains, anyFolder, followNofollow, storeHtml,
-            render, renderUrls, include, exclude,
+            render, renderUrls, include, exclude, extract,
             noAnalyze, quiet, verbose
         };
 
         // A resumed crawl keeps the scope and rules it started with; only how it talks to the site can change.
         Option[] fixedOnResume = [maxUrls, maxDepth, userAgent, userAgentString, ignoreRobots, crawlDelay, noResources, noExternal,
-            noSitemaps, subdomains, anyFolder, followNofollow, storeHtml, render, renderUrls, include, exclude];
+            noSitemaps, subdomains, anyFolder, followNofollow, storeHtml, render, renderUrls, include, exclude, extract];
 
         command.SetAction((parse, cancellationToken) => CommandErrors.RunAsync(async () =>
         {
@@ -66,6 +67,11 @@ internal static class CrawlCommand
             if (!TryParseHeaders(parse.GetValue(headers) ?? [], out var extraHeaders, out var headerError))
             {
                 return Fail(headerError);
+            }
+
+            if (!TryParseExtractions(parse.GetValue(extract) ?? [], out var extractionRules, out var extractError))
+            {
+                return Fail(extractError);
             }
 
             CrawlOptions options;
@@ -146,7 +152,8 @@ internal static class CrawlCommand
                     Rendering = parse.GetValue(render) ?? defaults.Rendering,
                     RenderPatterns = parse.GetValue(renderUrls) ?? [],
                     IncludePatterns = parse.GetValue(include) ?? [],
-                    ExcludePatterns = parse.GetValue(exclude) ?? []
+                    ExcludePatterns = parse.GetValue(exclude) ?? [],
+                    ExtractionRules = extractionRules
                 };
                 databasePath ??= CrawlDatabase.DefaultDatabasePath(startUrl);
             }
@@ -213,6 +220,23 @@ internal static class CrawlCommand
             }
 
             headers[value[..colon].Trim()] = value[(colon + 1)..].Trim();
+        }
+
+        return true;
+    }
+
+    internal static bool TryParseExtractions(string[] values, out List<ExtractionRule> rules, out string error)
+    {
+        rules = [];
+        error = string.Empty;
+        foreach (var value in values)
+        {
+            if (!ExtractionRule.TryParse(value, out var rule, out error))
+            {
+                return false;
+            }
+
+            rules.Add(rule);
         }
 
         return true;

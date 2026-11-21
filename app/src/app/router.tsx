@@ -99,6 +99,8 @@ const crawlIndexRoute = createRoute({
         throw redirect({ to: '/crawls/$crawl/settings', params, replace: true });
       case 'report':
         throw redirect({ to: '/crawls/$crawl/report', params, replace: true });
+      case 'extraction':
+        throw redirect({ to: '/crawls/$crawl/extraction', params, replace: true });
       default:
         throw redirect({ to: '/crawls/$crawl/overview', params, replace: true });
     }
@@ -153,6 +155,16 @@ const robotsRoute = createRoute({
   component: lazyRouteComponent(() => import('../screens/RobotsScreen'), 'RobotsScreen'),
 });
 
+const extractionRoute = createRoute({
+  getParentRoute: () => crawlRoute,
+  path: 'extraction',
+  validateSearch: validateNoSearch,
+  component: modeScreen(
+    'extraction',
+    lazyRouteComponent(() => import('../screens/ExtractionScreen'), 'ExtractionScreen'),
+  ),
+});
+
 const crawlSettingsRoute = createRoute({
   getParentRoute: () => crawlRoute,
   path: 'settings',
@@ -198,6 +210,7 @@ export const routeTree = rootRoute.addChildren([
     linksRoute,
     sitemapsRoute,
     robotsRoute,
+    extractionRoute,
     crawlSettingsRoute,
     reportRoute,
   ]),

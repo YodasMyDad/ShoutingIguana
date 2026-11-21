@@ -36,6 +36,7 @@ internal sealed class WriterStatements : IDisposable
     private readonly SqliteCommand _updateCrawlStatus;
     private readonly SqliteCommand _markSitemapsDone;
     private readonly SqliteCommand _insertNotice;
+    private readonly SqliteCommand _insertExtraction;
 
     public WriterStatements(SqliteConnection connection)
     {
@@ -83,6 +84,7 @@ internal sealed class WriterStatements : IDisposable
             DELETE FROM response_details WHERE url_id = $id;
             DELETE FROM response_html WHERE url_id = $id;
             DELETE FROM links WHERE from_id = $id;
+            DELETE FROM extractions WHERE url_id = $id;
             """, "$id");
         _upsertDetails = Prepare(connection,
             "INSERT OR REPLACE INTO response_details (url_id, data) VALUES ($id, $data)", "$id", "$data");
@@ -134,6 +136,10 @@ internal sealed class WriterStatements : IDisposable
             WHERE id = 1
             """, "$status", "$now", "$finished");
         _markSitemapsDone = Prepare(connection, "UPDATE crawl SET sitemaps_done = 1 WHERE id = 1");
+        _insertExtraction = Prepare(connection, """
+            INSERT INTO extractions (url_id, name, selector_type, selector, value, count, error)
+            VALUES ($urlId, $name, $type, $selector, $value, $count, $error)
+            """, "$urlId", "$name", "$type", "$selector", "$value", "$count", "$error");
         _insertNotice = Prepare(connection, """
             INSERT INTO notices (id, at, level, code, message, data) VALUES ($id, $at, $level, $code, $message, $data)
             """, "$id", "$at", "$level", "$code", "$message", "$data");
@@ -190,6 +196,21 @@ internal sealed class WriterStatements : IDisposable
             ? new StoredOutcome((FetchOutcome)reader.GetInt32(0), reader.IsDBNull(3) ? null : reader.GetInt32(3), reader.GetBoolean(1),
                 reader.GetBoolean(4), reader.GetInt64(2))
             : null;
+    }
+
+    /// <summary>
+    /// Stores what one rule found on a page: the matched texts, one a line, or the error when the rule failed.
+    /// A rule that matched nothing is not stored.
+    /// </summary>
+    public void InsertExtraction(int urlId, ExtractionMatch match)
+    {
+        if (match.Count == 0 && match.Error is null)
+        {
+            return;
+        }
+
+        Run(_insertExtraction, urlId, match.Name, (int)match.SelectorType, match.Selector,
+            match.Values.Count == 0 ? null : string.Join('\n', match.Values), match.Count, match.Error);
     }
 
     /// <summary>Stores a notice under the id the writer gave it, with its data as JSON.</summary>

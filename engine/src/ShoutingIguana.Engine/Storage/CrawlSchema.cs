@@ -202,6 +202,29 @@ internal static class CrawlSchema
         """;
 
     /// <summary>
+    /// What the crawl's custom extraction rules found, one row for a rule that matched or failed on a page. A rule that
+    /// matched nothing on a page has no row. <c>selector_type</c> is <c>Configuration.Models.ExtractionSelector</c>'s
+    /// number. <c>value</c> is the matched texts, one a line, or null when the rule failed (<c>error</c> says why, and
+    /// the rule was not tried on later pages). <c>count</c> is how many matched, which can be more than <c>value</c>
+    /// holds. A crawl-time table the writer creates whenever it opens a file, as <see cref="NOTICES"/> is, so a file
+    /// from an earlier engine gets it when it is continued. A crawl with no rules writes none, and a reader finds none
+    /// in a file that never had the table.
+    /// </summary>
+    public const string EXTRACTIONS = """
+        CREATE TABLE IF NOT EXISTS extractions (
+            url_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            selector_type INTEGER NOT NULL,
+            selector TEXT NOT NULL,
+            value TEXT,
+            count INTEGER NOT NULL,
+            error TEXT,
+            PRIMARY KEY (url_id, name)
+        );
+        CREATE INDEX IF NOT EXISTS ix_extractions_name ON extractions (name);
+        """;
+
+    /// <summary>
     /// The fix loop's rechecks ("Recheck these N pages"): crawl-time tables the writer creates whenever it opens a file, as
     /// it creates <see cref="NOTICES"/> and <see cref="RUN_TIME"/> (<see cref="CrawlSchemaUpgrade"/>), so the schema version
     /// stays as it is. A file from before them has none, and a reader finds none there. A recheck's rows are stored all at

@@ -15,6 +15,37 @@ internal sealed class CrawlData(CrawlManager crawls, ReadCache cache)
     private const int DEFAULT_LIMIT = 200;
     private const int MAX_LIMIT = 1_000;
 
+    /// <summary>The crawl's extraction rules and one page of what they found. A crawl with no rules has an empty page.</summary>
+    public ExtractionPageDto Extractions(string id, ExtractionRequest? request)
+    {
+        var path = crawls.PathOf(id);
+        var query = new ExtractionQuery(request?.Rule, request?.Search, request?.Offset ?? 0, request?.Limit ?? ExtractionReader.DEFAULT_LIMIT);
+        var page = EngineErrors.Read(() => ExtractionReader.Read(path, query));
+        return new ExtractionPageDto
+        {
+            Total = page.Total,
+            Rules = page.Rules.Select(rule => new ExtractionRuleCountDto
+            {
+                Name = rule.Name,
+                SelectorType = rule.SelectorType,
+                Selector = rule.Selector,
+                Enabled = rule.Enabled,
+                Matches = rule.Matches,
+                Errors = rule.Errors
+            }).ToList(),
+            Rows = page.Rows.Select(row => new ExtractionRowDto
+            {
+                Url = row.Url,
+                Name = row.Name,
+                SelectorType = row.SelectorType,
+                Selector = row.Selector,
+                Value = row.Value,
+                Count = row.Count,
+                Error = row.Error
+            }).ToList()
+        };
+    }
+
     /// <summary>As the crawl started: header names with empty values, and the proxy without its credentials.</summary>
     public CrawlOptionsDto StoredOptions(string id)
     {

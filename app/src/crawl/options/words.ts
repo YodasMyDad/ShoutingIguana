@@ -3,7 +3,7 @@
 // section's values in a line. Pure.
 import type { JavaScriptRendering, SpeedPreset, UserAgentPreset } from '../../api/types';
 import { formatCount } from '../../lib/format';
-import type { CrawlForm, CrawlFormField, FormSection, SpeedId } from './form';
+import type { CrawlForm, CrawlFormField, ExtractionRuleRow, FormSection, SpeedId } from './form';
 import { endsOn, signatureHost, signatureState } from './shopifySignature';
 
 export interface FieldWords {
@@ -106,6 +106,10 @@ export const FIELD_WORDS: Record<CrawlFormField, FieldWords> = {
     label: 'Don’t crawl',
     help: 'One regular expression a line, matched against the whole URL. A match is recorded and not fetched, so a rendered crawl stays out of a filter or a parameter trap. `sort=` leaves out every URL that says sort=.',
   },
+  extractionRules: {
+    label: 'Custom extraction',
+    help: 'Each rule’s name, and a CSS selector, an XPath expression or a regular expression. The crawl reads each page once and keeps what matches. A rule that matches nothing on a page is left out. Up to 40 rules.',
+  },
 };
 
 /** Simple's words for the settings it asks about (docs/v2-ui-simple.md, New crawl in each mode). */
@@ -198,6 +202,10 @@ export const SIMPLE_WORDS = {
     label: 'Pages built by JavaScript',
     help: 'Some pages send an empty shell and fill it in with a script. On reads those in a browser. The two lists keep the check out of filter and parameter traps.',
   },
+  extraction: {
+    label: 'Pull out your own data',
+    help: 'Name something on each page and how to find it. The check reads each page once and keeps what it finds.',
+  },
 } as const;
 
 const RENDERING_WORDS: Record<JavaScriptRendering, string> = {
@@ -251,6 +259,13 @@ function readableMb(text: string): string {
   return text.trim() === '' ? '–' : Number.isFinite(value) ? String(Math.round(value * 100) / 100) : text.trim();
 }
 
+const SELECTOR_LABELS = { css: 'CSS', xPath: 'XPath', regex: 'Regex' } as const;
+
+/** Rules that have a name or a selector: a blank row still being typed doesn't count. */
+function namedRules(rows: readonly ExtractionRuleRow[]): ExtractionRuleRow[] {
+  return rows.filter((rule) => rule.name.trim() !== '' || rule.selector.trim() !== '');
+}
+
 function plural(count: number, one: string, many: string): string {
   return `${formatCount(count)} ${count === 1 ? one : many}`;
 }
@@ -294,6 +309,13 @@ export function sectionSummary(
         `HTML up to ${readableMb(form.maxHtmlMb)} MB`,
       ].join(', ');
     }
+    case 'extraction': {
+      const rules = namedRules(form.extractionRules);
+      if (rules.length === 0) return 'No rules';
+      const names = rules.map((rule) => rule.name.trim() || 'Untitled').slice(0, 3);
+      const more = rules.length > names.length ? `, +${rules.length - names.length}` : '';
+      return `${plural(rules.length, 'rule', 'rules')}: ${names.join(', ')}${more}`;
+    }
     case 'rendering': {
       const rendering =
         form.javaScriptRendering === 'off'
@@ -304,9 +326,10 @@ export function sectionSummary(
               ? 'JavaScript on every page'
               : 'Auto, shells only';
       const excluded = patternCount(form.excludePatterns);
-      return [rendering, excluded > 0 ? `${plural(excluded, 'pattern', 'patterns')} excluded` : 'nothing excluded'].join(
-        ', ',
-      );
+      return [
+        rendering,
+        excluded > 0 ? `${plural(excluded, 'pattern', 'patterns')} excluded` : 'nothing excluded',
+      ].join(', ');
     }
     case 'robots': {
       const extra = sitemapCount(form.extraSitemaps);
@@ -395,6 +418,13 @@ export function settingValue(field: CrawlFormField, form: CrawlForm): string {
     }
     case 'javaScriptRendering':
       return RENDERING_WORDS[form.javaScriptRendering];
+    case 'extractionRules': {
+      const rules = namedRules(form.extractionRules);
+      if (rules.length === 0) return 'None';
+      return rules
+        .map((rule) => `${rule.enabled ? '' : 'Off: '}${rule.name.trim()} (${SELECTOR_LABELS[rule.selectorType]})`)
+        .join('\n');
+    }
     case 'proxyUrl':
       return form.proxyUrl.trim() || 'None';
     case 'signatures': {

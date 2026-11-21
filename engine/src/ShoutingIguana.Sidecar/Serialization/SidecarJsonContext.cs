@@ -202,6 +202,8 @@ namespace ShoutingIguana.Sidecar.Serialization;
 [JsonSerializable(typeof(RecheckRowsRequest))]
 [JsonSerializable(typeof(RecheckRowPage))]
 [JsonSerializable(typeof(RecheckEventDto))]
+[JsonSerializable(typeof(ExtractionRequest))]
+[JsonSerializable(typeof(ExtractionPageDto))]
 internal sealed partial class SidecarJsonContext : JsonSerializerContext
 {
 }

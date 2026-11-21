@@ -18,7 +18,7 @@ namespace ShoutingIguana.Engine.Storage;
 internal static class CrawlSchemaUpgrade
 {
     /// <summary>The crawl-time tables made since the first file of the schema, in the order they came.</summary>
-    public static readonly string[] TABLES = [CrawlSchema.NOTICES, CrawlSchema.RUN_TIME, CrawlSchema.FAVICON, CrawlSchema.RECHECKS, CrawlSchema.UNCOLLECTED];
+    public static readonly string[] TABLES = [CrawlSchema.NOTICES, CrawlSchema.RUN_TIME, CrawlSchema.FAVICON, CrawlSchema.RECHECKS, CrawlSchema.UNCOLLECTED, CrawlSchema.EXTRACTIONS];
 
     /// <summary>
     /// The columns whose null means something of its own, by <c>table.column</c>, with what a file already has that lacks

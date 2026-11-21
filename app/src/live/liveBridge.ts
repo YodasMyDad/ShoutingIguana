@@ -226,6 +226,7 @@ export function startLiveBridge({
     if (last !== undefined && now - last < LIVE_GRID_REFRESH_MS) return;
     gridRefreshedAt.set(crawlId, now);
     void queryClient.invalidateQueries(liveGridPagesOf(crawlId), { cancelRefetch: false });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.extractions(crawlId) }, { cancelRefetch: false });
     // The URL the inspector shows changes too (queued, then fetched; more links to it): it refreshes in place.
     void queryClient.invalidateQueries({ queryKey: queryKeys.urlDetails(crawlId) }, { cancelRefetch: false });
   }

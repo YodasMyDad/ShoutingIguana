@@ -1017,6 +1017,14 @@ public sealed partial class SyntheticSite
             });
         }
 
+        // A page with three values the crawl's extraction rules can read: a CSS class, an element id, and a comment
+        // the regular expression's capture group takes. The page itself has no SEO problem.
+        Page("custom-extract", "Custom extract", [], page => page with
+        {
+            Content = page.Content +
+                      $"<p class=\"plant-price\">{CUSTOM_EXTRACT_PRICE}</p><span id=\"plant-sku\">{CUSTOM_EXTRACT_SKU}</span><!-- extract-code: {CUSTOM_EXTRACT_CODE} -->"
+        });
+
         // A client-rendered shell. The raw HTML is an empty mount and a script tag. The script, which the page's
         // content security policy allows (it's on this site), writes the body and then adds a link and an image the
         // raw HTML does not contain. The crawl renders the page and parses that HTML once.

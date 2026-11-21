@@ -1,7 +1,8 @@
 // A crawl's sections, in sidebar order, with their routes and Ctrl+1 to Ctrl+7 (docs/v2-ui-ia.md), and the Report,
 // which joins them once its screen exists (app/simpleScreens.ts): the eighth in Advanced, the third in Simple.
 
-export type CrawlSection = 'overview' | 'issues' | 'urls' | 'links' | 'sitemaps' | 'robots' | 'settings' | 'report';
+export type CrawlSection =
+  'overview' | 'issues' | 'urls' | 'links' | 'sitemaps' | 'robots' | 'settings' | 'extraction' | 'report';
 
 export interface CrawlSectionEntry {
   id: CrawlSection;
@@ -39,6 +40,14 @@ export const CRAWL_SECTIONS: readonly CrawlSectionEntry[] = [
   { id: 'robots', title: 'robots.txt', to: '/crawls/$crawl/robots/{-$origin}', key: 'mod+6' },
   // Not "Settings": that is the app's, at the foot of the sidebar. This is the record of how this crawl was made.
   { id: 'settings', title: 'This crawl’s settings', to: '/crawls/$crawl/settings', key: 'mod+7' },
+  {
+    id: 'extraction',
+    title: 'Custom extraction',
+    simpleTitle: 'Custom data',
+    to: '/crawls/$crawl/extraction',
+    key: 'mod+9',
+    simpleKey: 'mod+4',
+  },
 ];
 
 /** The Report: listed after the others, below a rule, only once its screen exists. */

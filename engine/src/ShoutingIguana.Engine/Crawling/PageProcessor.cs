@@ -34,6 +34,9 @@ internal sealed class PageProcessor(
 {
     private const int FORBIDDEN_SAMPLE_SIZE = 20;
 
+    /// <summary>The crawl's extraction rules, compiled once. Applied to each HTML page as it is parsed.</summary>
+    private readonly ExtractionSession _extractions = CustomExtractor.Open(options.ExtractionRules);
+
     /// <summary>How often the alert that a Shopify store is refusing an unsigned crawl is said again, with its count, while it grows.</summary>
     internal static readonly TimeSpan SHOPIFY_COUNT_EVERY = TimeSpan.FromSeconds(30);
 
@@ -244,8 +247,10 @@ internal sealed class PageProcessor(
         ParsedPage? parsed = null;
         if (response.Outcome == FetchOutcome.Success && item.IsInternal)
         {
+            // Only a page that was read: an error page is not extracted, and the rules read the document this parse builds.
+            var extractions = response.StatusCode is >= 200 and < 300 ? _extractions : null;
             parsed = response is { IsHtml: true, Body: { } document }
-                ? HtmlPageParser.Parse(document, uri, response.Headers, userAgent.RobotsToken, response.ByteOrderMark)
+                ? HtmlPageParser.Parse(document, uri, response.Headers, userAgent.RobotsToken, response.ByteOrderMark, extractions)
                 : HtmlPageParser.ParseHeaders(uri, response.Headers, userAgent.RobotsToken);
         }
 
@@ -319,7 +324,11 @@ internal sealed class PageProcessor(
             ObserveShopify(uri, shopifySignal);
         }
 
-        return new PageRecord(item, row, outLinks, facts?.Robots.NoFollow ?? false, details, html) { ShopifySignal = shopifySignal };
+        return new PageRecord(item, row, outLinks, facts?.Robots.NoFollow ?? false, details, html)
+        {
+            ShopifySignal = shopifySignal,
+            Extractions = parsed?.Extractions ?? []
+        };
     }
 
     /// <summary>Notes what a response said of its host; the first sign of a store may be what makes Shopify's limit worth saying.</summary>

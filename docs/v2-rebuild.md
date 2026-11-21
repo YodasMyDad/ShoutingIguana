@@ -29,14 +29,15 @@ v2 is a fresh solution that ports the useful logic.
 | 2 | SEO rules and issue catalog (84 checks), `si analyze` / `si issues`, exact-match proof on the synthetic site | Done: `1489adb`, then a real-site crawl and two full reviews ([Status](#status)) |
 | 3 | Desktop UI: React + TypeScript in a Tauri 2 shell, with the engine as a sidecar behind a token-protected localhost API. Enterprise-grade UX: the bar is in [the UI brief](v2-ui-brief.md). Since 2026-11-10 it opens in Simple, with Advanced one switch away, and ends in a report: [Simple first](#simple-first-advanced-on-a-switch-2026-11-10) | Shipped. `app-v2.0.0-beta.1`, then `app-v2.0.0-beta.2`. History: [Where step 3 stands](#where-step-3-stands-2026-11-15) |
 | 3b | The check audit: every check proven against real sites and worded for a non-expert, then the old app's checks worth keeping and those a comparison with Screaming Frog shows are missing | Planned on 2026-11-10: [Simple first](#simple-first-advanced-on-a-switch-2026-11-10) |
-| 4 | Missing basics: JavaScript rendering, a browser fallback for blocked sites, include/exclude rules, auth and cookies, list mode, custom extraction | JavaScript rendering and include/exclude are on `master` (`781cca13`, `2.0.0-beta.2`). Next is custom extraction, then list mode. [Where step 4 stands](#where-step-4-stands-2026-11-20) |
+| 4 | Missing basics: JavaScript rendering, a browser fallback for blocked sites, include/exclude rules, auth and cookies, list mode, custom extraction | JavaScript rendering and include/exclude are on `master` (`781cca13`, `2.0.0-beta.2`). Custom extraction is on `step4/custom-extraction`. Next is list mode. [Where step 4 stands](#where-step-4-stands-2026-11-20) |
 | 5 | Integrations: Search Console, then GA4, Bing Webmaster, Google Ads and Microsoft Advertising | Later |
 
 ## Where step 4 stands (2026-11-20)
 
 The owner asked for the first slice only, on a branch off `master`: JavaScript rendering, with include and exclude
-patterns beside it. Custom extraction and list mode are next and are not started. On 2026-11-20 they asked for it on
-`master` as `2.0.0-beta.2`, published by the tag `app-v2.0.0-beta.2`. There is no `main` branch.
+patterns beside it. That shipped. Custom extraction is the next slice, on `step4/custom-extraction`, not on `master`.
+List mode is not started. On 2026-11-20 they asked for JavaScript rendering on `master` as `2.0.0-beta.2`, published
+by the tag `app-v2.0.0-beta.2`. There is no `main` branch.
 
 **Built, on `master` (`781cca13`, tag `app-v2.0.0-beta.2`):**
 
@@ -64,11 +65,32 @@ HTML does not have either. The same crawl with rendering off did not find the UR
 every planted issue, 101,221 pages in 54.9 s, working set 215 MB at 10–30% of the crawl and 192 MB at 70–100%
 (−289 bytes a URL).
 
+**Built, on `step4/custom-extraction` (not on `master`):**
+
+- Custom extraction, carried over from the old app's CustomExtraction plugin. A crawl's options hold the rules: a
+  name, a selector type (`css`, `xPath` or `regex`) and the selector, and whether the rule is on. `si crawl` takes
+  `--extract Name=css:selector` (also `xpath` and `regex`), repeatable. The sidecar's crawl options carry the same
+  list, and `POST /api/crawls/{id}/extractions` reads the rules and one page of what they found.
+- Enabled rules run while each HTML page is parsed, on the document that parse already built. CSS and XPath read that
+  document. A regular expression reads the HTML string the parser was given, and is non-backtracking when the pattern
+  allows it, otherwise it stops after two seconds. Nothing parses the HTML again. A rule that matches nothing on a
+  page is not stored. A rule that fails is stored once and not tried on later pages.
+- Only `Storage/` writes the crawl file. Matches go in the `extractions` table, which the writer creates when it opens
+  a file, including one made before this. They are not stored in `PageFacts`, and the checks do not read them, so
+  `AnalysisFreshness.VERSION` stays **23** and issue ids are unchanged.
+- The synthetic site plants `/plants/custom-extract` with no SEO problem. Its price, sku and code are the three values
+  a crawl with those rules stores, and a rule that matches nothing stores nothing.
+
+**Checked:** `dotnet test engine/ShoutingIguana.Engine.slnx` passed: 2,460 engine, 334 sidecar, 45 CLI. `si bench --pages 100000`
+found every planted issue, 101,222 pages in 59.3 s, working set 204 MB at 10–30% and 198 MB at 70–100% (15 bytes a URL).
+The benchmark sets no extraction rules.
+- Settings in both modes, on the New crawl form and on a crawl's own settings. The results are a crawl section in both
+  modes: Custom data in Simple, Custom extraction in Advanced.
+
 **Left, in this order.** Do the first. Do not start the later ones in the same session.
 
-1. **Custom extraction.** The old app's CustomExtraction plugin. Not started.
-2. **List mode.** The old app's ListMode plugin: crawl a list of URLs instead of following links. Not started.
-3. **Not in that agreed order, still in the step 4 plan, and not built:** a browser fallback when a site blocks the
+1. **List mode.** The old app's ListMode plugin: crawl a list of URLs instead of following links. Not started.
+2. **Not in that agreed order, still in the step 4 plan, and not built:** a browser fallback when a site blocks the
    plain HTTP fetch; auth and cookies. Step 5 (Search Console, then the other integrations) stays later.
 
 A page that already has its text is not rendered. A content security policy is enforced, so the planted script is a
@@ -472,11 +494,11 @@ rendering first, and neither is "later" any more. List mode and include/exclude 
 same day, and the owner's answer was "yes all those are needed". **Step 4, in the order agreed: JavaScript rendering
 with include/exclude rules alongside it (small, and it keeps a crawl out of filter and parameter traps), then custom
 extraction, then list mode.** The first of those shipped on `master` on 2026-11-20 (`781cca13`, `2.0.0-beta.2`).
-The next is custom extraction. The status is [Where step 4 stands](#where-step-4-stands-2026-11-20).
+Custom extraction is built on `step4/custom-extraction`. The next is list mode. The status is [Where step 4 stands](#where-step-4-stands-2026-11-20).
 
-*Left for the owner to decide (features, not UX fixes, so not in this round):* a URL-list crawl mode and custom
-extraction (JavaScript rendering and include/exclude shipped on 2026-11-20; list mode and custom extraction are the
-old app's ListMode and CustomExtraction plugins and are not carried over yet); a
+*Left for the owner to decide (features, not UX fixes, so not in this round):* a URL-list crawl mode (JavaScript
+rendering and include/exclude shipped on 2026-11-20; custom extraction is built on `step4/custom-extraction` and is
+not on `master`; list mode is the old app's ListMode plugin and is not carried over yet); a
 per-URL new/gone comparison between crawls; a "worst pages" list in Simple. Also open: whether `image-legacy-format`
 should pass an image whose `<picture>` offers a modern source (`fix-lane.md`, "Found on the way").
 

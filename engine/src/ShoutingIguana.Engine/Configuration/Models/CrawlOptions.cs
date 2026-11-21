@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using ShoutingIguana.Engine.Configuration;
 using ShoutingIguana.Engine.Fetching;
 using ShoutingIguana.Engine.Urls;
 
@@ -94,6 +95,12 @@ public sealed record CrawlOptions
 
     /// <summary>A URL that matches any of these is recorded and not fetched, so a rendered crawl can stay out of a filter trap.</summary>
     public IReadOnlyList<string> ExcludePatterns { get; init; } = [];
+
+    /// <summary>
+    /// Custom extraction rules, applied while each HTML page is parsed. Empty extracts nothing. A crawl file from
+    /// before this was stored reads as none: the property is absent.
+    /// </summary>
+    public IReadOnlyList<ExtractionRule> ExtractionRules { get; init; } = [];
 
     /// <summary>http://, https:// or socks5:// proxy. Credentials may be given as user:password@host.</summary>
     public string? ProxyUrl { get; init; }
@@ -290,6 +297,11 @@ public sealed record CrawlOptions
             yield return (Field(nameof(RenderPatterns)), "Say which URLs to render, one regular expression a line.");
         }
 
+        foreach (var problem in ExtractionProblems())
+        {
+            yield return (Field(nameof(ExtractionRules)), problem);
+        }
+
         if (UrlNormalizer.TryNormalize(StartUrl, out var start) &&
             UrlPatterns.TryCompile(IncludePatterns, out var include, out _) &&
             UrlPatterns.TryCompile(ExcludePatterns, out var exclude, out _) &&
@@ -304,6 +316,38 @@ public sealed record CrawlOptions
 
     /// <summary>A list a crawl file from before the property existed deserialises as null.</summary>
     private static bool NoPatterns(IReadOnlyList<string>? patterns) => patterns is null || patterns.Count == 0;
+
+    /// <summary>Each rule can be applied, and no two share a name. A missing list is none.</summary>
+    private IEnumerable<string> ExtractionProblems()
+    {
+        var rules = ExtractionRules ?? [];
+        if (rules.Count > ExtractionRule.MAX_RULES)
+        {
+            yield return $"At most {ExtractionRule.MAX_RULES} extraction rules. This crawl has {rules.Count}.";
+        }
+
+        HashSet<string> names = new(StringComparer.OrdinalIgnoreCase);
+        foreach (var rule in rules)
+        {
+            if (rule is null)
+            {
+                yield return "An extraction rule was empty.";
+                continue;
+            }
+
+            var name = rule.Name.Trim();
+            if (name.Length > 0 && !names.Add(name))
+            {
+                yield return $"Two extraction rules are named '{name}': keep one.";
+            }
+
+            var problem = ExtractionSyntax.Problem(rule);
+            if (problem is not null)
+            {
+                yield return problem;
+            }
+        }
+    }
 
     /// <summary>
     /// Each crawler signature must be for a host, one per host, in the form Shopify gives, and not expired: an expired one
