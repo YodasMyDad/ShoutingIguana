@@ -102,6 +102,19 @@ public sealed record CrawlOptions
     /// </summary>
     public IReadOnlyList<ExtractionRule> ExtractionRules { get; init; } = [];
 
+    /// <summary>
+    /// Addresses to crawl instead of following links. Empty follows links from <see cref="StartUrl"/>, as a crawl always
+    /// has. When any are set, those addresses and the start URL are fetched, and a link found on them is recorded and
+    /// not fetched, except a redirect or a meta refresh. A crawl file from before this reads as none: the property is absent.
+    /// </summary>
+    public IReadOnlyList<string> ListUrls { get; init; } = [];
+
+    /// <summary>How many addresses a list may name. Past this, the crawl is refused rather than started half-read.</summary>
+    public const int MAX_LIST_URLS = 100_000;
+
+    /// <summary>True when this crawl fetches a list and does not follow links. A missing list, from an older crawl file, is not.</summary>
+    internal bool IsListMode => ListUrls?.Any(static url => !string.IsNullOrWhiteSpace(url)) == true;
+
     /// <summary>http://, https:// or socks5:// proxy. Credentials may be given as user:password@host.</summary>
     public string? ProxyUrl { get; init; }
 
@@ -302,6 +315,11 @@ public sealed record CrawlOptions
             yield return (Field(nameof(ExtractionRules)), problem);
         }
 
+        foreach (var problem in ListProblems())
+        {
+            yield return (Field(nameof(ListUrls)), problem);
+        }
+
         if (UrlNormalizer.TryNormalize(StartUrl, out var start) &&
             UrlPatterns.TryCompile(IncludePatterns, out var include, out _) &&
             UrlPatterns.TryCompile(ExcludePatterns, out var exclude, out _) &&
@@ -316,6 +334,69 @@ public sealed record CrawlOptions
 
     /// <summary>A list a crawl file from before the property existed deserialises as null.</summary>
     private static bool NoPatterns(IReadOnlyList<string>? patterns) => patterns is null || patterns.Count == 0;
+
+    /// <summary>The list, as stored URL keys, so a link can be told from an address the list named.</summary>
+    internal HashSet<UInt128> ListKeys()
+    {
+        HashSet<UInt128> keys = [];
+        foreach (var raw in ListUrls ?? [])
+        {
+            if (!string.IsNullOrWhiteSpace(raw) && UrlNormalizer.TryNormalize(raw, out var url))
+            {
+                keys.Add(UrlKey.Compute(url));
+            }
+        }
+
+        return keys;
+    }
+
+    /// <summary>
+    /// Each address can be fetched, and there are not too many of them. A blank line is nothing. A missing list is none.
+    /// At most twenty bad addresses are named, so a file of them doesn't come back as a book.
+    /// </summary>
+    private IEnumerable<string> ListProblems()
+    {
+        var listed = 0;
+        var rejected = 0;
+        foreach (var raw in ListUrls ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                continue;
+            }
+
+            listed++;
+            var url = raw.Trim();
+            string? problem = null;
+            if (!UrlNormalizer.TryNormalize(url, out _))
+            {
+                problem = $"'{url}' is not an absolute http or https URL.";
+            }
+            else if (HasUserInfo(url))
+            {
+                problem = $"'{WithoutUserInfo(url)}' can't include a user name or password. {CREDENTIALS_ADVICE}";
+            }
+
+            if (problem is not null)
+            {
+                rejected++;
+                if (rejected <= 20)
+                {
+                    yield return problem;
+                }
+            }
+        }
+
+        if (listed > MAX_LIST_URLS)
+        {
+            yield return $"A list can hold at most {MAX_LIST_URLS} addresses. This one has {listed}.";
+        }
+
+        if (rejected > 20)
+        {
+            yield return $"{rejected - 20} more addresses in the list can't be used.";
+        }
+    }
 
     /// <summary>Each rule can be applied, and no two share a name. A missing list is none.</summary>
     private IEnumerable<string> ExtractionProblems()

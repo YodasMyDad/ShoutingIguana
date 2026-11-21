@@ -265,6 +265,11 @@ export interface CrawlOptions {
   excludePatterns?: string[] | null;
   /** Custom extraction rules, applied while each HTML page is parsed. Empty extracts nothing. */
   extractionRules?: ExtractionRule[] | null;
+  /**
+   * Addresses to crawl instead of following links. Empty follows links from the start URL. When any are set, those
+   * addresses and the start URL are fetched, and a link found on them is recorded and not fetched.
+   */
+  listUrls?: string[] | null;
   proxyUrl?: string | null;
   requestTimeoutSeconds?: number | null;
   maxRetries?: number | null;

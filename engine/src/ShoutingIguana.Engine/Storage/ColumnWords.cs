@@ -160,7 +160,9 @@ internal static class ColumnWords
             ["depthLimit"] = "Past the depth limit",
             ["urlLimit"] = "Past the URL limit",
             ["recheck"] = "Found by a recheck, not followed",
-            ["noLongerLinked"] = "No longer linked (a recheck let it go)"
+            ["noLongerLinked"] = "No longer linked (a recheck let it go)",
+            ["excluded"] = "Left out by a pattern",
+            ["listMode"] = "Not in the list"
         },
         ["indexability"] = new(StringComparer.Ordinal)
         {

@@ -26,5 +26,11 @@ public enum SkipReason : byte
     NoLongerLinked = 8,
 
     /// <summary>Left out by an include or exclude pattern. Recorded, not fetched, so the crawl doesn't follow it.</summary>
-    Excluded = 9
+    Excluded = 9,
+
+    /// <summary>
+    /// Found on a page of a list crawl, and not one of the addresses the list named. Recorded, not fetched. A redirect
+    /// or a meta refresh is still followed: that is fetching the listed address, not leaving the list.
+    /// </summary>
+    ListMode = 10
 }

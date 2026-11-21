@@ -1,5 +1,6 @@
 using System.CommandLine;
 using ShoutingIguana.Cli.Output;
+using ShoutingIguana.Engine.Configuration;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Crawling.Models;
@@ -44,6 +45,7 @@ internal static class CrawlCommand
         var include = new Option<string[]>("--include") { Description = "Regular expression matched against the whole URL. When any are set, only matching URLs are fetched. Repeatable." };
         var exclude = new Option<string[]>("--exclude") { Description = "Regular expression matched against the whole URL. A match is recorded and not fetched. Repeatable." };
         var extract = new Option<string[]>("--extract") { Description = "Custom extraction rule: Name=css:selector, Name=xpath:expression or Name=regex:pattern. Repeatable." };
+        var list = new Option<string[]>("--list") { Description = "Crawl these URLs instead of following links. A text file is one URL a line. A CSV file has a Url column and an optional Priority column (higher is crawled first). Repeatable." };
         var noAnalyze = new Option<bool>("--no-analyze") { Description = "Skip the SEO checks when the crawl completes." };
         var quiet = new Option<bool>("--quiet", "-q") { Description = "No progress line." };
         var verbose = new Option<bool>("--verbose", "-v") { Description = "Detailed engine logging." };
@@ -52,13 +54,13 @@ internal static class CrawlCommand
         {
             url, database, resume, maxUrls, maxDepth, concurrency, rate, userAgent, userAgentString, headers, proxy, signatureFiles, timeout,
             ignoreRobots, crawlDelay, noResources, noExternal, noSitemaps, subdomains, anyFolder, followNofollow, storeHtml,
-            render, renderUrls, include, exclude, extract,
+            render, renderUrls, include, exclude, extract, list,
             noAnalyze, quiet, verbose
         };
 
         // A resumed crawl keeps the scope and rules it started with; only how it talks to the site can change.
         Option[] fixedOnResume = [maxUrls, maxDepth, userAgent, userAgentString, ignoreRobots, crawlDelay, noResources, noExternal,
-            noSitemaps, subdomains, anyFolder, followNofollow, storeHtml, render, renderUrls, include, exclude, extract];
+            noSitemaps, subdomains, anyFolder, followNofollow, storeHtml, render, renderUrls, include, exclude, extract, list];
 
         command.SetAction((parse, cancellationToken) => CommandErrors.RunAsync(async () =>
         {
@@ -127,6 +129,11 @@ internal static class CrawlCommand
                     return Fail("Give a start URL, or --resume with --db.");
                 }
 
+                if (!ListUrlFile.TryRead(parse.GetValue(list) ?? [], out var listUrls, out var listError))
+                {
+                    return Fail(listError);
+                }
+
                 var defaults = new CrawlOptions { StartUrl = startUrl };
                 var customAgent = parse.GetValue(userAgentString);
                 options = defaults with
@@ -153,7 +160,8 @@ internal static class CrawlCommand
                     RenderPatterns = parse.GetValue(renderUrls) ?? [],
                     IncludePatterns = parse.GetValue(include) ?? [],
                     ExcludePatterns = parse.GetValue(exclude) ?? [],
-                    ExtractionRules = extractionRules
+                    ExtractionRules = extractionRules,
+                    ListUrls = listUrls
                 };
                 databasePath ??= CrawlDatabase.DefaultDatabasePath(startUrl);
             }

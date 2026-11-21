@@ -392,6 +392,8 @@ none (not even the host), and saved defaults drop it. Continue and a recheck tak
 
 `extractionRules` is a list of `{ name, selectorType, selector, enabled }`. `selectorType` is `css`, `xPath` or `regex`. Enabled rules run while each HTML page is parsed, once: CSS and XPath read that document, a regular expression reads the HTML. What matches is stored on the crawl, not in the facts the checks read. A rule that matches nothing on a page is left out. A rule that fails is stored once and not tried again. Empty, or absent on a crawl file from before this, extracts nothing. A bad selector, a missing name, two rules with the same name, or more than 40 rules is `invalid-options` under `extractionRules`. `si crawl` takes `--extract Name=css:selector`, `Name=xpath:expression` or `Name=regex:pattern`, repeatable.
 
+`listUrls` is the addresses to crawl instead of following links. Empty, or absent on a crawl file from before this, follows links from the start URL. When any are set, those addresses and the start URL are fetched, and a link found on them is recorded and not fetched (`notFetchedBecause` `listMode`), except a redirect or a meta refresh, which is part of fetching the listed address. Sitemaps are not read, so a sitemap can't pull the rest of the site in. An address that isn't absolute http or https, one with a user name or password, or more than 100,000 addresses, is `invalid-options` under `listUrls`. `si crawl` takes `--list <file>`, repeatable: a text file is one URL a line, and a CSV file has a `Url` column and an optional `Priority` column (a higher number is crawled first).
+
 `POST /api/crawls/{id}/extractions` with `{ rule, search, offset, limit }` reads that crawl's rules (each with `matches` and `errors`) and one page of rows (`url`, `name`, `selectorType`, `selector`, `value`, `count`, `error`). `rule` keeps one rule's rows. `search` matches the page's URL or the extracted text. No body is the first page of every rule. A file from before the table reads as no rows.
 
 `speedPresets` sets concurrency and a rate. These values are provisional until the IA sign-off:
@@ -1513,7 +1515,7 @@ below, or past what an id holds), and `invalid-query` without one.
   `redirect`...), `fetchMode` is `crawl` (fetched, parsed, its links followed) or `check` (status only), `state` is
   `queued`, `fetching`, `done` or `skipped`, and `notFetchedBecause` why a skipped URL wasn't fetched (`none` when no
   narrower reason was stored, `noFollow`, `notFollowedByOption`, `resourcesDisabled`, `externalsDisabled`,
-  `depthLimit`, `urlLimit`). A URL that was fetched has `notFetchedBecause` null.
+  `depthLimit`, `urlLimit`, `excluded`, `listMode`). A URL that was fetched has `notFetchedBecause` null.
 - **`response`** is null for a URL never fetched. **`response.fetched`** is the URL grid's `fetched` column: the crawl
   stored an outcome for the URL, which it also does when robots.txt refused the request, so a URL robots.txt blocked
   has `fetched: true` with no status, no times and `outcome: "robotsDisallowed"`. It's false only for a URL not

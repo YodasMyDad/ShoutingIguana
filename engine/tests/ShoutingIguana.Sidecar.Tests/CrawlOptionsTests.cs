@@ -242,7 +242,8 @@ public sealed class CrawlOptionsTests : IAsyncLifetime
             RequestTimeoutSeconds = 45,
             MaxRetries = 4,
             MaxHtmlBytes = 1024 * 1024,
-            ExtractionRules = [new ExtractionRule { Name = "Price", SelectorType = ExtractionSelector.Css, Selector = ".price", Enabled = false }]
+            ExtractionRules = [new ExtractionRule { Name = "Price", SelectorType = ExtractionSelector.Css, Selector = ".price", Enabled = false }],
+            ListUrls = ["https://example.com/listed"]
         };
 
         var json = JsonSerializer.Serialize(CrawlOptionsDto.From(options), Serialization.SidecarJsonContext.Default.CrawlOptionsDto);
@@ -257,8 +258,10 @@ public sealed class CrawlOptionsTests : IAsyncLifetime
             IncludePatterns = roundTripped.IncludePatterns,
             ExcludePatterns = roundTripped.ExcludePatterns,
             ExtractionRules = roundTripped.ExtractionRules,
+            ListUrls = roundTripped.ListUrls,
             Signatures = roundTripped.Signatures
         }, roundTripped);
+        Assert.Equal(["https://example.com/listed"], roundTripped.ListUrls);
         var rule = Assert.Single(roundTripped.ExtractionRules);
         Assert.Equal("Price", rule.Name);
         Assert.Equal(ExtractionSelector.Css, rule.SelectorType);

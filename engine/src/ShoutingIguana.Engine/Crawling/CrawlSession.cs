@@ -604,11 +604,37 @@ internal sealed class CrawlSession
             .Select(url => _links.Create(new Uri(url), LinkKind.Hyperlink, LinkFlags.None, LinkPosition.Content, null))
             .ToList();
         await _writer.DiscoverAsync(versions, DiscoverySource.SiteVersion, null, cancellationToken).ConfigureAwait(false);
+
+        if (!_options.IsListMode)
+        {
+            return;
+        }
+
+        // The start URL is already queued. The rest of the list is queued with it, and nothing found on those pages is.
+        var start = UrlNormalizer.Normalize(_startUri);
+        List<OutLink> listed = [];
+        foreach (var raw in _options.ListUrls ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(raw) || !UrlNormalizer.TryNormalize(raw, out var url) || url == start)
+            {
+                continue;
+            }
+
+            var link = _links.Create(new Uri(url), LinkKind.Hyperlink, LinkFlags.None, LinkPosition.Content, null);
+            // Named by the list, so it is read as a page even outside the start folder. Another host is still only checked.
+            listed.Add(link.IsInternal ? link with { IsCrawlable = true } : link);
+        }
+
+        if (listed.Count > 0)
+        {
+            await _writer.DiscoverAsync(listed, DiscoverySource.Seed, null, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private async Task DiscoverSitemapsAsync(CancellationToken cancellationToken)
     {
-        if (!_options.DiscoverSitemaps || _writer.SitemapsDone)
+        // A list crawl stays the list. Reading the sitemap would queue the rest of the site.
+        if (!_options.DiscoverSitemaps || _writer.SitemapsDone || _options.IsListMode)
         {
             return;
         }
@@ -651,6 +677,11 @@ internal sealed class CrawlSession
     /// </summary>
     private async Task ReadSitemapsAgainAsync(CancellationToken cancellationToken)
     {
+        if (_options.IsListMode)
+        {
+            return;
+        }
+
         try
         {
             if ((await _robots.GetAsync(_startUri).WaitAsync(cancellationToken).ConfigureAwait(false)).UnreachableReason is { } reason)

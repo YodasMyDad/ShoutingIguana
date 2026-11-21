@@ -51,7 +51,8 @@ export type NotFetchedBecause =
   | 'externalsDisabled'
   | 'depthLimit'
   | 'urlLimit'
-  | 'excluded';
+  | 'excluded'
+  | 'listMode';
 
 export const LINK_KINDS = [
   'hyperlink',

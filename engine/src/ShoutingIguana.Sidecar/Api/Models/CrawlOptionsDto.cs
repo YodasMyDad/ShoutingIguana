@@ -59,6 +59,12 @@ internal sealed record CrawlOptionsDto
 
     /// <summary>Custom extraction rules, applied while each HTML page is parsed. Empty extracts nothing.</summary>
     public IReadOnlyList<ExtractionRuleDto>? ExtractionRules { get; init; }
+
+    /// <summary>
+    /// Addresses to crawl instead of following links. Empty follows links from the start URL. When any are set, those
+    /// addresses and the start URL are fetched, and a link found on them is recorded and not fetched.
+    /// </summary>
+    public IReadOnlyList<string>? ListUrls { get; init; }
     public string? ProxyUrl { get; init; }
     public int? RequestTimeoutSeconds { get; init; }
     public int? MaxRetries { get; init; }
@@ -103,6 +109,7 @@ internal sealed record CrawlOptionsDto
         IncludePatterns = List(options.IncludePatterns),
         ExcludePatterns = List(options.ExcludePatterns),
         ExtractionRules = (options.ExtractionRules ?? []).Select(ExtractionRuleDto.From).ToList(),
+        ListUrls = List(options.ListUrls),
         ProxyUrl = options.ProxyUrl,
         RequestTimeoutSeconds = options.RequestTimeoutSeconds,
         MaxRetries = options.MaxRetries,
@@ -149,6 +156,7 @@ internal sealed record CrawlOptionsDto
             IncludePatterns = IncludePatterns is null ? defaults.IncludePatterns : [.. IncludePatterns],
             ExcludePatterns = ExcludePatterns is null ? defaults.ExcludePatterns : [.. ExcludePatterns],
             ExtractionRules = ExtractionRules is null ? defaults.ExtractionRules : ExtractionRules.Select(rule => rule.ToRule()).ToList(),
+            ListUrls = ListUrls is null ? defaults.ListUrls : [.. ListUrls],
             ProxyUrl = ProxyUrl ?? defaults.ProxyUrl,
             RequestTimeoutSeconds = RequestTimeoutSeconds ?? defaults.RequestTimeoutSeconds,
             MaxRetries = MaxRetries ?? defaults.MaxRetries,

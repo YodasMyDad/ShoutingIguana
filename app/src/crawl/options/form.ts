@@ -14,6 +14,7 @@ import type {
 } from '../../api/types';
 import type { SettingFocus } from '../../routing/search';
 import { ENGINE_DEFAULTS } from './engineDefaults';
+import { readList } from './listUrls';
 import { signatureFormOf, signaturesOf, type ShopifySignatureForm } from './shopifySignature';
 
 /** A header to send: its value is a secret, kept only while the app runs (never in defaults or a crawl file). */
@@ -61,6 +62,11 @@ export interface CrawlForm {
   excludePatterns: string;
   /** The crawl's custom extraction rules. A blank row, still being typed, is not sent. */
   extractionRules: ExtractionRuleRow[];
+  /**
+   * Addresses to crawl instead of following links. One a line, or a CSV as pasted. Empty follows links.
+   * What is sent is `readList` of this text.
+   */
+  listUrls: string;
   /** With its user name and password when it has them: a secret, as header values are. */
   proxyUrl: string;
   /** Shopify crawler access: one signature, for one domain. A secret, as the proxy's password is. */
@@ -150,6 +156,7 @@ export function formFromOptions(options: CrawlOptions, startUrl = ''): CrawlForm
     includePatterns: (options.includePatterns ?? []).join('\n'),
     excludePatterns: (options.excludePatterns ?? []).join('\n'),
     extractionRules: (options.extractionRules ?? []).map((rule) => extractionRow(rule)),
+    listUrls: (options.listUrls ?? []).join('\n'),
     proxyUrl: options.hasRedactedProxyCredentials ? '' : proxy,
     signatures: signatureFormOf(options.signatures, startUrl || (options.startUrl ?? '')),
     requestTimeoutSeconds: numberText(options.requestTimeoutSeconds, defaults.requestTimeoutSeconds),
@@ -225,6 +232,7 @@ export function sendableHeaders(headers: Record<string, string> | null | undefin
  */
 export function optionsFromForm(form: CrawlForm, { secrets = true }: { secrets?: boolean } = {}): CrawlOptions {
   const mb = typed(form.maxHtmlMb);
+  const list = readList(form.listUrls);
   return {
     startUrl: form.startUrl.trim(),
     maxUrls: typed(form.maxUrls),
@@ -256,6 +264,7 @@ export function optionsFromForm(form: CrawlForm, { secrets = true }: { secrets?:
     includePatterns: lines(form.includePatterns),
     excludePatterns: lines(form.excludePatterns),
     extractionRules: filledRules(form.extractionRules),
+    listUrls: list.error ? lines(form.listUrls) : list.urls,
     proxyUrl: form.proxyUrl.trim() === '' ? null : secrets ? form.proxyUrl.trim() : withoutCredentials(form.proxyUrl),
     signatures: secrets ? signaturesOf(form.signatures, withScheme(form.startUrl)) : {},
     requestTimeoutSeconds: typed(form.requestTimeoutSeconds),
@@ -335,11 +344,12 @@ export function withSpeed(form: CrawlForm, preset: SpeedPreset): CrawlForm {
 
 /** The form's sections, in order: where each setting lives in Advanced. */
 export type FormSection =
-  'start' | 'scope' | 'rendering' | 'extraction' | 'limits' | 'robots' | 'network' | 'shopify' | 'advanced';
+  'start' | 'scope' | 'list' | 'rendering' | 'extraction' | 'limits' | 'robots' | 'network' | 'shopify' | 'advanced';
 
 export const SECTION_TITLES: Record<FormSection, string> = {
   start: 'Start',
   scope: 'Scope',
+  list: 'List mode',
   rendering: 'JavaScript and filters',
   extraction: 'Custom extraction',
   limits: 'Limits',
@@ -363,6 +373,7 @@ export const FIELD_SECTIONS: Record<CrawlFormField, FormSection> = {
   includePatterns: 'rendering',
   excludePatterns: 'rendering',
   extractionRules: 'extraction',
+  listUrls: 'list',
   maxUrls: 'limits',
   maxDepth: 'limits',
   maxHtmlMb: 'limits',
@@ -401,6 +412,7 @@ export const SIMPLE_FIELDS: ReadonlySet<CrawlFormField> = new Set<CrawlFormField
   'includePatterns',
   'excludePatterns',
   'extractionRules',
+  'listUrls',
 ]);
 
 /** Which of the form's settings differ from these defaults: by field, with the start URL left out. */
@@ -424,7 +436,8 @@ function sameText(field: CrawlFormField, a: string, b: string): boolean {
     field === 'proxyUrl' ||
     field === 'renderPatterns' ||
     field === 'includePatterns' ||
-    field === 'excludePatterns'
+    field === 'excludePatterns' ||
+    field === 'listUrls'
   )
     return a.trim() === b.trim();
   return Number(a) === Number(b) || a.trim() === b.trim();

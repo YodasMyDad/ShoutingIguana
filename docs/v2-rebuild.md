@@ -29,13 +29,13 @@ v2 is a fresh solution that ports the useful logic.
 | 2 | SEO rules and issue catalog (84 checks), `si analyze` / `si issues`, exact-match proof on the synthetic site | Done: `1489adb`, then a real-site crawl and two full reviews ([Status](#status)) |
 | 3 | Desktop UI: React + TypeScript in a Tauri 2 shell, with the engine as a sidecar behind a token-protected localhost API. Enterprise-grade UX: the bar is in [the UI brief](v2-ui-brief.md). Since 2026-11-10 it opens in Simple, with Advanced one switch away, and ends in a report: [Simple first](#simple-first-advanced-on-a-switch-2026-11-10) | Shipped. `app-v2.0.0-beta.1`, then `app-v2.0.0-beta.2`. History: [Where step 3 stands](#where-step-3-stands-2026-11-15) |
 | 3b | The check audit: every check proven against real sites and worded for a non-expert, then the old app's checks worth keeping and those a comparison with Screaming Frog shows are missing | Planned on 2026-11-10: [Simple first](#simple-first-advanced-on-a-switch-2026-11-10) |
-| 4 | Missing basics: JavaScript rendering, a browser fallback for blocked sites, include/exclude rules, auth and cookies, list mode, custom extraction | JavaScript rendering, include/exclude, and custom extraction are on `master`. Next is list mode. [Where step 4 stands](#where-step-4-stands-2026-11-20) |
+| 4 | Missing basics: JavaScript rendering, a browser fallback for blocked sites, include/exclude rules, auth and cookies, list mode, custom extraction | JavaScript rendering, include/exclude, custom extraction, and list mode are on `step4/list-mode` (list mode not merged). Next, still unbuilt: a browser fallback, then auth and cookies. [Where step 4 stands](#where-step-4-stands-2026-11-20) |
 | 5 | Integrations: Search Console, then GA4, Bing Webmaster, Google Ads and Microsoft Advertising | Later |
 
 ## Where step 4 stands (2026-11-20)
 
 The owner asked for the first slice only, on a branch off `master`: JavaScript rendering, with include and exclude
-patterns beside it. That shipped. Custom extraction is on `master` too. List mode is not started. On 2026-11-20 they asked for JavaScript rendering on `master` as `2.0.0-beta.2`, published
+patterns beside it. That shipped. Custom extraction is on `master` too. List mode is built on `step4/list-mode` and not merged. On 2026-11-20 they asked for JavaScript rendering on `master` as `2.0.0-beta.2`, published
 by the tag `app-v2.0.0-beta.2`. There is no `main` branch.
 
 **Built, on `master` (`781cca13`, tag `app-v2.0.0-beta.2`):**
@@ -86,10 +86,26 @@ The benchmark sets no extraction rules.
 - Settings in both modes, on the New crawl form and on a crawl's own settings. The results are a crawl section in both
   modes: Custom data in Simple, Custom extraction in Advanced.
 
+**Built, on `step4/list-mode` (not merged):**
+
+- List mode, carried over from the old app's ListMode plugin. A crawl's options hold the addresses. When any are set,
+  those addresses and the start URL are fetched, and a link found on them is recorded and not fetched
+  (`SkipReason.ListMode`). A redirect or a meta refresh is still followed, because that is fetching the listed
+  address. Sitemaps are not read, so a sitemap can't pull the rest of the site in. A crawl file from before this reads
+  as no list: the property is absent, and the crawl follows links.
+- A text file is one URL a line. A CSV file has a `Url` column and an optional `Priority` column; a higher number is
+  crawled first. `si crawl` takes `--list <file>`, repeatable. The sidecar's crawl options carry `listUrls`. Settings
+  in both modes, on the New crawl form and on a crawl's own settings.
+- The synthetic site plants `/plants/list-mode`, which has no title, and links to `/plants/list-mode-target`, which
+  has no problem of its own. A list crawl of the first finds `title-missing` once and does not fetch the second. A
+  crawl that follows links fetches both, so the bench's expected issues include that `title-missing`. Issue ids are
+  unchanged. The checks don't read the list, so `AnalysisFreshness.VERSION` stays **23**.
+
+**Checked:** `dotnet test engine/ShoutingIguana.Engine.slnx` passed: 2,467 engine, 334 sidecar, 45 CLI. `si bench --pages 100000` found every planted issue, 101,224 pages in 67.9 s, working set 217 MB at 10–30% and 198 MB at 70–100% (−199 bytes a URL). The benchmark follows links, so it crawls both planted pages.
+
 **Left, in this order.** Do the first. Do not start the later ones in the same session.
 
-1. **List mode.** The old app's ListMode plugin: crawl a list of URLs instead of following links. Not started.
-2. **Not in that agreed order, still in the step 4 plan, and not built:** a browser fallback when a site blocks the
+1. **Not in that agreed order, still in the step 4 plan, and not built:** a browser fallback when a site blocks the
    plain HTTP fetch; auth and cookies. Step 5 (Search Console, then the other integrations) stays later.
 
 A page that already has its text is not rendered. A content security policy is enforced, so the planted script is a
@@ -493,11 +509,10 @@ rendering first, and neither is "later" any more. List mode and include/exclude 
 same day, and the owner's answer was "yes all those are needed". **Step 4, in the order agreed: JavaScript rendering
 with include/exclude rules alongside it (small, and it keeps a crawl out of filter and parameter traps), then custom
 extraction, then list mode.** The first of those shipped on `master` on 2026-11-20 (`781cca13`, `2.0.0-beta.2`).
-Custom extraction is on `master`. The next is list mode. The status is [Where step 4 stands](#where-step-4-stands-2026-11-20).
+Custom extraction is on `master`. List mode is built on `step4/list-mode` and not merged. The status is [Where step 4 stands](#where-step-4-stands-2026-11-20).
 
-*Left for the owner to decide (features, not UX fixes, so not in this round):* a URL-list crawl mode (JavaScript
-rendering and include/exclude shipped on 2026-11-20; custom extraction is on `master`; list mode is the old
-app's ListMode plugin and is not carried over yet); a
+*Left for the owner to decide (features, not UX fixes, so not in this round):* list mode is built on
+`step4/list-mode` (not merged). Still open: a
 per-URL new/gone comparison between crawls; a "worst pages" list in Simple. Also open: whether `image-legacy-format`
 should pass an image whose `<picture>` offers a modern source (`fix-lane.md`, "Found on the way").
 

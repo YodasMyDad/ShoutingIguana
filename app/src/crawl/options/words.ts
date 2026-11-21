@@ -4,6 +4,7 @@
 import type { JavaScriptRendering, SpeedPreset, UserAgentPreset } from '../../api/types';
 import { formatCount } from '../../lib/format';
 import type { CrawlForm, CrawlFormField, ExtractionRuleRow, FormSection, SpeedId } from './form';
+import { readList } from './listUrls';
 import { endsOn, signatureHost, signatureState } from './shopifySignature';
 
 export interface FieldWords {
@@ -110,6 +111,10 @@ export const FIELD_WORDS: Record<CrawlFormField, FieldWords> = {
     label: 'Custom extraction',
     help: 'Each rule’s name, and a CSS selector, an XPath expression or a regular expression. The crawl reads each page once and keeps what matches. A rule that matches nothing on a page is left out. Up to 40 rules.',
   },
+  listUrls: {
+    label: 'Addresses to crawl',
+    help: 'One address a line, or a CSV file with a Url column and an optional Priority column (a higher number is crawled first). These addresses are crawled instead of following links. The start address is crawled too. A redirect of one of them is still followed. Sitemaps are not read, so the crawl stays the list.',
+  },
 };
 
 /** Simple's words for the settings it asks about (docs/v2-ui-simple.md, New crawl in each mode). */
@@ -205,6 +210,10 @@ export const SIMPLE_WORDS = {
   extraction: {
     label: 'Pull out your own data',
     help: 'Name something on each page and how to find it. The check reads each page once and keeps what it finds.',
+  },
+  list: {
+    label: 'Only these addresses',
+    help: 'Leave this empty to follow links from the address above. Or paste addresses, one a line, or choose a CSV or text file. Those pages are read, and links on them are not followed.',
   },
 } as const;
 
@@ -309,6 +318,13 @@ export function sectionSummary(
         `HTML up to ${readableMb(form.maxHtmlMb)} MB`,
       ].join(', ');
     }
+    case 'list': {
+      const read = readList(form.listUrls);
+      if (read.error) return 'The list can’t be used';
+      return read.urls.length === 0
+        ? 'Follow links'
+        : `${plural(read.urls.length, 'address', 'addresses')}, links not followed`;
+    }
     case 'extraction': {
       const rules = namedRules(form.extractionRules);
       if (rules.length === 0) return 'No rules';
@@ -408,6 +424,14 @@ export function settingValue(field: CrawlFormField, form: CrawlForm): string {
     case 'headers': {
       const names = form.headers.map((row) => row.name).filter(Boolean);
       return names.length === 0 ? 'None' : names.join(', ');
+    }
+    case 'listUrls': {
+      const read = readList(form.listUrls);
+      if (read.error) return 'Can’t be used';
+      if (read.urls.length === 0) return 'Follow links';
+      const shown = read.urls.slice(0, 3);
+      const more = read.urls.length > shown.length ? `, +${read.urls.length - shown.length}` : '';
+      return `${shown.join(', ')}${more}`;
     }
     case 'extraSitemaps':
     case 'renderPatterns':

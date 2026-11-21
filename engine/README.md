@@ -72,7 +72,7 @@ and the first page of what the biggest check no longer flags, each held to 300 m
 `si crawl --help` lists every option: concurrency and rate cap, user agent presets, extra headers (for firewall
 allowlisting; they are only sent to the site being crawled, and never over plain HTTP when it starts on HTTPS),
 proxy, depth and URL limits, robots.txt, subdomains, start-folder scope, nofollow, stored HTML, JavaScript
-rendering, include and exclude patterns, custom extraction, and `--no-analyze`.
+rendering, include and exclude patterns, custom extraction, list mode, and `--no-analyze`.
 
 `--render` is `Off`, `Automatic` (the default: render a page whose HTML is a client-side shell, then parse that
 HTML), `JavaScript` (render every HTML page; a link that was only in the raw HTML is still followed), or `Matching`
@@ -86,6 +86,12 @@ the HTML, without backtracking when the pattern allows it, and stops after two s
 matches nothing on a page is not stored. A rule that fails is stored once and not tried on later pages. The values
 are in the crawl file's `extractions` table. `POST /api/crawls/{id}/extractions` reads the rules and one page of
 them. The desktop app sets the rules on a new crawl, in both modes, and lists the values there too.
+
+`--list <file>` crawls those addresses instead of following links. Repeat it for more than one file. A text file is
+one URL a line. A CSV file has a `Url` column and an optional `Priority` column; a higher number is crawled first.
+The start URL is fetched too. A redirect or a meta refresh of a listed address is still followed. Anything else a
+page links to is recorded and not fetched. Sitemaps are not read, so the crawl stays the list. The desktop app takes
+the same list on a new crawl, in both modes.
 
 A Shopify store limits crawlers that don't send a signature: its product pages answer 429 and stay refused. The
 sanctioned way through is the store's crawler signature (Web Bot Auth), which its owner creates in Shopify admin

@@ -54,6 +54,7 @@ const LISTED: Record<Exclude<FormSection, 'start'>, CrawlFormField[]> = {
     'crawlHreflang',
     'crawlPagination',
   ],
+  list: ['listUrls'],
   rendering: ['javaScriptRendering', 'renderPatterns', 'includePatterns', 'excludePatterns'],
   extraction: ['extractionRules'],
   limits: ['maxUrls', 'maxDepth', 'maxHtmlMb'],

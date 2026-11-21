@@ -104,11 +104,18 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
     // back and gave up on) was refused a signed crawl.
     private readonly HashSet<string> _signedHosts = new(StringComparer.Ordinal);
 
+    /// <summary>Addresses a list crawl fetches. Empty when the crawl follows links.</summary>
+    private readonly HashSet<UInt128> _listed;
+
+    private readonly bool _listMode;
+
     private CrawlWriter(SqliteConnection connection, CrawlFileLock fileLock, CrawlOptions options, CrawlCounters counters, ILogger logger)
     {
         _connection = connection;
         _fileLock = fileLock;
         _options = options;
+        _listed = options.ListKeys();
+        _listMode = _listed.Count > 0;
         _filter = new UrlPatternFilter(options);
         _counters = counters;
         _logger = logger;
@@ -636,7 +643,8 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
             var link = command.Urls[index];
 
             // Sitemap and start URLs are crawled in full, whatever link found them first, and never held to the depth limit.
-            var skip = !link.IsInternal && !_options.CheckExternalLinks ? SkipReason.ExternalsDisabled : SkipReason.None;
+            var listed = _listMode && _listed.Contains(link.Key);
+            var skip = !listed && !link.IsInternal && !_options.CheckExternalLinks ? SkipReason.ExternalsDisabled : SkipReason.None;
             if (skip == SkipReason.None && !_filter.Allows(link.Url))
             {
                 skip = SkipReason.Excluded;
@@ -1032,6 +1040,13 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
 
     private SkipReason FollowDecision(OutLink link, bool pageNoFollow)
     {
+        // A list crawl fetches the addresses it was given. A link to anything else is recorded and not fetched.
+        // A redirect or a meta refresh is how that address answers, so it is still followed.
+        if (_listMode && !link.Kind.KeepsDepth() && !_listed.Contains(link.Key))
+        {
+            return SkipReason.ListMode;
+        }
+
         var noFollow = pageNoFollow || (link.Flags & LinkFlags.NoFollow) != 0;
         var reason = link.Kind switch
         {

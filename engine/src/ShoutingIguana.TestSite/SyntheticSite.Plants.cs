@@ -1025,6 +1025,15 @@ public sealed partial class SyntheticSite
                       $"<p class=\"plant-price\">{CUSTOM_EXTRACT_PRICE}</p><span id=\"plant-sku\">{CUSTOM_EXTRACT_SKU}</span><!-- extract-code: {CUSTOM_EXTRACT_CODE} -->"
         });
 
+        // A list crawl fetches this page and does not fetch the page it links to. The page has no title, so that crawl
+        // finds title-missing once. A crawl that follows links fetches both, and the target has no problem of its own.
+        Page("list-mode", "List mode", ["title-missing"], page => page with
+        {
+            Title = null,
+            Content = page.Content + $"<p><a href=\"{PLANTS_PATH}list-mode-target\">The page a list crawl leaves</a></p>"
+        });
+        Page("list-mode-target", "List mode target", [], linked: false);
+
         // A client-rendered shell. The raw HTML is an empty mount and a script tag. The script, which the page's
         // content security policy allows (it's on this site), writes the body and then adds a link and an image the
         // raw HTML does not contain. The crawl renders the page and parses that HTML once.

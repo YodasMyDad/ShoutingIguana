@@ -25,6 +25,7 @@ import {
   type HeaderRow,
 } from './form';
 import { ExtractionRulesField } from './ExtractionRulesField';
+import { ListUrlsField } from './ListUrlsField';
 import { ProxyTest } from './ProxyTest';
 import { RememberSecrets, type RememberSecretsProps } from './RememberSecrets';
 import { ShopifyAccessFields } from './ShopifyAccessFields';
@@ -139,7 +140,11 @@ function SimpleQuestions({
       {withStartUrl ? (
         <TextField
           label={SIMPLE_WORDS.startUrl.label}
-          description={SIMPLE_WORDS.startUrl.help}
+          description={
+            form.listUrls.trim() === ''
+              ? SIMPLE_WORDS.startUrl.help
+              : 'The check starts here, then reads the addresses below, and doesn’t follow links.'
+          }
           size="lg"
           mono
           icon={Globe}
@@ -249,6 +254,24 @@ function SimpleQuestions({
         className="si-card"
       >
         <RenderingFields form={form} onChange={onChange} onTouch={onTouch} errors={errors} mode="simple" />
+      </Fold>
+      <Fold
+        name="list"
+        level={3}
+        title={SIMPLE_WORDS.list.label}
+        summary={sectionSummary('list', form, 'simple')}
+        attention={first(errors, 'listUrls') ? '1 to change' : null}
+        open={open.has('list')}
+        onOpenChange={(next) => onOpenChange('list', next)}
+        className="si-card"
+      >
+        <ListUrlsField
+          form={form}
+          onChange={onChange}
+          onTouch={onTouch ? () => onTouch('listUrls') : undefined}
+          error={first(errors, 'listUrls')}
+          mode="simple"
+        />
       </Fold>
       <Fold
         name="extraction"
@@ -443,6 +466,16 @@ function AdvancedSections({
               {toggle('crawlHreflang')}
               {toggle('crawlPagination')}
             </>,
+          )}
+          {fold(
+            'list',
+            <ListUrlsField
+              form={form}
+              onChange={onChange}
+              onTouch={onTouch ? () => onTouch('listUrls') : undefined}
+              error={first(errors, 'listUrls')}
+              mode="advanced"
+            />,
           )}
           {fold(
             'rendering',

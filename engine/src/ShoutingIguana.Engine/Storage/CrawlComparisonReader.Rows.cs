@@ -183,6 +183,8 @@ public static partial class CrawlComparisonReader
             SkipReason.DepthLimit => "Past the depth limit",
             SkipReason.UrlLimit => "Past the URL limit",
             SkipReason.Recheck => "Found by a recheck, and not fetched",
+            SkipReason.Excluded => "Left out by a pattern",
+            SkipReason.ListMode => "Not in the list",
             _ => "Not fetched"
         };
 }

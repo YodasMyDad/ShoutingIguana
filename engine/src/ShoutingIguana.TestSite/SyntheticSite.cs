@@ -24,6 +24,12 @@ public sealed partial class SyntheticSite
     public const string CUSTOM_EXTRACT_SKU = "SKU-4401";
     public const string CUSTOM_EXTRACT_CODE = "ALPHA-9";
 
+    /// <summary>The planted page a list crawl fetches, and the page it links to, which that crawl records and does not fetch.</summary>
+    public const string LIST_MODE_PATH = PLANTS_PATH + "list-mode";
+
+    /// <inheritdoc cref="LIST_MODE_PATH"/>
+    public const string LIST_MODE_TARGET_PATH = PLANTS_PATH + "list-mode-target";
+
     /// <summary>With <see cref="SyntheticSiteOptions.DeadTwin"/>, the dead twin's URLs the first orphan links: never checked.</summary>
     public const int DEAD_TWIN_UNCHECKED = 5;
 
