@@ -71,7 +71,21 @@ and the first page of what the biggest check no longer flags, each held to 300 m
 
 `si crawl --help` lists every option: concurrency and rate cap, user agent presets, extra headers (for firewall
 allowlisting; they are only sent to the site being crawled, and never over plain HTTP when it starts on HTTPS),
-proxy, depth and URL limits, robots.txt, subdomains, start-folder scope, nofollow, stored HTML, and `--no-analyze`.
+proxy, depth and URL limits, robots.txt, subdomains, start-folder scope, nofollow, stored HTML, JavaScript
+rendering, include and exclude patterns, custom extraction, and `--no-analyze`.
+
+`--render` is `Off`, `Automatic` (the default: render a page whose HTML is a client-side shell, then parse that
+HTML), `JavaScript` (render every HTML page; a link that was only in the raw HTML is still followed), or `Matching`
+with `--render-url` (a regular expression against the whole URL, repeatable). `--include` and `--exclude` are
+regular expressions against the whole URL, repeatable. When any include is set, a URL is fetched only if one matches.
+A URL that matches an exclude is recorded and not fetched. The start URL has to pass, or the crawl is refused.
+
+`--extract Name=css:selector` pulls text out while the page is parsed, once. `xpath` and `regex` are the other
+forms, and the flag repeats. CSS and XPath read the document that parse already built. A regular expression reads
+the HTML, without backtracking when the pattern allows it, and stops after two seconds otherwise. A rule that
+matches nothing on a page is not stored. A rule that fails is stored once and not tried on later pages. The values
+are in the crawl file's `extractions` table. `POST /api/crawls/{id}/extractions` reads the rules and one page of
+them. The desktop app sets the rules on a new crawl, in both modes, and lists the values there too.
 
 A Shopify store limits crawlers that don't send a signature: its product pages answer 429 and stay refused. The
 sanctioned way through is the store's crawler signature (Web Bot Auth), which its owner creates in Shopify admin
@@ -1395,6 +1409,7 @@ network and your rate settings, not by the crawler.
 ## Not yet
 
 - The desktop UI (step 3).
-- JavaScript rendering (Playwright, with HTTP / Rendered / Auto modes) and browser fallback for blocked sites,
-  plus custom extraction, list mode and include/exclude rules (step 4). `Blocked` responses are already detected.
+- A browser fallback when a site blocks the plain HTTP fetch, list mode, and auth and cookies (the rest of step 4).
+  `Blocked` responses are already detected. JavaScript rendering, include and exclude rules, and custom extraction
+  are built.
 - Search Console, Analytics, Bing and Ads data (step 5).

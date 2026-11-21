@@ -12,14 +12,16 @@ Hand the report to a client. Or fix it yourself, then recheck just those pages a
 
 **[Download 2.0.0-beta.1](https://github.com/YodasMyDad/ShoutingIguana/releases/tag/app-v2.0.0-beta.1)**
 
+JavaScript rendering shipped in [2.0.0-beta.2](https://github.com/YodasMyDad/ShoutingIguana/releases/tag/app-v2.0.0-beta.2). Custom extraction is in the current source, after that release.
+
 ## Why people download it
 
 - **A crawl you can act on.** Not a spreadsheet of ten thousand rows. A score, then the issues worth fixing first, with the fix written out.
 - **The full audit when you need it.** Simple is the client view. Advanced is one switch away: every URL, the link graph, XML sitemaps, robots.txt, and an inspector for a single address.
 - **Prove the fix.** Recheck the pages you changed. The score and the issue list update against the previous crawl.
 - **Yours, offline.** One `.sicrawl` file per site. Nothing is uploaded.
-
-The crawler reads the HTML the server returns. Pages that only exist after JavaScript runs are not in this beta. JavaScript rendering is next.
+- **Pages a script builds.** The default renders a page only when its HTML is an empty shell. Render every HTML page, only the URLs you name, or none. When every page is rendered, a link that was only in the raw HTML is still followed.
+- **Text you define.** Name a rule and give it a CSS selector, an XPath expression, or a regular expression. The crawl reads each page once and keeps what matches. Simple and Advanced both list the values.
 
 ## Screenshots
 
@@ -127,6 +129,7 @@ The same checks run in Simple and in Advanced. This is the technical SEO audit: 
 - URLs that are too long, duplicated, or easy to confuse
 - Slow responses and heavy pages
 - HTML issues that change how the page is parsed: language, charset, and broken markup
+- Text you asked the crawl to pull out, by CSS selector, XPath, or regular expression
 
 Shouting Iguana flags the issue and explains the fix. It does not change the site.
 
