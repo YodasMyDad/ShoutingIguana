@@ -19,6 +19,22 @@ namespace ShoutingIguana.Engine.Tests.Crawling;
 /// </summary>
 public sealed class JavaScriptRenderingTests
 {
+    /// <summary>A full page, not a shell. The script deletes the raw link and adds one the raw HTML does not have.</summary>
+    private const string FULL = """
+        <!DOCTYPE html><html><head><title>Catalogue</title></head><body>
+        <h1>Catalogue</h1>
+        <p>A long catalogue page that already has its text, so automatic rendering leaves it as it was sent. A long catalogue page that already has its text.</p>
+        <a href="/in-the-html">Already here</a>
+        <script>
+        document.querySelector('a').remove();
+        var link = document.createElement('a');
+        link.setAttribute('href', '/from-' + 'js');
+        link.textContent = 'Added by the page';
+        document.body.appendChild(link);
+        </script>
+        </body></html>
+        """;
+
     private const string SHELL = """
         <!DOCTYPE html><html><head><title>Shop</title></head><body>
         <div id="app"></div>
@@ -50,6 +66,7 @@ public sealed class JavaScriptRenderingTests
         Assert.False(RenderNeed.ShouldRender(JavaScriptRendering.Off, UrlPatterns.None, "https://example.com/", SHELL));
         Assert.True(RenderNeed.ShouldRender(JavaScriptRendering.Automatic, UrlPatterns.None, "https://example.com/", SHELL));
         Assert.False(RenderNeed.ShouldRender(JavaScriptRendering.Automatic, UrlPatterns.None, "https://example.com/", page));
+        Assert.True(RenderNeed.ShouldRender(JavaScriptRendering.JavaScript, UrlPatterns.None, "https://example.com/", page));
     }
 
     [Fact]
@@ -111,6 +128,28 @@ public sealed class JavaScriptRenderingTests
             CheckExternalLinks = false
         });
         Assert.Equal(0, Count(plain, $"SELECT COUNT(*) FROM urls WHERE url = '{site.Root}rendered-only'"));
+    }
+
+    [Fact]
+    public async Task JavaScriptModeRendersAFullPageAndKeepsALinkTheScriptRemoved()
+    {
+        await using var site = await TinySite.StartAsync();
+        var options = new CrawlOptions
+        {
+            StartUrl = site.Root + "full",
+            Rendering = JavaScriptRendering.JavaScript,
+            DiscoverSitemaps = false,
+            CheckResources = false,
+            CheckExternalLinks = false,
+            RespectRobotsTxt = false
+        };
+        var rendered = await CrawlAsync(site, options);
+        Assert.Equal(1, Count(rendered, $"SELECT COUNT(*) FROM urls WHERE url = '{site.Root}from-js'"));
+        Assert.Equal(1, Count(rendered, $"SELECT COUNT(*) FROM urls WHERE url = '{site.Root}in-the-html'"));
+
+        var automatic = await CrawlAsync(site, options with { Rendering = JavaScriptRendering.Automatic });
+        Assert.Equal(0, Count(automatic, $"SELECT COUNT(*) FROM urls WHERE url = '{site.Root}from-js'"));
+        Assert.Equal(1, Count(automatic, $"SELECT COUNT(*) FROM urls WHERE url = '{site.Root}in-the-html'"));
     }
 
     [Fact]
@@ -203,6 +242,9 @@ public sealed class JavaScriptRenderingTests
                 var (status, type, body) = path switch
                 {
                     "/" => (200, "text/html; charset=utf-8", SHELL),
+                    "/full" => (200, "text/html; charset=utf-8", FULL),
+                    "/from-js" => (200, "text/html; charset=utf-8", "<!DOCTYPE html><html><head><title>From JS</title></head><body><h1>From JS</h1></body></html>"),
+                    "/in-the-html" => (200, "text/html; charset=utf-8", "<!DOCTYPE html><html><head><title>In the HTML</title></head><body><h1>In the HTML</h1></body></html>"),
                     "/rendered-only" => (200, "text/html; charset=utf-8", "<!DOCTYPE html><html><head><title>Rendered product</title></head><body><h1>Rendered product</h1><p>Only the rendered page links here.</p></body></html>"),
                     "/links" => (200, "text/html; charset=utf-8", "<!DOCTYPE html><html><head><title>Links</title></head><body><a href=\"/ok\">Ok</a><a href=\"/trap?sort=price\">Sort</a></body></html>"),
                     "/ok" => (200, "text/html; charset=utf-8", "<!DOCTYPE html><html><head><title>Ok</title></head><body><h1>Ok</h1></body></html>"),

@@ -13,11 +13,13 @@ internal static class RenderNeed
     public const int SHELL_TEXT_CHARS = 120;
 
     /// <summary>
-    /// Automatic renders a shell. Matching renders a URL its patterns name, whatever the HTML says. Off renders nothing.
+    /// Automatic renders a shell. JavaScript renders every HTML page. Matching renders a URL its patterns name.
+    /// Off renders nothing.
     /// </summary>
     public static bool ShouldRender(JavaScriptRendering mode, UrlPatterns patterns, string url, string html) => mode switch
     {
         JavaScriptRendering.Off => false,
+        JavaScriptRendering.JavaScript => true,
         JavaScriptRendering.Matching => patterns.Matches(url, whenUnsure: false),
         _ => IsClientShell(html)
     };

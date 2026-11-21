@@ -38,7 +38,7 @@ internal static class CrawlCommand
         var storeHtml = new Option<bool>("--store-html") { Description = "Keep compressed HTML of every page." };
         var render = new Option<JavaScriptRendering?>("--render")
         {
-            Description = "JavaScript rendering: Automatic (a client-rendered shell), Off, or Matching (only --render-url)."
+            Description = "JavaScript rendering: Automatic (a client-rendered shell), JavaScript (every HTML page, and links from the raw HTML), Off, or Matching (only --render-url)."
         };
         var renderUrls = new Option<string[]>("--render-url") { Description = "Regular expression matched against the whole URL. With --render Matching, only these URLs are rendered. Repeatable." };
         var include = new Option<string[]>("--include") { Description = "Regular expression matched against the whole URL. When any are set, only matching URLs are fetched. Repeatable." };

@@ -183,9 +183,9 @@ internal sealed class PageProcessor(
     }
 
     /// <summary>
-    /// A client-rendered page, or one the crawl lists to render, is fetched again in the browser. The HTML that comes
-    /// back replaces the HTTP body, and <see cref="Build"/> parses it once. A render that doesn't happen, or fails,
-    /// leaves the HTTP body to be parsed.
+    /// A page this crawl renders is fetched again in the browser. The HTML that comes back replaces the HTTP body,
+    /// and <see cref="Build"/> parses that once. JavaScript mode also keeps the raw body, for links the script removed.
+    /// A render that doesn't happen, or fails, leaves the HTTP body to be parsed.
     /// </summary>
     private async Task<FetchResponse> RenderIfNeededAsync(FrontierItem item, Uri uri, FetchResponse response, CancellationToken cancellationToken)
     {
@@ -197,9 +197,40 @@ internal sealed class PageProcessor(
         }
 
         var rendered = await renderer.RenderAsync(uri, cancellationToken).ConfigureAwait(false);
-        return rendered is null
-            ? response
-            : response with { Body = rendered, BodyBytes = Encoding.UTF8.GetByteCount(rendered), ByteOrderMark = null };
+        if (rendered is null)
+        {
+            return response;
+        }
+
+        return response with
+        {
+            Body = rendered,
+            RawHtml = options.Rendering == JavaScriptRendering.JavaScript ? html : null,
+            BodyBytes = Encoding.UTF8.GetByteCount(rendered),
+            ByteOrderMark = null
+        };
+    }
+
+    /// <summary>
+    /// Links that were in the HTTP body and are gone after the script ran. JavaScript mode follows them too, as
+    /// Screaming Frog does. The raw body is not what the page's facts come from.
+    /// </summary>
+    private void AddLinksTheScriptRemoved(Uri page, FetchResponse response, List<OutLink> outLinks)
+    {
+        if (response.RawHtml is not { } raw)
+        {
+            return;
+        }
+
+        var seen = outLinks.Select(link => (link.Url, link.Kind)).ToHashSet();
+        var rawPage = HtmlPageParser.Parse(raw, page, response.Headers, userAgent.RobotsToken, null);
+        foreach (var link in rawPage.Links.Select(links.Create))
+        {
+            if (seen.Add((link.Url, link.Kind)))
+            {
+                outLinks.Add(link);
+            }
+        }
     }
 
     private static UrlPatterns CompilePatterns(IReadOnlyList<string>? patterns)
@@ -229,6 +260,7 @@ internal sealed class PageProcessor(
         if (parsed is not null && item.Mode == FetchMode.Crawl)
         {
             outLinks.AddRange(parsed.Links.Select(links.Create));
+            AddLinksTheScriptRemoved(uri, response, outLinks);
         }
 
         var facts = parsed?.Facts;

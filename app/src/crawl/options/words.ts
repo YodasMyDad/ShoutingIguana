@@ -92,7 +92,7 @@ export const FIELD_WORDS: Record<CrawlFormField, FieldWords> = {
   },
   javaScriptRendering: {
     label: 'JavaScript rendering',
-    help: 'On renders a page in a browser when its HTML is a shell and the content is built by a script. Off never does. Only these URLs renders just the addresses listed below, so a crawl can render the catalogue and leave the rest as it was sent.',
+    help: 'Auto renders a page in a browser when its HTML is a shell. JavaScript renders every HTML page, and still follows a link that was only in the raw HTML, as Screaming Frog does. Off never renders. Only these URLs renders just the addresses listed below.',
   },
   renderPatterns: {
     label: 'URLs to render',
@@ -202,7 +202,8 @@ export const SIMPLE_WORDS = {
 
 const RENDERING_WORDS: Record<JavaScriptRendering, string> = {
   off: 'Off',
-  automatic: 'On, where a page is built in the browser',
+  automatic: 'Auto, where a page is a shell',
+  javaScript: 'Every HTML page, in a browser',
   matching: 'Only the URLs listed',
 };
 
@@ -299,7 +300,9 @@ export function sectionSummary(
           ? 'JavaScript off'
           : form.javaScriptRendering === 'matching'
             ? 'JavaScript on listed URLs'
-            : 'JavaScript where a page needs it';
+            : form.javaScriptRendering === 'javaScript'
+              ? 'JavaScript on every page'
+              : 'Auto, shells only';
       const excluded = patternCount(form.excludePatterns);
       return [rendering, excluded > 0 ? `${plural(excluded, 'pattern', 'patterns')} excluded` : 'nothing excluded'].join(
         ', ',

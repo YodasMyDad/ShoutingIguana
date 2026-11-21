@@ -41,9 +41,10 @@ patterns beside it. Custom extraction and list mode are next and are not started
 **Built, on `master` (`781cca13`, tag `app-v2.0.0-beta.2`):**
 
 - A page is fetched by HTTP first. It is rendered in headless Chromium only when the crawl's setting says so:
-  off, on (a client-rendered shell: a script, an empty app mount, almost no visible text), or only the URLs a list of
-  regular expressions names. The rendered HTML replaces the HTTP body and is parsed once, into `PageFacts`. Only
-  `Storage/` writes the crawl file.
+  off, auto (a client-rendered shell: a script, an empty app mount, almost no visible text), JavaScript (every HTML
+  page, and a link that was only in the raw HTML is still followed), or only the URLs a list of regular expressions
+  names. The rendered HTML replaces the HTTP body and is parsed once, into `PageFacts`. Only `Storage/` writes the
+  crawl file. Auto is the default.
 - Include and exclude patterns are regular expressions matched against the whole URL. A match on an exclude, or a miss
   of every include when includes are set, is recorded and not fetched (`SkipReason.Excluded`), so a rendered crawl can
   be kept out of a filter or parameter trap. The start URL has to pass, or the crawl is refused.
@@ -75,16 +76,12 @@ file on the site, which `default-src 'self'` allows. Automatic rendering is a sh
 means the page is client-rendered: a script, an empty `#app`, `#root`, `#__next`, `#__nuxt` or `<app-root>`, and
 under 120 characters of visible text. Anything else stays the HTTP body unless the crawl lists its URL to render.
 
-**Not Screaming Frog's JavaScript mode.** Their Rendering setting is Text Only (raw HTML; the default) or JavaScript
-(headless Chromium renders the page and the crawl extracts from that HTML, and still sees links that were in the raw
-HTML). It does not decide per page. They tell you to turn JavaScript on only for a first look, a known client-rendered
-site, or a sample, because rendering every page is slow
-([Rendering](https://www.screamingfrog.co.uk/guides/rendering/),
-[How To Crawl JavaScript Websites](https://www.screamingfrog.co.uk/seo-spider/tutorials/crawl-javascript-seo/)).
-Our Off is their Text Only. Our On is not their JavaScript: a page that already has text, or a shell whose mount isn't
-one of those ids, is not rendered, so a category that injects products into an otherwise full page is missed. "Only
-these URLs" is the stand-in for rendering a sample. Parity with their JavaScript mode (render the HTML pages, keep the
-raw links as well) is not built. It is not next: custom extraction is.
+**Screaming Frog's JavaScript mode is a setting, not the default.** Their Rendering is Text Only (raw HTML) or
+JavaScript (headless Chromium renders the page, and links that were in the raw HTML are still found)
+([Rendering](https://www.screamingfrog.co.uk/guides/rendering/)). Ours is Auto by default: a shell only. JavaScript
+is the same crawl as theirs: every HTML page is rendered, the stored page is that HTML, and a link the script removed
+is still followed. Off is their Text Only. Only these URLs renders a list. Auto stays the default because rendering
+every page is what made the old app slow, and they say to turn JavaScript on only when the site needs it.
 
 **Step 3 starts with a design conversation with the owner, not with code.** The owner wants a "super slick,
 enterprise level" UI and UX. The old app was "clunky and a bit all over the place". **[The UI brief](v2-ui-brief.md)

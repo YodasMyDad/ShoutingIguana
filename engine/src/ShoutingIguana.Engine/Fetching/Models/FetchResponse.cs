@@ -33,6 +33,12 @@ internal sealed record FetchResponse
     public string? Body { get; init; }
 
     /// <summary>
+    /// The HTTP body, kept only when <see cref="Body"/> was replaced by rendered HTML in JavaScript mode, so a link
+    /// that the script removed is still followed. Not parsed into page facts.
+    /// </summary>
+    public string? RawHtml { get; init; }
+
+    /// <summary>
     /// The encoding a byte-order mark at the start of <see cref="Body"/>'s bytes declared (<c>utf-8</c>, <c>utf-16be</c>,
     /// <c>utf-16le</c>), or null with none. The decoded body no longer has the mark.
     /// </summary>

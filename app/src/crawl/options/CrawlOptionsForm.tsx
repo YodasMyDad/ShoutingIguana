@@ -515,7 +515,8 @@ function AdvancedSections({
 }
 
 const RENDERING_CHOICES: { value: JavaScriptRendering; title: string; text: string }[] = [
-  { value: 'automatic', title: 'On', text: 'Where a page is built by a script.' },
+  { value: 'automatic', title: 'Auto', text: 'A page that is only a shell.' },
+  { value: 'javaScript', title: 'JavaScript', text: 'Every HTML page, in a browser. Links in the raw HTML are kept.' },
   { value: 'off', title: 'Off', text: 'Read every page as it was sent.' },
   { value: 'matching', title: 'Only these URLs', text: 'Render the addresses listed below.' },
 ];

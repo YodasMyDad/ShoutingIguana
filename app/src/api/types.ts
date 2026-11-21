@@ -272,7 +272,7 @@ export interface CrawlOptions {
 }
 
 /** When a page is fetched again in a browser and that HTML is what gets parsed. The first fetch is always HTTP. */
-export type JavaScriptRendering = 'off' | 'automatic' | 'matching';
+export type JavaScriptRendering = 'off' | 'automatic' | 'javaScript' | 'matching';
 
 export type CrawlOptionField = keyof CrawlOptions;
 
