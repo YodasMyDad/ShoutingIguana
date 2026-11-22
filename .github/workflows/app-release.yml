@@ -294,7 +294,7 @@ jobs:
           cat > notes.md <<EOF
           Shouting Iguana ${VERSION}, from ${GITHUB_SHA}.
 
-          Unsigned beta. Signing was skipped.
+          Signing was skipped. The installers are unsigned.
 
           Windows SmartScreen blocks the installer until it earns a reputation, and some managed machines will not run it. macOS Gatekeeper blocks the app until it is allowed in Privacy and Security.
 

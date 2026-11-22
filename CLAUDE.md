@@ -4,7 +4,7 @@ Guidance for agents working in this repo. Read this before making changes.
 
 ## What this is
 
-**Shouting Iguana** `2.0.0-beta.3` — a cross-platform desktop SEO crawler and site auditor.
+**Shouting Iguana** `2.0.0` — a cross-platform desktop SEO crawler and site auditor.
 
 - `engine/` — headless .NET 10 crawl engine, the `si` CLI, and the localhost sidecar. One SQLite file per crawl.
 - `app/` — React and TypeScript UI in a Tauri 2 shell. The shell starts the engine as a sidecar.
@@ -15,8 +15,6 @@ The WPF app is not in this branch. It is the tag `legacy-v1`. Do not move or del
 ## Do not push
 
 Never push to GitHub (no branch, tag or backup) until the owner says it is time to deploy. Pushes ran CI and used up their GitHub minutes. Commit locally. Run every check locally: `dotnet test engine/ShoutingIguana.Engine.slnx`, and the app checks in [`app/README.md`](app/README.md) (`smoke:shell` included). The app and engine workflows are manual-only (`workflow_dispatch`). The release workflow runs only on a tag `app-v*`.
-
-This beta's one push is the exception already authorised and not yet done: `master` and the tag `app-v2.0.0-beta.1` (step E in [`docs/v2-rebuild.md`](docs/v2-rebuild.md)). Do not make that push as part of ordinary work. After it, the never-push rule stands again.
 
 Do not force-push.
 

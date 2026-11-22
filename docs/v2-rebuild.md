@@ -8,7 +8,8 @@ push** until the owner says it is time to deploy (2026-11-15: pushes ran CI and 
 check runs locally, and the app and engine workflows are manual-only. The release workflow publishes only from a tag
 `app-v*` plus the version in `app/src-tauri/tauri.conf.json`. `app-v2.0.0-beta.1` shipped. `app-v2.0.0-beta.2` is the
 JavaScript rendering release, tagged 2026-11-20. `app-v2.0.0-beta.3` is list mode, and custom extraction, tagged
-2026-11-21. After that tag, the never-push rule stands again.
+2026-11-21. `app-v2.0.0` is the 2.0 release, tagged 2026-11-22: the browser fallback and auth and cookies are in it.
+A version with no hyphen is a full release, not a prerelease. After that tag, the never-push rule stands again.
 
 ## Why
 
@@ -30,7 +31,7 @@ v2 is a fresh solution that ports the useful logic.
 | 2 | SEO rules and issue catalog (84 checks), `si analyze` / `si issues`, exact-match proof on the synthetic site | Done: `1489adb`, then a real-site crawl and two full reviews ([Status](#status)) |
 | 3 | Desktop UI: React + TypeScript in a Tauri 2 shell, with the engine as a sidecar behind a token-protected localhost API. Enterprise-grade UX: the bar is in [the UI brief](v2-ui-brief.md). Since 2026-11-10 it opens in Simple, with Advanced one switch away, and ends in a report: [Simple first](#simple-first-advanced-on-a-switch-2026-11-10) | Shipped. `app-v2.0.0-beta.1`, then `app-v2.0.0-beta.2`. History: [Where step 3 stands](#where-step-3-stands-2026-11-15) |
 | 3b | The check audit: every check proven against real sites and worded for a non-expert, then the old app's checks worth keeping and those a comparison with Screaming Frog shows are missing | Planned on 2026-11-10: [Simple first](#simple-first-advanced-on-a-switch-2026-11-10) |
-| 4 | Missing basics: JavaScript rendering, a browser fallback for blocked sites, include/exclude rules, auth and cookies, list mode, custom extraction | JavaScript rendering, include/exclude, custom extraction, list mode, the browser fallback, and auth and cookies are on `master`. List mode and custom extraction ship as `app-v2.0.0-beta.3`. The browser fallback and auth and cookies are not in a release tag. Step 5 is what's left. [Where step 4 stands](#where-step-4-stands-2026-11-20) |
+| 4 | Missing basics: JavaScript rendering, a browser fallback for blocked sites, include/exclude rules, auth and cookies, list mode, custom extraction | Shipped as `app-v2.0.0`. JavaScript rendering, include/exclude, custom extraction, list mode, the browser fallback, and auth and cookies. Step 5 is what's left. [Where step 4 stands](#where-step-4-stands-2026-11-20) |
 | 5 | Integrations: Search Console, then GA4, Bing Webmaster, Google Ads and Microsoft Advertising | Later |
 
 ## Where step 4 stands (2026-11-20)
@@ -104,7 +105,7 @@ The benchmark sets no extraction rules.
 
 **Checked:** `dotnet test engine/ShoutingIguana.Engine.slnx` passed: 2,467 engine, 334 sidecar, 45 CLI. `si bench --pages 100000` found every planted issue, 101,224 pages in 67.9 s, working set 217 MB at 10–30% and 198 MB at 70–100% (−199 bytes a URL). The benchmark follows links, so it crawls both planted pages.
 
-**Built, on `master` (`2b5ffe39`, not in a release tag):**
+**Built, on `master` (`2b5ffe39`), ships in `app-v2.0.0`:**
 
 - A browser fallback when a host blocks the plain HTTP fetch. The crawl still fetches by HTTP first. When `BlockDetector` names a block that is not a 429, that page is fetched again in headless Chromium. If the browser gets past the block, that host's later pages skip HTTP and are read in the browser, and that HTML is parsed once into `PageFacts`. A 429 is the host asking the crawler to slow down, so it does not switch. A browser fetch that is still blocked, or that fails, leaves the HTTP response, and the host stays on HTTP. This is not JavaScript rendering: a page the fallback already fetched is not rendered again, and a link that existed only in an HTTP body the browser never saw is not kept. example.com and www.example.com share it, as they share a gate. One browser context per host, kept for the crawl, so a clearance cookie is sent on the next page. The same browser as rendering.
 - The setting is off until a crawl turns it on. A crawl file from before this reads as off: the property is absent. Off is the default, so one challenge page on a host does not send the rest of that host through Chromium. `si crawl` takes `--browser-fallback`. The sidecar's crawl options carry `browserFallback`. Settings in both modes, on the New crawl form and on a crawl's own settings, in the JavaScript and filters section.
@@ -112,7 +113,7 @@ The benchmark sets no extraction rules.
 
 **Checked:** `dotnet test engine/ShoutingIguana.Engine.slnx` passed: 2,470 engine, 334 sidecar, 45 CLI. `si bench --pages 100000` found every planted issue, 101,224 pages in 52.9 s, working set 214 MB at 10–30% and 194 MB at 70–100% (−215 bytes a URL). The benchmark leaves the fallback off, so both challenge pages stay blocked and the host stays on HTTP.
 
-**Built, on `master` (`4f4b6472`, not in a release tag):**
+**Built, on `master` (`4f4b6472`), ships in `app-v2.0.0`:**
 
 - HTTP Basic and Digest for a host. An empty host means the site being crawled, and its www twin. The password is sent only to that host, when the host asks, and also up front for Basic. A wrong password leaves the 401. `si crawl` takes `--auth user:password` or `--auth host=user:password`.
 - Cookies sent from the first request, for a session the crawl did not start. An empty domain means the start URL's host. `si crawl` takes `--cookie name=value` or `--cookie name=value@domain`. Keep cookies has to be on, which it is by default.
@@ -527,7 +528,7 @@ rendering first, and neither is "later" any more. List mode and include/exclude 
 same day, and the owner's answer was "yes all those are needed". **Step 4, in the order agreed: JavaScript rendering
 with include/exclude rules alongside it (small, and it keeps a crawl out of filter and parameter traps), then custom
 extraction, then list mode.** The first of those shipped on `master` on 2026-11-20 (`781cca13`, `2.0.0-beta.2`).
-Custom extraction and list mode are on `master` as `2.0.0-beta.3`. The browser fallback is on `master` (`2b5ffe39`) and auth and cookies are on `master` (`4f4b6472`). Neither is in a release tag. Step 5 is what's left. The status is [Where step 4 stands](#where-step-4-stands-2026-11-20).
+Custom extraction and list mode shipped as `2.0.0-beta.3`. The browser fallback (`2b5ffe39`) and auth and cookies (`4f4b6472`) ship in `app-v2.0.0`. Step 5 is what's left. The status is [Where step 4 stands](#where-step-4-stands-2026-11-20).
 
 *Left for the owner to decide (features, not UX fixes, so not in this round):* list mode shipped as
 `2.0.0-beta.3`. Still open: a
