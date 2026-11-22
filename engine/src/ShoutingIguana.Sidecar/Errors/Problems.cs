@@ -14,13 +14,30 @@ internal static class Problems
         new(new ProblemDto("invalid-settings", "Some of the analysis's limits need changing.", 422) { Errors = errors });
 
     /// <param name="doing">What needs them: continuing the crawl, or rechecking it (the fix loop).</param>
-    public static ProblemException NeedsSecrets(IReadOnlyList<string> missingHeaders, bool proxyCredentials, string doing = "Continuing")
+    public static ProblemException NeedsSecrets(IReadOnlyList<string> missingHeaders, bool proxyCredentials, bool auth = false, string doing = "Continuing")
     {
-        var needed = (missingHeaders.Count > 0, proxyCredentials) switch
+        List<string> parts = [];
+        if (missingHeaders.Count > 0)
         {
-            (true, true) => "its header values and its proxy's user name and password",
-            (true, false) => missingHeaders.Count == 1 ? "the value of its header " + missingHeaders[0] : "the values of its headers",
-            _ => "its proxy's user name and password"
+            parts.Add(missingHeaders.Count == 1 ? "the value of its header " + missingHeaders[0] : "the values of its headers");
+        }
+
+        if (proxyCredentials)
+        {
+            parts.Add("its proxy's user name and password");
+        }
+
+        if (auth)
+        {
+            parts.Add("its sign-in");
+        }
+
+        var needed = parts.Count switch
+        {
+            0 => "its sign-in",
+            1 => parts[0],
+            2 => parts[0] + " and " + parts[1],
+            _ => string.Join(", ", parts[..^1]) + " and " + parts[^1]
         };
 
         return new(new ProblemDto("needs-secrets", $"{doing} this crawl needs {needed} again: crawl files don't store them.", 422)

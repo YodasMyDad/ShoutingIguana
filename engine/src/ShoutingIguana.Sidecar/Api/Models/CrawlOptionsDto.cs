@@ -44,6 +44,15 @@ internal sealed record CrawlOptionsDto
     public bool? StoreHtml { get; init; }
     public bool? UseCookies { get; init; }
 
+    /// <summary>HTTP Basic and Digest logins. A response keeps the user names and not the passwords.</summary>
+    public IReadOnlyList<SiteLogin>? HttpLogins { get; init; }
+
+    /// <summary>Cookies sent from the start. A response keeps the names and not the values.</summary>
+    public IReadOnlyList<SentCookie>? Cookies { get; init; }
+
+    /// <summary>Signs in through a page before the crawl. A response keeps the address and not the password.</summary>
+    public FormLogin? FormLogin { get; init; }
+
     /// <summary>When a page is rendered in a browser. Left out, a new crawl renders a client-rendered shell.</summary>
     [JsonPropertyName("javaScriptRendering")]
     public JavaScriptRendering? Rendering { get; init; }
@@ -82,6 +91,9 @@ internal sealed record CrawlOptionsDto
     /// <summary>Given in responses: the proxy's user name and password were removed, so they must be given again. Ignored in requests.</summary>
     public bool? HasRedactedProxyCredentials { get; init; }
 
+    /// <summary>Given in responses: a sign-in was stored without its password or cookie value. Ignored in requests.</summary>
+    public bool? HasRedactedAuth { get; init; }
+
     public static CrawlOptionsDto From(CrawlOptions options) => new()
     {
         StartUrl = options.StartUrl,
@@ -110,6 +122,9 @@ internal sealed record CrawlOptionsDto
         ExtraSitemaps = [.. options.ExtraSitemaps],
         StoreHtml = options.StoreHtml,
         UseCookies = options.UseCookies,
+        HttpLogins = options.HttpLogins.Select(login => login with { Password = "" }).ToList(),
+        Cookies = options.Cookies.Select(cookie => cookie with { Value = "" }).ToList(),
+        FormLogin = options.FormLogin is null ? null : options.FormLogin with { Password = "" },
         Rendering = options.Rendering,
         RenderPatterns = List(options.RenderPatterns),
         IncludePatterns = List(options.IncludePatterns),
@@ -121,7 +136,8 @@ internal sealed record CrawlOptionsDto
         RequestTimeoutSeconds = options.RequestTimeoutSeconds,
         MaxRetries = options.MaxRetries,
         MaxHtmlBytes = options.MaxHtmlBytes,
-        HasRedactedProxyCredentials = options.HasRedactedProxyCredentials
+        HasRedactedProxyCredentials = options.HasRedactedProxyCredentials,
+        HasRedactedAuth = options.HasRedactedAuth
     };
 
     /// <summary>
@@ -158,6 +174,9 @@ internal sealed record CrawlOptionsDto
             ExtraSitemaps = ExtraSitemaps is null ? defaults.ExtraSitemaps : [.. ExtraSitemaps],
             StoreHtml = StoreHtml ?? defaults.StoreHtml,
             UseCookies = UseCookies ?? defaults.UseCookies,
+            HttpLogins = HttpLogins is null ? defaults.HttpLogins : [.. HttpLogins],
+            Cookies = Cookies is null ? defaults.Cookies : [.. Cookies],
+            FormLogin = FormLogin ?? defaults.FormLogin,
             Rendering = this.Rendering ?? defaults.Rendering,
             RenderPatterns = RenderPatterns is null ? defaults.RenderPatterns : [.. RenderPatterns],
             IncludePatterns = IncludePatterns is null ? defaults.IncludePatterns : [.. IncludePatterns],

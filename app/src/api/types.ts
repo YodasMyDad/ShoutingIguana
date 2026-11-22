@@ -253,6 +253,15 @@ export interface CrawlOptions {
   storeHtml?: boolean | null;
   useCookies?: boolean | null;
   /**
+   * HTTP Basic and Digest logins. A response and a crawl file keep the user names and not the passwords.
+   * An empty host means the site being crawled.
+   */
+  httpLogins?: SiteLogin[] | null;
+  /** Cookies sent from the first request. A response and a crawl file keep the names and not the values. */
+  cookies?: SentCookie[] | null;
+  /** Signs in through a page before the crawl. A response and a crawl file keep the address and not the password. */
+  formLogin?: FormLogin | null;
+  /**
    * When a page is rendered in a browser. `automatic` renders a page whose HTML is a client-rendered shell.
    * `off` never does. `matching` renders only the URLs `renderPatterns` name.
    */
@@ -281,6 +290,34 @@ export interface CrawlOptions {
   maxHtmlBytes?: number | null;
   /** In responses only: the proxy's user name and password were removed, so they must be given again. */
   hasRedactedProxyCredentials?: boolean | null;
+  /** In responses only: a sign-in was stored without its password or cookie value. */
+  hasRedactedAuth?: boolean | null;
+}
+
+/** HTTP Basic and Digest for one host. An empty host means the site being crawled. */
+export interface SiteLogin {
+  host: string;
+  username: string;
+  password: string;
+}
+
+/** A cookie sent from the first request. An empty domain means the start address's host. */
+export interface SentCookie {
+  name: string;
+  value: string;
+  domain: string;
+  path: string;
+  secure: boolean;
+}
+
+/** A sign-in page filled in the browser before the crawl. Empty selectors use the form's own fields. */
+export interface FormLogin {
+  url: string;
+  username: string;
+  password: string;
+  usernameField: string;
+  passwordField: string;
+  submit: string;
 }
 
 /** When a page is fetched again in a browser and that HTML is what gets parsed. The first fetch is always HTTP. */
@@ -498,6 +535,12 @@ export interface ContinueCrawlRequest {
   extraHeaders?: Record<string, string>;
   /** Needed again when the stored proxy had a user name and password. */
   proxyUrl?: string;
+  /** The HTTP logins to send from now on. A crawl file keeps them without passwords. */
+  httpLogins?: SiteLogin[];
+  /** The cookies to send from now on. A crawl file keeps them without values. */
+  cookies?: SentCookie[];
+  /** The form sign-in to run from now on. A crawl file keeps it without its password. */
+  formLogin?: FormLogin | null;
   /** The Shopify crawler signatures to send from now on, by host: crawl files keep none. */
   signatures?: Record<string, CrawlSignature>;
   /** Continue without the stored headers that weren't given again, instead of asking for them. */

@@ -29,6 +29,9 @@ export const ENGINE_DEFAULTS = {
   extraSitemaps: [],
   storeHtml: false,
   useCookies: true,
+  httpLogins: [],
+  cookies: [],
+  formLogin: null,
   javaScriptRendering: 'automatic',
   renderPatterns: [],
   includePatterns: [],
@@ -40,4 +43,4 @@ export const ENGINE_DEFAULTS = {
   requestTimeoutSeconds: 20,
   maxRetries: 2,
   maxHtmlBytes: 8 * 1024 * 1024,
-} as const satisfies Omit<Required<CrawlOptions>, 'startUrl' | 'hasRedactedProxyCredentials'>;
+} as const satisfies Omit<Required<CrawlOptions>, 'startUrl' | 'hasRedactedProxyCredentials' | 'hasRedactedAuth'>;

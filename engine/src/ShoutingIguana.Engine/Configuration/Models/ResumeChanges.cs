@@ -21,4 +21,13 @@ public sealed record ResumeChanges
 
     /// <summary>Replaces the stored proxy. It must be given again when the stored one had credentials.</summary>
     public string? ProxyUrl { get; init; }
+
+    /// <summary>The HTTP logins to send from now on. A crawl file keeps them without passwords, so a stored crawl sends none unless given them.</summary>
+    public IReadOnlyList<SiteLogin> HttpLogins { get; init; } = [];
+
+    /// <summary>The cookies to send from now on. A crawl file keeps them without values.</summary>
+    public IReadOnlyList<SentCookie> Cookies { get; init; } = [];
+
+    /// <summary>The form sign-in to run from now on. A crawl file keeps it without its password.</summary>
+    public FormLogin? FormLogin { get; init; }
 }

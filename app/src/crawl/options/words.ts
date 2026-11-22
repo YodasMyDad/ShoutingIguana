@@ -64,6 +64,38 @@ export const FIELD_WORDS: Record<CrawlFormField, FieldWords> = {
     help: 'An http://, https:// or socks5:// proxy for every request, with its user name and password in the address if it needs them (socks5://user:password@host:port). The crawl file and your saved defaults never keep the password; it’s remembered only if you tick Remember below.',
   },
   useCookies: { label: 'Keep cookies', help: 'Send back the cookies the site sets, as a browser would.' },
+  httpLogins: {
+    label: 'HTTP sign-in',
+    help: 'A user name and password for a site that asks for one (HTTP Basic or Digest). Leave the host empty for this site, including its www address. The crawl file never keeps the password; it’s remembered only if you tick Remember.',
+  },
+  cookies: {
+    label: 'Cookies to send',
+    help: 'A cookie the crawl sends from the first request, for a session you already have. Leave the domain empty for this site. The crawl file never keeps the value.',
+  },
+  formUrl: {
+    label: 'Sign-in page',
+    help: 'The page where you sign in. The crawl fills the form in a browser before it starts, and then sends the cookies that page sets. Leave it empty when the site asks over HTTP instead.',
+  },
+  formUsername: {
+    label: 'User name on that page',
+    help: 'Empty uses the HTTP sign-in’s user name.',
+  },
+  formPassword: {
+    label: 'Password on that page',
+    help: 'Empty uses the HTTP sign-in’s password, and that password is then not also sent as HTTP. The crawl file never keeps it.',
+  },
+  formUsernameField: {
+    label: 'User name field',
+    help: 'A CSS selector. Empty uses the first email or text field.',
+  },
+  formPasswordField: {
+    label: 'Password field',
+    help: 'A CSS selector. Empty uses the first password field.',
+  },
+  formSubmit: {
+    label: 'Submit button',
+    help: 'A CSS selector. Empty uses the form’s submit button.',
+  },
   signatures: {
     label: 'Shopify crawler access',
     help: 'Shopify limits crawlers that don’t send a signature, so a store refuses its product pages (429 Too Many Requests). Its owner creates one in Shopify admin; it’s sent with every request to that domain only, over https, and never kept in the crawl file. The values are remembered only if you tick Remember.',
@@ -202,6 +234,10 @@ export const SIMPLE_WORDS = {
   checkResources: {
     label: 'Images and other files',
     help: 'So broken and oversized images are found. Turn it off for a quicker look at pages only.',
+  },
+  auth: {
+    label: 'Sign in',
+    help: 'For a site that won’t show its pages until you sign in. A user name and password are sent when the site asks. If it has a sign-in page, put that address in too and the check fills the form first.',
   },
   shopify: {
     label: 'A Shopify shop?',
@@ -366,6 +402,17 @@ export function sectionSummary(
       ]
         .filter(Boolean)
         .join(', ');
+    }
+    case 'auth': {
+      const hosts = form.httpLogins.filter((row) => row.username.trim() !== '').length;
+      const cookies = form.cookies.filter((row) => row.name.trim() !== '').length;
+      const parts = [
+        hosts > 0 ? plural(hosts, 'HTTP sign-in', 'HTTP sign-ins') : null,
+        form.formUrl.trim() ? 'a sign-in page' : null,
+        cookies > 0 ? plural(cookies, 'cookie', 'cookies') : null,
+      ].filter(Boolean);
+      if (parts.length === 0) return mode === 'simple' ? 'No sign-in' : 'No sign-in';
+      return parts.join(', ');
     }
     case 'network': {
       const headers = headerCount(form);

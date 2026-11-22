@@ -40,6 +40,30 @@ public sealed partial class SyntheticSite
     /// <inheritdoc cref="LIST_MODE_PATH"/>
     public const string LIST_MODE_TARGET_PATH = PLANTS_PATH + "list-mode-target";
 
+    /// <summary>Answers 401 until the request carries HTTP Basic for <see cref="AUTH_USER"/>.</summary>
+    public const string HTTP_AUTH_PATH = PLANTS_PATH + "http-auth";
+
+    /// <summary>Answers 401 until the request carries HTTP Digest for <see cref="AUTH_USER"/>.</summary>
+    public const string DIGEST_AUTH_PATH = PLANTS_PATH + "digest-auth";
+
+    /// <summary>Answers 403 until the request carries the cookie a signed-in session has.</summary>
+    public const string COOKIE_GATE_PATH = PLANTS_PATH + "cookie-gate";
+
+    /// <summary>The sign-in form. A correct POST sets <see cref="AUTH_COOKIE"/> and redirects to <see cref="FORM_MEMBER_PATH"/>.</summary>
+    public const string FORM_LOGIN_PATH = PLANTS_PATH + "form-login";
+
+    /// <inheritdoc cref="FORM_LOGIN_PATH"/>
+    public const string FORM_MEMBER_PATH = PLANTS_PATH + "form-member";
+
+    /// <summary>The user name the auth plants accept.</summary>
+    public const string AUTH_USER = "plant";
+
+    /// <summary>The password the auth plants accept.</summary>
+    public const string AUTH_PASSWORD = "plant-secret";
+
+    /// <summary>The cookie the form sets and the cookie gate requires: <c>session=planted</c>.</summary>
+    public const string AUTH_COOKIE = "session=planted";
+
     /// <summary>With <see cref="SyntheticSiteOptions.DeadTwin"/>, the dead twin's URLs the first orphan links: never checked.</summary>
     public const int DEAD_TWIN_UNCHECKED = 5;
 

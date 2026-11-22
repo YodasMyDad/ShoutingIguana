@@ -42,7 +42,7 @@ internal sealed partial class CrawlManager
         var plan = Plan(path, ask);
         var resume = EngineErrors.Read(() => CrawlDatabase.ReadOptions(path)).PlanResume(new ResumeChanges());
         var refused = Refusal(id, plan)?.Problem;
-        return RecheckPlanDto.From(plan, new RecheckSecretsDto(resume.MissingHeaders, resume.MissingProxyCredentials),
+        return RecheckPlanDto.From(plan, new RecheckSecretsDto(resume.MissingHeaders, resume.MissingProxyCredentials, resume.MissingAuth),
             refused is null ? null : new RecheckRefusalDto(refused.Type, refused.Title));
     }
 
@@ -69,12 +69,15 @@ internal sealed partial class CrawlManager
         {
             ExtraHeaders = headers,
             Signatures = CrawlSignatureDto.ToEngine(body.Signatures),
-            ProxyUrl = body.ProxyUrl
+            ProxyUrl = body.ProxyUrl,
+            HttpLogins = body.HttpLogins ?? [],
+            Cookies = body.Cookies ?? [],
+            FormLogin = body.FormLogin
         });
         var missingHeaders = body.SkipMissingHeaders ? [] : resume.MissingHeaders;
-        if (resume.MissingProxyCredentials || missingHeaders.Count > 0)
+        if (resume.MissingProxyCredentials || missingHeaders.Count > 0 || resume.MissingAuth)
         {
-            throw Problems.NeedsSecrets(missingHeaders, resume.MissingProxyCredentials, "Rechecking");
+            throw Problems.NeedsSecrets(missingHeaders, resume.MissingProxyCredentials, resume.MissingAuth, "Rechecking");
         }
 
         var errors = OptionFields.Merge(headerErrors, resume.Options.ValidateFields());

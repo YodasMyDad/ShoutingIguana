@@ -387,13 +387,16 @@ internal sealed partial class CrawlManager(
             RequestTimeoutSeconds = request.RequestTimeoutSeconds,
             ExtraHeaders = headers,
             Signatures = CrawlSignatureDto.ToEngine(request.Signatures),
-            ProxyUrl = request.ProxyUrl
+            ProxyUrl = request.ProxyUrl,
+            HttpLogins = request.HttpLogins ?? [],
+            Cookies = request.Cookies ?? [],
+            FormLogin = request.FormLogin
         });
 
         var missingHeaders = request.SkipMissingHeaders ? [] : plan.MissingHeaders;
-        if (plan.MissingProxyCredentials || missingHeaders.Count > 0)
+        if (plan.MissingProxyCredentials || missingHeaders.Count > 0 || plan.MissingAuth)
         {
-            throw Problems.NeedsSecrets(missingHeaders, plan.MissingProxyCredentials);
+            throw Problems.NeedsSecrets(missingHeaders, plan.MissingProxyCredentials, plan.MissingAuth);
         }
 
         var errors = OptionFields.Merge(headerErrors, plan.Options.ValidateFields());

@@ -7,4 +7,8 @@ namespace ShoutingIguana.Engine.Configuration.Models;
 /// The stored proxy had a user name and password, which crawl files don't keep, and no proxy was given again. The
 /// proxy in <paramref name="Options"/> can't be used as it is.
 /// </param>
-public sealed record ResumePlan(CrawlOptions Options, IReadOnlyList<string> MissingHeaders, bool MissingProxyCredentials);
+public sealed record ResumePlan(
+    CrawlOptions Options,
+    IReadOnlyList<string> MissingHeaders,
+    bool MissingProxyCredentials,
+    bool MissingAuth = false);

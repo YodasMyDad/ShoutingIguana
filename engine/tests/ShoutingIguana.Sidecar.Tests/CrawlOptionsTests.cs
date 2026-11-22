@@ -194,7 +194,7 @@ public sealed class CrawlOptionsTests : IAsyncLifetime
 
             var read = (await _sidecar.GetJsonAsync("api/crawl-options/defaults"))["options"]!.AsObject();
             Assert.True(engine[name]?.ToJsonString() == read[name]?.ToJsonString(), $"{name}: {read[name]?.ToJsonString()}, not the engine's {engine[name]?.ToJsonString()}");
-            Assert.All(without.Where(property => property.Key != "hasRedactedProxyCredentials"),
+            Assert.All(without.Where(property => property.Key is not "hasRedactedProxyCredentials" and not "hasRedactedAuth"),
                 property => Assert.Equal(property.Value?.ToJsonString(), read[property.Key]?.ToJsonString()));
         }
     }
@@ -259,6 +259,8 @@ public sealed class CrawlOptionsTests : IAsyncLifetime
             ExcludePatterns = roundTripped.ExcludePatterns,
             ExtractionRules = roundTripped.ExtractionRules,
             ListUrls = roundTripped.ListUrls,
+            HttpLogins = roundTripped.HttpLogins,
+            Cookies = roundTripped.Cookies,
             Signatures = roundTripped.Signatures
         }, roundTripped);
         Assert.Equal(["https://example.com/listed"], roundTripped.ListUrls);

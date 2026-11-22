@@ -60,6 +60,16 @@ const LISTED: Record<Exclude<FormSection, 'start'>, CrawlFormField[]> = {
   limits: ['maxUrls', 'maxDepth', 'maxHtmlMb'],
   robots: ['respectRobotsTxt', 'respectCrawlDelay', 'discoverSitemaps', 'extraSitemaps'],
   network: ['userAgent', 'customUserAgent', 'acceptLanguage', 'headers', 'proxyUrl', 'useCookies'],
+  auth: [
+    'httpLogins',
+    'cookies',
+    'formUrl',
+    'formUsername',
+    'formPassword',
+    'formUsernameField',
+    'formPasswordField',
+    'formSubmit',
+  ],
   shopify: ['signatures'],
   advanced: [
     'requestTimeoutSeconds',
@@ -298,6 +308,7 @@ function ContinuePanel({
         .map((row) => [row.name.trim(), row.value]),
     );
     const number = (text: string) => Number(text.trim().replace(/,/g, ''));
+    const sent = optionsFromForm(form);
     return {
       concurrency: number(form.concurrency),
       maxRequestsPerSecond: number(form.maxRequestsPerSecond),
@@ -305,6 +316,9 @@ function ContinuePanel({
       ...(Object.keys(headers).length > 0 ? { extraHeaders: headers } : {}),
       ...(form.proxyUrl.trim() !== '' ? { proxyUrl: form.proxyUrl.trim() } : {}),
       ...(Object.keys(signatures).length > 0 ? { signatures } : {}),
+      ...(sent.httpLogins && sent.httpLogins.length > 0 ? { httpLogins: sent.httpLogins } : {}),
+      ...(sent.cookies && sent.cookies.length > 0 ? { cookies: sent.cookies } : {}),
+      ...(sent.formLogin ? { formLogin: sent.formLogin } : {}),
       ...(skipMissingHeaders ? { skipMissingHeaders: true } : {}),
     };
   };

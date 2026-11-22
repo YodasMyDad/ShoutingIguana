@@ -14,7 +14,14 @@
 //
 // A Shopify signature the user ticked Remember for is also kept for its store, by host (`shopify:<host>`, lane
 // shopify): the next crawl of that store fills it in until it ends, and then it's forgotten.
-import type { ContinueCrawlRequest, CrawlOptions, CrawlSignature } from '../api/types';
+import type {
+  ContinueCrawlRequest,
+  CrawlOptions,
+  CrawlSignature,
+  FormLogin,
+  SentCookie,
+  SiteLogin,
+} from '../api/types';
 import { isTauri } from '../lib/platform';
 import { signatureState } from './options/shopifySignature';
 
@@ -25,6 +32,12 @@ export interface CrawlSecrets {
   headers?: Record<string, string>;
   /** Shopify crawler signatures by the host each is for. */
   signatures?: Record<string, CrawlSignature>;
+  /** HTTP logins that have a password. */
+  httpLogins?: SiteLogin[];
+  /** Cookies that have a value. */
+  cookies?: SentCookie[];
+  /** A form sign-in that has a password. */
+  formLogin?: FormLogin;
 }
 
 /** What the secrets are for: the crawl defaults, one crawl, or a Shopify store's signature (by its host). */
@@ -94,11 +107,59 @@ function wholeSignatures(given: unknown): Record<string, CrawlSignature> {
   );
 }
 
+function wholeLogins(given: unknown): SiteLogin[] {
+  if (!Array.isArray(given)) return [];
+  return given.flatMap((value): SiteLogin[] => {
+    if (typeof value !== 'object' || value === null) return [];
+    const { host, username, password } = value as Record<string, unknown>;
+    return typeof username === 'string' && typeof password === 'string' && password !== ''
+      ? [{ host: typeof host === 'string' ? host : '', username, password }]
+      : [];
+  });
+}
+
+function wholeCookies(given: unknown): SentCookie[] {
+  if (!Array.isArray(given)) return [];
+  return given.flatMap((value): SentCookie[] => {
+    if (typeof value !== 'object' || value === null) return [];
+    const row = value as Record<string, unknown>;
+    const name = row.name;
+    const cookieValue = row.value;
+    return typeof name === 'string' && typeof cookieValue === 'string' && cookieValue !== ''
+      ? [
+          {
+            name,
+            value: cookieValue,
+            domain: typeof row.domain === 'string' ? row.domain : '',
+            path: typeof row.path === 'string' ? row.path : '',
+            secure: row.secure === true,
+          },
+        ]
+      : [];
+  });
+}
+
+function wholeForm(given: unknown): FormLogin | null {
+  if (typeof given !== 'object' || given === null) return null;
+  const row = given as Record<string, unknown>;
+  if (typeof row.url !== 'string' || typeof row.password !== 'string' || row.password === '') return null;
+  return {
+    url: row.url,
+    username: typeof row.username === 'string' ? row.username : '',
+    password: row.password,
+    usernameField: typeof row.usernameField === 'string' ? row.usernameField : '',
+    passwordField: typeof row.passwordField === 'string' ? row.passwordField : '',
+    submit: typeof row.submit === 'string' ? row.submit : '',
+  };
+}
+
 /**
- * The secrets in a crawl's options: its proxy, when it has a user name, its headers that have values, and its Shopify
- * signatures.
+ * The secrets in a crawl's options: its proxy, when it has a user name, its headers that have values, its Shopify
+ * signatures, and a sign-in.
  */
-export function secretsOf(options: Pick<CrawlOptions, 'proxyUrl' | 'extraHeaders' | 'signatures'>): CrawlSecrets {
+export function secretsOf(
+  options: Pick<CrawlOptions, 'proxyUrl' | 'extraHeaders' | 'signatures' | 'httpLogins' | 'cookies' | 'formLogin'>,
+): CrawlSecrets {
   const secrets: CrawlSecrets = {};
   if (options.proxyUrl && credentialsIn(options.proxyUrl)) secrets.proxyUrl = options.proxyUrl;
   const headers = Object.fromEntries(
@@ -107,10 +168,21 @@ export function secretsOf(options: Pick<CrawlOptions, 'proxyUrl' | 'extraHeaders
   if (Object.keys(headers).length > 0) secrets.headers = headers;
   const signatures = wholeSignatures(options.signatures);
   if (Object.keys(signatures).length > 0) secrets.signatures = signatures;
+  const logins = (options.httpLogins ?? []).filter((login) => login.password !== '');
+  if (logins.length > 0) secrets.httpLogins = logins;
+  const cookies = (options.cookies ?? []).filter((cookie) => cookie.value !== '');
+  if (cookies.length > 0) secrets.cookies = cookies;
+  if (options.formLogin && options.formLogin.password !== '') secrets.formLogin = options.formLogin;
   return secrets;
 }
 
-const isEmpty = (secrets: CrawlSecrets) => !secrets.proxyUrl && !secrets.headers && !secrets.signatures;
+const isEmpty = (secrets: CrawlSecrets) =>
+  !secrets.proxyUrl &&
+  !secrets.headers &&
+  !secrets.signatures &&
+  !secrets.httpLogins &&
+  !secrets.cookies &&
+  !secrets.formLogin;
 
 /**
  * Keeps the secrets for `key`, or forgets what was kept when there are none. `remember`, the user's consent: in the
@@ -158,7 +230,7 @@ export async function keptSecrets(key: SecretsKey): Promise<CrawlSecrets | null>
     if (!text) return null;
     const value = JSON.parse(text) as unknown;
     if (typeof value !== 'object' || value === null) return null;
-    const { proxyUrl, headers, signatures } = value as Record<string, unknown>;
+    const { proxyUrl, headers, signatures, httpLogins, cookies, formLogin } = value as Record<string, unknown>;
     const secrets: CrawlSecrets = {};
     if (typeof proxyUrl === 'string') secrets.proxyUrl = proxyUrl;
     if (typeof headers === 'object' && headers !== null) {
@@ -168,6 +240,12 @@ export async function keptSecrets(key: SecretsKey): Promise<CrawlSecrets | null>
     }
     const kept = wholeSignatures(signatures);
     if (Object.keys(kept).length > 0) secrets.signatures = kept;
+    const logins = wholeLogins(httpLogins);
+    if (logins.length > 0) secrets.httpLogins = logins;
+    const keptCookies = wholeCookies(cookies);
+    if (keptCookies.length > 0) secrets.cookies = keptCookies;
+    const login = wholeForm(formLogin);
+    if (login) secrets.formLogin = login;
     return secrets;
   } catch (error) {
     console.warn(`The credential store didn't give the secrets for ${key}`, error);
@@ -213,6 +291,15 @@ export function withSecrets(options: CrawlOptions, secrets: CrawlSecrets | null)
   if (secrets.signatures && Object.keys(wholeSignatures(options.signatures)).length === 0) {
     next.signatures = secrets.signatures;
   }
+  if (secrets.httpLogins && (options.httpLogins ?? []).every((login) => login.password === '')) {
+    next.httpLogins = secrets.httpLogins;
+  }
+  if (secrets.cookies && (options.cookies ?? []).every((cookie) => cookie.value === '')) {
+    next.cookies = secrets.cookies;
+  }
+  if (secrets.formLogin && (options.formLogin == null || options.formLogin.password === '')) {
+    next.formLogin = secrets.formLogin;
+  }
   return next;
 }
 
@@ -227,6 +314,9 @@ export function continueWithSecrets(request: ContinueCrawlRequest, secrets: Craw
   if (next.extraHeaders === undefined && secrets.headers && !next.skipMissingHeaders)
     next.extraHeaders = secrets.headers;
   if (next.signatures === undefined && secrets.signatures) next.signatures = secrets.signatures;
+  if (next.httpLogins === undefined && secrets.httpLogins) next.httpLogins = secrets.httpLogins;
+  if (next.cookies === undefined && secrets.cookies) next.cookies = secrets.cookies;
+  if (next.formLogin === undefined && secrets.formLogin) next.formLogin = secrets.formLogin;
   return next;
 }
 
@@ -236,7 +326,7 @@ export function continueWithSecrets(request: ContinueCrawlRequest, secrets: Craw
  */
 export async function keepCrawlSecrets(
   crawlId: string,
-  options: Pick<CrawlOptions, 'proxyUrl' | 'extraHeaders' | 'signatures'>,
+  options: Pick<CrawlOptions, 'proxyUrl' | 'extraHeaders' | 'signatures' | 'httpLogins' | 'cookies' | 'formLogin'>,
   remember?: boolean,
 ): Promise<void> {
   const secrets = secretsOf(options);

@@ -30,7 +30,7 @@ v2 is a fresh solution that ports the useful logic.
 | 2 | SEO rules and issue catalog (84 checks), `si analyze` / `si issues`, exact-match proof on the synthetic site | Done: `1489adb`, then a real-site crawl and two full reviews ([Status](#status)) |
 | 3 | Desktop UI: React + TypeScript in a Tauri 2 shell, with the engine as a sidecar behind a token-protected localhost API. Enterprise-grade UX: the bar is in [the UI brief](v2-ui-brief.md). Since 2026-11-10 it opens in Simple, with Advanced one switch away, and ends in a report: [Simple first](#simple-first-advanced-on-a-switch-2026-11-10) | Shipped. `app-v2.0.0-beta.1`, then `app-v2.0.0-beta.2`. History: [Where step 3 stands](#where-step-3-stands-2026-11-15) |
 | 3b | The check audit: every check proven against real sites and worded for a non-expert, then the old app's checks worth keeping and those a comparison with Screaming Frog shows are missing | Planned on 2026-11-10: [Simple first](#simple-first-advanced-on-a-switch-2026-11-10) |
-| 4 | Missing basics: JavaScript rendering, a browser fallback for blocked sites, include/exclude rules, auth and cookies, list mode, custom extraction | JavaScript rendering, include/exclude, custom extraction, list mode, and the browser fallback are on `master`. List mode and custom extraction ship as `app-v2.0.0-beta.3`. The browser fallback is on `master` and not in a release tag. Next, still unbuilt: auth and cookies. [Where step 4 stands](#where-step-4-stands-2026-11-20) |
+| 4 | Missing basics: JavaScript rendering, a browser fallback for blocked sites, include/exclude rules, auth and cookies, list mode, custom extraction | JavaScript rendering, include/exclude, custom extraction, list mode, the browser fallback, and auth and cookies are built. List mode and custom extraction ship as `app-v2.0.0-beta.3`. The browser fallback is on `master` and not in a release tag. Auth and cookies are on `step4/auth-cookies`, not on `master`. [Where step 4 stands](#where-step-4-stands-2026-11-20) |
 | 5 | Integrations: Search Console, then GA4, Bing Webmaster, Google Ads and Microsoft Advertising | Later |
 
 ## Where step 4 stands (2026-11-20)
@@ -112,9 +112,19 @@ The benchmark sets no extraction rules.
 
 **Checked:** `dotnet test engine/ShoutingIguana.Engine.slnx` passed: 2,470 engine, 334 sidecar, 45 CLI. `si bench --pages 100000` found every planted issue, 101,224 pages in 52.9 s, working set 214 MB at 10–30% and 194 MB at 70–100% (−215 bytes a URL). The benchmark leaves the fallback off, so both challenge pages stay blocked and the host stays on HTTP.
 
+**Built, on `step4/auth-cookies` (not on `master`, not released):**
+
+- HTTP Basic and Digest for a host. An empty host means the site being crawled, and its www twin. The password is sent only to that host, when the host asks, and also up front for Basic. A wrong password leaves the 401. `si crawl` takes `--auth user:password` or `--auth host=user:password`.
+- Cookies sent from the first request, for a session the crawl did not start. An empty domain means the start URL's host. `si crawl` takes `--cookie name=value` or `--cookie name=value@domain`. Keep cookies has to be on, which it is by default.
+- A sign-in page filled in the browser before the first fetch. The cookies that page sets are then sent with the HTTP crawl and with later browser fetches. If the sign-in sets no cookie, the crawl fails and does not audit the signed-out site. `si crawl` takes `--form-url`, `--form-user` and `--form-password`, with optional CSS selectors.
+- A crawl file keeps the user names, cookie names and the sign-in address, and not the passwords or cookie values. Resume asks for them again. The desktop app has the same fields in both modes, under Sign in, and Remember keeps them the way it keeps a proxy password.
+- Nothing here is a new check. The synthetic site answers `/plants/http-auth`, `/plants/digest-auth`, `/plants/cookie-gate`, `/plants/form-login` and `/plants/form-member` only when a test asks for them. They are not linked, so the benchmark's crawl does not fetch them. Issue ids are unchanged. `AnalysisFreshness.VERSION` stays **24**.
+
+**Checked:** `dotnet test engine/tests/ShoutingIguana.Engine.Tests` passed: 2,475. The five auth crawls passed inside that: Basic reads the page and the password is not in the file, a wrong password stays 401, Digest reads the page, a cookie opens the gate, and a form sign-in reads the member page while a wrong password fails the crawl. The app typecheck passed, and the form, secrets and settings tests passed (160).
+
 **Left, in this order.** Do the first. Do not start the later ones in the same session.
 
-1. **Not in that agreed order, still in the step 4 plan, and not built:** auth and cookies. Step 5 (Search Console, then the other integrations) stays later.
+1. Step 5 (Search Console, then the other integrations) stays later. Step 4's list is built.
 
 A page that already has its text is not rendered. A content security policy is enforced, so the planted script is a
 file on the site, which `default-src 'self'` allows. Automatic rendering is a shell test, not a guess that any script
@@ -517,7 +527,7 @@ rendering first, and neither is "later" any more. List mode and include/exclude 
 same day, and the owner's answer was "yes all those are needed". **Step 4, in the order agreed: JavaScript rendering
 with include/exclude rules alongside it (small, and it keeps a crawl out of filter and parameter traps), then custom
 extraction, then list mode.** The first of those shipped on `master` on 2026-11-20 (`781cca13`, `2.0.0-beta.2`).
-Custom extraction and list mode are on `master` as `2.0.0-beta.3`. The browser fallback is on `master` (`2b5ffe39`) and not in a release tag. Next is auth and cookies. The status is [Where step 4 stands](#where-step-4-stands-2026-11-20).
+Custom extraction and list mode are on `master` as `2.0.0-beta.3`. The browser fallback is on `master` (`2b5ffe39`) and not in a release tag. Auth and cookies are on `step4/auth-cookies`, not on `master`. The status is [Where step 4 stands](#where-step-4-stands-2026-11-20).
 
 *Left for the owner to decide (features, not UX fixes, so not in this round):* list mode shipped as
 `2.0.0-beta.3`. Still open: a

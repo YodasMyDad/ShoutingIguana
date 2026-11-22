@@ -92,6 +92,13 @@ firewall `BlockDetector` names, not a 429). The first fetch is still HTTP. If th
 host's later pages skip HTTP, and that HTML is parsed once. It is not JavaScript rendering. Off unless the flag is
 given. The desktop app has the same switch, in both modes.
 
+`--auth user:password` signs in to the site with HTTP Basic and Digest, and `--auth host=user:password` signs in to
+that host only. The password is sent only there. `--cookie name=value` (or `name=value@domain`) is sent from the first
+request. `--form-url`, `--form-user` and `--form-password` fill a sign-in page in the browser before the crawl, and
+the cookies that page sets are sent after that. A sign-in that sets no cookie fails the crawl. None of the passwords
+or cookie values are stored in the crawl file: pass them again with `--resume`. The desktop app has the same fields,
+under Sign in, in both modes.
+
 `--list <file>` crawls those addresses instead of following links. Repeat it for more than one file. A text file is
 one URL a line. A CSV file has a `Url` column and an optional `Priority` column; a higher number is crawled first.
 The start URL is fetched too. A redirect or a meta refresh of a listed address is still followed. Anything else a
@@ -109,8 +116,8 @@ broken. Test against the synthetic site's Shopify mode only (`SyntheticSiteOptio
 store.
 
 The start URL and any `--sitemap` can't carry a user name or password (`https://user:pass@host/`): the crawler never
-sends them, and the URL is stored in the crawl file, listed and logged as it is, so they would leak. Send credentials
-in an `Authorization` header (`--header`), whose value a crawl file doesn't keep. A `--proxy` may carry credentials.
+sends them, and the URL is stored in the crawl file, listed and logged as it is, so they would leak. Use `--auth`, or
+send credentials in an `Authorization` header (`--header`). A crawl file keeps neither. A `--proxy` may carry credentials.
 
 Exit codes, for scripts and schedulers:
 
@@ -1420,6 +1427,5 @@ network and your rate settings, not by the crawler.
 ## Not yet
 
 - The desktop UI (step 3).
-- Auth and cookies (the rest of step 4). JavaScript rendering, include and exclude rules, custom extraction, list
-  mode, and the browser fallback are built. `Blocked` responses were already detected.
-- Search Console, Analytics, Bing and Ads data (step 5).
+- Search Console, Analytics, Bing and Ads data (step 5). JavaScript rendering, include and exclude rules, custom
+  extraction, list mode, the browser fallback, and auth and cookies are built. `Blocked` responses were already detected.

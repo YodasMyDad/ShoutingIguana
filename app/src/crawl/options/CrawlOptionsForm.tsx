@@ -24,6 +24,7 @@ import {
   type FormSection,
   type HeaderRow,
 } from './form';
+import { AuthFields } from './AuthFields';
 import { ExtractionRulesField } from './ExtractionRulesField';
 import { ListUrlsField } from './ListUrlsField';
 import { ProxyTest } from './ProxyTest';
@@ -286,6 +287,26 @@ function SimpleQuestions({
         <ExtractionRulesField form={form} onChange={onChange} error={first(errors, 'extractionRules')} />
       </Fold>
       <Fold
+        name="auth"
+        level={3}
+        title={SIMPLE_WORDS.auth.label}
+        summary={sectionSummary('auth', form, 'simple')}
+        attention={
+          first(errors, 'httpLogins') || first(errors, 'formUrl') || first(errors, 'cookies') ? '1 to change' : null
+        }
+        open={open.has('auth')}
+        onOpenChange={(next) => onOpenChange('auth', next)}
+        className="si-card"
+      >
+        <AuthFields
+          form={form}
+          onChange={onChange}
+          onTouch={onTouch ? () => onTouch('httpLogins') : undefined}
+          error={first(errors, 'httpLogins') ?? first(errors, 'formUrl') ?? first(errors, 'cookies')}
+          mode="simple"
+        />
+      </Fold>
+      <Fold
         name="shopify"
         level={3}
         title={SIMPLE_WORDS.shopify.label}
@@ -521,6 +542,16 @@ function AdvancedSections({
               {remember ? <RememberSecrets {...remember} /> : null}
               {toggle('useCookies')}
             </>,
+          )}
+          {fold(
+            'auth',
+            <AuthFields
+              form={form}
+              onChange={onChange}
+              onTouch={onTouch ? () => onTouch('httpLogins') : undefined}
+              error={first(errors, 'httpLogins') ?? first(errors, 'formUrl') ?? first(errors, 'cookies')}
+              mode="advanced"
+            />,
           )}
           {fold(
             'shopify',

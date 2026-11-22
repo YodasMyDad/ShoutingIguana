@@ -1064,6 +1064,31 @@ public sealed partial class SyntheticSite
         Content = $"<p>{Text("plant-" + slug, PLANT_WORDS)}</p>"
     };
 
+    /// <summary>The page behind HTTP Basic or Digest: no title, so a crawl that signed in finds <c>title-missing</c>.</summary>
+    internal SyntheticResponse SignedInDocument(string path) => Html(Render(new PageSpec
+    {
+        Path = path,
+        Title = null,
+        Description = "A page behind a sign-in, part of the Synthetic Store crawler tests.",
+        H1 = "Signed in",
+        Chrome = false,
+        Content = $"<p>{Text(path, PLANT_WORDS)}</p>"
+    }));
+
+    /// <summary>The sign-in form. A correct POST is handled by the server, which sets the session cookie.</summary>
+    internal SyntheticResponse SignInForm() => Html(Render(new PageSpec
+    {
+        Path = FORM_LOGIN_PATH,
+        Title = "Sign in | Synthetic Store planted page",
+        Description = "The sign-in form the crawler's form login fills in, part of the Synthetic Store crawler tests.",
+        H1 = "Sign in",
+        Chrome = false,
+        Content = "<form method=\"post\" action=\"" + FORM_LOGIN_PATH + "\">" +
+                  "<label>User name <input type=\"text\" name=\"username\"></label>" +
+                  "<label>Password <input type=\"password\" name=\"password\"></label>" +
+                  "<button type=\"submit\">Sign in</button></form>"
+    }));
+
     /// <summary>What the browser is served for <see cref="SyntheticSite.BROWSER_FALLBACK_PATH"/>: no title, and one link.</summary>
     internal SyntheticResponse BrowserFallbackDocument() => Html(Render(new PageSpec
     {

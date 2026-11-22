@@ -46,7 +46,7 @@ public sealed class FixLoopRecheckTests(RecheckSite site) : IClassFixture<Rechec
                 (int)plan["limit"]!, (bool)plan["capped"]!, (int)plan["notRechecked"]!));
         Assert.True((bool)plan["analysisFirst"]!);
         Assert.True(expected.Judged > 0);
-        Assert.Equal("""{"missingHeaders":[],"proxyCredentials":false}""", plan["secrets"]!.ToJsonString());
+        Assert.Equal("""{"missingHeaders":[],"proxyCredentials":false,"auth":false}""", plan["secrets"]!.ToJsonString());
         Assert.Null(plan["refused"]);
         Assert.False(plan.AsObject().ContainsKey("recheckId"));
 
@@ -189,7 +189,7 @@ public sealed class FixLoopRecheckTests(RecheckSite site) : IClassFixture<Rechec
         var ask = new JsonObject { ["urlIds"] = new JsonArray(home) };
 
         var plan = (await _sidecar.PostAsync($"api/crawls/{id}/rechecks/plan", ask)).Body!;
-        Assert.Equal("""{"missingHeaders":["X-Secret"],"proxyCredentials":false}""", plan["secrets"]!.ToJsonString());
+        Assert.Equal("""{"missingHeaders":["X-Secret"],"proxyCredentials":false,"auth":false}""", plan["secrets"]!.ToJsonString());
         Assert.Null(plan["refused"]);
         var needs = TestSidecar.AssertProblem(await _sidecar.PostAsync($"api/crawls/{id}/rechecks", ask.DeepClone()), HttpStatusCode.UnprocessableEntity, "needs-secrets");
         Assert.Equal("""["X-Secret"]""", needs["missingHeaders"]!.ToJsonString());

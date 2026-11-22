@@ -384,6 +384,12 @@ internal sealed class CrawlSession
         try
         {
             // Opening the writer has already marked the crawl running; a recheck's has handed out its first phase.
+            if (_options.FormLogin is { } login)
+            {
+                var cookies = await _renderer.SignInAsync(login, _stop.Token).ConfigureAwait(false);
+                _fetcher.AddCookies(cookies);
+            }
+
             if (_recheck is null)
             {
                 await SeedAsync(_stop.Token).ConfigureAwait(false);

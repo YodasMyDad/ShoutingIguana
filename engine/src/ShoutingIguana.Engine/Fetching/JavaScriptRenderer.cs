@@ -33,6 +33,7 @@ internal sealed partial class JavaScriptRenderer(
 
     private readonly bool _startsOnHttps = options.StartUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
     private readonly SignatureBook _signatures = new(options.Signatures, timeProvider);
+    private readonly List<Cookie> _jar = SeedJar(options);
     private readonly SemaphoreSlim _slots = new(RENDER_SLOTS, RENDER_SLOTS);
     private readonly SemaphoreSlim _launch = new(1, 1);
 
@@ -64,15 +65,7 @@ internal sealed partial class JavaScriptRenderer(
             }
 
             var started = Stopwatch.StartNew();
-            context = await browser.NewContextAsync(new BrowserNewContextOptions
-            {
-                UserAgent = userAgent.Header,
-                IgnoreHTTPSErrors = options.TrustedCertificate is not null,
-                ExtraHTTPHeaders = new Dictionary<string, string> { ["Accept-Language"] = options.AcceptLanguage },
-                JavaScriptEnabled = true
-            }).ConfigureAwait(false);
-            context.SetDefaultTimeout(options.RequestTimeoutSeconds * 1000f);
-            await context.RouteAsync("**/*", RouteAsync).ConfigureAwait(false);
+            context = await OpenContextAsync(browser).ConfigureAwait(false);
 
             var page = await context.NewPageAsync().ConfigureAwait(false);
             using var _ = cancellationToken.Register(() => page.CloseAsync());
@@ -152,6 +145,164 @@ internal sealed partial class JavaScriptRenderer(
             _launch.Dispose();
             _slots.Dispose();
         }
+    }
+
+    /// <summary>
+    /// Signs in on <paramref name="login"/> and returns the cookies the page set. Those cookies are also kept for
+    /// later browser fetches. Throws when the browser can't run, or the sign-in doesn't get past the form: a crawl
+    /// that was told to sign in must not go on and audit the signed-out site.
+    /// </summary>
+    public async Task<IReadOnlyList<SentCookie>> SignInAsync(FormLogin login, CancellationToken cancellationToken)
+    {
+        var browser = await BrowserAsync().ConfigureAwait(false);
+        if (browser is null)
+        {
+            throw new InvalidOperationException("Sign-in needs the browser, and it couldn't start, so the crawl did not run.");
+        }
+
+        if (!Uri.TryCreate(login.Url, UriKind.Absolute, out var uri))
+        {
+            throw new InvalidOperationException("The sign-in page is not an absolute http or https URL.");
+        }
+
+            IBrowserContext? context = null;
+            try
+            {
+                context = await OpenContextAsync(browser).ConfigureAwait(false);
+                var page = await context.NewPageAsync().ConfigureAwait(false);
+                using var _ = cancellationToken.Register(() => page.CloseAsync());
+                await page.GotoAsync(uri.AbsoluteUri, new PageGotoOptions
+                {
+                    WaitUntil = WaitUntilState.DOMContentLoaded,
+                    Timeout = options.RequestTimeoutSeconds * 1000f
+                }).ConfigureAwait(false);
+
+                var seen = (await context.CookiesAsync().ConfigureAwait(false))
+                    .Select(cookie => cookie.Name + "=" + cookie.Value)
+                    .ToHashSet(StringComparer.Ordinal);
+                var userField = login.UsernameField.Length == 0
+                    ? "input[type='email'], input[type='text'], input:not([type])"
+                    : login.UsernameField;
+                var passwordField = login.PasswordField.Length == 0 ? "input[type='password']" : login.PasswordField;
+                var submit = login.Submit.Length == 0 ? "button[type='submit'], input[type='submit']" : login.Submit;
+                await page.Locator(userField).First.FillAsync(login.Username).ConfigureAwait(false);
+                await page.Locator(passwordField).First.FillAsync(login.Password).ConfigureAwait(false);
+                await page.Locator(submit).First.ClickAsync().ConfigureAwait(false);
+                try
+                {
+                    await page.WaitForLoadStateAsync(LoadState.DOMContentLoaded, new PageWaitForLoadStateOptions
+                    {
+                        Timeout = options.RequestTimeoutSeconds * 1000f
+                    }).ConfigureAwait(false);
+                }
+                catch (TimeoutException)
+                {
+                }
+
+                List<SentCookie> cookies = [];
+                foreach (var cookie in await context.CookiesAsync().ConfigureAwait(false))
+                {
+                    if (!seen.Contains(cookie.Name + "=" + cookie.Value))
+                    {
+                        cookies.Add(new SentCookie
+                        {
+                            Name = cookie.Name,
+                            Value = cookie.Value,
+                            Domain = cookie.Domain,
+                            Path = cookie.Path,
+                            Secure = cookie.Secure
+                        });
+                    }
+                }
+
+                if (cookies.Count == 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Sign-in didn't get past {uri.AbsoluteUri}. The user name or password was refused, or the form isn't the one this crawl was told about.");
+                }
+
+                Remember(cookies);
+                return cookies;
+            }
+        catch (Exception ex) when (ex is not OperationCanceledException and not InvalidOperationException)
+        {
+            throw new InvalidOperationException($"Sign-in didn't get past {uri.AbsoluteUri}. {ex.Message}", ex);
+        }
+        finally
+        {
+            if (context is not null)
+            {
+                await context.CloseAsync().ConfigureAwait(false);
+            }
+        }
+    }
+
+    /// <summary>Cookies a sign-in set, sent with later browser fetches. Called once, before those fetches.</summary>
+    public void Remember(IReadOnlyList<SentCookie> cookies)
+    {
+        foreach (var cookie in cookies)
+        {
+            if (cookie.Name.Length == 0 || cookie.Value.Length == 0)
+            {
+                continue;
+            }
+
+            _jar.Add(new Cookie
+            {
+                Name = cookie.Name,
+                Value = cookie.Value,
+                Domain = cookie.Domain,
+                Path = cookie.Path.Length == 0 ? "/" : cookie.Path,
+                Secure = cookie.Secure
+            });
+        }
+    }
+
+    private async Task<IBrowserContext> OpenContextAsync(IBrowser browser)
+    {
+        var context = await browser.NewContextAsync(new BrowserNewContextOptions
+        {
+            UserAgent = userAgent.Header,
+            IgnoreHTTPSErrors = options.TrustedCertificate is not null,
+            ExtraHTTPHeaders = new Dictionary<string, string> { ["Accept-Language"] = options.AcceptLanguage },
+            JavaScriptEnabled = true
+        }).ConfigureAwait(false);
+        context.SetDefaultTimeout(options.RequestTimeoutSeconds * 1000f);
+        await context.RouteAsync("**/*", RouteAsync).ConfigureAwait(false);
+        if (_jar.Count > 0)
+        {
+            await context.AddCookiesAsync(_jar).ConfigureAwait(false);
+        }
+
+        return context;
+    }
+
+    private static List<Cookie> SeedJar(CrawlOptions options)
+    {
+        List<Cookie> jar = [];
+        if (!Uri.TryCreate(options.StartUrl, UriKind.Absolute, out var start))
+        {
+            return jar;
+        }
+
+        foreach (var cookie in options.Cookies)
+        {
+            if (cookie.Name.Length == 0 || cookie.Value.Length == 0)
+            {
+                continue;
+            }
+
+            jar.Add(new Cookie
+            {
+                Name = cookie.Name,
+                Value = cookie.Value,
+                Domain = cookie.Domain.Length == 0 ? start.Host : cookie.Domain,
+                Path = cookie.Path.Length == 0 ? "/" : cookie.Path,
+                Secure = cookie.Secure
+            });
+        }
+
+        return jar;
     }
 
     private async Task<IBrowser?> BrowserAsync()

@@ -29,6 +29,7 @@ internal sealed class HttpFetcher : IDisposable
     private const string ACCEPT = "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8";
 
     private readonly HttpClient _client;
+    private readonly CookieContainer _cookies = new();
     private long _requests;
     private readonly CrawlOptions _options;
     private readonly CrawlScope _scope;
@@ -59,7 +60,9 @@ internal sealed class HttpFetcher : IDisposable
             AllowAutoRedirect = false,
             AutomaticDecompression = DecompressionMethods.None,
             UseCookies = options.UseCookies,
-            CookieContainer = new CookieContainer(),
+            CookieContainer = _cookies,
+            Credentials = SiteCredentials.Cache(options),
+            PreAuthenticate = true,
             ConnectTimeout = TimeSpan.FromSeconds(Math.Min(10, options.RequestTimeoutSeconds)),
             PooledConnectionLifetime = TimeSpan.FromMinutes(5),
             PooledConnectionIdleTimeout = TimeSpan.FromMinutes(1),
@@ -82,6 +85,19 @@ internal sealed class HttpFetcher : IDisposable
         }
 
         _client = new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
+        if (options.UseCookies && Uri.TryCreate(options.StartUrl, UriKind.Absolute, out var cookieStart))
+        {
+            SiteCredentials.Add(_cookies, cookieStart, options.Cookies);
+        }
+    }
+
+    /// <summary>Cookies a sign-in just set, sent on the requests that follow. Called once, before the crawl fetches.</summary>
+    internal void AddCookies(IReadOnlyList<SentCookie> cookies)
+    {
+        if (_options.UseCookies && Uri.TryCreate(_options.StartUrl, UriKind.Absolute, out var start))
+        {
+            SiteCredentials.Add(_cookies, start, cookies);
+        }
     }
 
     /// <summary>What keeps a crawl of a public site off private network addresses.</summary>

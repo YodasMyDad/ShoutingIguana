@@ -210,6 +210,7 @@ public sealed class SyntheticSiteServer : IAsyncDisposable
                 : store is not null && path == SyntheticShopify.AWAY_PATH
                     ? SyntheticShopifyStore.Away(sitePort)
                     : site.Handle(path, external: false, plainHttp: !context.Request.IsHttps));
+            response = await AuthPageAsync(site, context.Request, path, response).ConfigureAwait(false);
             response = BrowserPage(site, context.Request, path, response);
             await ServeAsync(context, store?.Dress(response, path, sitePort) ?? response).ConfigureAwait(false);
         }
@@ -241,6 +242,119 @@ public sealed class SyntheticSiteServer : IAsyncDisposable
 
         holder.Current = holder.Current.AtRevision(number);
         return StatusCodes.Status204NoContent;
+    }
+
+    /// <summary>
+    /// The auth plants. They are not linked from the site, so a crawl that doesn't start on one never asks. HTTP Basic
+    /// and Digest answer 401 until the password is right. The cookie gate answers 403 until the session cookie is sent.
+    /// The form sets that cookie on a correct POST and redirects to the member page, which is 403 without it.
+    /// </summary>
+    private static async Task<SyntheticResponse> AuthPageAsync(SyntheticSite site, HttpRequest request, string path, SyntheticResponse response)
+    {
+        if (path == SyntheticSite.HTTP_AUTH_PATH)
+        {
+            return BasicOk(request) ? site.SignedInDocument(path) : Challenge("Basic realm=\"Synthetic\"");
+        }
+
+        if (path == SyntheticSite.DIGEST_AUTH_PATH)
+        {
+            return DigestOk(request, path)
+                ? site.SignedInDocument(path)
+                : Challenge("Digest realm=\"Synthetic\", nonce=\"planted\", algorithm=MD5, qop=\"auth\"");
+        }
+
+        if (path == SyntheticSite.COOKIE_GATE_PATH || path == SyntheticSite.FORM_MEMBER_PATH)
+        {
+            return HasSession(request) ? site.SignedInDocument(path) : Locked();
+        }
+
+        if (path == SyntheticSite.FORM_LOGIN_PATH)
+        {
+            if (HttpMethods.IsPost(request.Method))
+            {
+                var form = await request.ReadFormAsync().ConfigureAwait(false);
+                if (form["username"] == SyntheticSite.AUTH_USER && form["password"] == SyntheticSite.AUTH_PASSWORD)
+                {
+                    return new SyntheticResponse(302, "text/html", null, null, SyntheticSite.FORM_MEMBER_PATH,
+                        new Dictionary<string, string> { ["Set-Cookie"] = SyntheticSite.AUTH_COOKIE + "; Path=/" });
+                }
+            }
+
+            return site.SignInForm();
+        }
+
+        return response;
+    }
+
+    private static SyntheticResponse Challenge(string authenticate) =>
+        new(401, "text/html", "<html><head><title>Sign in</title></head><body><p>Sign in.</p></body></html>", null, null,
+            new Dictionary<string, string> { ["WWW-Authenticate"] = authenticate });
+
+    private static SyntheticResponse Locked() =>
+        new(403, "text/html", "<html><head><title>Members</title></head><body><p>Sign in first.</p></body></html>", null, null);
+
+    private static bool HasSession(HttpRequest request) =>
+        request.Headers.Cookie.ToString().Contains(SyntheticSite.AUTH_COOKIE, StringComparison.Ordinal);
+
+    private static bool BasicOk(HttpRequest request)
+    {
+        var header = request.Headers.Authorization.ToString();
+        if (!header.StartsWith("Basic ", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        try
+        {
+            var text = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(header["Basic ".Length..].Trim()));
+            return text == SyntheticSite.AUTH_USER + ":" + SyntheticSite.AUTH_PASSWORD;
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+    }
+
+    private static bool DigestOk(HttpRequest request, string path)
+    {
+        var header = request.Headers.Authorization.ToString();
+        if (!header.StartsWith("Digest ", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var fields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var part in header["Digest ".Length..].Split(','))
+        {
+            var eq = part.IndexOf('=');
+            if (eq <= 0)
+            {
+                continue;
+            }
+
+            fields[part[..eq].Trim()] = part[(eq + 1)..].Trim().Trim('"');
+        }
+
+        if (fields.GetValueOrDefault("username") != SyntheticSite.AUTH_USER ||
+            !fields.TryGetValue("response", out var given) ||
+            !fields.TryGetValue("nonce", out var nonce))
+        {
+            return false;
+        }
+
+        var uri = fields.GetValueOrDefault("uri") ?? path;
+        var ha1 = Md5($"{SyntheticSite.AUTH_USER}:Synthetic:{SyntheticSite.AUTH_PASSWORD}");
+        var ha2 = Md5($"{request.Method}:{uri}");
+        var expected = fields.TryGetValue("qop", out var qop) && qop.Length > 0
+            ? Md5($"{ha1}:{nonce}:{fields.GetValueOrDefault("nc")}:{fields.GetValueOrDefault("cnonce")}:{qop}:{ha2}")
+            : Md5($"{ha1}:{nonce}:{ha2}");
+        return string.Equals(expected, given, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string Md5(string text)
+    {
+        var hash = System.Security.Cryptography.MD5.HashData(System.Text.Encoding.ASCII.GetBytes(text));
+        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
     /// <summary>

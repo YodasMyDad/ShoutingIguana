@@ -40,18 +40,7 @@ internal sealed partial class JavaScriptRenderer
                     return null;
                 }
 
-                if (session.Context is null)
-                {
-                    session.Context = await browser.NewContextAsync(new BrowserNewContextOptions
-                    {
-                        UserAgent = userAgent.Header,
-                        IgnoreHTTPSErrors = options.TrustedCertificate is not null,
-                        ExtraHTTPHeaders = new Dictionary<string, string> { ["Accept-Language"] = options.AcceptLanguage },
-                        JavaScriptEnabled = true
-                    }).ConfigureAwait(false);
-                    session.Context.SetDefaultTimeout(options.RequestTimeoutSeconds * 1000f);
-                    await session.Context.RouteAsync("**/*", RouteAsync).ConfigureAwait(false);
-                }
+                session.Context ??= await OpenContextAsync(browser).ConfigureAwait(false);
 
                 var started = Stopwatch.StartNew();
                 page = await session.Context.NewPageAsync().ConfigureAwait(false);

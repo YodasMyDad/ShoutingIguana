@@ -20,7 +20,7 @@ public sealed record CrawlOptions
     private const string TOKEN_PUNCTUATION = "!#$%&'*+-.^_`|~";
 
     /// <summary>Crawl files keep URLs as they are given, and people share them, so credentials go in a header, whose value isn't kept.</summary>
-    private const string CREDENTIALS_ADVICE = "They would be stored in the crawl file: send credentials in an Authorization header instead.";
+    private const string CREDENTIALS_ADVICE = "They would be stored in the crawl file: use a sign-in (--auth, or a sign-in page), or send credentials in an Authorization header.";
 
     /// <summary>Request headers the HTTP client manages itself. Overriding one would break or reroute every request.</summary>
     private static readonly HashSet<string> CLIENT_HEADERS = new(StringComparer.OrdinalIgnoreCase)
@@ -79,6 +79,24 @@ public sealed record CrawlOptions
     public IReadOnlyList<string> ExtraSitemaps { get; init; } = [];
     public bool StoreHtml { get; init; }
     public bool UseCookies { get; init; } = true;
+
+    /// <summary>
+    /// HTTP Basic and Digest logins, sent only to the host each one names. Empty signs in no host. A crawl file keeps
+    /// the user names and not the passwords. A crawl file from before this reads as none: the property is absent.
+    /// </summary>
+    public IReadOnlyList<SiteLogin> HttpLogins { get; init; } = [];
+
+    /// <summary>
+    /// Cookies sent from the first request, for a session the crawl did not start. Empty sends only what the site sets
+    /// while crawling, when <see cref="UseCookies"/> is on. A crawl file keeps the names and not the values.
+    /// </summary>
+    public IReadOnlyList<SentCookie> Cookies { get; init; } = [];
+
+    /// <summary>
+    /// Signs in through a page in the browser before the first fetch, and sends the cookies that page sets. Null does
+    /// not. A crawl file keeps the address and not the password. A crawl file from before this reads as null.
+    /// </summary>
+    public FormLogin? FormLogin { get; init; }
 
     /// <summary>
     /// When a page is rendered in a browser and that HTML is parsed. A new crawl renders a client-rendered shell.
@@ -141,6 +159,9 @@ public sealed record CrawlOptions
     {
         ExtraHeaders = ExtraHeaders.ToDictionary(header => header.Key, _ => string.Empty, StringComparer.OrdinalIgnoreCase),
         Signatures = new Dictionary<string, CrawlSignature>(),
+        HttpLogins = HttpLogins.Select(login => login with { Password = "" }).ToList(),
+        Cookies = Cookies.Select(cookie => cookie with { Value = "" }).ToList(),
+        FormLogin = FormLogin is null ? null : FormLogin with { Password = "" },
         ProxyUrl = ProxyUrl is not null && Uri.TryCreate(ProxyUrl, UriKind.Absolute, out var proxy) && proxy.UserInfo.Length > 0
             ? new UriBuilder(proxy) { UserName = REDACTED, Password = string.Empty }.Uri.AbsoluteUri
             : ProxyUrl
@@ -148,6 +169,12 @@ public sealed record CrawlOptions
 
     /// <summary>True when the proxy's credentials were removed by <see cref="WithoutSecrets"/>.</summary>
     public bool HasRedactedProxyCredentials => ProxyUrl is not null && IsRedactedProxy(ProxyUrl);
+
+    /// <summary>True when a sign-in, a cookie or a form login was stored without the secret a crawl file doesn't keep.</summary>
+    public bool HasRedactedAuth =>
+        HttpLogins.Any(login => login.Username.Length > 0 && login.Password.Length == 0) ||
+        Cookies.Any(cookie => cookie.Name.Length > 0 && cookie.Value.Length == 0) ||
+        FormLogin is { Url.Length: > 0, Password: "" };
 
     /// <summary>
     /// Applies what may change when this stored crawl is resumed. The changes can't touch anything else: a resumed crawl
@@ -173,13 +200,17 @@ public sealed record CrawlOptions
             RequestTimeoutSeconds = changes.RequestTimeoutSeconds ?? RequestTimeoutSeconds,
             ExtraHeaders = headers,
             Signatures = changes.Signatures.Count > 0 ? changes.Signatures : Signatures,
-            ProxyUrl = proxyUrl ?? ProxyUrl
+            ProxyUrl = proxyUrl ?? ProxyUrl,
+            HttpLogins = changes.HttpLogins.Count > 0 ? changes.HttpLogins : HttpLogins,
+            Cookies = changes.Cookies.Count > 0 ? changes.Cookies : Cookies,
+            FormLogin = changes.FormLogin is { Url.Length: > 0 } ? changes.FormLogin : FormLogin
         };
 
         return new ResumePlan(
             options,
             [.. ExtraHeaders.Keys.Where(name => !headers.ContainsKey(name))],
-            proxyUrl is null && HasRedactedProxyCredentials);
+            proxyUrl is null && HasRedactedProxyCredentials,
+            HasRedactedAuth && options.HasRedactedAuth);
     }
 
     /// <summary>Every problem with these options, one sentence each, in the order <see cref="ValidateFields"/> gives them.</summary>
@@ -285,6 +316,11 @@ public sealed record CrawlOptions
         foreach (var problem in SignatureProblems())
         {
             yield return (Field(nameof(Signatures)), problem);
+        }
+
+        foreach (var problem in AuthProblems())
+        {
+            yield return problem;
         }
 
         foreach (var sitemap in ExtraSitemaps)
@@ -441,6 +477,92 @@ public sealed record CrawlOptions
     /// Each crawler signature must be for a host, one per host, in the form Shopify gives, and not expired: an expired one
     /// is refused rather than sent, since Shopify would only refuse the crawler. No problem repeats a value.
     /// </summary>
+    private IEnumerable<(string Field, string Message)> AuthProblems()
+    {
+        if (HttpLogins.Count > 20)
+        {
+            yield return (Field(nameof(HttpLogins)), "A crawl can sign in to at most 20 hosts.");
+        }
+
+        if (Cookies.Count > 50)
+        {
+            yield return (Field(nameof(Cookies)), "A crawl can be given at most 50 cookies.");
+        }
+
+        var hosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var login in HttpLogins)
+        {
+            if (login.Username.Length == 0 || login.Password.Length == 0)
+            {
+                yield return (Field(nameof(HttpLogins)), "A sign-in needs a user name and a password.");
+            }
+            else if (!IsFieldValue(login.Username) || !IsFieldValue(login.Password))
+            {
+                yield return (Field(nameof(HttpLogins)), "A sign-in's user name and password must be printable ASCII on one line.");
+            }
+
+            if (login.Host.Length > 0 && (login.Host.Contains('/') || login.Host.Contains(':') || !IsFieldValue(login.Host)))
+            {
+                yield return (Field(nameof(HttpLogins)), $"'{login.Host}' is not a host. Leave it empty to sign in to the site being crawled.");
+            }
+            else if (!hosts.Add(login.Host.Length == 0 ? "" : login.Host))
+            {
+                yield return (Field(nameof(HttpLogins)), "Two sign-ins are for the same host: keep one.");
+            }
+        }
+
+        if (Cookies.Count > 0 && !UseCookies)
+        {
+            yield return (Field(nameof(Cookies)), "Cookies to send need Keep cookies on, or they are never sent.");
+        }
+
+        foreach (var cookie in Cookies)
+        {
+            if (cookie.Name.Length == 0 || cookie.Value.Length == 0)
+            {
+                yield return (Field(nameof(Cookies)), "A cookie needs a name and a value.");
+            }
+            else if (!IsToken(cookie.Name) || !IsFieldValue(cookie.Value))
+            {
+                yield return (Field(nameof(Cookies)), $"Cookie '{cookie.Name}' is not valid.");
+            }
+
+            if (cookie.Domain.Length > 0 && (cookie.Domain.Contains('/') || !IsFieldValue(cookie.Domain)))
+            {
+                yield return (Field(nameof(Cookies)), $"'{cookie.Domain}' is not a cookie domain.");
+            }
+        }
+
+        if (FormLogin is { } form)
+        {
+            if (!UrlNormalizer.TryNormalize(form.Url, out _))
+            {
+                yield return (Field(nameof(FormLogin)), "The sign-in page must be an absolute http or https URL.");
+            }
+            else if (HasUserInfo(form.Url))
+            {
+                yield return (Field(nameof(FormLogin)), $"The sign-in page can't include a user name or password. {CREDENTIALS_ADVICE}");
+            }
+
+            if (form.Username.Length == 0 || form.Password.Length == 0)
+            {
+                yield return (Field(nameof(FormLogin)), "The sign-in page needs a user name and a password.");
+            }
+            else if (!IsFieldValue(form.Username) || !IsFieldValue(form.Password))
+            {
+                yield return (Field(nameof(FormLogin)), "The sign-in page's user name and password must be printable ASCII on one line.");
+            }
+
+            foreach (var selector in new[] { form.UsernameField, form.PasswordField, form.Submit })
+            {
+                if (selector.Length > 0 && (selector.Length > 500 || !IsFieldValue(selector)))
+                {
+                    yield return (Field(nameof(FormLogin)), "A sign-in field must be a short CSS selector on one line.");
+                }
+            }
+        }
+    }
+
     private IEnumerable<string> SignatureProblems()
     {
         HashSet<string> hosts = new(StringComparer.Ordinal);

@@ -29,7 +29,7 @@ async function startedOptions(page: Page): Promise<CrawlOptions> {
 
 test('the engine’s own defaults are the ones the app keeps a copy of', async () => {
   const { options } = await read<{ options: CrawlOptions }>('/api/crawl-options/defaults');
-  const { startUrl: _startUrl, hasRedactedProxyCredentials: _redacted, ...engine } = options;
+  const { startUrl: _startUrl, hasRedactedProxyCredentials: _redacted, hasRedactedAuth: _auth, ...engine } = options;
   expect(engine).toEqual(ENGINE_DEFAULTS);
 });
 

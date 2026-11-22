@@ -8,7 +8,10 @@ import type {
   CrawlOptions,
   ExtractionRule,
   ExtractionSelector,
+  FormLogin,
   JavaScriptRendering,
+  SentCookie,
+  SiteLogin,
   SpeedPreset,
   UserAgentPreset,
 } from '../../api/types';
@@ -69,6 +72,17 @@ export interface CrawlForm {
   listUrls: string;
   /** When a host blocks plain HTTP, read that host's pages in a browser. Not JavaScript rendering. */
   browserFallback: boolean;
+  /** HTTP Basic and Digest. An empty host means the site being crawled. A blank row is not sent. */
+  httpLogins: LoginRow[];
+  /** Cookies sent from the first request. A row with no name is not sent. */
+  cookies: CookieRow[];
+  /** The sign-in page. Empty means no form sign-in. */
+  formUrl: string;
+  formUsername: string;
+  formPassword: string;
+  formUsernameField: string;
+  formPasswordField: string;
+  formSubmit: string;
   /** With its user name and password when it has them: a secret, as header values are. */
   proxyUrl: string;
   /** Shopify crawler access: one signature, for one domain. A secret, as the proxy's password is. */
@@ -78,6 +92,21 @@ export interface CrawlForm {
 }
 
 export type CrawlFormField = keyof CrawlForm;
+
+/** One HTTP login on the form. */
+export interface LoginRow {
+  host: string;
+  username: string;
+  password: string;
+}
+
+/** One cookie on the form. `key` is only for React. */
+export interface CookieRow {
+  key: number;
+  name: string;
+  value: string;
+  domain: string;
+}
 
 /** A rule on the form: `key` is only for React, and is not sent. */
 export interface ExtractionRuleRow {
@@ -160,6 +189,18 @@ export function formFromOptions(options: CrawlOptions, startUrl = ''): CrawlForm
     extractionRules: (options.extractionRules ?? []).map((rule) => extractionRow(rule)),
     listUrls: (options.listUrls ?? []).join('\n'),
     browserFallback: options.browserFallback ?? defaults.browserFallback,
+    httpLogins: (options.httpLogins ?? []).map((login) => ({
+      host: login.host,
+      username: login.username,
+      password: login.password,
+    })),
+    cookies: (options.cookies ?? []).map((cookie) => cookieRow(cookie.name, cookie.value, cookie.domain)),
+    formUrl: options.formLogin?.url ?? '',
+    formUsername: options.formLogin?.username ?? '',
+    formPassword: options.formLogin?.password ?? '',
+    formUsernameField: options.formLogin?.usernameField ?? '',
+    formPasswordField: options.formLogin?.passwordField ?? '',
+    formSubmit: options.formLogin?.submit ?? '',
     proxyUrl: options.hasRedactedProxyCredentials ? '' : proxy,
     signatures: signatureFormOf(options.signatures, startUrl || (options.startUrl ?? '')),
     requestTimeoutSeconds: numberText(options.requestTimeoutSeconds, defaults.requestTimeoutSeconds),
@@ -269,10 +310,59 @@ export function optionsFromForm(form: CrawlForm, { secrets = true }: { secrets?:
     extractionRules: filledRules(form.extractionRules),
     listUrls: list.error ? lines(form.listUrls) : list.urls,
     browserFallback: form.browserFallback,
+    httpLogins: httpLoginsOf(form, secrets),
+    cookies: cookiesOf(form, secrets),
+    formLogin: formLoginOf(form, secrets),
     proxyUrl: form.proxyUrl.trim() === '' ? null : secrets ? form.proxyUrl.trim() : withoutCredentials(form.proxyUrl),
     signatures: secrets ? signaturesOf(form.signatures, withScheme(form.startUrl)) : {},
     requestTimeoutSeconds: typed(form.requestTimeoutSeconds),
     maxRetries: typed(form.maxRetries),
+  };
+}
+
+let nextCookieKey = 1;
+
+/** A cookie row. */
+export function cookieRow(name = '', value = '', domain = ''): CookieRow {
+  return { key: nextCookieKey++, name, value, domain };
+}
+
+/** HTTP logins the crawl is given. A sign-in page with no password of its own uses the first of these, and that login is not also sent as HTTP. */
+function httpLoginsOf(form: CrawlForm, secrets: boolean): SiteLogin[] {
+  if (form.formUrl.trim() !== '' && form.formPassword === '') return [];
+  return form.httpLogins
+    .filter((row) => row.username.trim() !== '' || row.password !== '')
+    .map((row) => ({ host: row.host.trim(), username: row.username.trim(), password: secrets ? row.password : '' }));
+}
+
+/** Cookies the crawl is given. A row still without a name is left out. */
+function cookiesOf(form: CrawlForm, secrets: boolean): SentCookie[] {
+  return form.cookies
+    .filter((row) => row.name.trim() !== '')
+    .map((row) => ({
+      name: row.name.trim(),
+      value: secrets ? row.value : '',
+      domain: row.domain.trim(),
+      path: '',
+      secure: false,
+    }));
+}
+
+/** The sign-in page, or null when none was given. Its password falls back to the HTTP login's when it has none of its own. */
+function formLoginOf(form: CrawlForm, secrets: boolean): FormLogin | null {
+  const url = form.formUrl.trim();
+  if (url === '') return null;
+  const typedUser = form.formUsername.trim();
+  const username = typedUser !== '' ? typedUser : (form.httpLogins[0]?.username.trim() ?? '');
+  const typedPassword = form.formPassword;
+  const password = typedPassword !== '' ? typedPassword : (form.httpLogins[0]?.password ?? '');
+  return {
+    url,
+    username,
+    password: secrets ? password : '',
+    usernameField: form.formUsernameField.trim(),
+    passwordField: form.formPasswordField.trim(),
+    submit: form.formSubmit.trim(),
   };
 }
 
@@ -290,12 +380,17 @@ export function withoutCredentials(proxyUrl: string): string {
 
 /** Whether a proxy address carries a user name or password. */
 /** The form holds a secret: a proxy with a user name or password, a header with a value, or a Shopify signature. */
-export function formHasSecrets(form: Pick<CrawlForm, 'proxyUrl' | 'headers' | 'signatures'>): boolean {
+export function formHasSecrets(
+  form: Pick<CrawlForm, 'proxyUrl' | 'headers' | 'signatures' | 'httpLogins' | 'cookies' | 'formPassword'>,
+): boolean {
   return (
     hasCredentials(form.proxyUrl) ||
     form.headers.some((row) => row.value !== '') ||
     form.signatures.signatureInput.trim() !== '' ||
-    form.signatures.signature.trim() !== ''
+    form.signatures.signature.trim() !== '' ||
+    form.httpLogins.some((row) => row.password !== '') ||
+    form.cookies.some((row) => row.value !== '') ||
+    form.formPassword !== ''
   );
 }
 
@@ -306,7 +401,10 @@ export function formHasSecrets(form: Pick<CrawlForm, 'proxyUrl' | 'headers' | 's
 export function missingSecrets(options: CrawlOptions): boolean {
   return (
     options.hasRedactedProxyCredentials === true ||
-    Object.values(options.extraHeaders ?? {}).some((value) => value === '')
+    Object.values(options.extraHeaders ?? {}).some((value) => value === '') ||
+    (options.httpLogins ?? []).some((login) => login.username !== '' && login.password === '') ||
+    (options.cookies ?? []).some((cookie) => cookie.name !== '' && cookie.value === '') ||
+    (options.formLogin != null && options.formLogin.url !== '' && options.formLogin.password === '')
   );
 }
 
@@ -348,7 +446,17 @@ export function withSpeed(form: CrawlForm, preset: SpeedPreset): CrawlForm {
 
 /** The form's sections, in order: where each setting lives in Advanced. */
 export type FormSection =
-  'start' | 'scope' | 'list' | 'rendering' | 'extraction' | 'limits' | 'robots' | 'network' | 'shopify' | 'advanced';
+  | 'start'
+  | 'scope'
+  | 'list'
+  | 'rendering'
+  | 'extraction'
+  | 'limits'
+  | 'robots'
+  | 'network'
+  | 'auth'
+  | 'shopify'
+  | 'advanced';
 
 export const SECTION_TITLES: Record<FormSection, string> = {
   start: 'Start',
@@ -359,6 +467,7 @@ export const SECTION_TITLES: Record<FormSection, string> = {
   limits: 'Limits',
   robots: 'Robots and sitemaps',
   network: 'Headers and network',
+  auth: 'Sign in',
   shopify: 'Shopify crawler access',
   advanced: 'Advanced',
 };
@@ -379,6 +488,14 @@ export const FIELD_SECTIONS: Record<CrawlFormField, FormSection> = {
   extractionRules: 'extraction',
   listUrls: 'list',
   browserFallback: 'rendering',
+  httpLogins: 'auth',
+  cookies: 'auth',
+  formUrl: 'auth',
+  formUsername: 'auth',
+  formPassword: 'auth',
+  formUsernameField: 'auth',
+  formPasswordField: 'auth',
+  formSubmit: 'auth',
   maxUrls: 'limits',
   maxDepth: 'limits',
   maxHtmlMb: 'limits',
@@ -419,6 +536,8 @@ export const SIMPLE_FIELDS: ReadonlySet<CrawlFormField> = new Set<CrawlFormField
   'extractionRules',
   'listUrls',
   'browserFallback',
+  'httpLogins',
+  'formUrl',
 ]);
 
 /** Which of the form's settings differ from these defaults: by field, with the start URL left out. */
@@ -426,6 +545,8 @@ export function changedFields(form: CrawlForm, defaults: CrawlForm): CrawlFormFi
   return (Object.keys(FIELD_SECTIONS) as CrawlFormField[]).filter((field) => {
     if (field === 'startUrl') return false;
     if (field === 'headers') return Object.keys(headersOf(form.headers, false)).length > 0;
+    if (field === 'httpLogins') return form.httpLogins.some((row) => row.username.trim() !== '' || row.password !== '');
+    if (field === 'cookies') return form.cookies.some((row) => row.name.trim() !== '' || row.value !== '');
     if (field === 'signatures') return Object.keys(signaturesOf(form.signatures, withScheme(form.startUrl))).length > 0;
     if (field === 'extractionRules') return !sameExtractionRules(form.extractionRules, defaults.extractionRules);
     if (field === 'customUserAgent') return form.userAgent === 'custom' && form[field] !== defaults[field];
@@ -464,6 +585,10 @@ export function fieldOfError(name: string): CrawlFormField | null {
       return 'maxHtmlMb';
     case 'extraHeaders':
       return 'headers';
+    case 'httpLogins':
+      return 'httpLogins';
+    case 'formLogin':
+      return 'formUrl';
     default:
       return Object.hasOwn(FIELD_SECTIONS, name) ? (name as CrawlFormField) : null;
   }

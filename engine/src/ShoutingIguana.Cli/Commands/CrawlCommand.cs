@@ -50,6 +50,14 @@ internal static class CrawlCommand
         {
             Description = "When a host blocks the plain HTTP fetch, read that host's pages in a headless browser instead. Not JavaScript rendering."
         };
+        var auth = new Option<string[]>("--auth") { Description = "HTTP Basic and Digest sign-in: user:password for the site, or host=user:password. Repeatable. Not stored in the crawl file." };
+        var cookie = new Option<string[]>("--cookie") { Description = "A cookie to send from the start: name=value, or name=value@domain. Repeatable. Not stored in the crawl file." };
+        var formUrl = new Option<string?>("--form-url") { Description = "Sign in on this page in the browser before the crawl, and send the cookies it sets." };
+        var formUser = new Option<string?>("--form-user") { Description = "The user name for --form-url." };
+        var formPassword = new Option<string?>("--form-password") { Description = "The password for --form-url. Not stored in the crawl file." };
+        var formUserField = new Option<string?>("--form-user-field") { Description = "CSS selector for the user name field. Empty uses the first email or text field." };
+        var formPasswordField = new Option<string?>("--form-password-field") { Description = "CSS selector for the password field. Empty uses the first password field." };
+        var formSubmit = new Option<string?>("--form-submit") { Description = "CSS selector for the submit control. Empty uses the form's submit button." };
         var noAnalyze = new Option<bool>("--no-analyze") { Description = "Skip the SEO checks when the crawl completes." };
         var quiet = new Option<bool>("--quiet", "-q") { Description = "No progress line." };
         var verbose = new Option<bool>("--verbose", "-v") { Description = "Detailed engine logging." };
@@ -59,6 +67,7 @@ internal static class CrawlCommand
             url, database, resume, maxUrls, maxDepth, concurrency, rate, userAgent, userAgentString, headers, proxy, signatureFiles, timeout,
             ignoreRobots, crawlDelay, noResources, noExternal, noSitemaps, subdomains, anyFolder, followNofollow, storeHtml,
             render, renderUrls, include, exclude, extract, list, browserFallback,
+            auth, cookie, formUrl, formUser, formPassword, formUserField, formPasswordField, formSubmit,
             noAnalyze, quiet, verbose
         };
 
@@ -97,7 +106,24 @@ internal static class CrawlCommand
                 if (unchangeable.Count > 0)
                 {
                     return Fail($"{string.Join(", ", unchangeable)} can't change when resuming: a crawl keeps the settings it started with. " +
-                                "When resuming you can change --concurrency, --rate, --timeout, --header, --proxy and --signature-file.");
+                                "When resuming you can change --concurrency, --rate, --timeout, --header, --proxy, --signature-file, --auth, --cookie and --form-url.");
+                }
+
+                if (!TryParseAuth(parse.GetValue(auth) ?? [], out var resumeLogins, out var resumeAuthError))
+                {
+                    return Fail(resumeAuthError);
+                }
+
+                if (!TryParseCookies(parse.GetValue(cookie) ?? [], out var resumeCookies, out var resumeCookieError))
+                {
+                    return Fail(resumeCookieError);
+                }
+
+                if (!TryParseForm(parse.GetValue(formUrl), parse.GetValue(formUser), parse.GetValue(formPassword),
+                        parse.GetValue(formUserField), parse.GetValue(formPasswordField), parse.GetValue(formSubmit),
+                        out var resumeForm, out var resumeFormError))
+                {
+                    return Fail(resumeFormError);
                 }
 
                 var plan = CrawlDatabase.ReadOptions(databasePath).PlanResume(new ResumeChanges
@@ -106,12 +132,20 @@ internal static class CrawlCommand
                     MaxRequestsPerSecond = parse.GetValue(rate),
                     RequestTimeoutSeconds = parse.GetValue(timeout),
                     ExtraHeaders = extraHeaders,
-                    ProxyUrl = parse.GetValue(proxy)
+                    ProxyUrl = parse.GetValue(proxy),
+                    HttpLogins = resumeLogins,
+                    Cookies = resumeCookies,
+                    FormLogin = resumeForm
                 });
 
                 if (plan.MissingProxyCredentials)
                 {
                     return Fail("This crawl used a proxy with a user name and password, which crawl files don't store. Pass --proxy again.");
+                }
+
+                if (plan.MissingAuth)
+                {
+                    return Fail("This crawl signed in, which crawl files don't store. Pass --auth, --cookie or --form-password again.");
                 }
 
                 // Header values aren't stored either: warn about any that weren't given again, rather than send them empty.
@@ -136,6 +170,23 @@ internal static class CrawlCommand
                 if (!ListUrlFile.TryRead(parse.GetValue(list) ?? [], out var listUrls, out var listError))
                 {
                     return Fail(listError);
+                }
+
+                if (!TryParseAuth(parse.GetValue(auth) ?? [], out var logins, out var authError))
+                {
+                    return Fail(authError);
+                }
+
+                if (!TryParseCookies(parse.GetValue(cookie) ?? [], out var cookies, out var cookieError))
+                {
+                    return Fail(cookieError);
+                }
+
+                if (!TryParseForm(parse.GetValue(formUrl), parse.GetValue(formUser), parse.GetValue(formPassword),
+                        parse.GetValue(formUserField), parse.GetValue(formPasswordField), parse.GetValue(formSubmit),
+                        out var form, out var formError))
+                {
+                    return Fail(formError);
                 }
 
                 var defaults = new CrawlOptions { StartUrl = startUrl };
@@ -166,7 +217,10 @@ internal static class CrawlCommand
                     ExcludePatterns = parse.GetValue(exclude) ?? [],
                     ExtractionRules = extractionRules,
                     ListUrls = listUrls,
-                    BrowserFallback = parse.GetValue(browserFallback)
+                    BrowserFallback = parse.GetValue(browserFallback),
+                    HttpLogins = logins,
+                    Cookies = cookies,
+                    FormLogin = form
                 };
                 databasePath ??= CrawlDatabase.DefaultDatabasePath(startUrl);
             }
@@ -254,6 +308,97 @@ internal static class CrawlCommand
 
         return true;
     }
+
+    internal static bool TryParseAuth(string[] values, out List<SiteLogin> logins, out string error)
+    {
+        logins = [];
+        error = string.Empty;
+        foreach (var value in values)
+        {
+            var host = "";
+            var body = value;
+            var split = value.IndexOf('=');
+            var colon = value.IndexOf(':');
+            if (split > 0 && (colon < 0 || split < colon))
+            {
+                host = value[..split].Trim();
+                body = value[(split + 1)..];
+            }
+
+            var userEnd = body.IndexOf(':');
+            if (userEnd <= 0)
+            {
+                error = $"Sign-in '{value}' must look like user:password or host=user:password.";
+                return false;
+            }
+
+            logins.Add(new SiteLogin { Host = host, Username = body[..userEnd], Password = body[(userEnd + 1)..] });
+        }
+
+        return true;
+    }
+
+    internal static bool TryParseCookies(string[] values, out List<SentCookie> cookies, out string error)
+    {
+        cookies = [];
+        error = string.Empty;
+        foreach (var value in values)
+        {
+            var domain = "";
+            var body = value;
+            var at = value.LastIndexOf('@');
+            var eq = value.IndexOf('=');
+            if (at > eq && eq > 0 && IsCookieDomain(value[(at + 1)..]))
+            {
+                domain = value[(at + 1)..].Trim();
+                body = value[..at];
+                eq = body.IndexOf('=');
+            }
+
+            if (eq <= 0)
+            {
+                error = $"Cookie '{value}' must look like name=value or name=value@domain.";
+                return false;
+            }
+
+            cookies.Add(new SentCookie { Name = body[..eq].Trim(), Value = body[(eq + 1)..], Domain = domain });
+        }
+
+        return true;
+    }
+
+    internal static bool TryParseForm(string? url, string? user, string? password, string? userField, string? passwordField, string? submit,
+        out FormLogin? form, out string error)
+    {
+        form = null;
+        error = string.Empty;
+        var any = url is not null || user is not null || password is not null || userField is not null || passwordField is not null || submit is not null;
+        if (!any)
+        {
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(user) || string.IsNullOrEmpty(password))
+        {
+            error = "A sign-in page needs --form-url, --form-user and --form-password together.";
+            return false;
+        }
+
+        form = new FormLogin
+        {
+            Url = url,
+            Username = user,
+            Password = password,
+            UsernameField = userField ?? "",
+            PasswordField = passwordField ?? "",
+            Submit = submit ?? ""
+        };
+        return true;
+    }
+
+    private static bool IsCookieDomain(string host) =>
+        host.Length > 0 && !host.Contains(' ') && !host.Contains('=') &&
+        (host.Contains('.') || host.Equals("localhost", StringComparison.OrdinalIgnoreCase));
 
     private static int Fail(string message)
     {
