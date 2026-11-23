@@ -10,6 +10,7 @@ check runs locally, and the app and engine workflows are manual-only. The releas
 JavaScript rendering release, tagged 2026-11-20. `app-v2.0.0-beta.3` is list mode, and custom extraction, tagged
 2026-11-21. `app-v2.0.0` is the 2.0 release, tagged 2026-11-22: the browser fallback and auth and cookies are in it.
 `app-v2.0.1` is the installer artwork, tagged 2026-11-23: the wizard shows the iguana at this screen's size.
+`app-v2.0.2` is the library status fix, tagged 2026-11-23: an out-of-date crawl no longer stacks its status one word a line.
 A version with no hyphen is a full release, not a prerelease. After that tag, the never-push rule stands again.
 
 ## Why

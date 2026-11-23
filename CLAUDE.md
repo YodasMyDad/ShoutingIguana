@@ -4,7 +4,7 @@ Guidance for agents working in this repo. Read this before making changes.
 
 ## What this is
 
-**Shouting Iguana** `2.0.1` — a cross-platform desktop SEO crawler and site auditor.
+**Shouting Iguana** `2.0.2` — a cross-platform desktop SEO crawler and site auditor.
 
 - `engine/` — headless .NET 10 crawl engine, the `si` CLI, and the localhost sidecar. One SQLite file per crawl.
 - `app/` — React and TypeScript UI in a Tauri 2 shell. The shell starts the engine as a sidecar.
