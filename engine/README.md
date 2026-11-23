@@ -137,7 +137,7 @@ line it writes to stdout, and calls it with a bearer token. The contract (endpoi
 
 ```bash
 dotnet run --project src/ShoutingIguana.Sidecar -- --data-dir ./crawls --state-dir ./si-state
-# {"event":"ready","port":53123,"version":"2.0.0","token":"<made up, as no SI_SIDECAR_TOKEN was set>"}
+# {"event":"ready","port":53123,"version":"2.0.1","token":"<made up, as no SI_SIDECAR_TOKEN was set>"}
 curl -H "Authorization: Bearer <token>" http://127.0.0.1:53123/api/health
 ```
 

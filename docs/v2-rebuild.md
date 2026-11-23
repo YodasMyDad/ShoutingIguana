@@ -9,6 +9,7 @@ check runs locally, and the app and engine workflows are manual-only. The releas
 `app-v*` plus the version in `app/src-tauri/tauri.conf.json`. `app-v2.0.0-beta.1` shipped. `app-v2.0.0-beta.2` is the
 JavaScript rendering release, tagged 2026-11-20. `app-v2.0.0-beta.3` is list mode, and custom extraction, tagged
 2026-11-21. `app-v2.0.0` is the 2.0 release, tagged 2026-11-22: the browser fallback and auth and cookies are in it.
+`app-v2.0.1` is the installer artwork, tagged 2026-11-23: the wizard shows the iguana at this screen's size.
 A version with no hyphen is a full release, not a prerelease. After that tag, the never-push rule stands again.
 
 ## Why
