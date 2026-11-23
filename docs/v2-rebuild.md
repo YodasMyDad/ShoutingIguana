@@ -11,6 +11,7 @@ JavaScript rendering release, tagged 2026-11-20. `app-v2.0.0-beta.3` is list mod
 2026-11-21. `app-v2.0.0` is the 2.0 release, tagged 2026-11-22: the browser fallback and auth and cookies are in it.
 `app-v2.0.1` is the installer artwork, tagged 2026-11-23: the wizard shows the iguana at this screen's size.
 `app-v2.0.2` is the library status fix, tagged 2026-11-23: an out-of-date crawl no longer stacks its status one word a line.
+`app-v2.0.3` is the layout pass, tagged 2026-11-23: Simple Home's saved-settings line stays a sentence, and the speed card and the check-again note keep each phrase whole.
 A version with no hyphen is a full release, not a prerelease. After that tag, the never-push rule stands again.
 
 ## Why
@@ -38,7 +39,7 @@ v2 is a fresh solution that ports the useful logic.
 
 ## Where step 4 stands (2026-11-20)
 
-**2026-11-23.** Work is on `master`. `ui/step-3` is the old step-3 line and is not where changes go. Home's library status was one word a line when a crawl's analysis was out of date: the site column takes the spare width, and the note could break on every word. Each phrase stays whole ("Analysis out of date." then "Analyse again"), and a file error wraps inside the status width. Shipped as `2.0.2`.
+**2026-11-23.** Work is on `master`. `ui/step-3` is the old step-3 line and is not where changes go. Home's library status was one word a line when a crawl's analysis was out of date: the site column takes the spare width, and the note could break on every word. Each phrase stays whole ("Analysis out of date." then "Analyse again"), and a file error wraps inside the status width. Shipped as `2.0.2`. `2.0.3` keeps Simple Home from ending a saved-settings line with an empty sentence, and keeps the speed card and the check-again note from leaving the last words of a phrase alone.
 
 The owner asked for the first slice only, on a branch off `master`: JavaScript rendering, with include and exclude
 patterns beside it. That shipped. Custom extraction and list mode are on `master` as `2.0.0-beta.3`. On 2026-11-20 they asked for JavaScript rendering on `master` as `2.0.0-beta.2`, published
