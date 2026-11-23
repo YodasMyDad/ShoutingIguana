@@ -44,7 +44,11 @@
     "windows": {
       "signCommand": { "cmd": "node", "args": ["../scripts/sign.mjs", "%1"] },
       "nsis": {
-        "installMode": "currentUser"
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico",
+        "headerImage": "nsis/header.bmp",
+        "sidebarImage": "nsis/sidebar.bmp",
+        "installerHooks": "nsis/hooks.nsh"
       }
     }
   },
