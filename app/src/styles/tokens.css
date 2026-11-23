@@ -511,7 +511,7 @@
   --topbar-site-max: 240px; /* the site's name in the top bar's crumbs: longer is cut, with the whole in its tooltip */
   --topbar-site-min: 112px; /* how short it's cut, the bar short of room, before it goes */
   --topbar-section-min: 72px; /* the section you're on, cut as short as this and no shorter, before it goes */
-  --library-status-width: 240px; /* Home's status column: a file's error wraps in it */
+  --library-status-width: 240px; /* Home's status column: a file's error wraps inside this, and never wider */
   /*
     Simple's Your sites: the site, its score, what to fix, when, and the row's action. The rows share these columns (a
     subgrid), so the action's is as wide as the widest action listed and the site takes the rest (gallery 6: a fixed

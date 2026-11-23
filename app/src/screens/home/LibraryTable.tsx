@@ -325,7 +325,9 @@ function CrawlRow({
           </div>
         </div>
       </td>
-      {/* The status wraps: a file's error, or "Analysis out of date", never pushes the table wider than the window. */}
+      {/* The site column takes the spare room, so this column is only as wide as its longest unbreakable
+          phrase. A max alone let "Analysis out of date" shrink to one word a line. Phrases stay whole (below);
+          a file's error wraps inside the max, and no narrower than a short line. */}
       <td className={CELL_BOX}>
         <div className="max-w-(--library-status-width)">
           <StatusPill status={status} fetched={null} variant="plain" />
@@ -409,12 +411,19 @@ function StatusNote({
     case 'missing':
       return (
         <span className="block text-12 text-text-muted">
-          File not found{isTauri ? '. ' : ''}
-          {isTauri ? <LocateButton item={item} /> : null}
+          <span className="whitespace-nowrap">File not found{isTauri ? '.' : ''}</span>
+          {isTauri ? (
+            <>
+              {' '}
+              <span className="whitespace-nowrap">
+                <LocateButton item={item} />
+              </span>
+            </>
+          ) : null}
         </span>
       );
     case 'unreadable':
-      return item.error ? <span className="block text-12 text-text-muted">{item.error}</span> : null;
+      return item.error ? <span className="block min-w-[12rem] text-12 text-text-muted">{item.error}</span> : null;
     case 'unfinished':
       return actions.canContinue ? (
         <span className="block text-12 text-text-muted">
@@ -432,10 +441,13 @@ function StatusNote({
     case 'outOfDate':
       return (
         <span className="block text-12 text-text-muted">
-          Analysis out of date
+          <span className="whitespace-nowrap">Analysis out of date.</span>
           {actions.canAnalyse ? (
             <>
-              . <InlineAction words="Analyse again" crawl={siteName(item)} onClick={() => void analyseCrawl(item.id)} />
+              {' '}
+              <span className="whitespace-nowrap">
+                <InlineAction words="Analyse again" crawl={siteName(item)} onClick={() => void analyseCrawl(item.id)} />
+              </span>
             </>
           ) : null}
         </span>
