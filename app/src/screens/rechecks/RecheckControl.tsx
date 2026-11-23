@@ -170,7 +170,7 @@ function HeadActions({
         {actions}
       </div>
       {line ? (
-        <span id={lineId} className="max-w-(--measure-note) text-right text-12 text-pretty text-text-muted">
+        <span id={lineId} className="block max-w-(--measure-note) text-right text-12 text-balance text-text-muted">
           {line}
         </span>
       ) : null}

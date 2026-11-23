@@ -540,6 +540,29 @@ export const SIMPLE_FIELDS: ReadonlySet<CrawlFormField> = new Set<CrawlFormField
   'formUrl',
 ]);
 
+const RENDERING_VALUES = [
+  'off',
+  'automatic',
+  'javaScript',
+  'matching',
+] as const satisfies readonly JavaScriptRendering[];
+
+/**
+ * The form's rendering mode. A current sidecar sends the name (`automatic`). One from before that sends the enum's
+ * number (Off 0, Automatic 1, Matching 2, JavaScript 3). Anything else is the engine's own default, so a bare Enter
+ * isn't described as saved settings that aren't there.
+ */
+export function renderingOf(value: unknown, fallback: JavaScriptRendering): JavaScriptRendering {
+  if (typeof value === 'string' && (RENDERING_VALUES as readonly string[]).includes(value)) {
+    return value as JavaScriptRendering;
+  }
+  if (value === 0) return 'off';
+  if (value === 1) return 'automatic';
+  if (value === 2) return 'matching';
+  if (value === 3) return 'javaScript';
+  return fallback;
+}
+
 /** Which of the form's settings differ from these defaults: by field, with the start URL left out. */
 export function changedFields(form: CrawlForm, defaults: CrawlForm): CrawlFormField[] {
   return (Object.keys(FIELD_SECTIONS) as CrawlFormField[]).filter((field) => {
@@ -550,6 +573,12 @@ export function changedFields(form: CrawlForm, defaults: CrawlForm): CrawlFormFi
     if (field === 'signatures') return Object.keys(signaturesOf(form.signatures, withScheme(form.startUrl))).length > 0;
     if (field === 'extractionRules') return !sameExtractionRules(form.extractionRules, defaults.extractionRules);
     if (field === 'customUserAgent') return form.userAgent === 'custom' && form[field] !== defaults[field];
+    // An older sidecar sends this enum as a number. Automatic is 1, the same mode as the name.
+    if (field === 'javaScriptRendering') {
+      return (
+        renderingOf(form.javaScriptRendering, 'automatic') !== renderingOf(defaults.javaScriptRendering, 'automatic')
+      );
+    }
     const a = form[field];
     const b = defaults[field];
     return typeof a === 'string' && typeof b === 'string' ? !sameText(field, a, b) : a !== b;

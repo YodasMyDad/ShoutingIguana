@@ -9,6 +9,7 @@ import {
   headerRow,
   hiddenChanges,
   optionsFromForm,
+  renderingOf,
   sendableHeaders,
   speedOf,
   withScheme,
@@ -40,6 +41,17 @@ describe('the crawl settings form', () => {
       extraSitemaps: ['https://example.com/a.xml'],
     };
     expect(optionsFromForm(formFromOptions(options))).toEqual({ ...options, extraHeaders: {} });
+  });
+
+  it('reads an older sidecar’s rendering number as the same mode the name is', () => {
+    expect(renderingOf(1, 'off')).toBe('automatic');
+    expect(renderingOf(0, 'automatic')).toBe('off');
+    expect(
+      changedFields(
+        formFromOptions({ ...ENGINE_DEFAULTS, javaScriptRendering: 1 as unknown as 'automatic' }),
+        formFromOptions(ENGINE_DEFAULTS),
+      ),
+    ).not.toContain('javaScriptRendering');
   });
 
   it('holds the HTML limit in MB and sends it in bytes', () => {

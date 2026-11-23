@@ -86,7 +86,7 @@ export function ChoiceCards<T extends string>({
                   {option.title}
                 </span>
                 {option.text ? (
-                  <span id={textId} className="text-12 text-text-secondary">
+                  <span id={textId} className="text-12 text-balance text-text-secondary">
                     {option.text}
                   </span>
                 ) : null}

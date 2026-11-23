@@ -312,5 +312,9 @@ describe('the saved-settings line', () => {
     expect(savedSettingsLine(saved({ respectRobotsTxt: false }))).toBe(
       'Uses your saved settings: 1 setting set in Advanced.',
     );
+    expect(savedSettingsLine(saved({ javaScriptRendering: 'off' }))).toBe('Uses your saved settings: JavaScript off.');
+    // An older sidecar sends the enum as a number. Automatic (1) is the engine's own default, not a saved change.
+    expect(savedSettingsLine(saved({ javaScriptRendering: 1 as unknown as 'automatic' }))).toBe(ENGINE_LINE);
+    expect(savedSettingsLine(saved({ listUrls: ['https://example.com/one'] }))).toBe('Uses your saved settings.');
   });
 });
