@@ -6,8 +6,9 @@ namespace ShoutingIguana.Engine.Analysis.Rules;
 
 /// <summary>
 /// The files pages load, judged by how they're used: a script, stylesheet or image served as another type, and a script
-/// or stylesheet past the 2 MB Googlebot reads of a file. A URL is reported once, however many pages use it; only the URLs
-/// at fault are kept.
+/// or stylesheet past the 2 MB Googlebot reads of a file. That limit is of the file once decompressed, so a file is
+/// judged by that size where the crawl counted it, and by the bytes sent in a crawl from before it did. A URL is
+/// reported once, however many pages use it; only the URLs at fault are kept.
 /// </summary>
 /// <param name="readContentType">The Content-Type a stored URL answered with, as the crawl recorded it, or null.</param>
 internal sealed class ResourceRules(UrlTable urls, Func<int, string?> readContentType) : ISiteRule
@@ -42,7 +43,7 @@ internal sealed class ResourceRules(UrlTable urls, Func<int, string?> readConten
                 uses.Add(link.Kind);
             }
 
-            if (link.Kind is LinkKind.Script or LinkKind.Stylesheet && file.SizeBytes > GOOGLEBOT_FILE_BYTES)
+            if (link.Kind is LinkKind.Script or LinkKind.Stylesheet && (file.BodyBytes ?? file.SizeBytes) > GOOGLEBOT_FILE_BYTES)
             {
                 _pastLimit.Add(link.ToId);
             }
@@ -65,8 +66,28 @@ internal sealed class ResourceRules(UrlTable urls, Func<int, string?> readConten
         foreach (var id in _pastLimit)
         {
             yield return new IssueHit(IssueCatalog.RESOURCE_PAST_CRAWL_LIMIT, id,
-                $"{RuleText.Size(urls[id].SizeBytes!.Value)}, past the {RuleText.LimitSize(GOOGLEBOT_FILE_BYTES)} Google reads");
+                $"{Measured(urls[id])}, past the {RuleText.LimitSize(GOOGLEBOT_FILE_BYTES)} Google reads");
         }
+    }
+
+    /// <summary>
+    /// The size a file is judged by. One sent compressed says so, with the bytes sent beside it, because the Size the
+    /// URL is listed with is the bytes sent: "2.3 MB once decompressed (586 KB as sent)".
+    /// </summary>
+    private static string Measured(UrlStatus file)
+    {
+        if (file.BodyBytes is not { } decompressed)
+        {
+            return RuleText.Size(file.SizeBytes!.Value);
+        }
+
+        var size = PerformanceRules.Measured(decompressed, GOOGLEBOT_FILE_BYTES);
+        return file.SizeBytes switch
+        {
+            null => $"{size} once decompressed",
+            { } sent when sent != decompressed => $"{size} once decompressed ({RuleText.Size(sent)} as sent)",
+            _ => size
+        };
     }
 
     /// <summary>The type a file is sent as suits how the page uses it: a script as JavaScript, a stylesheet as CSS, an image as an image.</summary>

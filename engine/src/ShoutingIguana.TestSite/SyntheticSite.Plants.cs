@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using ShoutingIguana.TestSite.Models;
@@ -54,6 +55,23 @@ public sealed partial class SyntheticSite
     /// <summary>A script past the 2 MB Googlebot reads of a file: comment lines, then one statement.</summary>
     private static readonly byte[] HUGE_SCRIPT_BYTES = Encoding.UTF8.GetBytes(
         string.Concat(Enumerable.Repeat("// A planted script well past the size Googlebot reads of a file.\n", 34_000)) + "document.title = document.title;\n");
+
+    /// <summary>
+    /// The same script as a server sends it compressed: a few kilobytes on the wire, past the 2 MB once decompressed,
+    /// which is the size Google's limit is about.
+    /// </summary>
+    private static readonly byte[] PACKED_SCRIPT_BYTES = Gzip(HUGE_SCRIPT_BYTES);
+
+    private static byte[] Gzip(byte[] bytes)
+    {
+        using var packed = new MemoryStream();
+        using (var gzip = new GZipStream(packed, CompressionLevel.Optimal, leaveOpen: true))
+        {
+            gzip.Write(bytes);
+        }
+
+        return packed.ToArray();
+    }
 
     /// <summary>The size in pixels the planted large image says it is.</summary>
     public const int LARGE_IMAGE_WIDTH = 4_000;
@@ -869,6 +887,11 @@ public sealed partial class SyntheticSite
         Page("huge-script", "Script past the crawl limit", [], page => page with { ExtraHead = $"<script src=\"{PLANTS_PATH}huge.js\"></script>" });
         plants.Add(new Plant(PLANTS_PATH + "huge.js", 200, Linked: false, InSitemap: false, ["resource-past-crawl-limit"],
             () => new SyntheticResponse(200, "text/javascript", null, HUGE_SCRIPT_BYTES, null), IsPage: false));
+        // The same script sent compressed: under the limit as sent, past it once decompressed, which is what Google measures.
+        Page("packed-script", "Packed script past the limit", [], page => page with { ExtraHead = $"<script src=\"{PLANTS_PATH}packed.js\"></script>" });
+        plants.Add(new Plant(PLANTS_PATH + "packed.js", 200, Linked: false, InSitemap: false, ["resource-past-crawl-limit"],
+            () => new SyntheticResponse(200, "text/javascript", null, PACKED_SCRIPT_BYTES, null, new Dictionary<string, string> { ["Content-Encoding"] = "gzip" }),
+            IsPage: false));
         Page("no-charset", "Missing charset", ["charset-missing"], page => page with { Charset = false }, contentType: "text/html");
 
         // The header and the page name different encodings: the header wins.

@@ -1257,9 +1257,15 @@ function brokenLinks(detail: string): string | null {
   return tail === null ? null : `${counted(match[1] ?? '', 'broken link', 'broken links')}${tail}`;
 }
 
-/** A page or file past what Google reads: "2.1 MB, past the 2 MB Google reads"; an older engine's "2.1 MB". */
+/**
+ * A page or file past what Google reads: "2.1 MB, past the 2 MB Google reads"; an older engine's "2.1 MB"; a file sent
+ * compressed, "2.3 MB once decompressed (586 KB as sent), past the 2 MB Google reads".
+ */
 function pastGoogle(detail: string, what: 'page' | 'file'): string | null {
-  const match = /^([\d.]+ [KMG]B)(?:, past the ([\d.]+ [KMG]B) Google reads)?$/.exec(detail);
+  const match =
+    /^([\d.]+ [KMG]B)(?: once decompressed(?: \([\d.]+ [KMG]B as sent\))?)?(?:, past the ([\d.]+ [KMG]B) Google reads)?$/.exec(
+      detail,
+    );
   if (!match) return null;
   return `the ${what} is ${match[1] ?? ''}; Google reads only the first ${match[2] ?? 'part'}`;
 }

@@ -51,7 +51,8 @@ internal sealed class RuleHarness(string site = "https://example.com")
     /// <param name="responseMs">How long the whole response took.</param>
     public int Fetched(string url, FetchOutcome outcome, int status, bool isHtml = false, IndexabilityReason reason = IndexabilityReason.None,
         string? redirectTo = null, long? size = null, bool inSitemap = false, string? contentType = null,
-        DiscoverySource source = DiscoverySource.Link, bool? isParsed = null, int responseMs = 0, int? pixelWidth = null, int? pixelHeight = null)
+        DiscoverySource source = DiscoverySource.Link, bool? isParsed = null, int responseMs = 0, int? pixelWidth = null, int? pixelHeight = null,
+        long? bodyBytes = null)
     {
         var id = Id(url);
         contentType ??= isHtml ? "text/html; charset=utf-8" : null;
@@ -66,6 +67,7 @@ internal sealed class RuleHarness(string site = "https://example.com")
             IndexabilityReason = reason,
             RedirectTargetId = redirectTo is null ? 0 : Id(redirectTo),
             SizeBytes = size,
+            BodyBytes = bodyBytes,
             InSitemap = inSitemap,
             Source = source,
             ResponseMs = responseMs,

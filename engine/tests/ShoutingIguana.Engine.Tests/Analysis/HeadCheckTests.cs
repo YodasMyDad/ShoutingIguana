@@ -200,6 +200,35 @@ public sealed class HeadCheckTests
             rule.Finish().Where(hit => hit.Issue == IssueCatalog.RESOURCE_PAST_CRAWL_LIMIT));
     }
 
+    /// <summary>
+    /// Google's 2 MB is of the file once decompressed. A compressed file is judged by that size where the crawl counted
+    /// it, and the detail gives both, because the Size column beside it is the bytes sent.
+    /// </summary>
+    [Fact]
+    public void ACompressedScriptIsJudgedByItsSizeOnceDecompressed()
+    {
+        var site = new RuleHarness();
+        var packed = site.Fetched($"{site.Site}/packed.js", FetchOutcome.Success, 200, contentType: "text/javascript", size: 600_000, bodyBytes: 2_400_000);
+        site.Fetched($"{site.Site}/small.css", FetchOutcome.Success, 200, contentType: "text/css", size: 300_000, bodyBytes: 1_900_000);
+        var plain = site.Fetched($"{site.Site}/plain.js", FetchOutcome.Success, 200, contentType: "text/javascript", size: 2_400_000, bodyBytes: 2_400_000);
+        var close = site.Fetched($"{site.Site}/close.js", FetchOutcome.Success, 200, contentType: "text/javascript", size: 700_000, bodyBytes: 2_097_400);
+        var cut = site.Fetched($"{site.Site}/cut.js", FetchOutcome.Success, 200, contentType: "text/javascript", bodyBytes: 16_777_216);
+        var page = site.Page($"{site.Site}/", RuleHarness.Html(
+            "<script src=\"/packed.js\"></script><link rel=\"stylesheet\" href=\"/small.css\"><script src=\"/plain.js\"></script>" +
+            "<script src=\"/close.js\"></script><script src=\"/cut.js\"></script>"));
+        var rule = new ResourceRules(site.Table(), _ => null);
+        rule.Observe(page);
+
+        Assert.Equal(
+            [
+                new IssueHit(IssueCatalog.RESOURCE_PAST_CRAWL_LIMIT, packed, "2.3 MB once decompressed (586 KB as sent), past the 2 MB Google reads"),
+                new IssueHit(IssueCatalog.RESOURCE_PAST_CRAWL_LIMIT, plain, "2.3 MB, past the 2 MB Google reads"),
+                new IssueHit(IssueCatalog.RESOURCE_PAST_CRAWL_LIMIT, close, "2,097,400 bytes once decompressed (684 KB as sent), past the 2 MB Google reads"),
+                new IssueHit(IssueCatalog.RESOURCE_PAST_CRAWL_LIMIT, cut, "16.0 MB once decompressed, past the 2 MB Google reads")
+            ],
+            rule.Finish().Where(hit => hit.Issue == IssueCatalog.RESOURCE_PAST_CRAWL_LIMIT));
+    }
+
     [Theory]
     [InlineData("max-age=2592000", "302 Found, cached for 30 days")]
     [InlineData("public, s-maxage=172800, max-age=60", "302 Found, cached for 2 days")]

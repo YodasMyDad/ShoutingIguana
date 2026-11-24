@@ -36,7 +36,7 @@ internal sealed class PerformanceRules(AnalysisSettings settings) : IPageRule
     /// A size past its limit, as a detail says it: "2.3 MB", or to the byte where a rounded size would read as the limit
     /// itself ("2,097,400 bytes", not "2.0 MB, past the 2 MB").
     /// </summary>
-    private static string Measured(long bytes, long limit) => RuleText.Size(bytes) == RuleText.Size(limit)
+    internal static string Measured(long bytes, long limit) => RuleText.Size(bytes) == RuleText.Size(limit)
         ? string.Create(CultureInfo.InvariantCulture, $"{bytes:N0} bytes")
         : RuleText.Size(bytes);
 }

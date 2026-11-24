@@ -811,6 +811,8 @@ public sealed class CrawlEngineTests : IAsyncLifetime
     {
         Assert.Equal(Count(path, "SELECT COALESCE(SUM(size_bytes), 0) FROM responses WHERE body_bytes IS NOT NULL"), summary.Progress.BytesDownloaded);
         Assert.Equal(1, Count(path, "SELECT COUNT(*) FROM responses r JOIN urls u ON u.id = r.url_id WHERE u.url LIKE '%/img/large.jpg' AND r.body_bytes IS NULL"));
+        // The planted compressed script: a few kilobytes sent, past Google's 2 MB once decompressed, and both sizes kept.
+        Assert.Equal(1, Count(path, "SELECT COUNT(*) FROM responses r JOIN urls u ON u.id = r.url_id WHERE u.url LIKE '%/plants/packed.js' AND r.size_bytes < 100000 AND r.body_bytes > 2097152"));
     }
 
     private static List<string> Strings(string path, string sql)

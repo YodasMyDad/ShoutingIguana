@@ -316,7 +316,7 @@ and is in the group without a related URL.
 | 81 | `slow-response` | P/N/– | – | – | "1,250 ms (first byte after 900 ms)" → `1,250 ms, over 1,000 ms (first byte after 900 ms)` | imp · – |
 | 82 | `large-page` | P/N/– | – | – | "1.4 MB" → `1.4 MB, over 1 MB` | imp · – |
 | 83 | `html-past-crawl-limit` | P/N/– | – | – | "2.3 MB" → `2.3 MB, past the 2 MB Google reads` | imp · – |
-| 116 | `resource-past-crawl-limit` (new) | U/N/S | `sizeBytes`, `contentType` | – | `2.3 MB, past the 2 MB Google reads` (the size as received: compressed, if the server compressed it) | use · – |
+| 116 | `resource-past-crawl-limit` (new) | U/N/S | `sizeBytes`, `contentType` | – | `2.3 MB, past the 2 MB Google reads`; sent compressed, `2.3 MB once decompressed (586 KB as sent), past the 2 MB Google reads` (judged by the decompressed size, which the crawl counts from 2.1.1; `sizeBytes` is the bytes sent) | use · – |
 
 ### HTML
 

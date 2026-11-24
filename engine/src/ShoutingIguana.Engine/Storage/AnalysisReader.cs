@@ -146,7 +146,7 @@ internal sealed class AnalysisReader : IDisposable
                    r.url_id IS NOT NULL AND NOT {NOT_CHECKED}, r.outcome, r.status_code, r.is_html, r.indexability_reason,
                    r.redirect_url_id, r.size_bytes, COALESCE({SITE_PAGE}, 0), u.url, r.content_type,
                    COALESCE(substr(r.error, 1, {RetryingFetcher.RATE_LIMITED_ERROR.Length}) = '{RetryingFetcher.RATE_LIMITED_ERROR}', 0),
-                   COALESCE(r.response_ms, 0), {pixels}
+                   COALESCE(r.response_ms, 0), {pixels}, r.body_bytes
             FROM urls u LEFT JOIN responses r ON r.url_id = u.id
             """, reader =>
         {
@@ -182,7 +182,8 @@ internal sealed class AnalysisReader : IDisposable
                 IsPrivateHost: Uri.TryCreate(url, UriKind.Absolute, out var uri) && PrivateNetworkGuard.IsPrivateLiteral(uri),
                 PixelWidth: fetched && !reader.IsDBNull(17) ? reader.GetInt32(17) : null,
                 IsLegacyImage: ContentTypeHeader.MediaTypeOf(contentType) is "image/jpeg" or "image/png" or "image/gif" or "image/bmp" or "image/x-ms-bmp",
-                PixelHeight: fetched && !reader.IsDBNull(18) ? reader.GetInt32(18) : null);
+                PixelHeight: fetched && !reader.IsDBNull(18) ? reader.GetInt32(18) : null,
+                BodyBytes: fetched && !reader.IsDBNull(19) ? reader.GetInt64(19) : null);
             read++;
             progress?.Advance(read);
         });

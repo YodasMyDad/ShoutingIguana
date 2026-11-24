@@ -642,6 +642,11 @@
       "said": "The file is 2.1 MB; Google reads only the first 2 MB"
     },
     {
+      "check": "resource-past-crawl-limit",
+      "detail": "2.3 MB once decompressed (586 KB as sent), past the 2 MB Google reads",
+      "said": "The file is 2.3 MB; Google reads only the first 2 MB"
+    },
+    {
       "check": "robots-directives-conflict",
       "detail": "The HTML says \"index, follow\"; the X-Robots-Tag header says \"noindex\"",
       "said": "The page says “index, follow”, but the server says “noindex”"

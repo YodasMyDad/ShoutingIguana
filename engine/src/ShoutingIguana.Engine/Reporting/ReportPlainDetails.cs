@@ -319,9 +319,12 @@ internal static class ReportPlainDetails
         return BrokenTail(Part(match, 2), Part(match, 3)) is { } tail ? $"{Counted(match.Groups[1].Value, "broken link", "broken links")}{tail}" : null;
     }
 
-    /// <summary>A page or file past what Google reads: "2.1 MB, past the 2 MB Google reads".</summary>
+    /// <summary>
+    /// A page or file past what Google reads: "2.1 MB, past the 2 MB Google reads", and a file sent compressed
+    /// "2.1 MB once decompressed (310 KB as sent), past the 2 MB Google reads".
+    /// </summary>
     private static string? PastGoogle(string detail, string what) =>
-        Read(detail, @"^([\d.]+ [KMG]B)(?:, past the ([\d.]+ [KMG]B) Google reads)?$") is { Success: true } match
+        Read(detail, @"^([\d.]+ [KMG]B)(?: once decompressed(?: \([\d.]+ [KMG]B as sent\))?)?(?:, past the ([\d.]+ [KMG]B) Google reads)?$") is { Success: true } match
             ? $"the {what} is {match.Groups[1].Value}; Google reads only the first {Part(match, 2) ?? "part"}"
             : null;
 

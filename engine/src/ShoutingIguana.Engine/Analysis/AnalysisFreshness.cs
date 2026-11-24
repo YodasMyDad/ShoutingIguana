@@ -98,8 +98,10 @@ public static class AnalysisFreshness
     /// chain entered at a listed URL; "More →" as generic link text). What the parse
     /// changed (a form control's text and a header's menu aren't the page's words, an image file on a div's href is no
     /// link, an AMP image's size, a password field outside a form, a meta Content-Security-Policy) takes a new crawl.
+    /// 27: resource-past-crawl-limit judges a script or stylesheet by its size once decompressed, which the crawl counts
+    /// from 2.1.1 on, and its detail says so. A crawl from before has only the bytes sent, and is judged by those.
     /// </summary>
-    public const int VERSION = 26;
+    public const int VERSION = 27;
 
     /// <summary>
     /// The catalog's check ids with their categories and severities, hashed. Titles, descriptions, fixes, why and

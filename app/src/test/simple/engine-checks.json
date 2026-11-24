@@ -5422,7 +5422,7 @@
       "category": "performance",
       "severity": "warning",
       "title": "Script or stylesheet over 2 MB",
-      "description": "A page uses this script or stylesheet, here or on another site, and it's larger than 2 MB, as far as Googlebot reads a file. It's measured as the crawl received it, compressed if the server compressed it, so a compressed file over the limit is larger still once decompressed, and one just under it may be over. The limit is Google's, not an analysis setting.",
+      "description": "A page uses this script or stylesheet, here or on another site, and it's larger than 2 MB, as far as Googlebot reads a file. It's measured once decompressed, which is what Google's limit is of, and the detail gives the size it was sent at beside it when the server compressed it. A crawl made before version 2.1.1 only has the size as sent, so it misses a compressed file that is over the limit once decompressed: crawl again to measure those. The limit is Google's, not an analysis setting.",
       "fix": "Split the file, or remove what pages don't use (unused code, inlined data, source maps); load what isn't needed at first later. Compressing the file doesn't help here: Google's limit is on its size once decompressed.",
       "why": "Google fetches each script and stylesheet a page uses separately, with the same 2 MB limit as the page, and ignores the rest of a larger one, so the page as Google renders it can be missing styles or behaviour, or break. A file that size also slows the page down for visitors on mobile.",
       "learnMore": "https://developers.google.com/search/docs/crawling-indexing/googlebot#how-googlebot-accesses-your-site",

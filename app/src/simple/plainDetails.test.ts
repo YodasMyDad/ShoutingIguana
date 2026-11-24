@@ -408,7 +408,12 @@ const DETAILS: Readonly<Record<string, readonly (string | null)[]>> = {
   ],
   'large-page': ['1.1 MB', '1.1 MB, over 1 MB'],
   'html-past-crawl-limit': ['2.1 MB', '2.1 MB, past the 2 MB Google reads'],
-  'resource-past-crawl-limit': ['2.1 MB', '2.1 MB, past the 2 MB Google reads'],
+  'resource-past-crawl-limit': [
+    '2.1 MB',
+    '2.1 MB, past the 2 MB Google reads',
+    '2.3 MB once decompressed (586 KB as sent), past the 2 MB Google reads',
+    '16.0 MB once decompressed, past the 2 MB Google reads',
+  ],
   // HTML
   'viewport-missing': [null],
   'lang-missing': [null],
@@ -746,6 +751,9 @@ describe('a check’s detail, plainly: the forms the fixit audit named', () => {
     expect(say('resource-past-crawl-limit', '2.1 MB, past the 2 MB Google reads')).toBe(
       'The file is 2.1 MB; Google reads only the first 2 MB',
     );
+    expect(
+      say('resource-past-crawl-limit', '2.3 MB once decompressed (586 KB as sent), past the 2 MB Google reads'),
+    ).toBe('The file is 2.3 MB; Google reads only the first 2 MB');
     expect(
       say(
         'charset-missing',
