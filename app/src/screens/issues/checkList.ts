@@ -131,6 +131,11 @@ export interface CheckList {
   hiddenCount: number;
   /** Checks that passed, hidden ones left out: the switch's "Show the 63 checks that passed". */
   passedCount: number;
+  /**
+   * Checks that passed and are listed as fixed, hidden ones left out: the header counts them among those that passed
+   * ("19 passed"), the switch doesn't ("Show the 15 other checks that passed").
+   */
+  fixedCount: number;
   /** The severity or text filter hides every check that would otherwise show. */
   filteredToNothing: boolean;
 }
@@ -571,6 +576,7 @@ export function buildCheckList(
 
   let hiddenCount = 0;
   let passedCount = 0;
+  let fixedCount = 0;
   let unfiltered = 0;
   const matching: CheckEntry[] = [];
   // The fix loop: checks that found nothing now and something then are fixed, listed apart from those that passed.
@@ -591,6 +597,7 @@ export function buildCheckList(
       category.passed++;
       passedCount++;
     }
+    if (isFixed && !entry.hidden) fixedCount++;
     // Shown at all: found, skipped and fixed checks always, passed ones when asked for, hidden ones when shown.
     const listed = entry.outcome !== 'passed' || isFixed || filters.showPassed;
     if (!listed) continue;
@@ -627,8 +634,21 @@ export function buildCheckList(
     category: only === undefined ? null : categoryNamed(checks, only),
     hiddenCount,
     passedCount,
+    fixedCount,
     filteredToNothing: visible.length === 0 && unfiltered > 0,
   };
+}
+
+/**
+ * The switch's words: "Show the 63 checks that passed". With checks listed as fixed, which passed too and are counted
+ * in the header's "19 passed", the switch shows the others: "Show the 15 other checks that passed" (the audit of
+ * 2026-11-24: 19 beside 15 read as a contradiction).
+ */
+export function showPassedWords(list: Pick<CheckList, 'passedCount' | 'fixedCount'>): string {
+  const other = list.fixedCount > 0 && list.passedCount > 0 ? 'other ' : '';
+  return list.passedCount === 1
+    ? `Show the ${other}check that passed`
+    : `Show the ${formatCount(list.passedCount)} ${other}checks that passed`;
 }
 
 /** The category's title for a check, for its header ("Links"). */

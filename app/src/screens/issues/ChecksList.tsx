@@ -21,7 +21,7 @@ import { SegmentedControl } from '../../ui/SegmentedControl';
 import { Select } from '../../ui/Select';
 import { SeverityMark } from '../../ui/SeverityMark';
 import { Switch } from '../../ui/Switch';
-import { CHECK_SORTS, type CheckEntry, type CheckList, type CheckSort } from './checkList';
+import { CHECK_SORTS, showPassedWords, type CheckEntry, type CheckList, type CheckSort } from './checkList';
 import { CountWithReach } from './CountWithReach';
 
 export type SeverityFilter = Severity | 'all';
@@ -269,11 +269,7 @@ export function ChecksList({
             />
           ) : null}
           <Switch
-            label={
-              list.passedCount === 1
-                ? 'Show the check that passed'
-                : `Show the ${formatCount(list.passedCount)} checks that passed`
-            }
+            label={showPassedWords(list)}
             checked={showPassed}
             onCheckedChange={onShowPassedChange}
             disabled={list.passedCount === 0}

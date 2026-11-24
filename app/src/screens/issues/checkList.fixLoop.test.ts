@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CheckChange } from '../../api/fixLoop';
 import type { Analysis, Check, Checks } from '../../api/types';
-import { buildCheckList, checkEntries, sortChecks, type CheckListFilters } from './checkList';
+import { buildCheckList, checkEntries, showPassedWords, sortChecks, type CheckListFilters } from './checkList';
 
 const check = (id: string, category: string, severity: Check['severity']): Check => ({
   id,
@@ -110,6 +110,13 @@ describe('the checks list compared with another crawl', () => {
     expect(ids(list.categories[1]?.entries ?? [])).toEqual(['internal-server-error']);
     // Passed and not fixed: title-duplicate. The fixed one isn't counted twice.
     expect(list.passedCount).toBe(1);
+    // The header counts both as passed ("2 passed"), so the switch says it shows the other one (the audit of
+    // 2026-11-24: "19 passed" beside "Show the 15 checks that passed").
+    expect(list.fixedCount).toBe(1);
+    expect(showPassedWords(list)).toBe('Show the other check that passed');
+    expect(showPassedWords({ passedCount: 15, fixedCount: 4 })).toBe('Show the 15 other checks that passed');
+    expect(showPassedWords({ passedCount: 63, fixedCount: 0 })).toBe('Show the 63 checks that passed');
+    expect(showPassedWords({ passedCount: 0, fixedCount: 2 })).toBe('Show the 0 checks that passed');
   });
 
   it('lists a fixed check in its category, by category', () => {
