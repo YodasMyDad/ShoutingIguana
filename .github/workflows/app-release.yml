@@ -21,6 +21,21 @@
 #
 # Linux builds on ubuntu-22.04, the oldest runner, so the shell and the libraries the AppImage carries need glibc
 # 2.35 and not 2.39: the AppImage then runs on Ubuntu 22.04, Debian 12 and later.
+#
+# The app updates itself from what this workflow publishes (app/src-tauri/src/updates.rs). Every leg builds with
+# src-tauri/tauri.updater.conf.json, which turns the updater's artifacts on, and with the updater's signing key (the
+# repository secrets TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD; this is the updater's own
+# minisign key, not a code-signing certificate). Each leg then holds what the app installs and its signature:
+#   Windows   Shouting Iguana_<version>_x64-setup.exe      and .sig  (the installer itself)
+#   macOS     Shouting Iguana_<version>_<arch>.app.tar.gz  and .sig  (the app, archived; the bundler names it
+#             "Shouting Iguana.app.tar.gz" on both Macs, so it is renamed here with the disk image's arch)
+#   Linux     Shouting Iguana_<version>_amd64.AppImage     and .sig  (the AppImage itself)
+# The release job uploads them all, then writes latest.json (version, notes, pub_date, and for windows-x86_64,
+# darwin-aarch64, darwin-x86_64 and linux-x86_64 the file's URL and its signature), checks it and uploads it last, so
+# the app never reads a latest.json that names a file not yet there. The app asks for
+# releases/latest/download/latest.json, so only a release GitHub marks latest updates anyone: a pre-release doesn't.
+# The preflight job fails before any installer is built when a secret is missing or isn't the key the app trusts.
+# What's new, as the app shows it, is app/release-notes/<version>.md when there is one.
 name: App release (v2)
 
 on:
@@ -37,8 +52,86 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Before any installer is built (a macOS minute costs ten Linux ones): the version is the same everywhere it is
+  # written, a tag is this version's, and the updater's signing key is there and is the key the app trusts.
+  preflight:
+    name: Version and updater key
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: One version, and the tag is it
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          failed=0
+          package="$(node -p "require('./package.json').version")"
+          cargo="$(sed -n 's/^version = "\(.*\)"$/\1/p' src-tauri/Cargo.toml | head -1)"
+          engine="$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' ../engine/Directory.Build.props | head -1)"
+          for pair in "app/package.json=${package}" "app/src-tauri/Cargo.toml=${cargo}" "engine/Directory.Build.props=${engine}"; do
+            if [ "${pair#*=}" != "$version" ]; then
+              echo "::error::${pair%%=*} says version ${pair#*=}, and app/src-tauri/tauri.conf.json says ${version}."
+              failed=1
+            fi
+          done
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "$GITHUB_REF_NAME" != "app-v${version}" ]; then
+            echo "::error::The tag ${GITHUB_REF_NAME} is not app-v${version}, app-v plus the version in app/src-tauri/tauri.conf.json."
+            failed=1
+          fi
+          exit "$failed"
+
+      - run: npm ci
+
+      # Signs a small file as the build signs the installers, and checks the signature with the public key in
+      # tauri.conf.json, as the app checks a download. Nothing of either secret is printed.
+      - name: Updater signing key
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -uo pipefail
+          missing=0
+          for name in TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::The repository secret ${name} is missing or empty. The app only installs an update signed with its updater key, so nothing is built without it."
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+          probe="${RUNNER_TEMP}/updater-key-probe.txt"
+          echo "Shouting Iguana ${VERSION}" > "$probe"
+          if ! npx tauri signer sign --app-version "$VERSION" "$probe" >/dev/null 2>"${RUNNER_TEMP}/updater-key-probe.log"; then
+            echo "::error::Nothing could be signed with TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD. The first must be the key file's contents exactly (no line break added at its end), the second that key's password."
+            exit 1
+          fi
+          if ! node scripts/updater-manifest.mjs verify "$probe" --version "$VERSION"; then
+            echo "::error::TAURI_SIGNING_PRIVATE_KEY is not the key whose public half is plugins.updater.pubkey in app/src-tauri/tauri.conf.json. The app would refuse every update signed with it."
+            exit 1
+          fi
+          echo "### Updater key" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "The updater's signing key is the one the app trusts. Version ${VERSION}." >> "$GITHUB_STEP_SUMMARY"
+
   build:
     name: ${{ matrix.name }}
+    needs: preflight
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     permissions:
@@ -63,7 +156,7 @@ jobs:
             name: macOS arm64
             os: macos-latest
             target: aarch64-apple-darwin
-            bundles: dmg
+            bundles: app,dmg
             smoke: false
             signing: "No certificate: this build is ad-hoc signed and not notarised. Gatekeeper blocks it until it is allowed in Privacy and Security."
             summary_extra: ""
@@ -71,7 +164,7 @@ jobs:
             name: macOS x64
             os: macos-latest
             target: x86_64-apple-darwin
-            bundles: dmg
+            bundles: app,dmg
             smoke: false
             signing: "No certificate: this build is ad-hoc signed and not notarised. Gatekeeper blocks it until it is allowed in Privacy and Security."
             summary_extra: ""
@@ -134,22 +227,31 @@ jobs:
       - name: Sidecar
         run: npm run build:sidecar -- --target ${{ matrix.target }}
 
-      # APPIMAGE_EXTRACT_AND_RUN lets linuxdeploy's own AppImage run on a runner without FUSE.
+      # APPIMAGE_EXTRACT_AND_RUN lets linuxdeploy's own AppImage run on a runner without FUSE. tauri.updater.conf.json
+      # turns the updater's artifacts on: the build signs the installer (and the AppImage) with the updater's key, and
+      # fails without it.
       - name: Release build
         if: runner.os != 'macOS'
         env:
           APPIMAGE_EXTRACT_AND_RUN: "1"
-        run: npm run tauri build -- --target "${{ matrix.target }}" --bundles "${{ matrix.bundles }}"
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npm run tauri build -- --target "${{ matrix.target }}" --bundles "${{ matrix.bundles }}" --config src-tauri/tauri.updater.conf.json
 
       # Ad-hoc signed (tauri.conf.json). If the signed bundle can't be made (codesign refusing the app or the sidecar
       # in it), the release still gets the unsigned bundle earlier releases shipped, and the summary says so. The
-      # second build only bundles again: the compiling is done.
+      # second build only bundles again: the compiling is done. The app bundle is built as well as the disk image,
+      # because the updater's archive (Shouting Iguana.app.tar.gz) is made from it. --no-sign also skips the
+      # updater's signature, so after that build the archive is signed by hand in the next step.
       - name: Release build (macOS)
         if: runner.os == 'macOS'
         shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           set -uo pipefail
-          if npm run tauri build -- --target "${{ matrix.target }}" --bundles "${{ matrix.bundles }}"; then
+          if npm run tauri build -- --target "${{ matrix.target }}" --bundles "${{ matrix.bundles }}" --config src-tauri/tauri.updater.conf.json; then
             exit 0
           fi
           message="The ad-hoc signed build failed, so this disk image was built again with --no-sign. The app in it has no signature: Apple silicon Macs call it damaged until its quarantine mark is removed (xattr -dr com.apple.quarantine)."
@@ -160,7 +262,7 @@ jobs:
             echo "${message}"
           } >> "$GITHUB_STEP_SUMMARY"
           rm -rf "src-tauri/target/${{ matrix.target }}/release/bundle"
-          npm run tauri build -- --target "${{ matrix.target }}" --bundles "${{ matrix.bundles }}" --no-sign
+          npm run tauri build -- --target "${{ matrix.target }}" --bundles "${{ matrix.bundles }}" --config src-tauri/tauri.updater.conf.json --no-sign
 
       - name: Installer and checksum (Windows)
         id: installers-win
@@ -188,13 +290,21 @@ jobs:
             $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $file.FullName).Hash.ToLowerInvariant()
             "$hash  $($file.Name)"
           })
+          $version = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          # The app updates from the installer itself: its signature, made by the build with the updater's key, goes
+          # with it, and is checked here as the app checks it.
+          $setup = $files | Where-Object { $_.Name -like "*-setup.exe" } | Select-Object -First 1
+          if (-not $setup) { throw "no installer for the app to update from under $root" }
+          $signature = "$($setup.FullName).sig"
+          if (-not (Test-Path -LiteralPath $signature)) { throw "the build made no updater signature beside $($setup.Name)" }
+          Copy-Item -LiteralPath $signature -Destination (Join-Path $out "$($setup.Name).sig") -Force
+          node scripts/updater-manifest.mjs verify (Join-Path $out $setup.Name) --version $version
+          if ($LASTEXITCODE -ne 0) { throw "the installer's updater signature is not good" }
           $sums = Join-Path $out "SHA256SUMS-${{ matrix.id }}.txt"
           Set-Content -LiteralPath $sums -Value $lines -Encoding ascii
-          $version = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
           "dir=$out" >> $env:GITHUB_OUTPUT
           "version=$version" >> $env:GITHUB_OUTPUT
-          $setup = $files | Where-Object { $_.Name -like "*-setup.exe" } | Select-Object -First 1
-          if ($setup) { "installer=$($setup.FullName)" >> $env:GITHUB_OUTPUT }
+          "installer=$($setup.FullName)" >> $env:GITHUB_OUTPUT
           $lines | ForEach-Object { Write-Host $_ }
           $nl = [Environment]::NewLine
           $fence = '```'
@@ -206,6 +316,9 @@ jobs:
         id: installers-unix
         if: runner.os != 'Windows'
         shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           root="src-tauri/target/${{ matrix.target }}/release/bundle"
@@ -222,6 +335,8 @@ jobs:
               dmg) matches=( "$root"/dmg/*.dmg ) ;;
               deb) matches=( "$root"/deb/*.deb ) ;;
               appimage) matches=( "$root"/appimage/*.AppImage ) ;;
+              # Not an installer: the updater's archive is made from it, below.
+              app) continue ;;
               *) echo "unknown bundle $kind" >&2; exit 1 ;;
             esac
             if [ ${#matches[@]} -eq 0 ]; then
@@ -244,6 +359,45 @@ jobs:
             fi
           done
           version="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          # What the app updates from, with the signature the build made with the updater's key, each checked here as
+          # the app checks it. On Linux that is the AppImage itself. On macOS it is the app, archived: the bundler names
+          # the archive the same on both Macs, so it takes the disk image's name, which has the arch in it.
+          update=""
+          for file in "${files[@]}"; do
+            case "$file" in
+              *.AppImage)
+                update="$out/$(basename "$file")"
+                if [ ! -s "$file.sig" ]; then
+                  echo "the build made no updater signature beside $(basename "$file")" >&2
+                  exit 1
+                fi
+                cp "$file.sig" "$update.sig"
+                ;;
+              *.dmg)
+                archives=( "$root"/macos/*.app.tar.gz )
+                if [ ${#archives[@]} -ne 1 ]; then
+                  echo "expected one .app.tar.gz for the app to update from under $root/macos, found ${#archives[@]}" >&2
+                  exit 1
+                fi
+                update="$out/$(basename "${file%.dmg}").app.tar.gz"
+                cp "${archives[0]}" "$update"
+                if [ -s "${archives[0]}.sig" ]; then
+                  cp "${archives[0]}.sig" "$update.sig"
+                else
+                  # The --no-sign build: it skips the updater's signature with the code signature.
+                  echo "::warning::The build made no updater signature for the app archive (the --no-sign build): signing it now."
+                  npx tauri signer sign --app-version "$version" "$update" >/dev/null
+                fi
+                name="$(basename "$update")"
+                shasum -a 256 "$update" | awk -v name="$name" '{print $1 "  " name}' >> "$sums"
+                ;;
+            esac
+          done
+          if [ -z "$update" ]; then
+            echo "nothing for the app to update from among: ${files[*]}" >&2
+            exit 1
+          fi
+          node scripts/updater-manifest.mjs verify "$update" --version "$version"
           {
             echo "dir=${out}"
             echo "version=${version}"
@@ -374,11 +528,39 @@ jobs:
             exit 1
           fi
 
+      # For scripts/updater-manifest.mjs, which needs nothing installed.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: release
           pattern: shouting-iguana-*
           merge-multiple: false
+
+      # latest.json is what the app reads to learn of this version (app/src-tauri/src/updates.rs). It is written
+      # before anything is published, from the files as they will be named on the release, and checked: every
+      # platform is there, every URL is one of this release's files, and every signature is the app's key's over the
+      # very file it names, signed as this version. A release that would update no one fails here, unpublished.
+      - name: Update information (latest.json)
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          node app/scripts/updater-manifest.mjs expect --dir release --repo "$GITHUB_REPOSITORY" --tag "$GITHUB_REF_NAME" --out expected-assets.json
+          node app/scripts/updater-manifest.mjs write --dir release --assets expected-assets.json --version "$VERSION" \
+            --notes "app/release-notes/${VERSION}.md" --out latest.json
+          node app/scripts/updater-manifest.mjs check --manifest latest.json --dir release --assets expected-assets.json --version "$VERSION"
+          {
+            echo "### Update information"
+            echo ""
+            echo "latest.json, as the app reads it. Every signature was checked against the file it names."
+            echo ""
+            echo '```json'
+            cat latest.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publish one release
         env:
@@ -400,8 +582,15 @@ jobs:
             echo "::error::Two artifacts share a file name, so one would replace the other on the release: ${dupes}"
             exit 1
           fi
-          cat > notes.md <<EOF
+          : > notes.md
+          if [ -s "app/release-notes/${VERSION}.md" ]; then
+            cat "app/release-notes/${VERSION}.md" >> notes.md
+            printf '\n---\n\n' >> notes.md
+          fi
+          cat >> notes.md <<EOF
           Shouting Iguana ${VERSION}, from ${GITHUB_SHA}.
+
+          The app updates itself from this release: Settings › Updates. A copy installed from the .deb package is told of the new version and downloads it. Versions 2.1.0 and older do not update themselves: download this installer once.
 
           No code-signing certificate was used. The Windows installer and the Linux packages are unsigned. The macOS app is ad-hoc signed and not notarised.
 
@@ -411,12 +600,16 @@ jobs:
           - macOS: disk image (arm64 and x64)
           - Linux: .deb and .AppImage (x64), for Ubuntu 22.04, Debian 12 and later
 
-          Each installer is attached with a SHA256 checksum.
+          Each installer is attached with a SHA256 checksum. The .sig files and latest.json are what the app's own updater reads.
 
           The sidecar publish does not carry ICU, because the engine does not set InvariantGlobalization. Starting it aborts without the system's libicu. The .deb gets that library through WebKitGTK, and the .AppImage bundles it with WebKit.
           EOF
+          # latest.json goes up with the installers: gh publishes the release only once every file is on it, so the
+          # app never finds a newest release without its update information, or update information naming a file
+          # that is not there yet.
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" --clobber "${files[@]}"
+            gh release upload "$GITHUB_REF_NAME" --clobber latest.json
             gh release edit "$GITHUB_REF_NAME" --title "Shouting Iguana ${VERSION}" --notes-file notes.md
           else
             flags=()
@@ -426,8 +619,19 @@ jobs:
             gh release create "$GITHUB_REF_NAME" "${flags[@]}" \
               --title "Shouting Iguana ${VERSION}" \
               --notes-file notes.md \
-              "${files[@]}"
+              "${files[@]}" latest.json
           fi
+
+      # The same check again, against what GitHub now holds: each URL in latest.json is a file of the release, of
+      # the size that was signed, and latest.json itself is there.
+      - name: Update information, as published
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh release view "$GITHUB_REF_NAME" --json assets > published-assets.json
+          node app/scripts/updater-manifest.mjs check --manifest latest.json --dir release --assets published-assets.json --version "$VERSION" --published
 
   # A hand run has no release job. Say that once, on the summary, so it is not mistaken for a publish.
   note:

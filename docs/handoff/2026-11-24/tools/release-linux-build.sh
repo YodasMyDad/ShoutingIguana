@@ -14,6 +14,11 @@
 # The bundles land in $work/out/bundle. The named volumes keep Node, the .NET SDK, Rust, the crates and the build
 # folder between runs: the first run takes about ten minutes, the next about five. si-rel-opt also gives
 # release-linux-smoke.sh its node binary. Remove them with `docker volume rm` when done.
+#
+# With the updater's signing key in the container's environment (add `-e TAURI_SIGNING_PRIVATE_KEY -e
+# TAURI_SIGNING_PRIVATE_KEY_PASSWORD` to docker run, with both set in the shell that runs it, so neither is on a
+# command line), the build is the release's: the updater's artifacts are on (tauri.updater.conf.json), the .sig files
+# land beside the bundles, and the AppImage's signature is checked as the app checks it.
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
@@ -50,9 +55,16 @@ echo "== sidecar"
 npm run build:sidecar -- --target x86_64-unknown-linux-gnu 2>&1 | tail -5
 echo "== tauri build"
 export APPIMAGE_EXTRACT_AND_RUN=1
-npm run tauri build -- --target x86_64-unknown-linux-gnu --bundles deb,appimage 2>&1 | tail -40
 root=src-tauri/target/x86_64-unknown-linux-gnu/release/bundle
-rm -rf /out/bundle && mkdir -p /out/bundle
+rm -rf "$root" /out/bundle && mkdir -p /out/bundle
+if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+  npm run tauri build -- --target x86_64-unknown-linux-gnu --bundles deb,appimage --config src-tauri/tauri.updater.conf.json 2>&1 | tail -40
+  cp "$root"/deb/*.deb.sig "$root"/appimage/*.AppImage.sig /out/bundle/
+  version="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+  node scripts/updater-manifest.mjs verify "$(ls "$root"/appimage/*.AppImage)" --version "$version"
+else
+  npm run tauri build -- --target x86_64-unknown-linux-gnu --bundles deb,appimage 2>&1 | tail -40
+fi
 cp "$root"/deb/*.deb "$root"/appimage/*.AppImage /out/bundle/
 ls -la /out/bundle
 echo "== BUILD DONE"
