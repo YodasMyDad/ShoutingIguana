@@ -36,6 +36,10 @@ namespace ShoutingIguana.Sidecar.Serialization;
         typeof(CamelCaseEnumConverter<OutOfDateReason>),
         typeof(CamelCaseEnumConverter<UserAgentPreset>),
 
+        // Read from a name or a number, written as a name: up to 2.0.3 these two were numbers.
+        typeof(NamedEnumConverter<JavaScriptRendering>),
+        typeof(NamedEnumConverter<ExtractionSelector>),
+
         // The grids (E3a).
         typeof(CamelCaseEnumConverter<SummaryUnavailableReason>),
         typeof(CamelCaseEnumConverter<ResourceType>),
