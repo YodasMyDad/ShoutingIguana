@@ -41,6 +41,17 @@
         "mimeType": "application/x-shouting-iguana-crawl"
       }
     ],
+    "macOS": {
+      "signingIdentity": "-",
+      "hardenedRuntime": false
+    },
+    "linux": {
+      "appimage": {
+        "files": {
+          "/usr/lib/libssl.so.3": "/usr/lib/x86_64-linux-gnu/libssl.so.3"
+        }
+      }
+    },
     "windows": {
       "signCommand": { "cmd": "node", "args": ["../scripts/sign.mjs", "%1"] },
       "nsis": {
