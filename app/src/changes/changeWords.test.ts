@@ -3,6 +3,8 @@ import type { CheckChange, CrawlComparison } from '../api/fixLoop';
 import {
   ANALYSED_AGAIN_WORDS,
   changeDate,
+  changeDateTime,
+  summaryChangeParts,
   checkChangeWords,
   checkSplitWords,
   checksMovedLine,
@@ -82,6 +84,20 @@ describe('the score’s change', () => {
     expect(homeScoreLine(14, SINCE, true)).toBe('▲14 since 3 Nov so far');
     // A first crawl, or one scored another way: nothing at all, never "+0".
     expect(homeScoreLine(null, SINCE, false)).toBeNull();
+    // The audit of 2026-11-24: two checks of one day read "Same as 24 Nov" and "Since your last check on 24 Nov".
+    const earlierToday = new Date(2026, 10, 17, 9, 12).toISOString();
+    expect(changeDateTime(earlierToday, NOW)).toBe('17 Nov at 09:12');
+    expect(changeDateTime(SINCE, NOW)).toBe('3 Nov');
+    expect(homeScoreLine(0, earlierToday, false, NOW)).toBe('Same as 17 Nov at 09:12');
+    expect(homeScoreLine(14, earlierToday, true, NOW)).toBe('▲14 since 17 Nov at 09:12 so far');
+    expect(homeScoreLine(0, SINCE, false, NOW)).toBe('Same as 3 Nov');
+    expect(
+      summaryChangeParts({ since: earlierToday, score: null, counts: { fixed: 0, new: 0 }, partial: false, now: NOW })
+        .lead,
+    ).toBe('Since your last check on 17 Nov at 09:12');
+    expect(
+      summaryChangeParts({ since: SINCE, score: null, counts: { fixed: 0, new: 0 }, partial: false, now: NOW }).lead,
+    ).toBe('Since your last check on 3 Nov');
   });
 
   it('reads "85 ▲14" in Advanced’s score cell, and the score alone without a change', () => {

@@ -33,6 +33,18 @@ export function changeDate(iso: string | null | undefined, now: number = Date.no
   return (sameYear ? SHORT_DATE : SHORT_DATE_YEAR).format(time);
 }
 
+/**
+ * The previous crawl's date with its time when it was today: "3 Nov at 09:12". Two checks of one day both read "3 Nov"
+ * (the audit of 2026-11-24: "Same as 24 Nov", said on 24 Nov), so the lines that name the last check say which. Any
+ * other day is the date alone.
+ */
+export function changeDateTime(iso: string | null | undefined, now: number = Date.now()): string {
+  const date = changeDate(iso, now);
+  if (!date || !iso) return date;
+  const sameDay = new Date(Date.parse(iso)).toDateString() === new Date(now).toDateString();
+  return sameDay ? `${date} at ${clockWords(iso)}` : date;
+}
+
 /** "since 3 Nov"; "since your last check" when the date doesn't read. */
 export function sinceWords(iso: string | null | undefined, now: number = Date.now()): string {
   const date = changeDate(iso, now);
@@ -81,11 +93,16 @@ export function moveSpoken(change: number, unit = 'point'): string {
  * Simple's line beside the score's ring on Home: "▲14 since 3 Nov", "Same as 3 Nov", and "so far" when either crawl
  * didn't read all it set out to. Null without a score change: nothing is said.
  */
-export function homeScoreLine(change: number | null, since: string | null, partial: boolean): string | null {
+export function homeScoreLine(
+  change: number | null,
+  since: string | null,
+  partial: boolean,
+  now: number = Date.now(),
+): string | null {
   if (change === null) return null;
-  const date = changeDate(since);
-  const when = date ? date : 'your last check';
-  const line = change === 0 ? `Same as ${when}` : `${moveGlyph(change)} ${sinceWords(since)}`;
+  // With the time when the last check was today: "Same as 24 Nov at 09:12".
+  const when = changeDateTime(since, now) || 'your last check';
+  const line = change === 0 ? `Same as ${when}` : `${moveGlyph(change)} since ${when}`;
   return partial ? `${line} so far` : line;
 }
 
@@ -152,11 +169,14 @@ export function summaryChangeParts(args: {
   score: { then: number; now: number } | null;
   counts: Pick<ChangeCounts, 'fixed' | 'new'>;
   partial: boolean;
+  now?: number | undefined;
 }): SummaryChangeParts {
   const { since, score, counts, partial } = args;
   const { fixed, new: added } = counts;
+  // With the time when the last check was today: "Since your last check on 24 Nov at 09:12".
+  const when = changeDateTime(since, args.now);
   return {
-    lead: `Since your last check ${onWords(since)}`,
+    lead: `Since your last check ${when ? `on ${when}` : 'last time'}`,
     score: score ? `score ${thenNow(score.then, score.now)}` : null,
     fixed: fixed > 0 ? `${formatCountOf(fixed, 'problem')} fixed` : null,
     added:
