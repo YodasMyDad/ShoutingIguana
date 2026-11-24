@@ -6,7 +6,9 @@ Installs the NSIS bundle silently for the current user, checks it, runs it, and 
 1. Runs the installer with /S into a fresh temporary folder (/D=), as a per-user install.
 2. Checks the install: the shell and the sidecar are there, the uninstaller is registered under HKCU, and Windows
    opens .sicrawl files with the installed app (the merged HKEY_CLASSES_ROOT view, as Explorer reads it).
-3. Runs the installed engine on its own (smoke-sidecar.mjs): it crawls a two-page local site and analyses it.
+3. Runs the installed engine on its own (smoke-sidecar.mjs --render): it crawls a two-page local site and analyses it,
+   then crawls a page whose only link a script adds, with JavaScript rendering on (the browser is downloaded on a
+   machine that has never rendered).
 4. Runs the installed app through smoke-tauri.mjs (--exe), on temporary data, state and profile folders: it shows the
    library, closes, and leaves no sidecar behind.
 5. Runs the uninstaller with /S and checks the folder, the registration, the association and the shortcuts are gone.
@@ -107,9 +109,10 @@ try {
             Write-Host "smoke-installer: installed; .sicrawl opens with $command"
         }
 
-        # 3. The installed engine on its own: it starts, crawls a two-page local site, analyses it and stops. Needs no
+        # 3. The installed engine on its own: it starts, crawls a two-page local site, analyses it, renders a page a
+        # script builds, and stops. Needs no
         # desktop, so it is checked on every machine.
-        & node (Join-Path $PSScriptRoot 'smoke-sidecar.mjs') --sidecar $sidecar
+        & node (Join-Path $PSScriptRoot 'smoke-sidecar.mjs') --render --sidecar $sidecar
         if ($LASTEXITCODE -ne 0) { Fail 'the installed engine failed on its own.' }
 
         # 4. The installed app runs: it shows the library, and closing it leaves no sidecar.

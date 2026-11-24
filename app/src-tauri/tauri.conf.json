@@ -46,6 +46,13 @@
       "hardenedRuntime": false
     },
     "linux": {
+      "deb": {
+        "depends": ["libnss3", "libasound2t64 | libasound2"],
+        "desktopTemplate": "linux/main.desktop",
+        "files": {
+          "/usr/share/mime/packages/shouting-iguana.xml": "linux/shouting-iguana.xml"
+        }
+      },
       "appimage": {
         "files": {
           "/usr/lib/libssl.so.3": "/usr/lib/x86_64-linux-gnu/libssl.so.3"

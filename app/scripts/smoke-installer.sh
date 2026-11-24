@@ -8,8 +8,10 @@
 #                                                 arch is arm64 or x86_64, an x86_64 app runs under Rosetta
 #
 # For each it checks, in this order:
-#   1. The packaged engine on its own (smoke-sidecar.mjs): si-sidecar starts, crawls a two-page local site, analyses
-#      it and stops cleanly. A native library it can't load fails here.
+#   1. The packaged engine on its own (smoke-sidecar.mjs --render): si-sidecar starts, crawls a two-page local site,
+#      analyses it, then crawls a page whose only link a script adds, with JavaScript rendering on, and stops cleanly.
+#      A native library it can't load fails here, and so does a browser it can't start: Playwright's driver, the
+#      Chromium it downloads on first use (this needs the internet), or a system library Chromium needs.
 #   2. The app, on temporary data, state and profile folders (SI_APP_DATA_DIR, SI_APP_STATE_DIR, SI_APP_PROFILE_DIR),
 #      under a virtual display on Linux: the shell's log says its engine is ready on a port; that port answers 401
 #      without the token (so it is the engine, and it is guarded); a si-sidecar process runs on the test's state
@@ -30,6 +32,9 @@ DISPLAY_NUMBER=99
 # What an AppImage leaves to the system, because every desktop has it (the AppImage excludelist): a bare container
 # doesn't, so the test installs these for the AppImage. Named here so the README's list is this one.
 APPIMAGE_SYSTEM_PACKAGES="libfribidi0 libfontconfig1 libfreetype6 libharfbuzz0b libx11-6 libx11-xcb1 libxcb1 libwayland-client0 libgbm1 libdrm2 libgl1 libegl1 libgles2 libexpat1 libgpg-error0 libcom-err2 zlib1g"
+# What the browser the engine downloads for JavaScript rendering needs and an AppImage doesn't carry. The .deb
+# depends on these (tauri.conf.json); a desktop usually has them.
+APPIMAGE_BROWSER_PACKAGES="libnss3 libasound2"
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 kind="${1:-}"
@@ -215,7 +220,7 @@ run_app() {
 }
 
 sidecar_smoke() {
-  node "$here/smoke-sidecar.mjs" --sidecar "$1" || fail "the packaged engine failed on its own ($1)."
+  node "$here/smoke-sidecar.mjs" --render --sidecar "$1" || fail "the packaged engine failed on its own ($1)."
 }
 
 smoke_deb() {
@@ -237,6 +242,15 @@ smoke_deb() {
   "$sidecar" --help >/dev/null 2>"$work/sidecar.err" || fail "si-sidecar --help failed: $(cat "$work/sidecar.err")"
   grep -q '^MimeType=application/x-shouting-iguana-crawl' /usr/share/applications/*.desktop 2>/dev/null ||
     fail "no desktop entry names the .sicrawl type."
+  # Opening a .sicrawl file: the entry hands the file to the app, and the system knows the type by its extension.
+  grep -q '^Exec=shouting-iguana %F' /usr/share/applications/*.desktop 2>/dev/null ||
+    fail "the desktop entry doesn't pass the opened file to the app (Exec has no %F)."
+  if [ -f /usr/share/mime/globs ]; then
+    grep -q '^application/x-shouting-iguana-crawl:*.sicrawl$' /usr/share/mime/globs ||
+      fail "the system doesn't know .sicrawl files as application/x-shouting-iguana-crawl."
+  else
+    fail "there is no MIME database (/usr/share/mime/globs) to know .sicrawl files by."
+  fi
   say "installed, with $(dpkg -s libwebkit2gtk-4.1-0 2>/dev/null | sed -n 's/^Version: /WebKitGTK /p')"
 
   sidecar_smoke "$sidecar"
@@ -255,7 +269,7 @@ smoke_appimage() {
   chmod +x "$image"
   if command -v apt-get >/dev/null && command -v dpkg >/dev/null; then
     local absent=() package
-    for package in $APPIMAGE_SYSTEM_PACKAGES; do
+    for package in $APPIMAGE_SYSTEM_PACKAGES $APPIMAGE_BROWSER_PACKAGES; do
       dpkg -s "$package" >/dev/null 2>&1 || absent+=("$package")
     done
     if [ ${#absent[@]} -gt 0 ]; then
@@ -271,7 +285,15 @@ smoke_appimage() {
   local missing
   missing="$(LD_LIBRARY_PATH="$root/usr/lib" ldd "$root/usr/bin/shouting-iguana" | grep '=> not found' || true)"
   [ -z "$missing" ] || fail "the shell can't find libraries the AppImage doesn't carry: $missing"
-  sidecar_smoke "$root/usr/bin/si-sidecar"
+  # With what the AppImage's own start script sets (its GTK hook), as the shell and so its engine get it.
+  (
+    export APPDIR="$root"
+    for hook in "$root"/apprun-hooks/*.sh; do
+      # shellcheck disable=SC1090
+      [ -f "$hook" ] && . "$hook"
+    done
+    node "$here/smoke-sidecar.mjs" --render --sidecar "$root/usr/bin/si-sidecar"
+  ) || fail "the packaged engine failed on its own ($root/usr/bin/si-sidecar)."
   rm -rf "$root"
 
   linux_test_tools
