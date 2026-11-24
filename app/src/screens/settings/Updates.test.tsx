@@ -2,16 +2,27 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { setTransport } from '../../../api/transport';
-import { createQueryClient } from '../../../app/queryClient';
-import { fakeSidecar, standardRoutes } from '../../../test/fakeSidecar';
-import { RELEASES_URL, Section } from './Updates';
+import { setTransport } from '../../api/transport';
+import { createQueryClient } from '../../app/queryClient';
+import { fakeSidecar, standardRoutes } from '../../test/fakeSidecar';
+import { SETTINGS_SECTIONS } from './registry';
+import { RELEASES_URL, Section } from './sections/Updates';
 
 const os = vi.hoisted(() => ({ openInBrowser: vi.fn(() => Promise.resolve(true)) }));
-vi.mock('../../../shell/os', () => os);
+vi.mock('../../shell/os', () => os);
 
 afterEach(() => {
   os.openInBrowser.mockClear();
+});
+
+// This file is beside `sections/`, not in it: the registry takes every file there into the app (a test among them
+// brought the test runner into the built app, and Settings didn't open).
+describe('Settings’ sections folder', () => {
+  it('holds sections only', () => {
+    const files = Object.keys(import.meta.glob('./sections/*.tsx'));
+    expect(files.length).toBeGreaterThan(0);
+    expect(files).toHaveLength(SETTINGS_SECTIONS.length);
+  });
 });
 
 describe('Settings › Updates', () => {
