@@ -71,6 +71,24 @@ public sealed class CrawlOptionsTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// A sign-in given without the parts that are optional (a host, a cookie's domain and path, a form's selectors),
+    /// or with one as null, is a sign-in with those left empty. It was an engine error: a 500.
+    /// </summary>
+    [Fact]
+    public async Task ASignInWithoutItsOptionalPartsIsValid()
+    {
+        var bare = await _sidecar.PostAsync("api/crawl-options/validate", JsonNode.Parse("""
+            {"startUrl":"https://example.com/",
+             "httpLogins":[{"username":"reader","password":"let-me-in"}],
+             "cookies":[{"name":"session","value":"abc"}],
+             "formLogin":{"url":"https://example.com/sign-in","username":"reader","password":"let-me-in","submit":null}}
+            """));
+
+        Assert.Equal(HttpStatusCode.OK, bare.Status);
+        Assert.Equal("""{"errors":{}}""", bare.Body!.ToJsonString());
+    }
+
+    /// <summary>
     /// The app sends the rendering mode and a rule's selector type by name (<c>javaScript</c>, <c>xPath</c>), as its
     /// types say, and reads them back by name. They were numbers, so choosing a mode in the app was refused as
     /// <c>invalid-options</c>. A number is still read: defaults a 2.0.3 sidecar saved hold one.

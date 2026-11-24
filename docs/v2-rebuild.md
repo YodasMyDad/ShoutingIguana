@@ -41,6 +41,33 @@ v2 is a fresh solution that ports the useful logic.
 
 ## Where step 4 stands (2026-11-20)
 
+**2026-11-24, the rendering audit (branch `audit/render`, not merged, not pushed).** Found and fixed in the engine:
+
+- The sidecar wrote the rendering mode and a rule's selector type as numbers and refused the names the app sends, so
+  choosing a mode in the app, or adding an extraction rule, was `invalid-options`. Names now, numbers still read.
+- A sign-in sent without its optional parts was a 500.
+- A router that rewrites the address (`history.replaceState`) threw the render away. Requests held back by the
+  crawl's own pace used up the page's two seconds and its timeout, so at 2 requests a second react.dev's renders were
+  dropped without a word. A browser answered 403 or 401 had that page stored as the page. Shadow roots and content
+  below the fold were not read. A page's own requests ignored robots.txt. A service worker's went round every rule. A
+  browser that died stayed dead.
+- Automatic missed a shell with no usual mount (quotes.toscrape.com/js: 44 words in 14 pages, 3,361 rendered) and a
+  mount with a spinner in it.
+- A browser that can't start is one `error` alert that says what the crawl is not getting. It was a warning.
+- The first download is the headless browser only, said in an alert, with its progress off standard output.
+
+**Not fixed here, the release lane's:** the installed app's single-file sidecar has no Playwright driver, so it can't
+render at all (`Driver not found`). `IncludeAllContentForSelfExtract` in the sidecar's project was tried and taken
+back out (`2b44a068`, reverted): with it the packaged sidecar rendered on Windows and in a Linux container, 244 MB
+for 233, a warm start of 160 ms for 123.
+
+**Left, ranked.** A page is rendered in a new browser context, so every page downloads the site's scripts again:
+about 43 requests a page on react.dev, 22 s a page at 2 requests a second. A cache of scripts and stylesheets for the
+crawl is the fix. Two pages render at once whatever the concurrency: 43 pages in 50 to 64 s. No report of what a
+script changed (title, canonical, robots as sent and as rendered). A script's redirect is not followed. The wait is
+fixed at two seconds. The browser fallback does not pass Cloudflare's managed challenge or DataDome. `engine/README.md`
+has how a page is rendered.
+
 **2026-11-24, the whole state.** Steps 1 to 4 are done and released. The latest release is `app-v2.0.3`, a full
 release for Windows, macOS (arm64 and x64) and Linux. `master` is the only line of work and matches GitHub, where it
 is now the only branch (the 55 old remote branches were deleted that day). Nothing is in flight: no branch holds unmerged work. The only thing left in the plan

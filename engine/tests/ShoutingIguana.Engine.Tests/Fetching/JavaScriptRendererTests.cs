@@ -249,6 +249,58 @@ public sealed class JavaScriptRendererTests
         Assert.Equal("Something else went wrong.", JavaScriptRenderer.PlainReason("Something else went wrong."));
     }
 
+    /// <summary>
+    /// The browser can't start: its driver is missing, as in an app packaged without it. The crawl is told once, as an
+    /// error, what it asked of the browser and is not getting, and why. Pages are read as sent, a blocked host stays
+    /// blocked, and a sign-in fails the crawl. Nothing is passed off as rendered.
+    /// </summary>
+    [Fact]
+    public async Task ABrowserThatCannotStartIsAnErrorThatSaysWhatTheCrawlIsNotGetting()
+    {
+        await using var site = await LoopbackServer.StartAsync(ServeAsync);
+        var observer = new Notices();
+        await using var renderer = Renderer(site.BaseUri, observer, edit: options => options with
+        {
+            Rendering = JavaScriptRendering.JavaScript,
+            BrowserFallback = true
+        });
+        renderer.CreatePlaywright = () => throw new PlaywrightException("Driver not found: /.playwright/node/linux-x64/node");
+
+        Assert.Null(await renderer.RenderAsync(site.Url("/plain"), CancellationToken.None));
+        Assert.Null(await renderer.RenderAsync(site.Url("/router"), CancellationToken.None));
+        Assert.Null(await renderer.LoadAsync(site.Url("/plain"), "127.0.0.1", CancellationToken.None));
+        var refused = await Assert.ThrowsAsync<InvalidOperationException>(() => renderer.SignInAsync(
+            new FormLogin { Url = site.Url("/plain").AbsoluteUri, Username = "reader", Password = "let-me-in" }, CancellationToken.None));
+        Assert.Contains("browser", refused.Message, StringComparison.OrdinalIgnoreCase);
+
+        var notice = Assert.Single(observer.Seen);
+        Assert.Equal(CrawlNoticeLevel.Error, notice.Level);
+        Assert.Equal("javascript-rendering", notice.Code);
+        Assert.Contains("No page of this crawl is rendered", notice.Message, StringComparison.Ordinal);
+        Assert.Contains("a host that blocks plain HTTP stays blocked", notice.Message, StringComparison.Ordinal);
+        Assert.Contains("Driver not found", notice.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ABrowserThatCannotStartForAFallbackOnlySaysSo()
+    {
+        await using var site = await LoopbackServer.StartAsync(ServeAsync);
+        var observer = new Notices();
+        await using var renderer = Renderer(site.BaseUri, observer, edit: options => options with
+        {
+            Rendering = JavaScriptRendering.Off,
+            BrowserFallback = true
+        });
+        renderer.CreatePlaywright = () => throw new PlaywrightException("Driver not found");
+
+        Assert.Null(await renderer.LoadAsync(site.Url("/plain"), "127.0.0.1", CancellationToken.None));
+
+        var notice = Assert.Single(observer.Seen);
+        Assert.Equal(CrawlNoticeLevel.Error, notice.Level);
+        Assert.DoesNotContain("rendered", notice.Message, StringComparison.Ordinal);
+        Assert.Contains("A host that blocks plain HTTP stays blocked", notice.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task ABrowserThatDiedIsStartedAgain()
     {

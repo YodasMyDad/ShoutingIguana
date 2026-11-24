@@ -98,7 +98,11 @@ internal sealed partial class JavaScriptRenderer(
     /// </summary>
     public Func<Uri, Task<RobotsTxt>>? ReadRobotsTxt { get; set; }
 
+    /// <summary>Starts Playwright's driver. A test gives one that fails, as an app packaged without the driver does.</summary>
+    internal Func<Task<IPlaywright>> CreatePlaywright { get; set; } = Playwright.CreateAsync;
+
     private IPlaywright? _playwright;
+    private string? _unavailableReason;
     private IBrowser? _browser;
     private Socks5AuthRelay? _socksRelay;
     private int _unavailable;
@@ -233,7 +237,7 @@ internal sealed partial class JavaScriptRenderer(
         var browser = await BrowserAsync().ConfigureAwait(false);
         if (browser is null)
         {
-            throw new InvalidOperationException("Sign-in needs the browser, and it couldn't start, so the crawl did not run.");
+            throw new InvalidOperationException($"Sign-in needs the browser, and it couldn't start, so the crawl did not run. {_unavailableReason}".TrimEnd());
         }
 
         if (!Uri.TryCreate(login.Url, UriKind.Absolute, out var uri))
@@ -542,7 +546,7 @@ internal sealed partial class JavaScriptRenderer(
     {
         MakeDriverRunnable();
         _playwright?.Dispose();
-        _playwright = await Playwright.CreateAsync().ConfigureAwait(false);
+        _playwright = await CreatePlaywright().ConfigureAwait(false);
         _browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
         {
             Headless = true,
@@ -729,15 +733,28 @@ internal sealed partial class JavaScriptRenderer(
     [GeneratedRegex(@"\blib[a-z0-9][a-z0-9.+-]*", RegexOptions.CultureInvariant)]
     private static partial Regex LibraryName();
 
+    /// <summary>
+    /// The browser can't be used for the rest of the crawl. Said once, as an error the crawl keeps: what this crawl
+    /// asked of the browser and is not getting, and why. A crawl that was to be rendered must not read as one that was.
+    /// </summary>
     private IBrowser? Unavailable(string why)
     {
         Volatile.Write(ref _unavailable, 1);
-        logger.LogWarning("JavaScript rendering is off for this crawl: {Reason}", why);
+        logger.LogError("The browser can't be used in this crawl: {Reason}", why);
         why = PlainReason(why);
+        _unavailableReason = why;
+        var renders = options.Rendering != JavaScriptRendering.Off;
+        var lost = (renders, options.BrowserFallback) switch
+        {
+            (true, true) => "No page of this crawl is rendered: every page is read as it was sent, and a host that blocks plain HTTP stays blocked.",
+            (true, false) => "No page of this crawl is rendered: every page is read as it was sent.",
+            (false, true) => "A host that blocks plain HTTP stays blocked.",
+            _ => "Nothing is read in it."
+        };
         observer.OnNotice(new CrawlNotice(
-            CrawlNoticeLevel.Warning,
+            CrawlNoticeLevel.Error,
             "javascript-rendering",
-            "JavaScript rendering couldn't start, so pages are read as they were sent. " + why));
+            $"The browser couldn't start. {lost} {why}"));
         return null;
     }
 
