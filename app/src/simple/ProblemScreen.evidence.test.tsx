@@ -112,7 +112,7 @@ describe.skipIf(TABLE_STUBBED)('what a problem found, in Simple', () => {
     );
     cleanup();
     await open('title-too-long');
-    expect((await where().findAllByText(/more than Google shows\./)).length).toBe(3);
+    expect((await where().findAllByText(/Google will likely cut off about the last \d+\./)).length).toBe(3);
     expect(screen.queryByText(/One fix clears/)).toBeNull();
   });
 
@@ -126,14 +126,14 @@ describe.skipIf(TABLE_STUBBED)('what a problem found, in Simple', () => {
     expect(cut.parentElement).toHaveTextContent(
       '“Garden sofas and chairs for every season, delivered free across the UK | Example”',
     );
-    expect(where().getByText('80 characters: about 23 more than Google shows.')).toBeVisible();
+    expect(where().getByText('80 characters: Google will likely cut off about the last 23.')).toBeVisible();
     // What the grey is, said once, over the column.
     expect(
       where().getByRole('columnheader', {
         name: 'Its title: the words in grey are the ones Google will likely cut off',
       }),
     ).toBeVisible();
-    expect(where().getAllByText(/more than Google shows\./)).toHaveLength(3);
+    expect(where().getAllByText(/Google will likely cut off about the last \d+\./)).toHaveLength(3);
     // The engine's detail and the evidence's widths are Advanced's.
     expect(where().queryByText(/742 px/)).toBeNull();
     expect(screen.getByRole('main')).not.toHaveTextContent(/\bpx\b|pixels/);

@@ -784,7 +784,9 @@ const DETAIL_WORDS: Readonly<Record<string, Say>> = {
     if (schemes) return `its address starts ${schemes[1] ?? ''}://, but the sitemap’s starts ${schemes[2] ?? ''}://`;
     const match = /^The URL (.+)$/.exec(detail);
     const said = match ? statusPhrase(match[1] ?? '') : null;
-    return said ? `it ${said}` : null;
+    // The fault is where the address is, not how it answers: "It forwards" alone read as the problem (the audit of
+    // 2026-11-24).
+    return said ? `it isn’t on the sitemap’s own website, and it ${said}` : null;
   },
   'robots-txt-no-sitemap': (detail) => {
     const match = /^(\S+) has no Sitemap: line; the sitemap was found at (\S+)$/.exec(detail);

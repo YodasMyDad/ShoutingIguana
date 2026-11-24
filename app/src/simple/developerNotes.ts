@@ -40,7 +40,7 @@ export interface CutText {
   shown: string;
   /** The rest, which they cut. */
   cut: string;
-  /** "171 characters: about 21 more than Google shows." */
+  /** "171 characters: Google will likely cut off about the last 21." */
   words: string;
 }
 
@@ -76,6 +76,8 @@ export function cutTextOf(check: Pick<Check, 'id'>, row: Readonly<Record<string,
   return {
     shown,
     cut,
-    words: `${formatCount(length)} characters: about ${formatCount(over)} more than Google shows.`,
+    // Not "about 10 more than Google shows": what shows is a width, and 67 less 10 beside "about 60 characters" read as
+    // a sum that didn't add up (the audit of 2026-11-24).
+    words: `${formatCount(length)} characters: Google will likely cut off about the last ${formatCount(over)}.`,
   };
 }

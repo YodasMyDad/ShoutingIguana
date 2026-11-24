@@ -714,12 +714,12 @@
     {
       "check": "sitemap-url-other-host",
       "detail": "The URL redirects (301 Moved Permanently)",
-      "said": "It forwards (301 Moved Permanently)"
+      "said": "It isn’t on the sitemap’s own website, and it forwards (301 Moved Permanently)"
     },
     {
       "check": "sitemap-url-other-host",
       "detail": "The URL returns 404 Not Found",
-      "said": "It is missing (404 Not Found)"
+      "said": "It isn’t on the sitemap’s own website, and it is missing (404 Not Found)"
     },
     {
       "check": "sitemap-url-repeated",

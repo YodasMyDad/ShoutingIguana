@@ -504,7 +504,8 @@ internal static class ReportPlainDetails
         ["sitemap-non-indexable"] = AddressStatus,
         ["sitemap-url-other-host"] = detail => Read(detail, @"^The URL is (\w+)://, the sitemap (\w+)://$") is { Success: true } schemes
             ? $"its address starts {schemes.Groups[1].Value}://, but the sitemap’s starts {schemes.Groups[2].Value}://"
-            : AddressStatus(detail),
+            // The fault is where the address is, not how it answers: "It forwards" alone read as the problem.
+            : AddressStatus(detail) is { } status ? $"it isn’t on the sitemap’s own website, and {status}" : null,
         ["robots-txt-no-sitemap"] = detail => Read(detail, @"^(\S+) has no Sitemap: line; the sitemap was found at (\S+)$") is { Success: true } match
             ? $"the rules file {match.Groups[1].Value} doesn’t say where your sitemap is; it was found at {match.Groups[2].Value}"
             : null,

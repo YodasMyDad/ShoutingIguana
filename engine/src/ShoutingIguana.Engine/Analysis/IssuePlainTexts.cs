@@ -1244,6 +1244,7 @@ public static class IssuePlainTexts
             """Titles that may be cut off in search results""",
             [
                 """These pages have a title too long to show in full in search results, where there's room for {limit:titleMaxPixels}.""",
+                """That room is a width, so the number of characters is a rough guide.""",
                 """Search results cut a long title off to fit the screen, so the last words may not show.""",
                 """That's harmless when the important words come first, and then there's nothing to do."""
             ],
@@ -1258,7 +1259,8 @@ public static class IssuePlainTexts
         ["title-too-short"] = new(
             """Very short titles""",
             [
-                """These pages have a title shorter than {limit:titleMinPixels}.""",
+                """These pages have a title narrower in search results than {limit:titleMinPixels} of ordinary text.""",
+                """It's measured by width, as Google shows it, so the number of characters is a rough guide.""",
                 """Titles like "Login" or "Products" don't tell a searcher what the page is, or whose.""",
                 """A short title can be exactly right, such as a product name, and then there's nothing to do."""
             ],

@@ -446,8 +446,8 @@ test('a title or description too long says where Google will likely cut it, one 
   // the UX audit of 2026-11-19 (S-13): the whole text in quotes, the part Google cuts in grey (a span the column's
   // heading explains), then its length and how far over it is. One too short says "Only 16 characters long", as it did.
   const lines: [string, RegExp, 'title' | 'description' | null][] = [
-    ['title-too-long', /^“.+”[\d,]+ characters: about [\d,]+ more than Google shows\.$/, 'title'],
-    ['description-too-long', /^“.+”[\d,]+ characters: about [\d,]+ more than Google shows\.$/, 'description'],
+    ['title-too-long', /^“.+”[\d,]+ characters: Google will likely cut off about the last [\d,]+\.$/, 'title'],
+    ['description-too-long', /^“.+”[\d,]+ characters: Google will likely cut off about the last [\d,]+\.$/, 'description'],
     ['title-too-short', /^Only [\d,]+ characters? long$/, null],
     // A short description is quoted under its length: it is short enough to show whole.
     ['description-too-short', /^Only [\d,]+ characters? long\s*Search description: “.+”$/, null],
@@ -474,7 +474,7 @@ test('a title or description too long says where Google will likely cut it, one 
         rows.map((row) => {
           const parts = row.querySelectorAll('.si-cut-text');
           const grey = (parts[0]?.textContent ?? '').trim();
-          const said = /about ([\d,]+) more than Google shows\./.exec(row.textContent)?.[1] ?? '';
+          const said = /about the last ([\d,]+)\./.exec(row.textContent)?.[1] ?? '';
           return {
             parts: parts.length,
             grey: Array.from(new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(grey)).length,

@@ -61,7 +61,7 @@ describe('a title or description cut in search results', () => {
       shown:
         'Wide selection of fantastic affordable garden sheds and storage boxes. Choose from plastic, metal and wooden sheds and storage boxes to help keep your',
       cut: ' garden clutter free.',
-      words: '171 characters: about 20 more than Google shows.',
+      words: '171 characters: Google will likely cut off about the last 20.',
     });
     expect(
       cutTextOf({ id: 'title-too-long' }, { title: 'Sofas and chairs | Example', titleInResults: 'Sofas and chairs…' }),
