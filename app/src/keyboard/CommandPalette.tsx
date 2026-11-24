@@ -5,6 +5,7 @@ import { useEffect, useId, useMemo, useState, type KeyboardEvent, type ReactNode
 import { errorTitle } from '../api/errors';
 import { checksQuery, libraryQuery } from '../api/queries';
 import { afterFocusReturns, restoreFocus, setOverlay, useOverlay } from '../app/overlays';
+import { FOCUS_TARGETS, SIMPLE_FIELDS } from '../crawl/options/form';
 import { crawlName } from '../crawl/status';
 import { formatCount, formatRelativeTime } from '../lib/format';
 import { useMode } from '../mode/mode';
@@ -109,7 +110,10 @@ export function CommandPalette() {
         run: () => navigate({ to: '/settings/{-$section}', params: { section: place.section } }),
       });
     }
+    // Simple lists no Advanced-only command (docs/v2-ui-simple.md): a setting its form doesn't ask about would turn
+    // Advanced on, so it's found in Advanced only.
     for (const place of NEW_CRAWL_PLACES) {
+      if (appMode === 'simple' && !SIMPLE_FIELDS.has(FOCUS_TARGETS[place.focus].field)) continue;
       list.push({
         id: `new:${place.focus}`,
         group: 'Crawl',

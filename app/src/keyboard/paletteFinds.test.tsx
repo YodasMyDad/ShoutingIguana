@@ -128,6 +128,21 @@ describe('the palette finds a setting by its words', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/settings/analysis'));
   });
 
+  // docs/v2-ui-simple.md: in Simple the palette lists no Advanced-only command. These four opened New crawl on a
+  // setting Simple's form doesn't have, which turned Advanced on.
+  it('in Simple, lists only the settings Simple’s form asks about', async () => {
+    updateSettings({ mode: 'simple' });
+    const { find } = await openPalette('/');
+    expect(await find('user agent')).not.toContain('Check a website: set the user agent');
+    expect(await find('proxy')).not.toContain('Check a website: set a proxy');
+    expect(await find('request headers')).not.toContain('Check a website: add request headers');
+    expect(await find('robots')).not.toContain('Check a website: ignore robots.txt');
+    expect(await find('speed')).toContain('Check a website: set the speed');
+    expect(await find('shopify')).toContain('Check a website: add a Shopify signature');
+    for (const words of ['user agent', 'proxy', 'request headers', 'robots'])
+      expect((await find(words)).filter((title) => /^(New crawl|Check a website):/.test(title))).toEqual([]);
+  });
+
   it('lists every Settings section there is, by its own name, and every setting New crawl can open on', () => {
     expect(SETTINGS_PLACES.map((place) => place.section ?? 'general').sort()).toEqual(
       SETTINGS_SECTIONS.map((section) => section.id).sort(),
