@@ -69,6 +69,42 @@ public sealed class JavaScriptRenderingTests
         Assert.True(RenderNeed.ShouldRender(JavaScriptRendering.JavaScript, UrlPatterns.None, "https://example.com/", page));
     }
 
+    /// <summary>
+    /// Shells the first test of one missed, each seen on a real site: a page with a script and next to no text but
+    /// none of the usual mounts (quotes.toscrape.com/js), and a mount that holds a spinner between a menu and a footer.
+    /// </summary>
+    [Fact]
+    public void AShellWithoutAUsualMountOrWithASpinnerInItNeedsRendering()
+    {
+        const string noMount = """
+            <!DOCTYPE html><html><head><title>Quotes</title><script src="/jquery.js"></script></head><body>
+            <h1>Quotes to Scrape</h1><a href="/login">Login</a><div class="quotes"></div>
+            <script>var data = [{"text": "A long quotation that is only in the script, which writes it to the page when it runs."}];</script>
+            <footer>Quotes by: GoodReads.com</footer></body></html>
+            """;
+        Assert.True(RenderNeed.IsClientShell(noMount));
+
+        const string menu = "<nav><a href=\"/\">Home</a> <a href=\"/products\">Products</a> <a href=\"/about\">About the company</a> " +
+                            "<a href=\"/contact\">Contact us</a> <a href=\"/blog\">Blog</a> <a href=\"/careers\">Careers</a> <a href=\"/basket\">Basket</a></nav>";
+        const string footer = "<footer>Copyright 2026 The Example Company Limited. All rights reserved. Registered in England.</footer>";
+        var spinner = "<!DOCTYPE html><html><head><title>Shop</title></head><body>" + menu +
+                      "<div id=\"root\"><div class=\"loading\"><div class=\"spinner\"></div><p>Loading the catalogue</p></div></div>" +
+                      footer + "<script src=\"/app.js\"></script></body></html>";
+        Assert.True(RenderNeed.IsClientShell(spinner));
+
+        // The same mount with the page in it was rendered on the server.
+        var served = spinner.Replace("<p>Loading the catalogue</p>", "<h1>Catalogue</h1><p>" + new string('a', 200) + "</p>", StringComparison.Ordinal);
+        Assert.False(RenderNeed.IsClientShell(served));
+
+        // An empty mount on a page that has its text is a widget, not the page.
+        var widget = "<!DOCTYPE html><html><head><title>Article</title></head><body>" + menu + "<p>" + new string('a', 2_000) + "</p>" +
+                     "<div id=\"app\"></div>" + footer + "<script src=\"/chat.js\"></script></body></html>";
+        Assert.False(RenderNeed.IsClientShell(widget));
+
+        // No script, nothing to run.
+        Assert.False(RenderNeed.IsClientShell("<!DOCTYPE html><html><head><title>Empty</title></head><body><p>Short.</p></body></html>"));
+    }
+
     [Fact]
     public void IncludeAndExcludeDecideWhatIsFetchedAndABadPatternIsRefused()
     {
