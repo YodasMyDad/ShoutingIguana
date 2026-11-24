@@ -117,6 +117,26 @@ describe('Advanced’s library: the score', () => {
     expect(scoreCell(await rowOf('fernleigh.example'))).toHaveTextContent('–');
   });
 
+  // The audit of 2026-11-24: a crawl stopped early, compared with its previous one, read "so far so far".
+  it('says "so far" once of a score and a change that are both so far', async () => {
+    const stoppedAgain = site('a000000000000004', '2026-11-20T09:00:00Z', {
+      status: 'stopped',
+      score: { value: 80, band: 'good', partial: true },
+      previous: {
+        id: LATEST.id,
+        startedAt: LATEST.startedAt,
+        score: LATEST.score ?? null,
+        comparable: 'full',
+        needsAnalysis: false,
+      },
+      changes: { ...NO_CHANGES, score: -6, partial: true },
+    });
+    await open([LATEST, stoppedAgain]);
+    const cell = scoreCell(await rowOf('garden.example'));
+    expect(cell).toHaveTextContent(/down 6 points since 17 Nov/);
+    expect(cell.textContent.match(/so far/g)).toHaveLength(1);
+  });
+
   it('gives each older crawl its own score and change, once unfolded', async () => {
     await open([FIRST, SECOND, LATEST]);
     await userEvent.click(within(await rowOf('garden.example')).getByRole('button', { name: /2 older crawls/ }));

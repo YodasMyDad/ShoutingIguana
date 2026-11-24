@@ -552,7 +552,8 @@ function ScoreCell({ item, status }: { item: CrawlListItem; status: CrawlStatus 
             </span>
             <span className="sr-only">
               , {moveSpoken(change)} {sinceWords(since)}
-              {item.changes?.partial ? ' so far' : ''}
+              {/* Said once: the line under the score says it when the score itself is so far. */}
+              {item.changes?.partial && !score.partial ? ' so far' : ''}
             </span>
           </>
         )}
