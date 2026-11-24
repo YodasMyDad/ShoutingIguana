@@ -14,9 +14,14 @@ All work is on `master`. Steps 1 to 4 of the rebuild are shipped; step 5 (integr
 
 The WPF app is not in this branch. It is the tag `legacy-v1`. Do not move or delete that tag. v2 has no plugin system. The `ShoutingIguana.PluginSdk` NuGet package is unused here and stays published.
 
-## Do not push
+## Pushing and releasing
 
-Never push to GitHub (no branch, tag or backup) until the owner says it is time to deploy. Pushes ran CI and used up their GitHub minutes. Commit locally. Run every check locally: `dotnet test engine/ShoutingIguana.Engine.slnx`, and the app checks in [`app/README.md`](app/README.md) (`smoke:shell` included). The app and engine workflows are manual-only (`workflow_dispatch`). The release workflow runs only on a tag `app-v*`.
+The owner's rule since 2026-11-24: push and release without asking.
+
+- Push `master` when a piece of work is finished and checked. A push to `master` runs no workflow.
+- When a batch is done and checked, release it: set the version (the four places below), commit, push `master`, then push the tag `app-v<version>`. The tag runs the release workflow, which builds every OS installer. That run costs GitHub minutes (macOS bills at ten times Linux), so get it green locally first and do not tag twice for one batch.
+- Run every check locally before pushing: `dotnet test engine/ShoutingIguana.Engine.slnx`, and the app checks in [`app/README.md`](app/README.md) (`smoke:shell` included). The app and engine workflows stay manual-only (`workflow_dispatch`): do not add a push or pull-request trigger to any workflow, and do not run them by hand without the owner's word.
+- Work goes on `master`. Do not push work branches or backups.
 
 Do not force-push.
 

@@ -3,8 +3,10 @@
 The single place to pick up the rebuild. Technical detail lives in [engine/README.md](../engine/README.md) and the
 rules for working in the code in [CLAUDE.md](../CLAUDE.md). Update the status and open items here at the end of every
 step. For step 3, **Where step 3 stands** below is the history. For what to build next, **Where step 4 stands** is the
-only status. Work is on `master`; the old `v2` and `ui/step-3` branches are retired. Update this section before you stop, then commit it. **Never
-push** until the owner says it is time to deploy (2026-11-15: pushes ran CI and used up their GitHub minutes); every
+only status. Work is on `master`; the old `v2` and `ui/step-3` branches are retired. Update this section before you stop, then commit it. **Pushing:
+since 2026-11-24 the owner's rule is push and release without asking** (it replaces the never-push rule of
+2026-11-15, made when pushes ran CI and used up their GitHub minutes): push `master` when work is finished and
+checked, and tag a release when a batch is done. The details are in [CLAUDE.md](../CLAUDE.md). Every
 check runs locally, and the app and engine workflows are manual-only. The release workflow publishes only from a tag
 `app-v*` plus the version in `app/src-tauri/tauri.conf.json`. `app-v2.0.0-beta.1` shipped. `app-v2.0.0-beta.2` is the
 JavaScript rendering release, tagged 2026-11-20. `app-v2.0.0-beta.3` is list mode, and custom extraction, tagged
@@ -12,7 +14,7 @@ JavaScript rendering release, tagged 2026-11-20. `app-v2.0.0-beta.3` is list mod
 `app-v2.0.1` is the installer artwork, tagged 2026-11-23: the wizard shows the iguana at this screen's size.
 `app-v2.0.2` is the library status fix, tagged 2026-11-23: an out-of-date crawl no longer stacks its status one word a line.
 `app-v2.0.3` is the layout pass, tagged 2026-11-23: Simple Home's saved-settings line stays a sentence, and the speed card and the check-again note keep each phrase whole.
-A version with no hyphen is a full release, not a prerelease. After that tag, the never-push rule stands again.
+A version with no hyphen is a full release, not a prerelease.
 
 ## Why
 
@@ -40,8 +42,8 @@ v2 is a fresh solution that ports the useful logic.
 ## Where step 4 stands (2026-11-20)
 
 **2026-11-24, the whole state.** Steps 1 to 4 are done and released. The latest release is `app-v2.0.3`, a full
-release for Windows, macOS (arm64 and x64) and Linux. `master` is the only line of work and matches GitHub apart from
-docs commits made since the tag. Nothing is in flight: no branch holds unmerged work. The only thing left in the plan
+release for Windows, macOS (arm64 and x64) and Linux. `master` is the only line of work and matches GitHub, where it
+is now the only branch (the 55 old remote branches were deleted that day). Nothing is in flight: no branch holds unmerged work. The only thing left in the plan
 is step 5 (integrations), which is not started and waits for the owner's word. Builds are still unsigned; how to sign
 is an open talk with the owner.
 
