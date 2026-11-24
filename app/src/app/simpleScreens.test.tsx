@@ -12,6 +12,7 @@ import { TEST_CRAWL_ID, fakeSidecar, standardRoutes } from '../test/fakeSidecar'
 import { issuesRoutes } from '../test/issuesSidecar';
 import { App } from './App';
 import { createQueryClient } from './queryClient';
+import { resetOverlaysForTests, setOverlay } from './overlays';
 import { createAppRouter } from './router';
 import type * as SimpleScreensModule from './simpleScreens';
 
@@ -51,6 +52,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   uninstall();
+  resetOverlaysForTests();
   setTransport(fakeSidecar([]));
 });
 
@@ -91,6 +93,17 @@ describe('the Report’s row', () => {
     fireEvent.keyDown(window, { key: '3', code: 'Digit3', ctrlKey: true });
     await waitFor(() => expect(router.state.location.pathname).toBe(`${CRAWL}/report`));
     expect(await screen.findByRole('heading', { level: 1, name: 'The Report' })).toBeVisible();
+  });
+
+  // Custom data sat above the Report with Ctrl+4, so the sidebar, the palette and the `?` sheet read 1, 2, 4, 3.
+  it('lists the sections in the order of their keys in the `?` sheet too', async () => {
+    await open(`${CRAWL}/overview`, 'simple');
+    act(() => setOverlay('shortcuts'));
+    const sheet = await screen.findByRole('dialog', { name: /shortcuts/i });
+    const names = within(sheet)
+      .getAllByText(/^Go to (Summary|What to fix|Report|Custom data)$/)
+      .map((element) => element.textContent);
+    expect(names).toEqual(['Go to Summary', 'Go to What to fix', 'Go to Report', 'Go to Custom data']);
   });
 
   it('lists Report eighth in Advanced, after a rule, on Ctrl+8, the same screen', async () => {
