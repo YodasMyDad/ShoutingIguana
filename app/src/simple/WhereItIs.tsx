@@ -67,7 +67,18 @@ function saysSomething(check: Pick<Check, 'category'>, column: string, value: un
  * A page's evidence in plain words, a line each, muted under what it's about: "The rules file says “Disallow:
  * /cart/”, on line 12", "Forwards to /b/, then /new/, which works". Nothing for a check without evidence.
  */
-function EvidenceLines({ row, check, origin }: { row: IssueRow; check: Check; origin: string | null }) {
+function EvidenceLines({
+  row,
+  check,
+  origin,
+  said = null,
+}: {
+  row: IssueRow;
+  check: Check;
+  origin: string | null;
+  /** What the line above them already says: evidence that only repeats it ("1,036 words") isn't said again. */
+  said?: string | null;
+}) {
   const values = row as unknown as Record<string, unknown>;
   // The row's own address, so it's never said to forward to itself or be its own main address (X1); a line two columns
   // say alike ("No pages link here") once.
@@ -75,7 +86,8 @@ function EvidenceLines({ row, check, origin }: { row: IssueRow; check: Check; or
   const lines = columns
     .filter((column) => saysSomething(check, column, values[column], columns))
     .map((column) => plainEvidence(column, values[column], origin, row.url ?? null))
-    .filter((line, index, all): line is string => line !== null && all.indexOf(line) === index);
+    .filter((line, index, all): line is string => line !== null && all.indexOf(line) === index)
+    .filter((line) => !said?.toLowerCase().includes(line.toLowerCase()));
   if (lines.length === 0) return null;
   return (
     <span className="si-evidence-lines mt-0.5 block text-13 text-text-secondary">
@@ -111,9 +123,10 @@ function Found({ row, check, origin }: { row: IssueRow; check: Check; origin: st
     );
   }
   const names = settingNames(check, row.detail);
+  const detail = plainDetail(check, values) ?? row.detail ?? '';
   return (
     <>
-      {plainDetail(check, values) ?? row.detail ?? ''}
+      {detail}
       {names.length > 0 ? (
         <span className="mt-1 block text-13">
           Their names, for your developer or host:{' '}
@@ -125,7 +138,7 @@ function Found({ row, check, origin }: { row: IssueRow; check: Check; origin: st
           ))}
         </span>
       ) : null}
-      <EvidenceLines row={row} check={check} origin={origin} />
+      <EvidenceLines row={row} check={check} origin={origin} said={detail} />
     </>
   );
 }

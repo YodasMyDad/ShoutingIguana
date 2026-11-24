@@ -413,8 +413,17 @@ export function unlinkedWords(unlinked: Pick<UnlinkedAddress, 'where' | 'sitemap
   }
 }
 
-/** The card's count: "8 links to change on 4 pages", then the shared links and the unlinked addresses where there are any. */
-export function fixSummary(model: FixModel): string {
+/**
+ * The card's count: "8 links to change on 4 pages", then the shared links and the unlinked addresses where there are
+ * any. `partial` is a list read in part ("Showing the first 25 of 47 addresses"): the count says it is of what is
+ * shown, since it read as the whole problem's beside "8 of 33 pages" in the head ("25 links to change on 3 pages").
+ */
+export function fixSummary(model: FixModel, partial = false): string {
+  const words = fixCounts(model);
+  return partial && words ? `Shown so far: ${words}` : words;
+}
+
+function fixCounts(model: FixModel): string {
   const links = model.pages.reduce((sum, page) => sum + page.links.length, 0);
   const parts: string[] = [];
   if (links > 0) {

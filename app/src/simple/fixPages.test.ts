@@ -160,6 +160,10 @@ describe('dead addresses, by the page to edit', () => {
     expect(fixSummary(model)).toBe(
       '3 links to change on 2 pages · 1 link many pages share · 2 addresses no page links to',
     );
+    // A list read in part says its count is of what is shown, never the whole problem's.
+    expect(fixSummary(model, true)).toBe(
+      'Shown so far: 3 links to change on 2 pages · 1 link many pages share · 2 addresses no page links to',
+    );
     expect(linksToChange(1)).toBe('1 link to change');
     expect(linksToChange(5)).toBe('5 links to change');
   });

@@ -240,7 +240,7 @@ export function WhereToFix({
         <h2 id="where-to-fix" className="text-16 font-semibold">
           Where to fix it
         </h2>
-        {model ? <span className="text-14 text-text-muted">{fixSummary(model)}</span> : null}
+        {model ? <span className="text-14 text-text-muted">{fixSummary(model, more)}</span> : null}
         <div className="ml-auto flex flex-wrap gap-2">
           <Button size="sm" icon={Copy} command="problem.copyList" onClick={onCopy}>
             Copy the list
