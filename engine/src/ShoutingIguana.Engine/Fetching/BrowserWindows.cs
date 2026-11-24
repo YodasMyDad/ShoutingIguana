@@ -17,6 +17,7 @@ internal static class BrowserWindows
     private const int GWL_EXSTYLE = -20;
     private const long WS_EX_TOOLWINDOW = 0x80;
     private const long WS_EX_APPWINDOW = 0x40000;
+    private const long WS_EX_NOACTIVATE = 0x8000000;
     private const int SW_HIDE = 0;
     private const int SW_SHOWNOACTIVATE = 4;
     private const int SW_SHOW = 5;
@@ -51,7 +52,13 @@ internal static class BrowserWindows
         return screen is { Width: > 0, Height: > 0 } ? screen : null;
     }
 
-    /// <summary>Takes the browser's windows off the taskbar and out of Alt+Tab. They stay drawn, wherever they are.</summary>
+    /// <summary>The window in front now, to give the keyboard back to (<see cref="GiveBack"/>). Zero when there is none.</summary>
+    public static nint InFront() => GetForegroundWindow();
+
+    /// <summary>
+    /// Takes the browser's windows off the taskbar and out of Alt+Tab, and marks them as windows that are not to be
+    /// put in front. They stay drawn, wherever they are.
+    /// </summary>
     /// <returns>Whether a window was found.</returns>
     public static bool KeepOffTaskbar(int processId)
     {
@@ -66,11 +73,43 @@ internal static class BrowserWindows
 
             // The taskbar reads a window's style when it is shown.
             ShowWindow(window, SW_HIDE);
-            SetWindowLongPtr(window, GWL_EXSTYLE, new nint((style | WS_EX_TOOLWINDOW) & ~WS_EX_APPWINDOW));
+            SetWindowLongPtr(window, GWL_EXSTYLE, new nint((style | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE) & ~WS_EX_APPWINDOW));
             ShowWindow(window, SW_SHOWNOACTIVATE);
         }
 
         return windows.Count > 0;
+    }
+
+    /// <summary>
+    /// A browser that has just started, or opened a tab, takes the keyboard, though its window is out of sight: what
+    /// the person types next would go to a page they can't see. The keyboard goes back to <paramref name="previous"/>,
+    /// the window that had it.
+    /// </summary>
+    /// <returns>Whether the browser had the keyboard.</returns>
+    public static bool GiveBack(int processId, nint previous)
+    {
+        var front = GetForegroundWindow();
+        if (front == 0)
+        {
+            return false;
+        }
+
+        var windows = Of(processId);
+        if (!windows.Contains(front))
+        {
+            return false;
+        }
+
+        if (previous != 0 && !windows.Contains(previous) && IsWindow(previous) && IsWindowVisible(previous))
+        {
+            Raise(previous, tapAlt: false);
+            if (GetForegroundWindow() == front)
+            {
+                Raise(previous, tapAlt: true);
+            }
+        }
+
+        return true;
     }
 
     /// <summary>Gives the browser's windows their taskbar button back, restores them, and puts them in front with the keyboard.</summary>
@@ -81,10 +120,10 @@ internal static class BrowserWindows
         foreach (var window in windows)
         {
             var style = GetWindowLongPtr(window, GWL_EXSTYLE).ToInt64();
-            if ((style & WS_EX_TOOLWINDOW) != 0)
+            if ((style & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE)) != 0)
             {
                 ShowWindow(window, SW_HIDE);
-                SetWindowLongPtr(window, GWL_EXSTYLE, new nint((style & ~WS_EX_TOOLWINDOW) | WS_EX_APPWINDOW));
+                SetWindowLongPtr(window, GWL_EXSTYLE, new nint((style & ~(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE)) | WS_EX_APPWINDOW));
                 ShowWindow(window, SW_SHOW);
             }
 
@@ -187,6 +226,10 @@ internal static class BrowserWindows
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool IsIconic(nint window);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsWindow(nint window);
 
     [DllImport("user32.dll")]
     private static extern nint GetWindow(nint window, uint command);

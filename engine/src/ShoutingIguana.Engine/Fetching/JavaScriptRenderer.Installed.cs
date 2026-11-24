@@ -243,9 +243,8 @@ internal sealed partial class JavaScriptRenderer
         CancellationToken cancellationToken)
     {
         var connection = browser.Connection;
-        var created = await connection.SendAsync("Target.createTarget", new { url = "about:blank" }, cancellationToken: cancellationToken)
-            .ConfigureAwait(false);
-        var targetId = created.GetProperty("targetId").GetString()!;
+        var front = InstalledBrowserProcess.WindowInFront();
+        var targetId = await browser.OpenTabAsync(cancellationToken).ConfigureAwait(false);
         var load = new InstalledLoad(targetId);
         Action<string?, string, JsonElement> onEvent = (sessionId, method, parameters) => OnInstalledEvent(connection, load, sessionId, method, parameters);
         connection.Event += onEvent;
@@ -287,6 +286,9 @@ internal sealed partial class JavaScriptRenderer
 
             // Answered once the document's request has gone, which waits its turn on the host's gate.
             await connection.SendAsync("Page.navigate", new { url = uri.AbsoluteUri }, sessionId, cancellationToken, answerBy).ConfigureAwait(false);
+
+            // The tab that has just come to the top of its window can take the keyboard a moment after it opened.
+            browser.KeepKeyboardWith(front);
 
             InstalledDocument? judged = null;
             string? reason = null;

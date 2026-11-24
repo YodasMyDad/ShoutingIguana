@@ -75,15 +75,17 @@ public sealed class WindowPlacementTests
         {
             using var patience = new CancellationTokenSource(TimeSpan.FromSeconds(60));
             await using var browser = await InstalledBrowserProcess.StartAsync(found, null, NullLogger.Instance, patience.Token);
-            var created = await browser.Connection.SendAsync("Target.createTarget", new { url = "about:blank" }, cancellationToken: patience.Token);
-            var targetId = created.GetProperty("targetId").GetString()!;
+            var targetId = await browser.OpenTabAsync(patience.Token);
 
+            // Out of sight, it never keeps the keyboard: what a person typed would go to a page they can't see.
+            var tookKeyboard = browser.IsInFront;
             var before = await browser.BoundsAsync(targetId, patience.Token);
             var shown = await browser.ShowAsync(targetId, patience.Token);
             var during = await browser.BoundsAsync(targetId, patience.Token);
             var inFront = browser.IsInFront;
             await browser.HideAsync(targetId, patience.Token);
             var after = await browser.BoundsAsync(targetId, patience.Token);
+            var keptKeyboard = browser.IsInFront;
 
             Assert.False(WindowPlacement.IsOn(before, shown.Screen), $"Before it was shown the window was at {before}");
             Assert.True(shown.IsOnScreen, $"Shown, the window was at {shown.Bounds} on {shown.Screen}");
@@ -94,6 +96,8 @@ public sealed class WindowPlacementTests
             {
                 Assert.True(shown.InFront, "Shown, the window was not the one in front");
                 Assert.True(inFront, "A moment later the window was no longer the one in front");
+                Assert.False(tookKeyboard, "Out of sight, with a tab just opened, the browser had the keyboard");
+                Assert.False(keptKeyboard, "Hidden again, the browser still had the keyboard");
             }
         }
         finally

@@ -30,6 +30,9 @@ internal sealed class InstalledBrowserProcess : IAsyncDisposable
     private readonly FileStream? _profileLock;
     private readonly ILogger _logger;
 
+    /// <summary>The window that had the keyboard when this one was put in front of the person. Windows only.</summary>
+    private nint _shownOver;
+
     private InstalledBrowserProcess(Process process, DevToolsConnection connection, InstalledBrowser browser, string profile,
         bool temporaryProfile, FileStream? profileLock, ILogger logger)
     {
@@ -92,6 +95,7 @@ internal sealed class InstalledBrowserProcess : IAsyncDisposable
             }
 
             start.ArgumentList.Add("about:blank");
+            var front = OperatingSystem.IsWindows() ? BrowserWindows.InFront() : 0;
             process = Process.Start(start) ?? throw new InvalidOperationException($"{browser.Name} didn't start.");
             process.OutputDataReceived += static (_, _) => { };
             process.ErrorDataReceived += static (_, _) => { };
@@ -100,7 +104,7 @@ internal sealed class InstalledBrowserProcess : IAsyncDisposable
 
             var endpoint = await EndpointAsync(port, process, browser, cancellationToken).ConfigureAwait(false);
             var connection = await DevToolsConnection.ConnectAsync(endpoint, cancellationToken).ConfigureAwait(false);
-            await KeepOutOfSightAsync(process, cancellationToken).ConfigureAwait(false);
+            await KeepOutOfSightAsync(process, front, cancellationToken).ConfigureAwait(false);
             return new InstalledBrowserProcess(process, connection, browser, profile, temporary, profileLock, logger);
         }
         catch
@@ -132,7 +136,17 @@ internal sealed class InstalledBrowserProcess : IAsyncDisposable
         await SetBoundsAsync(window, new { left = place.Left, top = place.Top, width = place.Width, height = place.Height }, cancellationToken)
             .ConfigureAwait(false);
         await Connection.SendAsync("Target.activateTarget", new { targetId }, cancellationToken: cancellationToken).ConfigureAwait(false);
-        bool? inFront = OperatingSystem.IsWindows() ? BrowserWindows.BringToFront(_process.Id) : null;
+        bool? inFront = null;
+        if (OperatingSystem.IsWindows())
+        {
+            // Whoever has the keyboard now gets it back when the window is put away again.
+            if (!BrowserWindows.IsInFront(_process.Id))
+            {
+                _shownOver = BrowserWindows.InFront();
+            }
+
+            inFront = BrowserWindows.BringToFront(_process.Id);
+        }
 
         var bounds = await BoundsAsync(window, cancellationToken).ConfigureAwait(false);
         if (!WindowPlacement.IsOn(bounds, screen))
@@ -156,6 +170,9 @@ internal sealed class InstalledBrowserProcess : IAsyncDisposable
             await SetBoundsAsync(window, new { windowState = "normal" }, cancellationToken).ConfigureAwait(false);
             await SetBoundsAsync(window, new { left = OFF_SCREEN, top = OFF_SCREEN }, cancellationToken).ConfigureAwait(false);
             BrowserWindows.KeepOffTaskbar(_process.Id);
+
+            // Out of sight it must not keep the keyboard: it goes back to the window the person was in.
+            BrowserWindows.GiveBack(_process.Id, _shownOver);
         }
         else
         {
@@ -272,7 +289,8 @@ internal sealed class InstalledBrowserProcess : IAsyncDisposable
     /// On Windows the window is drawn far off the screen, and its taskbar button is taken away: pressed, it would show
     /// nothing. The window is given a moment to exist.
     /// </summary>
-    private static async Task KeepOutOfSightAsync(Process process, CancellationToken cancellationToken)
+    /// <param name="front">The window that had the keyboard before the browser started, which takes it.</param>
+    private static async Task KeepOutOfSightAsync(Process process, nint front, CancellationToken cancellationToken)
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -283,7 +301,39 @@ internal sealed class InstalledBrowserProcess : IAsyncDisposable
         {
             await Task.Delay(100, cancellationToken).ConfigureAwait(false);
         }
+
+        BrowserWindows.GiveBack(process.Id, front);
     }
+
+    /// <summary>
+    /// Opens a tab for a page. A browser that opens one puts its window in front, though it is out of sight, and what
+    /// the person typed next would go to a page they can't see: the keyboard is given back to the window that had it.
+    /// </summary>
+    /// <returns>The tab's target id.</returns>
+    public async Task<string> OpenTabAsync(CancellationToken cancellationToken)
+    {
+        var front = OperatingSystem.IsWindows() ? BrowserWindows.InFront() : 0;
+        var created = await Connection.SendAsync("Target.createTarget", new { url = "about:blank" }, cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+        if (OperatingSystem.IsWindows())
+        {
+            BrowserWindows.GiveBack(_process.Id, front);
+        }
+
+        return created.GetProperty("targetId").GetString()!;
+    }
+
+    /// <summary>Gives the keyboard to <paramref name="front"/> if the browser has taken it while out of sight. Windows only.</summary>
+    public void KeepKeyboardWith(nint front)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            BrowserWindows.GiveBack(_process.Id, front);
+        }
+    }
+
+    /// <summary>The window that has the keyboard now. Zero where that can't be asked.</summary>
+    public static nint WindowInFront() => OperatingSystem.IsWindows() ? BrowserWindows.InFront() : 0;
 
     /// <summary>
     /// The kept profile, when no other crawl has it open: two browsers can't share one. Otherwise a folder for this
