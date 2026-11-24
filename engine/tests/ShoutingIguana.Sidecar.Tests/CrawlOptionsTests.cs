@@ -253,6 +253,15 @@ public sealed class CrawlOptionsTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, mistyped.Status);
         Assert.Equal(["maxUrls"], mistyped.Body!["errors"]!.AsObject().Select(field => field.Key));
 
+        // It says what the field takes: "This value isn't valid here." didn't say a number was wanted.
+        Assert.Equal("Enter a whole number, in digits.", (string?)mistyped.Body!["errors"]!["maxUrls"]![0]);
+        var fraction = await _sidecar.PostAsync("api/crawl-options/validate", JsonNode.Parse("""{"startUrl":"https://example.com/","maxUrls":2.5}"""));
+        Assert.Equal("Enter a whole number, in digits.", (string?)fraction.Body!["errors"]!["maxUrls"]![0]);
+        var rate = await _sidecar.PostAsync("api/crawl-options/validate", JsonNode.Parse("""{"startUrl":"https://example.com/","maxRequestsPerSecond":"fast"}"""));
+        Assert.Equal("Enter a number, in digits.", (string?)rate.Body!["errors"]!["maxRequestsPerSecond"]![0]);
+        var notANumberField = await _sidecar.PostAsync("api/crawl-options/validate", JsonNode.Parse("""{"startUrl":"https://example.com/","respectRobotsTxt":"maybe"}"""));
+        Assert.Equal("This value isn't valid here.", (string?)notANumberField.Body!["errors"]!["respectRobotsTxt"]![0]);
+
         // An enum by number, or a property the options don't have, isn't guessed at.
         Assert.Equal(["userAgent"], (await _sidecar.PostAsync("api/crawl-options/validate", JsonNode.Parse("""{"userAgent":3}""")))
             .Body!["errors"]!.AsObject().Select(field => field.Key));
