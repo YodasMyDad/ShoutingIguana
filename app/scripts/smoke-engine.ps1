@@ -96,10 +96,11 @@ try {
         if ($called) { Write-Host 'smoke-engine: the window''s page called the engine with the token (GET /api/crawls, 200)' }
         else { Write-Host 'smoke-engine: the window''s page did not call the engine: no window here (not a failure of this check).' }
         # The engine unpacked Playwright's driver into the app's own folder: without it no crawl renders a page.
-        $driver = Get-ChildItem -Path (Join-Path $temp 'profileengine') -Recurse -Filter 'cli.js' -ErrorAction SilentlyContinue |
-            Where-Object { $_.FullName -like '*.playwrightpackagecli.js' } | Select-Object -First 1
+        $unpacked = Join-Path $temp 'profile\engine'
+        $driver = Get-ChildItem -Path $unpacked -Recurse -Filter 'cli.js' -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -like '*\.playwright\package\cli.js' } | Select-Object -First 1
         if ($driver) { Write-Host 'smoke-engine: the engine unpacked the browser driver (.playwright) into the app''s folder' }
-        else { Fail "the engine the shell started has no browser driver (.playwrightpackagecli.js) under $tempprofileengine." }
+        else { Fail "the engine the shell started has no browser driver (.playwright\package\cli.js) under $unpacked." }
         if ($shell.HasExited) { Fail "the shell has stopped by itself (exit code $($shell.ExitCode))." }
     }
 }

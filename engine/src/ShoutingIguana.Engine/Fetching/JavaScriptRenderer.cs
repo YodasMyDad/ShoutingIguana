@@ -365,6 +365,7 @@ internal sealed partial class JavaScriptRenderer(
 
     private async Task<IBrowser> StartAsync()
     {
+        BrowserHostPlatform.UseKnownBuild();
         _playwright = await Playwright.CreateAsync().ConfigureAwait(false);
         _browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
         {
