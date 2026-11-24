@@ -54,6 +54,34 @@ describe('what’s in the way', () => {
     expect(entries[2]?.actions).toEqual([{ kind: 'stop', label: 'Stop' }]);
   });
 
+  // A live check of the test site (2026-11-24): its note was read from the file and heard live, and was listed twice
+  // under one key ("Encountered two children with the same key").
+  it('says an alert once when it is given twice, a note too', () => {
+    const note = alert('a-code-of-a-newer-engine', '2026-11-01T10:00:00Z', null, 2);
+    const entries = inTheWay({ ...base, alerts: [note, { ...note }] });
+    expect(entries.map((entry) => entry.text)).toEqual(["The engine's words for a-code-of-a-newer-engine"]);
+    expect(new Set(entries.map((entry) => entry.key)).size).toBe(entries.length);
+    // Two notes of one code raised at different times are still two.
+    const later = alert('a-code-of-a-newer-engine', '2026-11-01T10:05:00Z', null, 3);
+    expect(inTheWay({ ...base, alerts: [note, later] })).toHaveLength(2);
+  });
+
+  it('says in plain words that the browser for JavaScript pages couldn’t start, without the driver’s fault', () => {
+    const entries = inTheWay({
+      ...base,
+      alerts: [
+        {
+          ...alert('javascript-rendering', '2026-11-01T10:00:00Z'),
+          message:
+            "JavaScript rendering couldn't start, so pages are read as they were sent. Driver not found: C:/app/node.exe",
+        },
+      ],
+    });
+    expect(entries.map((entry) => entry.text)).toEqual([
+      'The browser that reads pages built by JavaScript couldn’t start, so every page is read as the site sent it. A page that fills itself in with a script may look empty. The reason is in Advanced.',
+    ]);
+  });
+
   it('says a Shopify shop turns away checks without a signature, in plain words, once', () => {
     const entries = inTheWay({
       ...base,
