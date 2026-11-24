@@ -225,6 +225,12 @@ function UsedSettings({ stored }: { stored: CrawlOptions }) {
                     {field === 'headers' && form.headers.length > 0 ? (
                       <span className="text-text-muted"> (values aren’t in the crawl file)</span>
                     ) : null}
+                    {field === 'httpLogins' && form.httpLogins.length > 0 ? (
+                      <span className="text-text-muted"> (the password isn’t in the crawl file)</span>
+                    ) : null}
+                    {field === 'cookies' && form.cookies.length > 0 ? (
+                      <span className="text-text-muted"> (values aren’t in the crawl file)</span>
+                    ) : null}
                     {field === 'proxyUrl' && stored.hasRedactedProxyCredentials ? (
                       <span className="text-text-muted"> (its user name and password aren’t in the crawl file)</span>
                     ) : null}

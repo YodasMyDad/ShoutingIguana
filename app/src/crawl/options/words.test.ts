@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { FIELD_WORDS, rememberWords, savedDefaultsWords, secretsAgainWords } from './words';
+import { formFromOptions } from './form';
+import { FIELD_WORDS, rememberWords, savedDefaultsWords, secretsAgainWords, settingValue } from './words';
 
 describe('what happens to a proxy password and header values', () => {
   it('asks to remember them in Windows Credential Manager, and says what happens ticked or not, in each mode', () => {
@@ -70,5 +71,29 @@ describe('what happens to a proxy password and header values', () => {
     expect(secretsAgainWords('simple')).toBe(
       'The crawl file doesn’t keep header values or a proxy’s password, and these weren’t remembered. They’re Advanced settings.',
     );
+  });
+});
+
+describe('what a crawl signed in with, in This crawl’s settings', () => {
+  // Both read as nothing at all, so a crawl made signed in looked like one that wasn't.
+  it('names who signed in and which cookies went, never a password or a value', () => {
+    const form = formFromOptions({
+      httpLogins: [
+        { host: '', username: 'audit', password: '' },
+        { host: 'staging.example.com', username: 'lee', password: '' },
+      ],
+      cookies: [
+        { name: 'session', value: '', domain: '', path: '', secure: false },
+        { name: 'consent', value: '', domain: 'example.com', path: '', secure: false },
+      ],
+    });
+    expect(settingValue('httpLogins', form)).toBe('audit\nlee on staging.example.com');
+    expect(settingValue('cookies', form)).toBe('session\nconsent for example.com');
+  });
+
+  it('says None for a crawl that didn’t', () => {
+    const form = formFromOptions({});
+    expect(settingValue('httpLogins', form)).toBe('None');
+    expect(settingValue('cookies', form)).toBe('None');
   });
 });

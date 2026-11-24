@@ -38,7 +38,7 @@ export function ExtractionScreen() {
   const title = simple ? 'Custom data' : 'Custom extraction';
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-5 px-(--page-gutter) pt-7 pb-6">
       <PageHeader
         title={title}
         subtitle={
@@ -50,6 +50,7 @@ export function ExtractionScreen() {
               : `${formatCountOf(rules.filter((item) => item.enabled).length, 'rule')}, ${formatCountOf(
                   rules.reduce((sum, item) => sum + item.matches, 0),
                   'match',
+                  'matches',
                 )}.`
             : undefined
         }
