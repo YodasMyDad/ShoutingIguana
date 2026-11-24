@@ -12,16 +12,17 @@ Hand the report to a client. Or fix it yourself, then recheck just those pages a
 
 **[Download 2.0.3](https://github.com/YodasMyDad/ShoutingIguana/releases/tag/app-v2.0.3)**
 
-This release is the full v2 app. It renders pages a script builds, reads a host in a browser when plain HTTP is blocked, crawls a list of addresses, pulls out text you name, and signs in over HTTP, with a cookie, or through a form.
+This release is the full v2 app. It renders pages a script builds, can retry a blocked host in a real browser, crawls a list of addresses, pulls out text you name, and signs in over HTTP, with a cookie, or through a form.
 
 ## Why people download it
 
 - **A crawl you can act on.** Not a spreadsheet of ten thousand rows. A score, then the issues worth fixing first, with the fix written out.
 - **The full audit when you need it.** Simple is the client view. Advanced is one switch away: every URL, the link graph, XML sitemaps, robots.txt, and an inspector for a single address.
-- **Prove the fix.** Recheck the pages you changed. The score and the issue list update against the previous crawl.
-- **Yours, offline.** One `.sicrawl` file per site. Nothing is uploaded.
-- **Pages a script builds.** The default renders a page only when its HTML is an empty shell. Render every HTML page, only the URLs you name, or none. When every page is rendered, a link that was only in the raw HTML is still followed.
-- **A list, not the whole site.** Paste addresses, or a CSV with a Url column. Those pages are read. Links on them are recorded and not followed.
+- **Prove the fix.** Recheck the pages you changed. The score and the issue list update, and each page says fixed or still there. Crawl the site again later and the new crawl is compared with the last one.
+- **Yours, offline.** One `.sicrawl` file per crawl. Nothing is uploaded.
+- **Pages a script builds.** The default renders a page only when its HTML is an empty shell. Render every HTML page, only the URLs that match a pattern you give, or none. When every page is rendered, a link that was only in the raw HTML is still followed.
+- **A blocked host, retried in a browser.** Off by default. Turned on, a host that blocks plain HTTP is read in a real browser instead. That helps with simple blocks. It does not get past a managed challenge (Cloudflare, DataDome) or a CAPTCHA: those pages stay marked as blocked.
+- **A list, not the whole site.** Paste addresses, or a CSV with a Url column. Those pages are read. Links on them are recorded and not followed, and sitemaps are not read.
 - **Text you define.** Name a rule and give it a CSS selector, an XPath expression, or a regular expression. The crawl reads each page once and keeps what matches. Simple and Advanced both list the values.
 
 ## Screenshots
@@ -36,7 +37,7 @@ Enter a URL, or reopen a site you already audited. The score and what is still o
 
 ### The issues worth fixing first
 
-Errors, then warnings, then notices. Each line is the issue, how many URLs it hits, and what fixing it does to the score.
+Errors, then warnings, then notices. Each line is the issue, how many URLs it hits, and, for an error or a warning, what fixing it adds to the score.
 
 | Light | Dark |
 | --- | --- |
@@ -80,7 +81,7 @@ Each file has a SHA256 checksum (`SHA256SUMS-*.txt` on the release). The engine 
 
 Pages a script builds are rendered in a headless Chromium, which is not in the installer. The first crawl that needs it downloads it once, a few hundred MB on disk, into your user folder, so that crawl needs the internet. The crawl says it is downloading, and goes on when it is done. If the download fails, or the browser can't start, the crawl says so in an alert and reads every page as it was sent. The download does not use the proxy set in the app: behind a proxy, set `HTTPS_PROXY` before starting the app.
 
-The app does not update itself yet. **Settings › Updates** says there is no update information. For a new version, download its installer and run it over the old one.
+The app does not update itself yet. **Settings › Updates** shows the version you have and opens the releases page. For a new version, download its installer and run it over the old one.
 
 ## Opening it the first time
 
@@ -122,9 +123,9 @@ The `.deb` and the AppImage are unsigned, and are for 64-bit Intel and AMD. Both
 ## A first crawl
 
 1. Open the app. It starts in Simple.
-2. Enter the site address and choose **Check site**. The default crawl rate is polite.
+2. Enter the site address and choose **Check site**. The default speed is safe for most hosting, and slows down when the site asks. There is a slower, polite setting.
 3. When the crawl finishes, **What to fix** lists errors first.
-4. Open an issue. The text says what to change and where. **Recheck these pages** fetches those URLs again.
+4. Open an issue. The text says what to change and where. Under **Fixed it?**, the recheck button fetches those URLs again.
 5. **Report** is the audit as a page you can save or print.
 6. **Advanced**, at the top right, is the full URL list. Select a URL to open the inspector.
 
@@ -136,19 +137,20 @@ The same checks run in Simple and in Advanced. This is the technical SEO audit: 
 - Redirect chains, loops, and redirects that do not land on the final URL
 - Broken internal and external links
 - Indexability: noindex, robots.txt blocks, canonicals that disagree, and canonicals that point at a URL which does not resolve
-- Orphan URLs, and pages a sitemap should list but does not
-- XML sitemaps: unreadable files, URLs on another host, invalid lastmod, and URLs listed more than once
+- Pages only a sitemap leads to, and pages a sitemap should list but does not
+- XML sitemaps: unreadable files, URLs on another host, invalid lastmod, and URLs listed in more than one sitemap
 - Page titles and meta descriptions: missing, duplicate, or the wrong length in pixels, the way the search result cuts them
 - Heading structure: missing H1, duplicates, and skipped levels
 - Thin content, and near-duplicate pages
 - Images: broken, oversized, missing alt text, legacy formats, missing dimensions
 - Hreflang and language tags that do not agree
-- Structured data that is missing or invalid
+- Structured data that is invalid or missing properties
 - HTTPS, mixed content, insecure forms, and weak security headers
-- URLs that are too long, duplicated, or easy to confuse
+- URLs that are too long or easy to confuse: uppercase, spaces, underscores, repeated folders
 - Slow responses and heavy pages
 - HTML issues that change how the page is parsed: language, charset, and broken markup
-- Text you asked the crawl to pull out, by CSS selector, XPath, or regular expression
+
+That is 170 checks. Text you asked the crawl to pull out, by CSS selector, XPath, or regular expression, is listed beside them. It is data, not a check.
 
 Shouting Iguana flags the issue and explains the fix. It does not change the site.
 
