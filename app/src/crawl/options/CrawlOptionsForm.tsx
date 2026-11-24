@@ -284,7 +284,7 @@ function SimpleQuestions({
         onOpenChange={(next) => onOpenChange('extraction', next)}
         className="si-card"
       >
-        <ExtractionRulesField form={form} onChange={onChange} error={first(errors, 'extractionRules')} />
+        <ExtractionRulesField form={form} onChange={onChange} error={first(errors, 'extractionRules')} mode="simple" />
       </Fold>
       <Fold
         name="auth"
@@ -605,7 +605,14 @@ const RENDERING_CHOICES: { value: JavaScriptRendering; title: string; text: stri
   { value: 'matching', title: 'Only these URLs', text: 'Render the addresses listed below.' },
 ];
 
-/** JavaScript rendering, and the include and exclude patterns beside it. The same fields in both modes. */
+/** Simple's: the last choice in its words ("Only these URLs", "Render the addresses…" are Advanced's). */
+const SIMPLE_RENDERING_CHOICES = RENDERING_CHOICES.map((choice) =>
+  choice.value === 'matching'
+    ? { ...choice, title: SIMPLE_WORDS.renderMatching.label, text: SIMPLE_WORDS.renderMatching.help }
+    : choice,
+);
+
+/** JavaScript rendering, and the include and exclude patterns beside it. The same fields in both modes, in each mode's words. */
 function RenderingFields({
   form,
   onChange,
@@ -626,16 +633,17 @@ function RenderingFields({
       <ChoiceCards
         legend={words.label}
         description={mode === 'advanced' ? words.help : undefined}
-        options={RENDERING_CHOICES}
+        options={mode === 'simple' ? SIMPLE_RENDERING_CHOICES : RENDERING_CHOICES}
         value={form.javaScriptRendering}
         onValueChange={(value) => {
-          onChange({ ...form, javaScriptRendering: value as JavaScriptRendering });
+          onChange({ ...form, javaScriptRendering: value });
           onTouch?.('javaScriptRendering');
         }}
       />
       {form.javaScriptRendering === 'matching' || form.renderPatterns.trim() !== '' ? (
         <PatternBox
           field="renderPatterns"
+          mode={mode}
           form={form}
           onChange={onChange}
           onTouch={onTouch}
@@ -645,6 +653,7 @@ function RenderingFields({
       ) : null}
       <PatternBox
         field="includePatterns"
+        mode={mode}
         form={form}
         onChange={onChange}
         onTouch={onTouch}
@@ -653,6 +662,7 @@ function RenderingFields({
       />
       <PatternBox
         field="excludePatterns"
+        mode={mode}
         form={form}
         onChange={onChange}
         onTouch={onTouch}
@@ -680,6 +690,7 @@ function PatternBox({
   onTouch,
   error,
   placeholder,
+  mode,
 }: {
   field: 'renderPatterns' | 'includePatterns' | 'excludePatterns';
   form: CrawlForm;
@@ -687,12 +698,14 @@ function PatternBox({
   onTouch?: ((field: CrawlFormField) => void) | undefined;
   error: string | null;
   placeholder: string;
+  mode: 'simple' | 'advanced';
 }) {
   const id = useId();
+  const words = mode === 'simple' ? SIMPLE_WORDS[field] : FIELD_WORDS[field];
   return (
     <div className="si-field-wrap" data-setting={field}>
       <label htmlFor={id} className="si-field-label">
-        {FIELD_WORDS[field].label}
+        {words.label}
       </label>
       <div className="si-field">
         <textarea
@@ -715,7 +728,7 @@ function PatternBox({
         </p>
       ) : null}
       <p id={`${id}-help`} className="si-field-description">
-        {FIELD_WORDS[field].help}
+        {words.help}
       </p>
     </div>
   );

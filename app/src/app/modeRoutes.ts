@@ -55,8 +55,12 @@ export function simpleLanding(pathname: string): SimpleLanding | null {
     : null;
 }
 
-/** The crawl's sections Simple has, in sidebar order: Summary, What to fix, Custom data, and the Report once it exists. */
-export const SIMPLE_SECTIONS: readonly CrawlSection[] = ['overview', 'issues', 'extraction', 'report'];
+/**
+ * The crawl's sections Simple has, in sidebar order, which is the order of their keys (Ctrl+1 to Ctrl+4): Summary, What
+ * to fix, the Report once it exists, and Custom data. Custom data sat third, above the Report: the list then read
+ * Ctrl+1, 2, 4, 3 down the sidebar, and the Report (docs/v2-ui-simple.md: "the third in Simple") was fourth.
+ */
+export const SIMPLE_SECTIONS: readonly CrawlSection[] = ['overview', 'issues', 'report', 'extraction'];
 
 /** Whether Simple has a crawl's section: a crawl reopens on its last view only if the mode has it. */
 export function simpleHasSection(section: CrawlSection): boolean {

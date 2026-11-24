@@ -423,7 +423,9 @@ function StatusNote({
         </span>
       );
     case 'unreadable':
-      return item.error ? <span className="block min-w-[12rem] text-12 text-text-muted">{item.error}</span> : null;
+      return item.error ? (
+        <span className="block min-w-(--library-error-min) text-12 text-text-muted">{item.error}</span>
+      ) : null;
     case 'unfinished':
       return actions.canContinue ? (
         <span className="block text-12 text-text-muted">

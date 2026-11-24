@@ -94,7 +94,7 @@ export function ExtractionScreen() {
             <TextField
               label="Search"
               value={search}
-              className="min-w-48 flex-1"
+              className="min-w-(--extraction-search-min) flex-1"
               spellCheck={false}
               onChange={(event) => {
                 setSearch(event.target.value);
@@ -112,7 +112,7 @@ export function ExtractionScreen() {
             <ul className="flex flex-col gap-3">
               {page.rows.map((row) => (
                 <li key={`${row.url}-${row.name}`} className="border-b border-border-subtle pb-3">
-                  <p className="font-semibold">{row.error ? row.error : row.value}</p>
+                  <p className="font-semibold">{row.error ?? row.value}</p>
                   <p className="text-12 text-text-secondary">
                     {row.name} · {row.url}
                     {row.count > 1 ? ` · ${row.count} values` : ''}

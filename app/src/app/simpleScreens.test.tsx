@@ -85,6 +85,7 @@ describe('the Report’s row', () => {
       'Summary',
       'What to fix',
       'Report',
+      'Custom data',
       'Settings',
     ]);
     fireEvent.keyDown(window, { key: '3', code: 'Digit3', ctrlKey: true });

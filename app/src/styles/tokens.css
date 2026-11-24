@@ -537,6 +537,9 @@
   --limit-field-width: 480px; /* one of Settings > Analysis's limits: a number and its unit */
   --number-field-width: 96px; /* a count typed inline in a sentence: "Stop after [5,000] addresses" */
   --number-row-width: 320px; /* a setting's own field for a number or a short choice */
+  --library-error-min: 192px; /* why a crawl file can't be read, under its status, before the words wrap */
+  --rule-name-min: 160px; /* an extraction rule's name, beside its selector type, before the row wraps */
+  --extraction-search-min: 192px; /* Custom extraction's search, beside its rule picker, before the row wraps */
   --header-name-width: 200px; /* an extra header's name, beside its value */
   --detail-max-height: 192px; /* an error's technical detail, before it scrolls */
   --palette-width: 640px;

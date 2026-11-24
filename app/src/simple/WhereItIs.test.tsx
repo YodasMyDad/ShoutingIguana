@@ -119,13 +119,9 @@ describe.skipIf(TABLE_STUBBED)('Where it is, in Simple', () => {
   it('doesn’t repeat as evidence what the line above already says', async () => {
     const where = await open(
       'h2-missing',
-      catalogRoutes(
-        'h2-missing',
-        1,
-        [],
-        [page(1, '/blog/', { detail: '1,036 words, no H2', wordCount: 1036 } as Partial<IssueRow>)],
-        { check: { evidence: ['wordCount'] } },
-      ),
+      catalogRoutes('h2-missing', 1, [], [page(1, '/blog/', { detail: '1,036 words, no H2', wordCount: 1036 })], {
+        check: { evidence: ['wordCount'] },
+      }),
     );
     expect(await where.findByText('1,036 words with no subheadings')).toBeVisible();
     expect(where.queryByText('1,036 words')).toBeNull();

@@ -18,7 +18,13 @@ import {
 import { useMemo } from 'react';
 import { analysisQuery, checksQuery, crawlQuery, libraryQuery } from '../api/queries';
 import { isCrawlStatus, type IssueCounts } from '../api/types';
-import { CRAWL_SECTIONS, REPORT_SECTION, type CrawlSection, type CrawlSectionEntry } from '../app/sections';
+import {
+  CRAWL_SECTIONS,
+  REPORT_SECTION,
+  crawlSectionEntry,
+  type CrawlSection,
+  type CrawlSectionEntry,
+} from '../app/sections';
 import { SIMPLE_SECTIONS } from '../app/modeRoutes';
 import { SIMPLE_SCREENS } from '../app/simpleScreens';
 import logoUrl from '../assets/iguana-64.png';
@@ -73,9 +79,7 @@ export function Sidebar() {
   const report = SIMPLE_SCREENS.report !== null;
   const sections =
     mode === 'simple'
-      ? [...CRAWL_SECTIONS, REPORT_SECTION].filter(
-          (section) => SIMPLE_SECTIONS.includes(section.id) && (section.id !== 'report' || report),
-        )
+      ? SIMPLE_SECTIONS.filter((id) => id !== 'report' || report).map(crawlSectionEntry)
       : CRAWL_SECTIONS;
 
   return (
