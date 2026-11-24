@@ -151,6 +151,7 @@ internal sealed class CrawlSession
         var fetcher = new RetryingFetcher(_fetcher, _gates, scope, _options.MaxRetries, _observer, timeProvider);
         _robots = new RobotsCache(fetcher, _gates, _writer, scope, _options, userAgent.RobotsToken, _observer,
             timeProvider, loggerFactory.CreateLogger<RobotsCache>(), _stop.Token);
+        _renderer.ReadRobotsTxt = _robots.GetAsync;
         _links = new OutLinkFactory(scope);
         _favicon = new FaviconFetcher(_options, _fetcher, _gates, _robots, _writer, scope, _pause, timeProvider, loggerFactory.CreateLogger<FaviconFetcher>(), _stop.Token);
         _processor = new PageProcessor(_options, userAgent, fetcher, _robots, _links, _observer, scope, _gates, _favicon, _renderer, timeProvider);

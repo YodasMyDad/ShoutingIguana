@@ -40,7 +40,7 @@ internal sealed partial class JavaScriptRenderer
                     return null;
                 }
 
-                session.Context ??= await OpenContextAsync(browser).ConfigureAwait(false);
+                session.Context ??= await OpenContextAsync(browser, session.Held).ConfigureAwait(false);
 
                 var started = Stopwatch.StartNew();
                 page = await session.Context.NewPageAsync().ConfigureAwait(false);
@@ -86,6 +86,8 @@ internal sealed partial class JavaScriptRenderer
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
+                // A crawl that is stopping closed the page: the URL is not read, rather than kept as the block.
+                cancellationToken.ThrowIfCancellationRequested();
                 logger.LogDebug(ex, "Browser fallback for {Url} failed; keeping the HTTP response", uri);
                 return null;
             }
@@ -209,5 +211,7 @@ internal sealed partial class JavaScriptRenderer
     {
         public SemaphoreSlim Gate { get; } = new(1, 1);
         public IBrowserContext? Context { get; set; }
+
+        public HeldRequests Held { get; } = new();
     }
 }

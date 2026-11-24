@@ -174,9 +174,27 @@ internal sealed record CrawlOptionsDto
             ExtraSitemaps = ExtraSitemaps is null ? defaults.ExtraSitemaps : [.. ExtraSitemaps],
             StoreHtml = StoreHtml ?? defaults.StoreHtml,
             UseCookies = UseCookies ?? defaults.UseCookies,
-            HttpLogins = HttpLogins is null ? defaults.HttpLogins : [.. HttpLogins],
-            Cookies = Cookies is null ? defaults.Cookies : [.. Cookies],
-            FormLogin = FormLogin ?? defaults.FormLogin,
+            // A part a request leaves out, or sends as null, arrives as null whatever the record's default: it is empty.
+            HttpLogins = HttpLogins is null
+                ? defaults.HttpLogins
+                : [.. HttpLogins.Select(login => login with { Host = login.Host ?? "", Username = login.Username ?? "", Password = login.Password ?? "" })],
+            Cookies = Cookies is null
+                ? defaults.Cookies
+                : [.. Cookies.Select(cookie => cookie with
+                {
+                    Name = cookie.Name ?? "", Value = cookie.Value ?? "", Domain = cookie.Domain ?? "", Path = cookie.Path ?? ""
+                })],
+            FormLogin = FormLogin is null
+                ? defaults.FormLogin
+                : FormLogin with
+                {
+                    Url = FormLogin.Url ?? "",
+                    Username = FormLogin.Username ?? "",
+                    Password = FormLogin.Password ?? "",
+                    UsernameField = FormLogin.UsernameField ?? "",
+                    PasswordField = FormLogin.PasswordField ?? "",
+                    Submit = FormLogin.Submit ?? ""
+                },
             Rendering = this.Rendering ?? defaults.Rendering,
             RenderPatterns = RenderPatterns is null ? defaults.RenderPatterns : [.. RenderPatterns],
             IncludePatterns = IncludePatterns is null ? defaults.IncludePatterns : [.. IncludePatterns],

@@ -136,6 +136,59 @@ public sealed class CrawlOptionsTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// A sign-in given without the parts that are optional (a host, a cookie's domain and path, a form's selectors),
+    /// or with one as null, is a sign-in with those left empty. It was an engine error: a 500.
+    /// </summary>
+    [Fact]
+    public async Task ASignInWithoutItsOptionalPartsIsValid()
+    {
+        var bare = await _sidecar.PostAsync("api/crawl-options/validate", JsonNode.Parse("""
+            {"startUrl":"https://example.com/",
+             "httpLogins":[{"username":"reader","password":"let-me-in"}],
+             "cookies":[{"name":"session","value":"abc"}],
+             "formLogin":{"url":"https://example.com/sign-in","username":"reader","password":"let-me-in","submit":null}}
+            """));
+
+        Assert.Equal(HttpStatusCode.OK, bare.Status);
+        Assert.Equal("""{"errors":{}}""", bare.Body!.ToJsonString());
+    }
+
+    /// <summary>
+    /// The app sends the rendering mode and a rule's selector type by name (<c>javaScript</c>, <c>xPath</c>), as its
+    /// types say, and reads them back by name. They were numbers, so choosing a mode in the app was refused as
+    /// <c>invalid-options</c>. A number is still read: defaults a 2.0.3 sidecar saved hold one.
+    /// </summary>
+    [Fact]
+    public async Task TheRenderingModeAndASelectorTypeAreNamesAndANumberIsStillRead()
+    {
+        var engine = (await _sidecar.GetJsonAsync("api/crawl-options/defaults"))["options"]!;
+        Assert.Equal("\"automatic\"", engine["javaScriptRendering"]!.ToJsonString());
+
+        var saved = await _sidecar.SendAsync(HttpMethod.Put, "api/crawl-options/defaults", JsonNode.Parse("""
+            {"javaScriptRendering":"javaScript",
+             "extractionRules":[{"name":"Price","selectorType":"xPath","selector":"//span[@class='price']","enabled":true}]}
+            """));
+        Assert.Equal(HttpStatusCode.OK, saved.Status);
+        Assert.Equal("\"javaScript\"", saved.Body!["options"]!["javaScriptRendering"]!.ToJsonString());
+        Assert.Equal("\"xPath\"", saved.Body!["options"]!["extractionRules"]![0]!["selectorType"]!.ToJsonString());
+
+        var numbered = await _sidecar.SendAsync(HttpMethod.Put, "api/crawl-options/defaults", JsonNode.Parse("""
+            {"javaScriptRendering":2,"renderPatterns":["/app/"],
+             "extractionRules":[{"name":"Price","selectorType":2,"selector":"price: (\\d+)","enabled":true}]}
+            """));
+        Assert.Equal(HttpStatusCode.OK, numbered.Status);
+        Assert.Equal("\"matching\"", numbered.Body!["options"]!["javaScriptRendering"]!.ToJsonString());
+        Assert.Equal("\"regex\"", numbered.Body!["options"]!["extractionRules"]![0]!["selectorType"]!.ToJsonString());
+
+        foreach (var unknown in new[] { "\"sometimes\"", "9" })
+        {
+            var refused = TestSidecar.AssertProblem(await _sidecar.SendAsync(HttpMethod.Put, "api/crawl-options/defaults",
+                JsonNode.Parse($$"""{"javaScriptRendering":{{unknown}}}""")), HttpStatusCode.UnprocessableEntity, "invalid-options");
+            Assert.Equal(["javaScriptRendering"], refused["errors"]!.AsObject().Select(field => field.Key));
+        }
+    }
+
+    /// <summary>
     /// An address typed without a scheme starts where the site answers: the test site serves only http, so http, where
     /// a guess of https read nothing and blamed robots.txt (the closing audit's gap 1). One with its scheme is kept.
     /// </summary>

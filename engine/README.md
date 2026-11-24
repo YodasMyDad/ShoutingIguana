@@ -80,6 +80,30 @@ with `--render-url` (a regular expression against the whole URL, repeatable). `-
 regular expressions against the whole URL, repeatable. When any include is set, a URL is fetched only if one matches.
 A URL that matches an exclude is recorded and not fetched. The start URL has to pass, or the crawl is refused.
 
+How a page is rendered (`Fetching/JavaScriptRenderer`):
+
+- **A shell**, for `Automatic`, is a page with a script and under 120 characters of visible text, or under 1,000 with
+  an application mount (`#app`, `#root`, `#__next`, `#__nuxt`, `app-root`) that holds under 120 of them. A page that
+  was rendered on the server and adds to itself in the browser is not a shell: only `JavaScript` reads what it adds.
+- **Done** is the document parsed, then the network quiet for half a second, or two seconds gone. A page that writes
+  its content later than that, with no request in between, is read without it.
+- **The crawl's pace holds.** Each request a page makes takes a slot on its host's gate, and is held to robots.txt.
+  Time spent waiting for the gate is not counted against the page: at two requests a second a page with thirty
+  scripts takes fifteen seconds, and is still rendered.
+- **The window** is 1,280 by 9,000 pixels, as tall as Google's renderer's, so what loads when it comes into view has
+  loaded. Nothing scrolls, so an endless list is read as far as its first screenful goes.
+- **Kept as it was sent:** a page whose script loads another page (a script's redirect is not followed; the crawl is
+  told once), a page the browser is answered anything but a 2xx for, and a page that doesn't finish in the request
+  timeout.
+- What open shadow roots show is in the HTML. A frame's own document is not. Images, fonts and media are not
+  fetched. A service worker is not started. A dialog is dismissed.
+- The page's facts are the rendered HTML's. The HTML as sent is read again only in `JavaScript` mode, for its links.
+  A title, canonical or robots tag a script changed is stored as the script left it, and the difference is not
+  reported.
+- The browser is downloaded the first time a crawl needs it (the headless Chromium only), to Playwright's own
+  folder. If it can't start, the crawl says why in an alert and reads pages as sent. If it stops mid-crawl it is
+  started again, up to five times.
+
 `--extract Name=css:selector` pulls text out while the page is parsed, once. `xpath` and `regex` are the other
 forms, and the flag repeats. CSS and XPath read the document that parse already built. A regular expression reads
 the HTML, without backtracking when the pattern allows it, and stops after two seconds otherwise. A rule that
@@ -90,7 +114,10 @@ them. The desktop app sets the rules on a new crawl, in both modes, and lists th
 `--browser-fallback` reads a host in headless Chromium when plain HTTP is blocked (a Cloudflare challenge or another
 firewall `BlockDetector` names, not a 429). The first fetch is still HTTP. If the browser gets past the block, that
 host's later pages skip HTTP, and that HTML is parsed once. It is not JavaScript rendering. Off unless the flag is
-given. The desktop app has the same switch, in both modes.
+given. The desktop app has the same switch, in both modes. It gets past a block that only tells a browser from a
+script. It does not get past a challenge that tells a headless browser from a person: on 2026-11-24 Cloudflare's
+managed challenge (stackoverflow.com, npmjs.com, udemy.com, scrapingcourse.com) and DataDome (g2.com) stayed blocked,
+and the crawl kept the 403 and its alert.
 
 `--auth user:password` signs in to the site with HTTP Basic and Digest, and `--auth host=user:password` signs in to
 that host only. The password is sent only there. `--cookie name=value` (or `name=value@domain`) is sent from the first
