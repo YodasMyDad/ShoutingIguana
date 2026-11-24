@@ -390,7 +390,7 @@ describe('what the live bridge refreshes', () => {
       show(false);
       show(true);
       expect(stale(gridKey(ID, 0))).toBe(false);
-      expect(refreshes).toHaveBeenCalledTimes(2);
+      expect(refreshes).toHaveBeenCalledTimes(3);
 
       // Shown, the ticks refresh as they did, at most once a second from the refresh on showing.
       tick(4);
