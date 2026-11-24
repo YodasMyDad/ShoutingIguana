@@ -66,11 +66,15 @@ export async function continueCrawl(
   } catch (error) {
     if (isProblem(error, 'needs-secrets')) {
       const headersOnly = !error.proxyCredentials && error.missingHeaders.length > 0;
+      // Neither the proxy nor a header: the crawl signed in, and its passwords or cookie values are what is missing.
+      const signIn = !error.proxyCredentials && error.missingHeaders.length === 0;
       notifyResult(error.title, {
         id: crawlToast(id, 'continue'),
         description: headersOnly
           ? `Its headers (${error.missingHeaders.join(', ')}) aren’t kept in the crawl file. Enter them again in its settings, or continue without them.`
-          : 'Its proxy password isn’t kept in the crawl file. Enter it again in the crawl’s settings to continue.',
+          : signIn
+            ? 'Its passwords and cookie values aren’t kept in the crawl file, and weren’t remembered. Enter them again under Continue in the crawl’s settings.'
+            : 'Its proxy password isn’t kept in the crawl file. Enter it again in the crawl’s settings to continue.',
         ...(headersOnly
           ? {
               action: {

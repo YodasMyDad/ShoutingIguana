@@ -160,3 +160,31 @@ describe('round 5: a crawl analysed since it was stopped refuses Continue, Remov
     expect(vi.mocked(notifyError).mock.calls[0]?.[1]).toMatchObject({ id: `crawl:${ID}:continue` });
   });
 });
+
+describe('continuing a crawl whose file doesn’t keep what it needs', () => {
+  const needs = (extra: { missingHeaders: string[]; proxyCredentials: boolean }) =>
+    setTransport(
+      fakeSidecar([
+        [
+          'POST',
+          /\/continue$/,
+          () => problem({ type: 'needs-secrets', title: 'Some settings must be given again.', status: 422, ...extra }),
+        ],
+      ]),
+    );
+  const said = () => (vi.mocked(notifyResult).mock.calls[0]?.[1] as { description?: string } | undefined)?.description;
+
+  // The audit of 2026-11-24: a crawl that signed in was told its proxy password was missing, with no proxy at all.
+  it('says it is the sign-in when neither a header nor the proxy is what’s missing', async () => {
+    needs({ missingHeaders: [], proxyCredentials: false });
+    expect(await continueCrawl(ID)).toBe(false);
+    expect(said()).toMatch(/^Its passwords and cookie values aren’t kept in the crawl file/);
+    expect(said()).not.toMatch(/proxy/);
+  });
+
+  it('still says it is the proxy’s password when it is', async () => {
+    needs({ missingHeaders: [], proxyCredentials: true });
+    await continueCrawl(ID);
+    expect(said()).toMatch(/^Its proxy password isn’t kept/);
+  });
+});

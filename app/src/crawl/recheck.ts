@@ -98,12 +98,16 @@ export async function startRecheck(
   } catch (error) {
     if (isProblem(error, 'needs-secrets')) {
       const headersOnly = !error.proxyCredentials && error.missingHeaders.length > 0;
+      // Neither the proxy nor a header: the crawl signed in, and its passwords or cookie values are what is missing.
+      const signIn = !error.proxyCredentials && error.missingHeaders.length === 0;
       const settings = openSettingsAction(crawlId);
       notifyResult(error.title, {
         id: crawlToast(crawlId, 'recheck'),
         description: headersOnly
           ? `Its headers (${error.missingHeaders.join(', ')}) aren’t kept in the crawl file. Enter them again in its settings, or recheck without them.`
-          : 'Its proxy password isn’t kept in the crawl file. Enter it again in the crawl’s settings to recheck.',
+          : signIn
+            ? 'Its passwords and cookie values aren’t kept in the crawl file, and weren’t remembered. Crawl the site again from its settings, signed in, to check it.'
+            : 'Its proxy password isn’t kept in the crawl file. Enter it again in the crawl’s settings to recheck.',
         ...(headersOnly
           ? {
               action: {
