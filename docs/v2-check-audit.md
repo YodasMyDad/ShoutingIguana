@@ -513,3 +513,361 @@ Not built here, by the audit's rule:
 - `X-Frame-Options` with a value browsers don't know (`ALLOW-FROM`), and a CSP sent only as Report-Only.
 - More click ids on internal links (`gbraid`, `wbraid`, `dclid`, `_gl`, `ttclid`, `twclid`, `yclid`).
 - og:type and og:url missing (ogp.me requires four properties; two are checked).
+
+## The third audit, 2026-11-24: real-site proof
+
+The second audit left 128 of the 170 checks proven only on the synthetic site: its three sites are well kept, and gave
+them nothing to find. This one went looking for sites that would. Every check was run on some forty real sites and
+test targets, each first firing was read by hand against the real page, and each site was searched for the opposite
+fault, a page that plainly has the problem and wasn't flagged. The fixes are on `fix/checks`.
+
+### In short
+
+- **Of the 128, 101 fired, and 99 are now proven on a real page**: 81 on an ordinary site, 18 only on a target made
+  for testing crawlers (crawler-test.com, badssl.com, httpbin). Two fired only wrongly, were fixed, and are unproven
+  again (`content-type-mismatch`, `pagination-not-linked`). **27 have still never fired**, each with its reason below.
+- **Of the 170, 141 are proven on a real page** (the 42 of the second audit, 41 of which fired again here, and these
+  99).
+- **Wrong flags: 19 checks flagged what a real site showed to be right.** The largest: 48,195 pages of wordpress.org
+  "listed in more than one sitemap" for being in Jetpack's image sitemap; 25,443 gov.uk URLs with a "repeating path"
+  that only its sitemaps list; 584 sitemap entries "on another host" where the sitemap's own URL redirects to that
+  host; 299 of theregister.com's pages "non-indexable" for a robots.txt that refuses every crawler but the search
+  engines'; 132 Wix product photos as "links search engines can't follow"; 71 unrelated pages as near duplicates for
+  a header menu counted as their content; 59 of mozilla.org's pages for an `x-default` that does what `x-default` is
+  for.
+- **Missed cases: 4 checks missed a real fault** (a redirect chain on a crawl of a URL list, "More →" as link text, a
+  password field outside a form, and `boilerplate-heavy`, which couldn't fire on a site whose menu isn't a `<nav>`).
+- **Evidence: 7 checks said something wrong or useless about a true flag** (a detail cut before the part that matters,
+  a parser's advice to a programmer, "2.0 MB, past the 2 MB").
+- **29 checks changed, all with a test of the real markup, 31 of the 44 cases seen failing with the rules as they
+  were.** `AnalysisFreshness.VERSION` 26.
+- **Five faults are the fetcher's, outside this audit's lane, and are left**: the worst reads a page that declares
+  `charset=unicode` as UTF-16, which turned berkshirehathaway.com into one page of garbage, flagged for having no
+  title, no H1 and no links.
+
+### How it was checked
+
+**The sites**, crawled on 2026-11-24 with the CLI at its default polite pace, robots.txt obeyed, `--store-html`,
+`--max-urls` 200 to 400 (3,000 on crawler-test.com, which has 1,213 URLs), rendering left on Automatic. Sites named
+by a search for each kind, each checked to answer an ordinary request before it was crawled. None was crawled past a
+block or asked again after one. The sites a fix was for were crawled a second time, to see the fix on the real pages.
+
+| Kind | Sites (URLs fetched, pages read) |
+| --- | --- |
+| Made for testing crawlers | crawler-test.com (1,263, 812), badssl.com with its subdomains (211, 35), httpbin.org and httpbingo.org (a list of 20 status and redirect URLs each), quotes.toscrape.com (304, 234), books.toscrape.com (404, 226), webscraper.io's test shop (316, 179) |
+| Old and unmaintained | info.cern.ch (704, 174), spacejam.com/1996 (103, 47), cs.stanford.edu/~knuth (643, 52), paulgraham.com (2,303, 299), neverssl.com, httpforever.com |
+| Documentation | postgresql.org/docs (417, 239), sqlite.org (728, 280), create-react-app.dev (113, 1 folder) |
+| Multilingual | mozilla.org (1,294, 307), debian.org (7,261, 126), european-union.europa.eu (2,251, 217), videolan.org (2,339, 296), kde.org (3,507, 201), softmaker.com (644, 192), oo-software.com (833, 347) |
+| Government and academic | gov.uk (774, 273), mit.edu (737, 23) |
+| News and blogs | arstechnica.com (1,879, 126), wordpress.org/news (1,597, 130), omgubuntu.co.uk (1,988, 218; AMP), cnx-software.com (871, 125; AMP) |
+| Small businesses on builders | Wix: waldenfloral.com (1,782, 250), pellabakery.com (132, 11). Squarespace: mugipottery.com (690, 74), olasceramics.com (158, 33). WordPress: jonasbrotherstaxidermy.com (344, 27), littletonareachamber.com (735, 161). Shopify: brooklyncandlestudio.com (545, 26), lannacoffeeco.com (344, 52). Webflow: dianasseafood.com (67, 1). Weebly: kilmingtonvillage.com (325, 58) |
+| Structured data | kingarthurbaking.com/recipes (889, 167), carrabelle.org (684, 174) |
+| Not read | w3.org and text.npr.org (a firewall refused the crawler: `internal-blocked`), theregister.com (its robots.txt refuses every crawler but the ones it names: 300 `blocked-by-robots`), berkshirehathaway.com (one page, garbled: see the fetcher's faults), gnu.org (down), docs.python.org and nasa.gov (stopped after an hour of checking their links to other sites, not analysed, not counted) |
+
+**Seven readers, one per group of checks** (responses and links; indexability; canonicals and sitemaps; titles,
+content and URLs; the HTML category; images, security and performance; hreflang and structured data), each working
+from the stored crawls, with a live fetch only where the stored page couldn't settle it:
+
+- **Every first firing read by hand**: up to five flagged URLs a check, spread over two sites or more where it fired on
+  more, the stored HTML and headers against the check's own words and against the standard it rests on.
+- **Counted again without the engine** where a check counts: Python's `html.parser` over every stored page for robots
+  directives, viewports, lang, charset, image alts and sizes, hreflang sets, fragment ids and JSON-LD; Windows' own
+  `arial.ttf` over 3,551 titles and 1,818 descriptions (no pixel width differed); a shingle cosine over the near
+  duplicates; a word count by region over the pages `boilerplate-heavy` flagged.
+- **The opposite fault hunted**: each site scanned for the markup a check should have caught, and crawler-test.com's
+  named cases compared with what fired on each (a case its robots.txt keeps out, or that the crawl never reached, is
+  no miss).
+- **Then crawled again** with the fixes, the sites a fix was for (below), as what the parse changed takes a new crawl.
+
+### Every check that had never fired
+
+`–` under samples is a check that didn't fire. A count after a site is the URLs flagged there, before any fix.
+
+| Check | Fired on | Samples read | Verdict | Note |
+| --- | --- | ---: | --- | --- |
+| `internal-server-error` | create-react-app.dev 1, crawler-test.com 18 and 2 more | 22 | right; left | 21 true. A 101 answer is called a 5xx: the fetcher's classing (see below) |
+| `internal-unreachable` | omgubuntu.co.uk 2, badssl.com 35 and 1 more | 8 | right; left | True. A connection given up after 10 s says "20 seconds": the fetcher's message (see below) |
+| `internal-blocked` | cnx-software.com 4, brooklyncandlestudio.com 1, w3.org 1 | 5 | right | cnx-software.com: 403 with `Cf-Mitigated: challenge`; brooklyncandlestudio.com: 429 with the same |
+| `content-type-mismatch` | crawler-test.com 4 | 4 | fixed | All four were a stray `<link rel="stylesheet" href="#">` naming the page itself. No real mismatch seen |
+| `soft-404` | – | – | not seen | Needs a 200 page with an error title or H1 and under 300 words; none crawled |
+| `redirect-chain` | debian.org 224, kde.org 16, mozilla.org 3, crawler-test.com 20 and 2 more | 30 | fixed | True. Missed on a crawl of a URL list (httpbin `/redirect/5`): a listed URL is a way in now |
+| `redirect-loop` | crawler-test.com 8 | 8 | right; left | True. An instant meta refresh to the page itself isn't traced as a loop (see below) |
+| `redirect-broken` | cs.stanford.edu/~knuth 2, create-react-app.dev 1, crawler-test.com 6 and 2 more | 10 | right | All true. The www probe that ends at a 404 (cs.stanford.edu) is reported by design: that address is broken for whoever types it |
+| `redirect-temporary` | debian.org 7, oo-software.com 7, sqlite.org 5, httpbin.org 13 and 10 more | 20 | right | – |
+| `redirect-temporary-cached` | – | – | not seen | Of 52 temporary redirects whose headers were read, the longest cache was `max-age=600` |
+| `redirect-downgrade` | kde.org 55, quotes.toscrape.com 46 and 4 more | 12 | right | kde.org and quotes.toscrape.com redirect HTTPS URLs to http://, confirmed live |
+| `meta-refresh` | crawler-test.com 21 | 21 | fixed | 17 true. A script's redirect was described as a tag; the detail and the words now say script |
+| `links-to-redirects` | oo-software.com 345, omgubuntu.co.uk 218, european-union.europa.eu 217, quotes.toscrape.com 185 and 19 more | 14 | right; left | True. On crawler-test, 300, 304, 305 and 306 answers count as redirects: the fetcher's classing |
+| `internal-nofollow-links` | postgresql.org/docs 239, carrabelle.org 174, cnx-software.com 125, crawler-test.com 8 and 9 more | 6 | right | Noisy: carrabelle.org's 174 are one hidden bot-trap link |
+| `broken-fragment-links` | omgubuntu.co.uk 209, kingarthurbaking.com 167, lannacoffeeco.com 52, crawler-test.com 6 and 12 more | 11 | fixed | True but for cnx-software.com's two: an id and its link written with lowercase percent escapes |
+| `orphan-page` | mugipottery.com 38, olasceramics.com 8, crawler-test.com 10 | 14 | right | Every one grepped for in every stored page |
+| `uncrawlable-links` | waldenfloral.com 130, paulgraham.com 19, pellabakery.com 2 | 135 | fixed | 132 of 151 were Wix's `<div href>` holding a product photo. paulgraham.com's `<xa href>` is true |
+| `broken-resources` | paulgraham.com 1, videolan.org 1, crawler-test.com 577 | 3 | right | – |
+| `links-to-localhost` | create-react-app.dev 1 | 1 | right | create-react-app.dev links `http://localhost:3000` |
+| `few-internal-outlinks` | info.cern.ch 63, spacejam.com 43, cs.stanford.edu/~knuth 7, crawler-test.com 625 and 10 more | 9 | right | berkshirehathaway.com's is the charset fault (see below) |
+| `generic-anchor-text` | waldenfloral.com 134, arstechnica.com 81, kde.org 39 and 20 more | 6 | fixed | True. Missed "More →", "Read more …": 53 links on 4 sites |
+| `non-indexable-inlinks-only` | – | – | not seen | Skipped on a URL-limited crawl; none on the complete ones |
+| `deep-page` | webscraper.io 45 | 3 | right | – |
+| `too-many-links` | kingarthurbaking.com 149, debian.org 22, sqlite.org 4 and 6 more | 5 | right | Noisy: a site's own subdomains count as other sites |
+| `slow-external-links` | mozilla.org 36, kde.org 21, european-union.europa.eu 6 and 13 more | 4 | right | Noisy: one slow answer flags every page linking to it |
+| `pagination-not-linked` | omgubuntu.co.uk 6, cnx-software.com 4 | 3 | fixed | All 10 were AMP copies of a series in order |
+| `pagination-broken` | – | – | not seen | No rel=next/prev in any crawl leads to an error or a redirect |
+| `pagination-sequence-error` | omgubuntu.co.uk 6, cnx-software.com 4, debian.org 1, crawler-test.com 4 and 1 more | 6 | fixed | 6 true (waldenfloral.com, crawler-test.com, debian.org); 10 were AMP copies |
+| `noindex-page` | omgubuntu.co.uk 32, waldenfloral.com 28, arstechnica.com 6, crawler-test.com 46 and 9 more | 12 | right | Every hit matched an independent scan of all stored HTML and headers |
+| `nofollow-page` | lannacoffeeco.com 6, crawler-test.com 16 | 7 | right | – |
+| `snippet-blocked` | crawler-test.com 4 | 4 | right | crawler-test only |
+| `robots-txt-unreachable` | – | – | not seen | Needs a robots.txt that answers 5xx, 429 or nothing |
+| `robots-txt-unreachable-other-origin` | badssl.com 1 | 1 | right | badssl.com: 35 origins, each a TLS failure by design |
+| `robots-txt-missing` | info.cern.ch 1, spacejam.com 1, neverssl.com 1, badssl.com 1 and 6 more | 8 | right | w3.org's 403 is a firewall's challenge, which the words cover |
+| `site-hidden-from-search` | – | – | not seen | Needs a home page that is noindex |
+| `robots-directives-conflict` | crawler-test.com 2 | 2 | right | crawler-test only |
+| `noindex-near-home` | omgubuntu.co.uk 32, waldenfloral.com 28, arstechnica.com 6, crawler-test.com 41 and 7 more | 10 | right | Noisy: tag archives, booking and profile pages, noindex on purpose |
+| `unavailable-after-passed` | – | – | not seen | crawler-test's only case is also noindex, so the check is rightly silent |
+| `media-preview-blocked` | gov.uk 58 | 58 | right | gov.uk organisation pages: `max-image-preview:none` |
+| `translation-blocked` | – | – | not seen | As above: the only notranslate page is noindex |
+| `indexifembedded-without-noindex` | – | – | not seen | No page in any crawl has indexifembedded |
+| `canonical-multiple` | crawler-test.com 4 | 4 | fixed | True. The detail lost its second URL to the 120-character cut. No real site has two canonicals |
+| `canonical-broken` | crawler-test.com 38 | 8 | right | crawler-test only |
+| `canonical-to-redirect` | littletonareachamber.com 3, arstechnica.com 1, create-react-app.dev 1, crawler-test.com 2 | 3 | right | – |
+| `canonical-to-non-indexable` | omgubuntu.co.uk 10, crawler-test.com 2 | 3 | right | – |
+| `canonical-outside-head` | cnx-software.com 97, crawler-test.com 6 | 4 | right | cnx-software.com: a `<div>` on line 59 of the head |
+| `canonical-relative` | crawler-test.com 10 | 5 | right | crawler-test only |
+| `canonical-invalid` | – | – | not seen | Needs an empty or non-web canonical href |
+| `noindex-with-canonical` | omgubuntu.co.uk 10, arstechnica.com 5, european-union.europa.eu 1, crawler-test.com 2 | 4 | right | arstechnica.com: syndicated articles, noindex with a canonical to wired.com |
+| `canonical-other-domain` | mit.edu 23, crawler-test.com 2 | 3 | right | mit.edu names tlecms.mit.edu on all 23 pages |
+| `canonical-loop` | – | – | not seen | No pair of pages in any crawl name each other |
+| `canonical-on-redirect` | – | – | not seen | No 3xx answer in any crawl carries a canonical |
+| `canonical-fragment` | – | – | not seen | No canonical href in any stored page has a fragment |
+| `canonical-invalid-attribute` | – | – | not seen | No canonical link in any stored page has hreflang, lang, media or type |
+| `canonical-unlinked` | – | – | not seen | crawler-test's cases name 404s, which is canonical-broken's |
+| `sitemap-non-indexable` | theregister.com 299, create-react-app.dev 46, arstechnica.com 5, crawler-test.com 5 and 5 more | 9 | fixed | theregister.com's 299 were refused to this crawler by robots.txt and open to Googlebot |
+| `sitemap-error` | paulgraham.com 1, cnx-software.com 1, crawler-test.com 1 | 3 | right; left | True. crawler-test's `sitemap.txt` failed once on a dropped connection, with no second try |
+| `sitemap-missing` | info.cern.ch 1, spacejam.com 1, neverssl.com 1, badssl.com 1 and 12 more | 4 | fixed | 15 true. w3.org's guess at /sitemap.xml met a firewall's 403 |
+| `sitemap-url-other-host` | cs.stanford.edu/~knuth 584, theregister.com 1, crawler-test.com 9 | 6 | fixed | cs.stanford.edu's 584: the sitemap was asked for on the bare domain and served by www |
+| `sitemap-over-limit` | crawler-test.com 1 | 1 | right | crawler-test: 50 MB is 52,428,800 bytes |
+| `sitemap-near-limit` | crawler-test.com 1 | 1 | right | crawler-test |
+| `sitemap-empty` | – | – | not seen | No sitemap in any crawl lists nothing |
+| `sitemap-url-repeated` | gov.uk 183,443, wordpress.org/news 48,195, theregister.com 244, crawler-test.com 2 and 4 more | 5 | fixed | gov.uk's 183,443 are true. wordpress.org's 48,195 (Jetpack image sitemap) and the news sitemaps weren't repeats |
+| `sitemap-lastmod-invalid` | – | – | not seen | Over 1.6 million real entries, none unreadable or in the future |
+| `title-missing` | berkshirehathaway.com 1, crawler-test.com 24 and 2 more | 7 | right | berkshirehathaway.com's is the charset fault (see below) |
+| `title-multiple` | lannacoffeeco.com 45, info.cern.ch 1, crawler-test.com 2 | 4 | right | info.cern.ch: two real titles; lannacoffeeco.com: 45 collection pages |
+| `description-multiple` | lannacoffeeco.com 39, crawler-test.com 2 | 3 | right | – |
+| `h1-multiple` | waldenfloral.com 211, softmaker.com 192, sqlite.org 101, webscraper.io 29 and 18 more | 10 | right | Noisy: counts hidden modal H1s |
+| `h1-duplicate` | waldenfloral.com 222, oo-software.com 169, videolan.org 146, crawler-test.com 570 and 21 more | 10 | fixed | True. wordpress.org's 24 and cnx-software.com's 10 were pages of one archive read with a gap |
+| `h1-image-only` | mugipottery.com 72, lannacoffeeco.com 2, crawler-test.com 2 | 4 | right | – |
+| `duplicate-content` | softmaker.com 38, videolan.org 18, kde.org 16, quotes.toscrape.com 85 and 11 more | 8 | right | – |
+| `near-duplicate-content` | softmaker.com 50, kingarthurbaking.com 41, videolan.org 31, quotes.toscrape.com 26 and 14 more | 20 | fixed | 71 of 311 were unrelated pages alike only in a header menu counted as content |
+| `duplicate-site-version` | spacejam.com 2, neverssl.com 2, berkshirehathaway.com 2, crawler-test.com 3 and 11 more | 9 | right | Confirmed live |
+| `readability-low` | littletonareachamber.com 28, brooklyncandlestudio.com 14, oo-software.com 5, quotes.toscrape.com 3 and 12 more | 14 | fixed | 19 of 81 were scored on option lists and embed-code boxes. The detail no longer reads "30, under 30" |
+| `boilerplate-heavy` | kingarthurbaking.com (crawled again) 8 | 3 | fixed | Couldn't fire where a header's menu has no `<nav>`: its words counted as the page's own. After the fix, kingarthurbaking.com 8, true by an independent count (268 of 1,305 words) |
+| `image-missing-alt` | paulgraham.com 299, kde.org 138, softmaker.com 45, crawler-test.com 6 and 12 more | 9 | right; left | True. A `data:` image with no alt isn't judged (sqlite.org's logo, see below) |
+| `image-alt-too-long` | mugipottery.com 74, waldenfloral.com 36, brooklyncandlestudio.com 26, books.toscrape.com 15 and 10 more | 7 | right | – |
+| `image-inline-large` | – | – | not seen | The largest inline image in any crawl is 4.6 KB |
+| `hreflang-invalid-code` | videolan.org 127, kde.org 97, crawler-test.com 2 | 5 | right | `ast` and `nds` are no ISO 639-1 codes, which is all Google documents |
+| `hreflang-missing-self` | kde.org 194, waldenfloral.com 3, softmaker.com 1, crawler-test.com 14 and 1 more | 6 | right | – |
+| `hreflang-missing-return` | waldenfloral.com 3, crawler-test.com 4 | 5 | right | – |
+| `hreflang-broken-target` | – | – | not seen | Hreflang targets aren't fetched unless something else leads to them |
+| `hreflang-to-non-indexable` | softmaker.com 192, mozilla.org 59, create-react-app.dev 1 | 6 | fixed | softmaker.com's 192 true. mozilla.org's 59 were x-default naming a home page that redirects by language |
+| `hreflang-duplicate-code` | crawler-test.com 4 | 4 | right | crawler-test only |
+| `hreflang-missing-x-default` | mozilla.org 246, european-union.europa.eu 213, kde.org 194, crawler-test.com 8 | 5 | right | – |
+| `hreflang-outside-head` | – | – | not seen | No page with hreflang has its head ended early |
+| `hreflang-inconsistent-code` | – | – | not seen | No two fetched versions name each other by different codes |
+| `hreflang-header-mismatch` | crawler-test.com 4 | 4 | right | crawler-test only |
+| `hreflang-unlinked` | – | – | not seen | Skipped on every multilingual crawl for its URL limit |
+| `hreflang-lang-mismatch` | – | – | not seen | An independent scan of every self entry found none either |
+| `hreflang-self-only` | waldenfloral.com 184, mozilla.org 7, european-union.europa.eu 3 | 5 | right | Noisy: Wix writes x-default and en-us, both naming the page, on a one-language site |
+| `structured-data-invalid` | brooklyncandlestudio.com 2 | 2 | fixed | True. The detail carried the parser's advice to a programmer |
+| `structured-data-missing-required` | waldenfloral.com 130 | 3 | right | waldenfloral.com: `"Offers"` with a capital, which schema.org doesn't know |
+| `structured-data-schema-errors` | kde.org 201, waldenfloral.com 163, gov.uk 70 and 5 more | 12 | fixed | True but for waldenfloral.com's 24: "No @context" for an empty `{}` block |
+| `structured-data-missing-recommended` | softmaker.com 188, mugipottery.com 72, gov.uk 69, webscraper.io 179 and 8 more | 10 | right | Noisy: a Microdata Article shell beside a complete JSON-LD one |
+| `structured-data-on-noindex` | omgubuntu.co.uk 32, lannacoffeeco.com 6, arstechnica.com 5 and 5 more | 5 | right | – |
+| `no-https` | info.cern.ch 1, neverssl.com 1, httpforever.com 1 | 3 | right | info.cern.ch, neverssl.com, httpforever.com |
+| `http-page` | videolan.org 1, crawler-test.com 400 and 4 more | 6 | right | – |
+| `form-not-secure` | badssl.com 4, crawler-test.com 3 and 1 more | 8 | fixed | True. Missed a password field outside any form (http-password.badssl.com) |
+| `protocol-relative-links` | carrabelle.org 174, littletonareachamber.com 161, kilmingtonvillage.com 58, crawler-test.com 581 and 3 more | 6 | right | Suppressed by any HSTS max-age, however short (see below) |
+| `url-uppercase` | info.cern.ch 173, mozilla.org 98, debian.org 39, quotes.toscrape.com 46 and 4 more | all | right | Noisy: mozilla.org's 98 are locale folders (`/en-US/`) |
+| `url-underscores` | european-union.europa.eu 213, sqlite.org 107, videolan.org 26, crawler-test.com 617 and 7 more | all | right | – |
+| `url-too-long` | arstechnica.com 37, cnx-software.com 27, european-union.europa.eu 3, crawler-test.com 45 and 6 more | all | right | – |
+| `url-tracking-parameters` | lannacoffeeco.com 4 | 4 | right | lannacoffeeco.com: a blog links a product with `utm_` parameters |
+| `url-multiple-slashes` | – | – | not seen | crawler-test's cases are disallowed in its robots.txt |
+| `url-space` | crawler-test.com 4 | 4 | right | crawler-test only |
+| `url-non-ascii` | crawler-test.com 25 | 6 | right | crawler-test only |
+| `url-repetitive-path` | gov.uk 25,446, info.cern.ch 4, debian.org 3, crawler-test.com 6 and 7 more | 16 | fixed | gov.uk's 25,443 were sitemap-only URLs built that way on purpose. info.cern.ch's 4 are the real fault |
+| `url-internal-search` | gov.uk 6, debian.org 1, brooklyncandlestudio.com 1 and 1 more | 8 | right | – |
+| `large-page` | waldenfloral.com 237, pellabakery.com 8, sqlite.org 1, crawler-test.com 20 and 1 more | 5 | fixed | True. "1.0 MB, over 1 MB" is now given to the byte |
+| `html-past-crawl-limit` | waldenfloral.com 120, crawler-test.com 16 | 3 | fixed | True (waldenfloral.com: 120 pages). "2.0 MB, past the 2 MB" is now given to the byte |
+| `resource-past-crawl-limit` | – | 7 files | left, not seen | No script or stylesheet in any crawl is over 2 MB decompressed (the largest 1.43 MB). The hole is confirmed (see below) |
+| `viewport-missing` | paulgraham.com 299, info.cern.ch 174, videolan.org 90, crawler-test.com 796 and 9 more | 5 | right | An independent scan of all stored HTML agrees |
+| `lang-missing` | paulgraham.com 299, sqlite.org 279, info.cern.ch 174, crawler-test.com 806 and 8 more | 4 | right | As above |
+| `charset-missing` | paulgraham.com 299, info.cern.ch 174, berkshirehathaway.com 1, crawler-test.com 14 and 1 more | 5 | right | berkshirehathaway.com's is the charset fault (see below) |
+| `social-image-relative` | lannacoffeeco.com 23 | 2 | right | lannacoffeeco.com: og:image is a Liquid error message |
+| `og-url-not-canonical` | postgresql.org/docs 238, wordpress.org/news 22, omgubuntu.co.uk 9, crawler-test.com 3 and 5 more | 9 | right | – |
+| `social-tags-multiple` | – | – | not seen | 18 pages repeat a tag, all with the same content |
+| `og-title-duplicate` | kde.org 18, omgubuntu.co.uk 6, wordpress.org/news 5 | 29 | right | – |
+| `social-image-broken` | cnx-software.com 1, carrabelle.org 1, crawler-test.com 8 | 10 | right | – |
+| `social-image-too-large` | waldenfloral.com 1 | 1 | right | waldenfloral.com: 11.4 MB |
+| `social-image-too-small` | mugipottery.com 67, kilmingtonvillage.com 43, waldenfloral.com 2 | 8 | fixed | 22 of kilmingtonvillage.com's 43 were a small og:image after a large first one |
+| `head-tags-in-body` | cnx-software.com 97, info.cern.ch 23, paulgraham.com 2 | 6 | fixed | True. cnx-software.com's 97 details were cut before the cause, and fell into five groups |
+| `html-structure-errors` | mugipottery.com 74, arstechnica.com 28, sqlite.org 1, quotes.toscrape.com 2 | 4 | right | – |
+| `viewport-invalid` | littletonareachamber.com 161, jonasbrotherstaxidermy.com 27, debian.org 4 and 1 more | 4 | fixed | debian.org's 4: `initial-scale=1` and `1.0` "differ" |
+| `charset-invalid` | crawler-test.com 2 | 1 | right; left | True. berkshirehathaway.com's `charset=unicode` should be one (see below) |
+| `lang-invalid` | – | – | not seen | All 130 lang values in the crawls are well-formed |
+| `mobile-alternate` | crawler-test.com 32 | 5 | right | crawler-test only. One sent in a Link header isn't read |
+
+**The 42 that had fired before**: 41 fired again (all but `canonical-to-first-page`), and their counts were read for
+anything odd. Two were at fault: `image-missing-dimensions` flagged every image of an AMP page (its size is on the
+`<amp-img>`: omgubuntu 21 pages, cnx 4), and `security-headers-missing` called a referrer policy missing where a
+`<meta name="referrer">` sets it (cnx-software.com's home page), the open item of the second audit. Both are fixed.
+The title and description widths were measured again as above. `cookies-insecure` is noisy on Wix (its own
+`ssr-caching` cookie, on 249 pages) and `not-in-sitemap` on tag archives; both are true to their words.
+
+### What changed
+
+All in `d936448c`. "Seen on" is where the fault was, and the count there before and after. For a rule's fix that is
+the same crawl analysed again: all 45 crawls were, and the counts in this table are the only ones that changed on any
+of them. For a fix to the parse or to how sitemaps are read it is a new crawl of the site (marked *crawled again*;
+the pages a limited crawl reads differ a little from run to run).
+
+| Check | What was wrong | Now | Seen on, before → after |
+| --- | --- | --- | --- |
+| `sitemap-url-repeated` | A page in the page sitemap and again in an image or news sitemap is no repeat: that's what Google's sitemap extensions are | A sitemap at least nine in ten of whose entries carry an `image:`, `video:` or `news:` tag isn't counted (a new column, `sitemaps.extensions_only`) | wordpress.org 48,195 → 1, cnx 10 → 0 (*crawled again*). gov.uk's 183,443, the same URL in two page sitemaps, stand. theregister.com's 244 are its news sitemap's, one entry of 246 without a tag, which is why the rule is nine in ten |
+| `url-repetitive-path` | Judged every URL the crawl knew of, with no link to fix for one only a sitemap lists | Only a URL a page of the crawl links to or uses | gov.uk 25,446 → 4; info.cern.ch's 4, the real fault (a relative link building `/hypertext/WWW/hypertext/WWW/`), stand |
+| `sitemap-url-other-host` | A sitemap was held to the host it was asked for at, not the one that served it after a redirect | The file's final URL is kept (`sitemaps.final_url`), and its entries belong on that host | cs.stanford.edu/~knuth 584 → 0 (*crawled again*) |
+| `sitemap-non-indexable` | "Blocked by robots.txt" where robots.txt refuses this crawler and allows Googlebot | Such a URL wasn't checked, as one behind a firewall isn't (`GooglebotAccess` reads the stored robots.txt as Googlebot) | theregister.com 299 → 0 |
+| `sitemap-missing` | Reported where the guess at `/sitemap.xml` met a firewall's 403, a timeout or a server error | Only where the guess was answered: not when the home page was blocked, nor on no answer, 429 or 5xx | w3.org 1 → 0 |
+| `uncrawlable-links` | A `<div href>` holding a gallery's full-size photo isn't a link to a page | An href that names an image file isn't counted | waldenfloral.com 130 → 0 (*crawled again*); paulgraham.com's 19 (`<xa href>`) stand |
+| `near-duplicate-content`, `low-word-count`, `boilerplate-heavy` | A header's menu written without `<nav>` (`role="navigation"`, Max Mega Menu, Weebly's `wsite-menu`) counted as the page's own words: unrelated pages looked alike, thin pages looked full, and `boilerplate-heavy` couldn't fire | Such a menu in a header or sidebar is navigation, as a `<nav>` there is | kingarthurbaking.com near duplicates 41 → 11, low word count 0 → 45, boilerplate 0 → 8; kilmingtonvillage.com near duplicates 13 → 0 (*crawled again*) |
+| `readability-low`, and every word count | A `<select>`'s options, a `<textarea>`'s content and Shopify's country picker were words of the page | A form control's text is no words at all | debian.org's two forms 2 → 0; wordpress.org/news/podcast -23 → not flagged; brooklyncandlestudio.com: see after the table (*crawled again*) |
+| `h1-duplicate` | Pages 2 and 9 of one archive, read with a gap by a crawl that hit its URL limit, "duplicated" each other's H1 | Paginated pages whose URLs number them from the same first page are one series | wordpress.org/news 24 → 0, cnx 10 → 0 |
+| `pagination-sequence-error`, `pagination-not-linked` | An AMP copy of page 1 names the series' page 2, which points back to page 1, the copy's canonical | A copy is pointed back to by its canonical, and a link to a copy of the next page counts | omgubuntu.co.uk 6 and 6 → 0 and 2; cnx 4 and 4 → 0 and 3. What's left is an AMP page whose next AMP page the URL limit kept out, so its canonical isn't known |
+| `hreflang-to-non-indexable` | An `x-default` naming a home page that redirects each visitor to their language is what `x-default` is for | An entry that is only `x-default` and redirects temporarily isn't judged; a permanent redirect still is | mozilla.org 59 → 0; softmaker.com's 192 (an old `http://` address) stand |
+| `social-image-too-small`, `social-image-too-large` | Measured every `og:image` a page names; networks show the first | Only the first of each tag | kilmingtonvillage.com 43 → 21; the 21 left have a first image of 1,013 × 120 |
+| `structured-data-schema-errors` | "No @context" for an empty `{}` block | An empty block says nothing | waldenfloral.com 163 → 139 |
+| `viewport-invalid` | `initial-scale=1` and `initial-scale=1.0` "differ" | Two tags differ when their settings do | debian.org 4 → 0 |
+| `broken-fragment-links` | `id="%e0%b9%81"` wasn't found by `href="#%e0%b9%81"` beside it: a stored fragment's escapes are in capitals | An id with escapes is matched in capitals too | cnx 2 → 0 |
+| `content-type-mismatch` | A stray `<link rel="stylesheet" href="#">` made the page itself a stylesheet sent as HTML | A link to the page itself is no file | crawler-test.com 4 → 0 |
+| `image-missing-dimensions` | The `<img>` an AMP optimiser writes inside a sized `<amp-img>` has no size of its own | It takes its `<amp-img>`'s | omgubuntu.co.uk 216 → 181 (*crawled again*) |
+| `security-headers-missing`, `mixed-content` | A policy set in a meta tag read as missing | `<meta name="referrer">` is a referrer policy and a meta Content-Security-Policy a policy (not for `frame-ancestors`, which only a header sets); `upgrade-insecure-requests` in one leaves no mixed content | cnx-software.com: "Missing Content-Security-Policy, Referrer-Policy" → "Missing Content-Security-Policy" (*crawled again*) |
+| `redirect-chain` (missed) | A chain entered at a URL of the crawl's list had no way in | A listed URL is one | httpbin.org and httpbingo.org 0 → 3 each (`/redirect/5`, `/absolute-redirect/3`, `/status/302`) |
+| `generic-anchor-text` (missed) | "More →" and "Read more …" kept the space before the symbol | Trimmed | 53 links on videolan.org, softmaker.com and oo-software.com; 7 more pages flagged |
+| `form-not-secure` (missed) | A password field outside any `<form>` on an HTTP page | Counted | http-password.badssl.com |
+| `meta-refresh` (evidence) | A script's redirect read "Moves to … after 0 seconds", on a page with no such tag | "A script moves to … as the page loads", and the description says scripts count | crawler-test.com 4 |
+| `canonical-multiple` (evidence) | The 120-character cut took the second URL | A URL on the page's host is shown as its path | crawler-test.com 4 |
+| `head-tags-in-body` (evidence) | The list of tags came first and the cut took the cause; one template fault fell into five groups | The cause is kept whole and the list gives way | cnx 97: one group |
+| `structured-data-invalid` (evidence) | "…which is not supported in this mode. Change the reader options." | Says the block has a trailing comma | brooklyncandlestudio.com 2 |
+| `large-page`, `html-past-crawl-limit` (evidence) | "2.0 MB, past the 2 MB Google reads" | A size that rounds to its limit is given to the byte | waldenfloral.com 57 of 120 |
+| `readability-low` (evidence) | "Reading ease 30, under 30" for 29.72 | "29.7, under 30" | oo-software.com 1 |
+
+Words changed on 8 checks (`meta-refresh`, `sitemap-non-indexable`, `sitemap-missing`, `url-repetitive-path`,
+`social-image-too-large`, `social-image-too-small`, `hreflang-to-non-indexable`, `security-headers-missing`), each to
+say what its rule now does; the app's copy of the catalog is captured again. On the synthetic site: `/plants/real-markup`,
+a clean page holding seven of the shapes above, and `/sitemaps/images.xml`, an image sitemap that lists the home page
+and two products again.
+
+**brooklyncandlestudio.com, crawled again** (60 URLs asked for, 17 pages read: the shop refuses most to an unsigned
+crawler): `readability-low` 14 of 26 pages → 0 of 17, `near-duplicate-content` 12 → 0. Every page had scored the
+country picker's 670 words. Its mega menu's lists, under class names of the theme's own, still count as each page's
+words.
+
+**A crawl made before these fixes, analysed again**, gets every rule's change. What the parse changed takes a new
+crawl: the words of a form control or a header's menu, an image file on a `<div href>`, an AMP image's size, a
+password field outside a form, a meta Content-Security-Policy; and a sitemap read before has neither of the two new
+columns, so its repeats and its host are judged as they were.
+
+### Still never seen on a real page, and why
+
+27 checks. None of the crawled pages has the fault, by an independent scan where one can be made.
+
+- **The fault is rare, and none of forty sites has it:** `soft-404` (every site crawled answers 404 for a missing
+  page, tried by hand; paulgraham.com redirects one to its home page, which this check doesn't cover),
+  `redirect-temporary-cached`, `robots-txt-unreachable`, `site-hidden-from-search`, `unavailable-after-passed`,
+  `translation-blocked`, `indexifembedded-without-noindex`, `canonical-invalid`, `canonical-loop`,
+  `canonical-on-redirect`, `canonical-fragment`, `canonical-invalid-attribute`, `sitemap-empty`,
+  `sitemap-lastmod-invalid` (1.6 million entries read, none wrong), `image-inline-large` (the largest inline image is
+  4.6 KB), `hreflang-outside-head`, `hreflang-lang-mismatch`, `social-tags-multiple`, `lang-invalid`,
+  `pagination-broken`, `resource-past-crawl-limit` (no script or stylesheet on any site is over 2 MB, the largest
+  1.43 MB decompressed).
+- **Only crawler-test.com has the case, and it can't fire there:** `url-multiple-slashes` (its cases are disallowed in
+  its robots.txt), `canonical-unlinked` (its cases name 404s, which is `canonical-broken`'s), `hreflang-broken-target`
+  (its target is never fetched: the crawl doesn't follow hreflang), and `unavailable-after-passed` and
+  `translation-blocked` again (its one page with them is noindex, and both judge indexable pages).
+- **Needs a whole crawl of a site, which a few hundred URLs isn't:** `non-indexable-inlinks-only`, `hreflang-unlinked`,
+  `hreflang-inconsistent-code` (skipped, and said so, on every multilingual crawl for its URL limit; on the small sites
+  crawled whole, none).
+
+### Left, and why
+
+- **The fetcher's, outside this audit's lane (`Fetching/`):**
+  - **A page that declares `charset=unicode` in a meta tag is read as UTF-16** (`CharsetDecoder`: only labels starting
+    `utf-16` are taken as UTF-8, as the HTML standard has it for every UTF-16 label in a meta tag: `unicode`, `ucs-2`,
+    `csunicode`, `unicodefeff`, `unicodefffe`, `iso-10646-ucs-2`). berkshirehathaway.com's ASCII home page became
+    garbage: no title, no H1, no links, so the crawl stopped at one page and reported them all missing. It should be
+    one `charset-invalid`.
+  - **A 1xx answer is a "5xx"** (`HttpFetcher.Classify` sends everything outside 200 to 499 to server errors:
+    crawler-test's `status_101`), **and 300, 304, 305 and 306 are redirects** (`links-to-redirects` counts four such
+    targets there). Seen on crawler-test.com only.
+  - **A connection given up after 10 seconds says "No response within 20 seconds"** (the connect timeout is the lesser
+    of 10 and the request's; the message prints the request's): three badssl.com hosts.
+  - **`resource-past-crawl-limit` still stores the compressed size**, or none. Measured here: of 1,158 scripts and
+    stylesheets fetched, 175 have no size at all, and the stored size is 3.5 to 3.8 times under the real one
+    (maps.googleapis.com's script 401,885 stored, 1,428,268 decompressed). No file on any site is over the limit, so
+    nothing was missed, and nothing proves the check either.
+- **`redirect-broken` on the crawler's own probe of the www address** (cs.stanford.edu: `http://www…/~knuth/` ends at
+  a 404). Kept: it's the rule as designed and tested ("a redirect to a broken URL is reported on the version"), and
+  the address is broken for whoever types it. Nothing on the site links there, which is why a reader took it for
+  noise.
+- **`canonical-multiple`: no real site declares two different canonicals.** Only crawler-test.com's two cases fired
+  (4 flags), so the owner's decision on which canonical should count has no real page to weigh yet.
+- **`image-missing-alt` doesn't judge a `data:` image** (sqlite.org's logo, on 5 pages). Tried and taken out: the
+  check's views name each image by its URL, and such an image has none to name.
+- **`<amp-img>` itself isn't read**, only the `<img>` inside it: an AMP image's alt goes unjudged where the optimiser
+  wrote no `<img>` (one long alt on omgubuntu.co.uk).
+- **`redirect-loop` doesn't see a page whose instant meta refresh names itself** (crawler-test's
+  `infinite_meta_redirect`): only `meta-refresh` fires.
+- **`uncrawlable-links` reads only script written in the attribute**: `onclick="myFunction()"` isn't caught
+  (crawler-test), and can't be from the markup.
+- **A sitemap that robots.txt disallows is read all the same**, and nothing says so (crawler-test's
+  `sitemap_disallowed.xml`); **a sitemap whose connection dropped once isn't asked for again** (its `sitemap.txt`).
+- **`near-duplicate-content` names the first page of the group**, which isn't always the nearest (softmaker 7 of 50).
+- **`mobile-alternate` doesn't read one sent in a `Link` header** (crawler-test), as its words say.
+- **`protocol-relative-links` is silenced by any HSTS policy**, a five-minute one included (kingarthurbaking.com,
+  `max-age=300`, 167 pages), where `security-headers-weak` already calls that policy too short.
+- **`html-past-crawl-limit` takes Google's "2MB" as 2,097,152 bytes.** sqlite.org's `lang_select.html` is 2,033,807:
+  past 2,000,000, not flagged. Google's page doesn't say which it means.
+- **`description-too-long` and `-too-short`: the words are right.** They measure pixels and say so, and 1,818
+  descriptions measured again agree to the pixel. "About 160 characters" is a little generous: descriptions within 3%
+  of the limit average 155. The Why cites Screaming Frog for 985 px where the description calls it Google's desktop
+  width. Left for the owner.
+- **`x-card-missing` and `x-card-incomplete`**: as the second audit left them.
+
+### Seen on the sites, not faults of a check
+
+- **True and noisy:** `noindex-near-home` on tag archives, booking and profile pages that are noindex on purpose
+  (omgubuntu 32, waldenfloral 28); `too-many-links`, where a site's own shop subdomain counts as another site
+  (kingarthur: 210 of 227 "external" links); `slow-external-links`, where one slow answer flags every page linking to
+  it (mozilla: 36 pages, one URL); `internal-nofollow-links` on a hidden bot-trap link (carrabelle: all 174 pages);
+  `hreflang-self-only` on Wix, which writes `x-default` and `en-us` on a one-language site (184); `h1-multiple` on
+  hidden dialog headings; `structured-data-missing-recommended` on a Microdata `Article` shell beside a complete
+  JSON-LD one; `url-uppercase` on locale folders (mozilla's `/en-US/`).
+- **Wix writes `"Offers"` and `"Availability"` with capitals** (130 product pages): unknown properties to schema.org,
+  and `structured-data-missing-required` says the product has no `offers`. Whether Google's reader forgives the
+  capital wasn't learnt.
+- **`responses.indexability_reason` says Canonicalised for a page whose canonical is broken**, where the analysis
+  judges it indexable: anything reading the stored column, not the analysis's, disagrees with the issues.
+- **create-react-app.dev names every page without its trailing slash**, in its sitemap, its canonicals and its
+  hreflang, and each such URL redirects to the one with the slash: `sitemap-non-indexable` 46, and
+  `canonical-to-redirect` and `hreflang-to-non-indexable` on the page read, confirmed live.
+- **A Shopify shop refuses half its pages to an unsigned crawler** (brooklyncandlestudio.com: 26 pages read of 250
+  URLs), as the first audit found.
+
+### Checks worth adding
+
+Not built here, by the audit's rule:
+
+- `<meta name="google" content="notranslate">`: Google's own tag for it, which `translation-blocked` doesn't read
+  (it reads the robots rule).
+- A sitemap blocked by robots.txt (Search Console's "Sitemap blocked by robots.txt").
+- A missing URL answered with a redirect to the home page (paulgraham.com): the soft 404 Google reports most.
+- Hreflang entries written as relative URLs (crawler-test), which Google requires in full.
+- A URL listed twice in one sitemap file (gov.uk's `sitemap_10.xml` has two).
+- `blocked-by-robots` saying when Googlebot is allowed where this crawler isn't (theregister.com's 300).
