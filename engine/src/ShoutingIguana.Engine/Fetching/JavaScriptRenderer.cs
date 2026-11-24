@@ -100,6 +100,7 @@ internal sealed partial class JavaScriptRenderer(
     private readonly SemaphoreSlim _slots = NewSlots(options.Concurrency);
     private readonly RenderCache _cache = new();
     private long _requestsSent;
+    private readonly ConcurrentDictionary<string, long> _sentByKind = new(StringComparer.Ordinal);
     private long _requestsFromCache;
     private long _pagesRendered;
     private readonly SemaphoreSlim _launch = new(1, 1);
@@ -275,8 +276,8 @@ internal sealed partial class JavaScriptRenderer(
             if (sent + fromCache > 0)
             {
                 logger.LogInformation(
-                    "Rendered {Pages} pages: {Sent} requests sent, {FromCache} answered from the crawl's cache ({CacheBytes} bytes kept)",
-                    pages, sent, fromCache, cacheBytes);
+                    "Rendered {Pages} pages: {Sent} requests sent ({Kinds}), {FromCache} answered from the crawl's cache ({CacheBytes} bytes kept)",
+                    pages, sent, string.Join(", ", _sentByKind.OrderByDescending(kind => kind.Value).Select(kind => $"{kind.Value} {kind.Key}")), fromCache, cacheBytes);
             }
 
             await CloseFallbackAsync().ConfigureAwait(false);
@@ -870,7 +871,7 @@ internal sealed partial class JavaScriptRenderer(
                 return;
             }
 
-            if (request.ResourceType is "image" or "media" or "font" or "websocket")
+            if (request.ResourceType is "image" or "media" or "font" or "websocket" || IsAskedAhead(request))
             {
                 await route.AbortAsync().ConfigureAwait(false);
                 return;
@@ -933,6 +934,7 @@ internal sealed partial class JavaScriptRenderer(
             {
                 var fetched = await route.FetchAsync(new RouteFetchOptions { Headers = headers }).ConfigureAwait(false);
                 Interlocked.Increment(ref _requestsSent);
+                _sentByKind.AddOrUpdate(request.ResourceType, 1, static (_, count) => count + 1);
                 lease.ReportStatus(fetched.Status, null, uri);
                 if (cacheable && fetched.Status == 200)
                 {
@@ -981,6 +983,19 @@ internal sealed partial class JavaScriptRenderer(
         {
             held.End(began);
         }
+    }
+
+    /// <summary>
+    /// A request for where a visitor might go next, not for this page: a prefetch link, which the browser marks, or
+    /// the Next.js router fetching the routes its links name. The page is the same without them, and a site is
+    /// spared most of what a render would otherwise ask of it.
+    /// </summary>
+    private static bool IsAskedAhead(IRequest request)
+    {
+        var headers = request.Headers;
+        return (headers.TryGetValue("sec-purpose", out var purpose) && purpose.Contains("prefetch", StringComparison.OrdinalIgnoreCase)) ||
+               (headers.TryGetValue("purpose", out var older) && older.Contains("prefetch", StringComparison.OrdinalIgnoreCase)) ||
+               headers.ContainsKey("next-router-prefetch");
     }
 
     private static bool IsTopDocument(IRequest request)

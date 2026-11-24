@@ -83,6 +83,12 @@ public sealed class JavaScriptRendererTests
             </script>
             """),
         ["/plain"] = Page("<h1>Plain</h1>"),
+        ["/asks-ahead"] = Page("""
+            <link rel="prefetch" href="/next-page.js"><div id="app"></div><script>
+            fetch('/next-route', { headers: { 'Next-Router-Prefetch': '1' } }).catch(() => {});
+            fetch('/data').then(() => { document.getElementById('app').innerHTML = '<h1>Asked ' + 'ahead</h1>'; });
+            </script>
+            """),
         ["/asks"] = Page("""
             <div id="app"></div><script>
             Promise.allSettled([fetch('/data'), fetch('/kept-out/data')]).then(answers => {
@@ -157,6 +163,24 @@ public sealed class JavaScriptRendererTests
         Assert.Equal(2, counts.FromCache);
         Assert.Equal(8, counts.Sent);
         Assert.True(counts.CacheBytes > 0);
+    }
+
+    /// <summary>
+    /// A page that asks ahead for where a visitor might go next (a prefetch link, or Next.js's router) is not sent
+    /// those: they are other pages' files, and on docusaurus.io they were 93 of the 108 requests a page made.
+    /// </summary>
+    [Fact]
+    public async Task WhatAPageAsksForAheadOfAVisitIsNotFetched()
+    {
+        await using var site = await LoopbackServer.StartAsync(ServeAsync);
+        await using var renderer = Renderer(site.BaseUri);
+
+        var html = await HtmlAsync(renderer, site.Url("/asks-ahead"));
+
+        Assert.Contains("<h1>Asked ahead</h1>", html, StringComparison.Ordinal);
+        Assert.Contains("/data", _requests);
+        Assert.DoesNotContain("/next-page.js", _requests);
+        Assert.DoesNotContain("/next-route", _requests);
     }
 
     /// <summary>A kept script is still held to robots.txt: what the crawler is kept out of is not run from memory either.</summary>
@@ -509,7 +533,7 @@ public sealed class JavaScriptRendererTests
             return;
         }
 
-        if (path is "/data" or "/after-register" or "/from-worker" or "/kept-out/data")
+        if (path is "/data" or "/after-register" or "/from-worker" or "/kept-out/data" or "/next-route" or "/next-page.js")
         {
             context.Response.ContentType = "application/json";
             await context.Response.WriteAsync("{}");

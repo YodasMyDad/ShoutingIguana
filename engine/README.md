@@ -97,6 +97,9 @@ How a page is rendered (`Fetching/JavaScriptRenderer`):
   varies by cookie, one over 4 MB, and anything that isn't a GET for a script or stylesheet. The bodies stay under
   64 MB: the ones asked for longest ago go first. This was chosen over one browser context shared by the
   crawl, which would share cookies and storage too, and so change what later pages show.
+- **What a page asks for ahead of a visit is not fetched:** a prefetch link (the browser marks the request), and the
+  Next.js router fetching the routes its links name. They are other pages' files. On docusaurus.io they were 93 of
+  the 108 requests a page made.
 - **As many pages render at once as the crawl's concurrency**, up to half the processors, a slot for each 512 MB of
   memory, and eight. A page's requests still take their turn on each host's gate.
 - **A script's redirect is followed.** A page whose script loads another page (it sets the location, or writes a meta
