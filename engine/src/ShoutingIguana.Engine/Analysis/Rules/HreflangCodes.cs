@@ -40,6 +40,21 @@ internal static class HreflangCodes
         "za", "zm", "zw"
     };
 
+    /// <summary>
+    /// Codes that name one language in hreflang and in an HTML lang: Google's hreflang takes only ISO 639-1, where Norwegian is
+    /// "no" and Filipino "tl", while a lang usually says "nb" or "nn", and "fil"; and the codes ISO renamed (he, id, yi, jv).
+    /// </summary>
+    private static readonly string[][] SAME_LANGUAGE =
+    [
+        ["no", "nb", "nn", "nob", "nno", "nor"], ["tl", "fil", "tgl"], ["he", "iw", "heb"], ["id", "in", "ind"], ["yi", "ji", "yid"], ["jv", "jw", "jav"],
+        ["zh", "cmn", "yue", "zho"], ["ms", "zsm", "msa"], ["sr", "sh"]
+    ];
+
+    /// <summary>Whether two primary language subtags name the same language: the same code, or two codes for one language.</summary>
+    public static bool SameLanguage(string one, string other) =>
+        string.Equals(one, other, StringComparison.OrdinalIgnoreCase) ||
+        SAME_LANGUAGE.Any(codes => codes.Contains(one, StringComparer.OrdinalIgnoreCase) && codes.Contains(other, StringComparer.OrdinalIgnoreCase));
+
     /// <summary>An ISO 639-1 language code, any case.</summary>
     public static bool IsLanguage(string code) => LANGUAGES.Contains(code);
 

@@ -38,7 +38,8 @@ internal sealed class TextStructureRules(AnalysisSettings settings) : IPageRule
                 : $"{skipped.Step}: {RuleText.Quote(skipped.Heading.Text, SKIPPED_HEADING_MAX)}");
         }
 
-        if (h1 is { FromImageAlt: true })
+        // An H1 whose image has an empty alt has no text at all, which h1-missing says.
+        if (h1 is { FromImageAlt: true } && !string.IsNullOrWhiteSpace(h1.Text))
         {
             yield return new IssueHit(IssueCatalog.H1_IMAGE_ONLY, page.UrlId, RuleText.Fit($"The H1 is an image: {RuleText.Quote(h1.Text, 60)}"));
         }
@@ -116,11 +117,14 @@ internal sealed class TextStructureRules(AnalysisSettings settings) : IPageRule
     {
         var language = facts.Language?.Trim();
         var english = language is not null && (language.Equals("en", StringComparison.OrdinalIgnoreCase) || language.StartsWith("en-", StringComparison.OrdinalIgnoreCase));
-        if (!english || facts.WordCount < READABILITY_MIN_WORDS || facts.SentenceCount < READABILITY_MIN_SENTENCES || facts.SyllableCount == 0)
+        // The words the sentences and syllables were counted in: the prose's, or the whole main text's for a page parsed before
+        // the two were told apart.
+        var words = facts.ProseWordCount ?? facts.WordCount;
+        if (!english || words < READABILITY_MIN_WORDS || facts.SentenceCount < READABILITY_MIN_SENTENCES || facts.SyllableCount == 0)
         {
             return null;
         }
 
-        return 206.835 - 1.015 * facts.WordCount / facts.SentenceCount - 84.6 * facts.SyllableCount / facts.WordCount;
+        return 206.835 - 1.015 * words / facts.SentenceCount - 84.6 * facts.SyllableCount / words;
     }
 }

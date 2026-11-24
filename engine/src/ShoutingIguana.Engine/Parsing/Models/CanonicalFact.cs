@@ -11,4 +11,12 @@ public sealed record CanonicalFact(string Href, string? Url, bool InHead, bool F
     /// (<see cref="PageFacts.CollectedVersion"/>).
     /// </summary>
     public string? Attributes { get; init; }
+
+    /// <summary>
+    /// Whether search engines take it as the page's canonical: in the head or an HTTP header, as Google requires, and
+    /// without the attributes of an alternate ("rel="canonical" annotations with hreflang, lang, media, and type attributes
+    /// are not used for canonicalization").
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsHonoured => (InHead || FromHttpHeader) && Attributes is null;
 }

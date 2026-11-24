@@ -25,6 +25,19 @@ public sealed class ResourceTypesTests
     public void AFetchedUrlIsWhatItsContentTypeSays(string contentType, ResourceType expected) =>
         Assert.Equal(expected, ResourceTypes.Classify("https://example.com/photo.jpg", contentType));
 
+    /// <summary>Every JavaScript media type the HTML standard lists runs as a script, nosniff or not: none is a mismatch.</summary>
+    [Theory]
+    [InlineData("text/javascript")]
+    [InlineData("application/javascript")]
+    [InlineData("application/x-javascript")]
+    [InlineData("text/x-javascript")]
+    [InlineData("text/jscript")]
+    [InlineData("text/javascript1.5")]
+    [InlineData("application/x-ecmascript")]
+    [InlineData("text/livescript")]
+    public void EveryJavaScriptMediaTypeOfTheHtmlStandardIsAScript(string mediaType) =>
+        Assert.Equal(ContentClass.Script, ResourceTypes.ClassOf(mediaType));
+
     [Theory]
     [InlineData("https://example.com/photo.JPG", ResourceType.Image)]
     [InlineData("https://example.com/clip.webm", ResourceType.Media)]

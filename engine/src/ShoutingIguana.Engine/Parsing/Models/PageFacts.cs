@@ -101,6 +101,13 @@ public sealed record PageFacts
 
     public int SyllableCount { get; init; }
 
+    /// <summary>
+    /// The words of the blocks of main text that have a sentence end, which <see cref="SentenceCount"/> and
+    /// <see cref="SyllableCount"/> are counted in: the page's prose, without its lists, grids, code and headings. Null for a
+    /// page parsed before, whose sentences and syllables are the whole main text's, as <see cref="WordCount"/> is.
+    /// </summary>
+    public int? ProseWordCount { get; init; }
+
     /// <summary>Words of the whole body, menus, header and footer included (collection 4); null for a page parsed before.</summary>
     public int? TotalWordCount { get; init; }
 

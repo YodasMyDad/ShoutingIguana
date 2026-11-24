@@ -79,6 +79,7 @@ internal static class MicrodataReader
         // Each name's values, in order: a name given twice is a list.
         var properties = new List<(string Name, List<IElement> Values)>();
         Collect(item, properties);
+        CollectReferenced(item, properties);
         foreach (var (name, values) in properties)
         {
             writer.WritePropertyName(name);
@@ -108,31 +109,76 @@ internal static class MicrodataReader
         writer.WriteEndObject();
     }
 
+    /// <summary>
+    /// The properties of the elements the item's itemref names by id, each once, which are the item's as its own are (the
+    /// HTML standard's "crawl the properties"): a price block elsewhere in the page that the product's markup points at. An
+    /// id inside the item itself adds nothing new, and a missing one nothing at all.
+    /// </summary>
+    private static void CollectReferenced(IElement item, List<(string Name, List<IElement> Values)> properties)
+    {
+        if (item.GetAttribute("itemref") is not { } references || item.Owner is not { } document)
+        {
+            return;
+        }
+
+        foreach (var id in references.Split(SPACES, StringSplitOptions.RemoveEmptyEntries).Distinct(StringComparer.Ordinal).Take(MAX_REFERENCES))
+        {
+            if (document.GetElementById(id) is not { } referenced || item.Contains(referenced) || referenced.Contains(item))
+            {
+                continue;
+            }
+
+            // The element itself may be the property, or hold several.
+            if (referenced.HasAttribute("itemprop"))
+            {
+                CollectOne(referenced, properties);
+            }
+
+            if (!referenced.HasAttribute("itemscope"))
+            {
+                Collect(referenced, properties);
+            }
+        }
+    }
+
+    private static readonly char[] SPACES = [' ', '\t', '\n', '\r', '\f'];
+
+    /// <summary>The most ids of an itemref that are followed.</summary>
+    private const int MAX_REFERENCES = 20;
+
     /// <summary>The item's properties: the elements under it with an itemprop, not those inside a nested item or another top-level one.</summary>
     private static void Collect(IElement scope, List<(string Name, List<IElement> Values)> properties)
     {
         foreach (var child in scope.Children)
         {
-            if (child.GetAttribute("itemprop") is { } names)
-            {
-                foreach (var name in names.Split((char[])[' ', '\t', '\n', '\r', '\f'], StringSplitOptions.RemoveEmptyEntries).Select(PropertyName).OfType<string>())
-                {
-                    var index = properties.FindIndex(property => property.Name == name);
-                    if (index < 0)
-                    {
-                        properties.Add((name, [child]));
-                    }
-                    else
-                    {
-                        properties[index].Values.Add(child);
-                    }
-                }
-            }
+            CollectOne(child, properties);
 
             // A nested item's own properties are its own; a top-level item inside this one is another item.
             if (!child.HasAttribute("itemscope"))
             {
                 Collect(child, properties);
+            }
+        }
+    }
+
+    /// <summary>Adds the element under each name its itemprop gives, when it has one.</summary>
+    private static void CollectOne(IElement element, List<(string Name, List<IElement> Values)> properties)
+    {
+        if (element.GetAttribute("itemprop") is not { } names)
+        {
+            return;
+        }
+
+        foreach (var name in names.Split(SPACES, StringSplitOptions.RemoveEmptyEntries).Select(PropertyName).OfType<string>())
+        {
+            var index = properties.FindIndex(property => property.Name == name);
+            if (index < 0)
+            {
+                properties.Add((name, [element]));
+            }
+            else
+            {
+                properties[index].Values.Add(element);
             }
         }
     }

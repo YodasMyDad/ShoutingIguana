@@ -14,7 +14,7 @@ internal static class RichResultRequirements
         ["Product"] = ["name", "offers|review|aggregateRating"],
         ["Recipe"] = ["name", "image"],
         ["Event"] = ["name", "startDate", "location"],
-        ["JobPosting"] = ["title", "description", "datePosted", "hiringOrganization", "jobLocation|jobLocationType"],
+        ["JobPosting"] = ["title", "description", "datePosted", "hiringOrganization", "jobLocation|jobLocationType|applicantLocationRequirements"],
         ["VideoObject"] = ["name", "thumbnailUrl", "uploadDate"],
         ["Review"] = ["itemReviewed", "reviewRating", "author"],
         ["AggregateRating"] = ["itemReviewed", "ratingValue", "ratingCount|reviewCount"],

@@ -32,11 +32,17 @@ internal sealed class TextAccumulator : IDisposable
         _length += value.Length;
     }
 
+    /// <summary>
+    /// What separates one block of the text from the next (a paragraph, a list item, a heading, a line break): white space to
+    /// everything that reads words, and to <see cref="TextMeasures.SentencesAndSyllables"/> where one block ends.
+    /// </summary>
+    public const char BLOCK_MARK = '\u2029';
+
     public void AppendSeparator()
     {
-        if (_length > 0 && _buffer[_length - 1] != ' ')
+        if (_length > 0 && _buffer[_length - 1] != BLOCK_MARK)
         {
-            Append(" ");
+            Append([BLOCK_MARK]);
         }
     }
 

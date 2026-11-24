@@ -48,6 +48,10 @@ public sealed class ImageCheckTests
         // An srcset attribute, even an empty one, is something a script may fill: only an image with neither is counted.
         Assert.Equal("2 images, the first: alt \"No file\"", Detail(hits, IssueCatalog.IMAGE_MISSING_SRC));
         Assert.Equal("2 inline images, the largest 24 KB, alt \"Bigger\"", Detail(hits, IssueCatalog.IMAGE_INLINE_LARGE));
+
+        // In a <picture>, the browser shows one of its <source>s through the <img>, which needs no src of its own to show.
+        var picture = site.Page($"{site.Site}/p", RuleHarness.Html(body: "<picture><source srcset=\"/a.webp\" type=\"image/webp\"><img alt=\"Hero\"></picture>"));
+        Assert.Null(Detail(new ImageRules(SETTINGS, site.Table(), site.Find).Check(picture).ToList(), IssueCatalog.IMAGE_MISSING_SRC));
     }
 
     /// <summary>
@@ -161,6 +165,11 @@ public sealed class ImageCheckTests
     [InlineData("--", true)]
     [InlineData("hero-banner", true)]
     [InlineData("Logo", false)]
+    [InlineData("X", false)]
+    [InlineData("TV", false)]
+    [InlineData("4K", false)]
+    [InlineData("12", true)]
+    [InlineData("ab", true)]
     [InlineData("Map", false)]
     [InlineData("猫", false)]
     [InlineData("A garden sofa in the sun", false)]
@@ -203,7 +212,20 @@ public sealed class ImageCheckTests
         site.Fetched("https://static.example.com/c.jpg", FetchOutcome.Success, 200, contentType: "image/jpeg");
         site.Fetched("https://cdn.shopify.com/d.jpg", FetchOutcome.Success, 200, contentType: "image/jpeg");
         site.Fetched("https://d111.cloudfront.net/e.jpg", FetchOutcome.Success, 200, contentType: "image/jpeg");
-        var page = site.Page($"{site.Site}/", RuleHarness.Html(body:
+        // A hosted platform's own image hosts and a site's own storage bucket: the only place such a site's images can be.
+        string[] hosted =
+        [
+            "https://cdn.prod.website-files.com/5f1/hero.jpg", "https://static1.squarespace.com/static/a/b.jpg", "https://img1.wsimg.com/isteam/c.jpg",
+            "https://my-shop.s3.eu-west-2.amazonaws.com/d.jpg", "https://storage.googleapis.com/my-shop/e.jpg", "https://myshop.blob.core.windows.net/img/f.jpg",
+            "https://myshop.b-cdn.net/g.jpg", "https://imagedelivery.net/abc/h/public", "https://ik.imagekit.io/shop/i.jpg", "https://cdn.sanity.io/images/j.jpg",
+            "https://123.fs1.hubspotusercontent-na1.net/hubfs/123/k.jpg", "https://irp.cdn-website.com/1/l.jpg"
+        ];
+        foreach (var url in hosted)
+        {
+            site.Fetched(url, FetchOutcome.Success, 200, contentType: "image/jpeg");
+        }
+
+        var page = site.Page($"{site.Site}/", RuleHarness.Html(body: string.Concat(hosted.Select(url => $"<img src=\"{url}\" alt=\"Hosted\">")) +
             "<img src=\"https://photos.example.org/a.jpg\" alt=\"A\"><img src=\"https://cdn.elsewhere.net/b.jpg\" alt=\"B\"><img src=\"https://static.example.com/c.jpg\" alt=\"C\">" +
             "<img src=\"https://cdn.shopify.com/d.jpg\" alt=\"D\"><img src=\"https://d111.cloudfront.net/e.jpg\" alt=\"E\"><img src=\"/f.jpg\" alt=\"F\">"));
         var scope = new CrawlScope(new Uri($"{site.Site}/"), includeSubdomains: false, stayInStartFolder: false);

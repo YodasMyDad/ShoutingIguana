@@ -75,9 +75,17 @@ internal sealed class RobotsTxtRules(UrlTable urls, IReadOnlyList<RobotsRecord> 
     /// <summary>The robots.txt URLs of these origins, as the detail names them.</summary>
     private static string[] FilesOf(IEnumerable<RobotsRecord> files) => [.. files.Select(file => $"{file.Origin}/robots.txt")];
 
-    /// <summary>A robots.txt line that names a sitemap: "Sitemap:" at its start, in any case (RFC 9309, Google).</summary>
+    /// <summary>
+    /// A robots.txt line that names a sitemap, as the crawler's parser reads one (RFC 9309, Google): "Sitemap" in any case
+    /// before the colon, spaces around it or not, and a value after it that a comment doesn't make up.
+    /// </summary>
     internal static bool NamesSitemap(string? content) =>
-        content is not null && content.Split('\n').Any(line => line.Trim().TrimStart('\uFEFF').StartsWith("sitemap:", StringComparison.OrdinalIgnoreCase));
+        content is not null && content.Split('\n', '\r').Any(line =>
+        {
+            var written = line.Split('#', 2)[0].Trim().TrimStart('\uFEFF');
+            var colon = written.IndexOf(':');
+            return colon > 0 && written[..colon].Trim().Equals("sitemap", StringComparison.OrdinalIgnoreCase) && written[(colon + 1)..].Trim().Length > 0;
+        });
 
     /// <summary>RobotsCache records a robots.txt behind too many redirects without a status, and allows everything.</summary>
     internal static bool TooManyRedirects(RobotsRecord file) =>

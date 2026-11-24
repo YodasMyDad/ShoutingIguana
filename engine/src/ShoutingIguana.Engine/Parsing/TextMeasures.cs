@@ -28,10 +28,37 @@ internal static class TextMeasures
     }
 
     /// <summary>
+    /// The text's prose, for the Flesch reading ease: the sentences, English syllables and words of each block of it (a
+    /// paragraph, a list item; <see cref="TextAccumulator.BLOCK_MARK"/> ends one) that has a sentence end. A block with none
+    /// (a specification list's line, a product card, a code sample, a heading) is no sentence, and its words would only make
+    /// the real ones look longer.
+    /// </summary>
+    public static (int Sentences, int Syllables, int Words) SentencesAndSyllables(ReadOnlySpan<char> text)
+    {
+        var (sentences, syllables, words) = (0, 0, 0);
+        while (!text.IsEmpty)
+        {
+            var end = text.IndexOf(TextAccumulator.BLOCK_MARK);
+            var block = end < 0 ? text : text[..end];
+            var (blockSentences, blockSyllables) = BlockSentencesAndSyllables(block);
+            if (blockSentences > 0)
+            {
+                sentences += blockSentences;
+                syllables += blockSyllables;
+                words += Words(block);
+            }
+
+            text = end < 0 ? [] : text[(end + 1)..];
+        }
+
+        return (sentences, syllables, words);
+    }
+
+    /// <summary>
     /// Sentences (a run of '.', '!' or '?' after a word, before a space or the end) and English syllables (each word's
     /// vowel groups, y counting as a vowel, a final silent e dropped, at least one a word).
     /// </summary>
-    public static (int Sentences, int Syllables) SentencesAndSyllables(ReadOnlySpan<char> text)
+    private static (int Sentences, int Syllables) BlockSentencesAndSyllables(ReadOnlySpan<char> text)
     {
         var sentences = 0;
         var syllables = 0;

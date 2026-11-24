@@ -723,7 +723,7 @@ public static class IssuePlainTexts
             """Pages that keep their pictures or videos out of Google""",
             [
                 """These pages tell Google not to show their pictures, or a preview of their videos, in search results.""",
-                """Their results then stand out less, and the pictures can't be found in image search.""",
+                """Their results then stand out less, and with the strictest setting the pictures can't be found in image search.""",
                 """That's often deliberate, for photos you may only use in one place, and then there's nothing to do."""
             ],
             [
@@ -1013,10 +1013,10 @@ public static class IssuePlainTexts
         },
 
         ["canonical-invalid-attribute"] = new(
-            """Main addresses written in a way Google may ignore""",
+            """Main addresses written in a way Google ignores""",
             [
                 """These pages name their main address with extra details, such as a language or a screen size, that belong on other links.""",
-                """Search engines may then not treat it as the page's main address at all.""",
+                """Google then doesn't treat it as the page's main address at all, and picks one itself.""",
                 """It's usually a link to a translated or mobile version, written as the main address by mistake."""
             ],
             [
@@ -1024,7 +1024,7 @@ public static class IssuePlainTexts
                 """If the link was meant to point at another version of the page, ask for it to be written as a separate link."""
             ],
             IssueFixer.Developer,
-            """No main address is written in a way Google may ignore"""),
+            """No main address is written in a way Google ignores"""),
 
         ["canonical-unlinked"] = new(
             """Main versions of pages that nothing links to""",
@@ -1560,7 +1560,7 @@ public static class IssuePlainTexts
         ["boilerplate-heavy"] = new(
             """Pages that are mostly menus and footers""",
             [
-                """Less than a quarter of the words on these pages are their own: the rest are menus, footers and sidebars.""",
+                """Less than a quarter of the words on these pages are their own: the rest are menus and footers.""",
                 """Search engines see little on them that's different from your other pages."""
             ],
             [

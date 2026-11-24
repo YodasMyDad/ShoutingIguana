@@ -9,7 +9,8 @@ namespace ShoutingIguana.Engine.Analysis.Rules;
 
 /// <summary>
 /// The page's canonical: whether it's declared properly, and whether the URL it names can be indexed. Only canonicals
-/// in the head or an HTTP Link header count, as with Google.
+/// in the head or an HTTP Link header count, as with Google, and not one with an alternate's attributes (hreflang, lang,
+/// media, type), which Google doesn't use as a canonical.
 /// </summary>
 /// <param name="readUrl">The stored URL with an id, or null: a canonical that redirects is reported with the URL its redirects end at.</param>
 /// <param name="readFacts">
@@ -27,9 +28,22 @@ internal sealed partial class CanonicalRules(UrlTable urls, Func<int, string?> r
     public IEnumerable<IssueHit> Check(AnalyzedPage page)
     {
         var canonicals = page.Facts.Canonicals;
-        var honoured = canonicals.Where(canonical => canonical.InHead || canonical.FromHttpHeader).ToList();
+        var honoured = canonicals.Where(canonical => canonical.IsHonoured).ToList();
+
+        // A canonical in the head that search engines don't use, for its attributes: reported, and otherwise no canonical.
+        var qualified = canonicals.FirstOrDefault(canonical => canonical is { InHead: true, Attributes: not null });
+        if (qualified is { Attributes: { } attributes })
+        {
+            yield return new IssueHit(IssueCatalog.CANONICAL_INVALID_ATTRIBUTE, page.UrlId, attributes);
+        }
+
         if (honoured.Count == 0)
         {
+            if (qualified is not null)
+            {
+                yield break;
+            }
+
             if (canonicals.Count > 0)
             {
                 yield return new IssueHit(IssueCatalog.CANONICAL_OUTSIDE_HEAD, page.UrlId, RuleText.HeadEnded(page.Facts.HeadEnd));
@@ -64,11 +78,6 @@ internal sealed partial class CanonicalRules(UrlTable urls, Func<int, string?> r
         if (honoured.Select(canonical => Fragment(canonical.Href)).FirstOrDefault(fragment => fragment is not null) is { } fragment)
         {
             yield return new IssueHit(IssueCatalog.CANONICAL_FRAGMENT, page.UrlId, RuleText.Cut(fragment, FRAGMENT_MAX));
-        }
-
-        if (honoured.FirstOrDefault(canonical => canonical is { FromHttpHeader: false, Attributes: not null }) is { Attributes: { } attributes })
-        {
-            yield return new IssueHit(IssueCatalog.CANONICAL_INVALID_ATTRIBUTE, page.UrlId, attributes);
         }
 
         // The first honoured canonical decides, as it does for indexability.

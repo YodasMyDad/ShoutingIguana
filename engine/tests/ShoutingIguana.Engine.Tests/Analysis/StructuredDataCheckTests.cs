@@ -15,6 +15,25 @@ public sealed class StructuredDataCheckTests
 {
     private const string NOINDEX = "<meta name=\"robots\" content=\"noindex\">";
 
+    /// <summary>Google reads an offer's currency from priceCurrency or from its priceSpecification's (WooCommerce writes the second).</summary>
+    [Fact]
+    public void AnOffersCurrencyInItsPriceSpecificationIsACurrency()
+    {
+        List<string> Lacking(string offer)
+        {
+            using var json = System.Text.Json.JsonDocument.Parse(
+                $$"""{"@context":"https://schema.org","@type":"Product","name":"Sofa","image":"https://example.com/sofa.jpg","offers":{{offer}}}""");
+            List<string> lacking = [];
+            SchemaChecks.Recommended(json.RootElement, lacking);
+            return lacking;
+        }
+
+        Assert.Empty(Lacking("""{"@type":"Offer","availability":"https://schema.org/InStock","priceSpecification":[{"@type":"UnitPriceSpecification","price":"10","priceCurrency":"GBP"}]}"""));
+        Assert.Empty(Lacking("""{"@type":"Offer","availability":"https://schema.org/InStock","priceSpecification":{"@type":"PriceSpecification","price":"10","priceCurrency":"GBP"}}"""));
+        Assert.Equal(["Product: lacks offers.priceCurrency"],
+            Lacking("""{"@type":"Offer","availability":"https://schema.org/InStock","priceSpecification":{"@type":"PriceSpecification","price":"10"}}"""));
+    }
+
     [Fact]
     public void TheBundledVocabularyKnowsSchemaOrgsTypesPropertiesDatesAndCurrencies()
     {
@@ -81,6 +100,24 @@ public sealed class StructuredDataCheckTests
         Assert.Equal("Product, BreadcrumbList, Restaurant", Detail(IssueCatalog.STRUCTURED_DATA_ON_NOINDEX, Page(BLOCK, NOINDEX, IndexabilityReason.Noindex)));
         Assert.Null(Detail(IssueCatalog.STRUCTURED_DATA_ON_NOINDEX, Page(BLOCK)));
         Assert.Null(Detail(IssueCatalog.STRUCTURED_DATA_ON_NOINDEX, Page("""{"@context":"https://schema.org","@type":"WebPage"}""", NOINDEX, IndexabilityReason.Noindex)));
+    }
+
+    /// <summary>
+    /// An item's itemref names elements elsewhere in the page whose properties are the item's too (the HTML standard's
+    /// Microdata), and a JSON-LD script's type may carry a charset: both are structured data the checks must see.
+    /// </summary>
+    [Fact]
+    public void AnItemrefsPropertiesAndAJsonLdTypeWithAParameterAreRead()
+    {
+        var parsed = HtmlPageParser.Parse(RuleHarness.Html(
+            "<script type=\"application/ld+json; charset=utf-8\">{\"@context\":\"https://schema.org\",\"@type\":\"Organization\",\"name\":\"Acme\"}</script>",
+            """
+            <div itemscope itemtype="https://schema.org/Product" itemref="buy missing buy"><span itemprop="name">Bench</span></div>
+            <div id="buy"><div itemprop="offers" itemscope itemtype="https://schema.org/Offer"><span itemprop="price">9</span></div></div>
+            """), new Uri("https://example.com/p"), [], "ShoutingIguana");
+
+        Assert.Equal(["""{"@context":"https://schema.org","@type":"Organization","name":"Acme"}"""], parsed.Facts.JsonLd);
+        Assert.Equal(["""{"@context":"https://schema.org","@type":"Product","name":"Bench","offers":{"@type":"Offer","price":"9"}}"""], parsed.Facts.Microdata);
     }
 
     [Fact]

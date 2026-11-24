@@ -78,10 +78,10 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition CONTENT_TYPE_MISMATCH = new("content-type-mismatch", IssueCategory.ResponseCodes, IssueSeverity.Warning,
         "File served with the wrong content type",
-        """A page uses this internal URL as a script, a stylesheet or an image, but the server sends it with a Content-Type that isn't one (a script not sent as JavaScript, a stylesheet not as text/css, an image not as image/*), or with none or a malformed one. A URL used two ways is judged for each. The detail says how it's used and what it's sent as.""",
+        """A page uses this URL, on the site or another, as a script, a stylesheet or an image, but the server sends it with a Content-Type that isn't one (a script not sent as JavaScript, a stylesheet not as text/css, an image not as image/*), or with none or a malformed one. A URL used two ways is judged for each. The detail says how it's used and what it's sent as.""",
         """In the server's or CDN's response for that file, send a Content-Type that matches how the page uses it: text/javascript for a script, text/css for a stylesheet, and an image type for an image. If the address answers with a page instead, such as an error or login page sent with status 200, fix that response or replace the link to the file.""")
     {
-        Why = """With X-Content-Type-Options: nosniff, as most sites send, browsers refuse to run a script or apply a stylesheet sent as the wrong type, so the page can break for visitors and for Google's rendering. An "image" that answers with a web page is usually an error page in disguise.""",
+        Why = """With X-Content-Type-Options: nosniff, as many sites send, browsers refuse to run a script or apply a stylesheet sent as the wrong type, so the page can break for visitors and for Google's rendering. An "image" that answers with a web page is usually an error page in disguise.""",
         LearnMore = "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/X-Content-Type-Options",
         References = IssueReferences.Sources,
         Subject = IssueSubject.Url,
@@ -631,10 +631,10 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition MEDIA_PREVIEW_BLOCKED = new("media-preview-blocked", IssueCategory.Indexability, IssueSeverity.Notice,
         "Image or video previews blocked",
-        """This indexable page has a robots rule that keeps its images or video out of search: noimageindex, max-image-preview:none or max-video-preview:0. The detail names the rules found.""",
-        """If the page's pictures or video should appear in search, change max-image-preview or max-video-preview on the robots meta tag, or on the X-Robots-Tag header, so previews are allowed. max-image-preview set to large allows the largest image previews. If they are meant to stay out, leave the rule.""")
+        """This indexable page has a robots rule that limits how its images or video show in search: noimageindex (the page's images aren't indexed), max-image-preview:none (no image preview with the page's result) or max-video-preview:0 (no moving preview of its video). The detail names the rules found.""",
+        """If the page's pictures or video should appear in search, remove noimageindex, or change max-image-preview or max-video-preview, on the robots meta tag or the X-Robots-Tag header, so previews are allowed. max-image-preview set to large allows the largest image previews. If they are meant to stay out, leave the rule.""")
     {
-        Why = """Google won't show the page's images in its results or image search, or a preview of its video, so the result stands out less. That's often deliberate, for photos licensed for one use or private media, but some plugins set it for a whole site without anyone noticing.""",
+        Why = """With noimageindex Google doesn't index the images on the page; the two preview rules only stop it showing an image or a moving video preview with the page's own result. Either way the result stands out less. That's often deliberate, for photos licensed for one use or private media, but some plugins set it for a whole site without anyone noticing.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag#max-image-preview",
         Subject = IssueSubject.Page,
         Recheck = [RecheckKind.Urls],
@@ -775,7 +775,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition CANONICAL_INVALID = new("canonical-invalid", IssueCategory.Canonicals, IssueSeverity.Warning,
         "Invalid canonical URL",
-        """A canonical in the <head> or an HTTP Link header has a value that isn't a valid http or https URL, such as an empty href, a template placeholder or a malformed address.""",
+        """A canonical in the <head> or an HTTP Link header has a value that isn't a valid http or https URL, such as an empty href, an address with another scheme or a malformed one.""",
         """In the canonical link in the head, put this page's full URL, or remove the broken tag.""")
     {
         Why = """Search engines can't resolve it, so it's ignored: if it's the page's only canonical, the page has none in effect. It's usually a template variable that didn't fill in.""",
@@ -870,12 +870,12 @@ public static class IssueCatalog
         Grouping = IssueGrouping.PageDetail
     };
 
-    public static readonly IssueDefinition CANONICAL_INVALID_ATTRIBUTE = new("canonical-invalid-attribute", IssueCategory.Canonicals, IssueSeverity.Notice,
+    public static readonly IssueDefinition CANONICAL_INVALID_ATTRIBUTE = new("canonical-invalid-attribute", IssueCategory.Canonicals, IssueSeverity.Warning,
         "Canonical link with hreflang, lang, media or type",
-        """A canonical <link> in the <head> also has an hreflang, lang, media or type attribute. The detail names them. A crawl made before the crawler noted these attributes isn't checked.""",
+        """A canonical <link> in the <head> also has an hreflang, lang, media or type attribute, so search engines don't use it as the page's canonical. The detail names the attributes. A crawl made before the crawler noted these attributes isn't checked.""",
         """Remove hreflang, lang, media and type from the canonical link. To point at another language or a mobile version, add a separate alternate link with hreflang or media.""")
     {
-        Why = """Those attributes describe an alternate version of a page, not the page's own preferred URL, so search engines may not take the link as a canonical at all. The usual cause is an alternate link written as rel="canonical" by mistake. No Google page says such a canonical is ignored, so treat this as tidying up.""",
+        Why = """Those attributes describe an alternate version of a page, not the page's own preferred URL. Google says canonical annotations with hreflang, lang, media or type aren't used for canonicalization, so the page is left with no canonical from this link and Google chooses one itself. The usual cause is an alternate link written as rel="canonical" by mistake.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls#rel-canonical-link-method",
         Subject = IssueSubject.Page,
         Recheck = [RecheckKind.Urls],
@@ -1299,7 +1299,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition BOILERPLATE_HEAVY = new("boilerplate-heavy", IssueCategory.Content, IssueSeverity.Notice,
         "Page mostly template text",
-        """Under a quarter of this indexable page's words are its own: the rest are menus, header, footer and sidebars. Pages with too few words of their own are another check's (low word count). The detail gives the page's own words of all its words. A crawl made before the crawler counted them isn't checked.""",
+        """Under a quarter of this indexable page's words are its own: the rest are in its menus and footer. Pages with too few words of their own are another check's (low word count). The detail gives the page's own words of all its words. A crawl made before the crawler counted them isn't checked.""",
         """Add text of the page's own, or trim menus and footers that repeat long lists of links on every page.""")
     {
         Why = """When most of a page is the same as every other page, search engines see little that's particular to it, and pages made from the template look alike to them.""",
@@ -1423,10 +1423,10 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition IMAGE_MISSING_SRC = new("image-missing-src", IssueCategory.Images, IssueSeverity.Warning,
         "Image without a source",
-        """The page has <img> elements with no file to show: no src, none of the lazy-loading attributes the crawler reads (data-src and the like), no srcset, and not a data: image. The detail counts them and says which is the first: its alt text, else its class, else where on the page it is. A crawl made before the crawler told data: images apart isn't checked.""",
-        """Put the image file's address in the image's src attribute. If a lazy-loading script fills the address in, use a standard attribute such as data-src, or loading set to lazy, and check the image still shows without the script.""")
+        """The page has <img> elements with no file to show: no src, none of the lazy-loading attributes the crawler reads (data-src and the like), no srcset, not a data: image, and not in a picture element, whose sources show through it. The detail counts them and says which is the first: its alt text, else its class, else where on the page it is. A crawl made before the crawler told data: images apart isn't checked.""",
+        """Put the image file's address in the image's src attribute. If a lazy-loading script fills the address in, use an attribute lazy-loading scripts commonly use, such as data-src, or the standard loading attribute set to lazy, and check the image still shows without the script.""")
     {
-        Why = """An image with no source never shows, for visitors or for Google Images. It's usually a template slot left empty, or a lazy-loading script keeping the file in an attribute only it knows, which search engines may not read either. Not an error: a script the crawler doesn't know can look the same.""",
+        Why = """An image with no source doesn't show unless a script gives it one, for visitors or for Google Images. It's usually a template slot left empty, or a lazy-loading script keeping the file in an attribute only it knows, which search engines may not read either. Not an error: a script the crawler doesn't know can look the same.""",
         LearnMore = "https://developers.google.com/search/docs/appearance/google-images#use-html-image-elements",
         Subject = IssueSubject.Page,
         Recheck = [RecheckKind.Urls],
@@ -1725,7 +1725,7 @@ public static class IssueCatalog
         """The page tells search engines not to index it (noindex, in a meta tag or the X-Robots-Tag header) yet has structured data of a type with rich results, such as a Product, Article, Organization or BreadcrumbList, in JSON-LD or Microdata. The detail names the types.""",
         """If the page should be in search results, remove the noindex. If it shouldn't, the structured data does nothing there and can stay or go; make sure the indexable page it describes has it instead.""")
     {
-        Why = """Google can't show a rich result for a page it doesn't index, so the markup can't do anything there. It's harmless, but it often means the noindex is a mistake on a page meant to rank.""",
+        Why = """Google can't show a rich result for a page it doesn't index, so the markup can't do anything there. It's harmless, and normal where a plugin adds an Organization or BreadcrumbList to every page, but on a product or article it can mean the noindex is a mistake on a page meant to rank.""",
         LearnMore = "https://developers.google.com/search/docs/appearance/structured-data/sd-policies#technical-guidelines",
         Subject = IssueSubject.Page,
         Recheck = [RecheckKind.Urls],
@@ -2011,7 +2011,7 @@ public static class IssueCatalog
     public static readonly IssueDefinition RESOURCE_PAST_CRAWL_LIMIT = new("resource-past-crawl-limit", IssueCategory.Performance, IssueSeverity.Warning,
         "Script or stylesheet over 2 MB",
         """A page uses this script or stylesheet, here or on another site, and it's larger than 2 MB, as far as Googlebot reads a file. It's measured as the crawl received it, compressed if the server compressed it, so a compressed file over the limit is larger still once decompressed, and one just under it may be over. The limit is Google's, not an analysis setting.""",
-        """Split the file, or remove what pages don't use (unused code, inlined data, source maps), and compress it on the server; load what isn't needed at first later.""")
+        """Split the file, or remove what pages don't use (unused code, inlined data, source maps); load what isn't needed at first later. Compressing the file doesn't help here: Google's limit is on its size once decompressed.""")
     {
         Why = """Google fetches each script and stylesheet a page uses separately, with the same 2 MB limit as the page, and ignores the rest of a larger one, so the page as Google renders it can be missing styles or behaviour, or break. A file that size also slows the page down for visitors on mobile.""",
         LearnMore = "https://developers.google.com/search/docs/crawling-indexing/googlebot#how-googlebot-accesses-your-site",
@@ -2238,7 +2238,7 @@ public static class IssueCatalog
     public static readonly IssueDefinition CHARSET_INVALID = new("charset-invalid", IssueCategory.Html, IssueSeverity.Notice,
         "Character encoding declared wrongly",
         """The page's character encoding, as a byte-order mark, the Content-Type header or the meta tag declares it, isn't UTF-8; or the header and the meta tag name different encodings (the header wins); or the page has two meta declarations that differ. A meta tag after the first 1024 bytes declares nothing: with the header declaring the encoding it changes nothing, and without it that's a missing encoding. The detail says which.""",
-        """Save and serve the page as UTF-8: send Content-Type: text/html; charset=utf-8, and put one <meta charset="utf-8"> first in the <head>.""")
+        """Save and serve the page as UTF-8: name UTF-8 as the charset in the Content-Type header, and put one meta charset tag naming UTF-8 first in the head.""")
     {
         Why = """The HTML standard requires UTF-8. A page in another encoding usually shows right, but a declaration that's wrong or contradicts another makes browsers guess, and a wrong guess garbles accented letters, currency symbols and quotes.""",
         LearnMore = "https://www.w3.org/International/questions/qa-html-encoding-declarations",

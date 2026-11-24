@@ -108,6 +108,13 @@ public sealed class SiteFileCheckTests
         Assert.Equal("https://example.com/robots.txt is empty, so it has no Sitemap: line; the sitemap was found at https://example.com/sitemap.xml", Detail(string.Empty));
         Assert.Equal("https://example.com/robots.txt is empty, so it has no Sitemap: line; the sitemap was found at https://example.com/sitemap.xml", Detail(" \r\n\uFEFF\n"));
         Assert.Equal("https://example.com/robots.txt has no Sitemap: line; the sitemap was found at https://example.com/sitemap.xml", Detail("User-agent: *\nDisallow:\n"));
+
+        // As the crawler's parser reads the file: a space before the colon is still a Sitemap line, one naming nothing isn't,
+        // nor is one in a comment.
+        Assert.Null(Detail("User-agent: *\nDisallow:\nSITEMAP : https://example.com/sitemap.xml\n"));
+        Assert.Null(Detail("Sitemap:https://example.com/sitemap.xml # the only one"));
+        Assert.NotNull(Detail("User-agent: *\nSitemap:\n"));
+        Assert.NotNull(Detail("User-agent: *\n# Sitemap: https://example.com/sitemap.xml\n"));
     }
 
     [Fact]

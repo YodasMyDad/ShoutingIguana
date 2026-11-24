@@ -366,7 +366,12 @@ public sealed class PageRuleTests
         Assert.Equal([IssueCatalog.STRUCTURED_DATA_INVALID], Issues(rules, trailingComma));
         Assert.Equal([IssueCatalog.STRUCTURED_DATA_INVALID], Issues(rules, comment));
         Assert.Empty(Issues(rules, remoteJob));
-        Assert.Equal("JobPosting: needs jobLocation or jobLocationType", rules.Check(jobWithoutLocation).Single().Detail);
+
+        // Google: jobLocation isn't required when applicantLocationRequirements is given (a remote job).
+        var remoteByCountry = site.Page($"{site.Site}/i", RuleHarness.Html(Script(
+            """{"@context":"https://schema.org","@type":"JobPosting","title":"Engineer","description":"Build things","datePosted":"2026-01-01","hiringOrganization":{"@type":"Organization","name":"Acme"},"applicantLocationRequirements":{"@type":"Country","name":"UK"}}""")));
+        Assert.Empty(Issues(rules, remoteByCountry));
+        Assert.Equal("JobPosting: needs jobLocation or jobLocationType or applicantLocationRequirements", rules.Check(jobWithoutLocation).Single().Detail);
     }
 
     /// <summary>
@@ -459,6 +464,11 @@ public sealed class PageRuleTests
         Assert.Equal("1 HTTP resource", homeHits.Single(hit => hit.Issue == IssueCatalog.MIXED_CONTENT).Detail);
         Assert.DoesNotContain(homeHits, hit => hit.Issue == IssueCatalog.NO_HTTPS);
         Assert.Equal([IssueCatalog.HTTP_PAGE], Issues(rules, stray));
+
+        // upgrade-insecure-requests has the browser ask for every http:// resource over HTTPS: nothing loads insecurely.
+        var upgraded = site.Page($"{site.Site}/upgraded", RuleHarness.Html(body: "<img src=\"http://cdn.example/a.jpg\" alt=\"x\" width=\"1\" height=\"2\">"),
+            headers: [new ResponseHeader("content-security-policy", "default-src https:; Upgrade-Insecure-Requests")]);
+        Assert.DoesNotContain(rules.Check(upgraded), hit => hit.Issue == IssueCatalog.MIXED_CONTENT);
     }
 
     [Fact]

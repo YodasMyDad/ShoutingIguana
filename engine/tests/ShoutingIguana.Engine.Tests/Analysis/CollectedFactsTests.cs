@@ -46,7 +46,7 @@ public sealed class CollectedFactsTests : IAsyncLifetime
 
         var analysis = await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(_path);
         Assert.Empty(analysis.Skipped);
-        Assert.Single(IssueReader.ReadAll(_path, IssueCatalog.CANONICAL_INVALID_ATTRIBUTE.Id));
+        Assert.Equal(2, IssueReader.ReadAll(_path, IssueCatalog.CANONICAL_INVALID_ATTRIBUTE.Id).Count());
 
         // One page as an earlier version parsed it: the same facts, with no collection.
         ParsedBefore(server.BaseUri + "plants/thin");

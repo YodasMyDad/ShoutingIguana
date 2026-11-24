@@ -80,7 +80,7 @@ internal sealed class HreflangRules(UrlTable urls, Func<int, string?>? readUrl =
         var selfCode = honoured.FirstOrDefault(hreflang => hreflang.Url == page.Url && !hreflang.Language.Equals("x-default", StringComparison.OrdinalIgnoreCase))?.Language;
         var lang = page.Facts.Language?.Trim();
         if (selfCode is not null && lang is not null && HreflangCodes.IsValid(selfCode) && HtmlRules.IsLanguageTag(lang) &&
-            !string.Equals(selfCode.Split('-')[0], lang.Split('-')[0], StringComparison.OrdinalIgnoreCase))
+            !HreflangCodes.SameLanguage(selfCode.Split('-')[0], lang.Split('-')[0]))
         {
             yield return new IssueHit(IssueCatalog.HREFLANG_LANG_MISMATCH, page.UrlId, $"hreflang {selfCode}, lang {lang}");
         }

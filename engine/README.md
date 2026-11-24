@@ -305,7 +305,7 @@ pages count: a genuine 403 from a site behind one of those firewalls stays a 403
 
 ## SEO analysis
 
-When a crawl completes, `CrawlAnalyzer` runs 87 checks over what was stored and writes the issues into the same
+When a crawl completes, `CrawlAnalyzer` runs 170 checks over what was stored and writes the issues into the same
 file. It never refetches or reparses anything, so any crawl can be analysed again with new rules or thresholds
 (`si analyze`). It refuses a crawl that is still running. A rule that fails on one page (page content is untrusted)
 is logged with the URL and skipped for that page, and the analysis notes say which rule failed on how many pages.
@@ -331,7 +331,7 @@ is logged with the URL and skipped for that page, and the analysis notes say whi
   `Analysis/IssuePlainTexts.cs`, by check id (a title, what's wrong as sentences, how to fix it as steps, who fixes
   it, the good news when nothing is found, and optionally what a template fault usually is and what the check looks
   for), and `Analysis/PlainWords.cs` (a plain title for each category; a sentence and what would let the check run for
-  a skip reason, by its code). `IssueDefinition.Plain` reads a check's. All 87 checks, the 17 categories and the 17
+  a skip reason, by its code). `IssueDefinition.Plain` reads a check's. All 170 checks, the 17 categories and the 20
   skip reasons have theirs. No analysis goes out of date when one changes, as the words are no part of the
   fingerprint.
   - **Both files are generated: don't edit them.** The words are written in
@@ -390,7 +390,9 @@ is logged with the URL and skipped for that page, and the analysis notes say whi
   does (`CrawlStats.NotCheckedCount`). The stats' indexability breakdown leaves such URLs out, and the probes of the
   site's other versions too, as the checks do, so it agrees with the URL summary.
 - **As search engines see it.** An instant (0-second) meta refresh is a redirect, as Google treats it. A canonical
-  whose target leads back to the page (through a redirect) or nowhere doesn't make the page non-indexable. Links and
+  whose target leads back to the page (through a redirect) or nowhere doesn't make the page non-indexable. Nor does a
+  canonical link that also has `hreflang`, `lang`, `media` or `type`, which Google doesn't use as a canonical: the parse
+  keeps it as a fact (`CanonicalFact.IsHonoured` is false) and gives the page no canonical link from it. Links and
   images are judged by where their redirects end, so a link to a redirect that ends at a 404 is broken. Where this
   differs from what the crawl recorded, the analysis stores it in `effective_indexability`, which `si stats` reads.
   A sitemap entry must be on the host of a sitemap that lists it, or on the start URL's or home page's host, so `www`
