@@ -245,7 +245,22 @@ export const SIMPLE_WORDS = {
   },
   rendering: {
     label: 'Pages built by JavaScript',
-    help: 'Some pages send an empty shell and fill it in with a script. On reads those in a browser. The two lists keep the check out of filter and parameter traps.',
+    help: 'Some pages send an empty shell and fill it in with a script. Auto reads those in a browser. The two lists keep the check out of filter and parameter traps.',
+  },
+  // The fields under it, in Simple's words: they said "Only crawl", "URLs to render" and "matched against the whole
+  // URL" where the rest of the form says "address" and "check".
+  renderMatching: { label: 'Only some addresses', help: 'Read in a browser only the addresses listed below.' },
+  renderPatterns: {
+    label: 'Addresses to read in a browser',
+    help: 'One pattern a line (a regular expression), matched against the whole address. Used when the choice above is “Only some addresses”. `catalogue` matches every address that says catalogue.',
+  },
+  includePatterns: {
+    label: 'Only read',
+    help: 'One pattern a line (a regular expression), matched against the whole address. When any are set, an address is read only if one matches. Leave it empty to read every address.',
+  },
+  excludePatterns: {
+    label: 'Don’t read',
+    help: 'One pattern a line (a regular expression), matched against the whole address. A match is noted and not read, which keeps the check out of a filter or a parameter trap. `sort=` leaves out every address that says sort=.',
   },
   browserFallback: {
     label: 'If a site blocks the check',
@@ -253,10 +268,12 @@ export const SIMPLE_WORDS = {
   },
   extraction: {
     label: 'Pull out your own data',
-    help: 'Name something on each page and how to find it. The check reads each page once and keeps what it finds.',
+    help: 'Name something on each page and how to find it: a CSS selector, an XPath expression or a regular expression. The check reads each page once and keeps what it finds. A rule that finds nothing on a page is left out. Up to 40 rules.',
   },
   list: {
     label: 'Only these addresses',
+    field: 'Addresses to check',
+    noAddresses: 'The list has no addresses.',
     help: 'Leave this empty to follow links from the address above. Or paste addresses, one a line, or choose a CSV or text file. Those pages are read, and links on them are not followed.',
   },
 } as const;

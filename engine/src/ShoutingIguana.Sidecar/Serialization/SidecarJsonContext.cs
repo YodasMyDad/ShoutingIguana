@@ -35,6 +35,9 @@ namespace ShoutingIguana.Sidecar.Serialization;
         typeof(CamelCaseEnumConverter<IssueSeverity>),
         typeof(CamelCaseEnumConverter<OutOfDateReason>),
         typeof(CamelCaseEnumConverter<UserAgentPreset>),
+
+        // Written as names, and read from a name or a number: up to 2.0.3 these two went out as numbers and the names
+        // the app sends were refused, so no extraction rule could be added and no rendering mode chosen.
         typeof(NamedOrNumberedEnumConverter<JavaScriptRendering>),
         typeof(NamedOrNumberedEnumConverter<ExtractionSelector>),
 

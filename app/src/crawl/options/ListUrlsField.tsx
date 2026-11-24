@@ -28,7 +28,7 @@ export function ListUrlsField({
       <p className="text-13 text-text-secondary">{words.help}</p>
       <div className="si-field-wrap">
         <label htmlFor={id} className="si-field-label">
-          {FIELD_WORDS.listUrls.label}
+          {mode === 'simple' ? SIMPLE_WORDS.list.field : FIELD_WORDS.listUrls.label}
         </label>
         {/* `h-auto`: the field's own height is one control's, which cut the four rows to one line. */}
         <div className="si-field si-field--mono h-auto py-1.5" data-invalid={shown ? '' : undefined}>
@@ -69,7 +69,9 @@ export function ListUrlsField({
             void picked.text().then((text) => {
               const read = readList(text);
               if (read.error || read.urls.length === 0) {
-                setFileError(read.error ?? 'The list has no URLs.');
+                setFileError(
+                  mode === 'simple' ? SIMPLE_WORDS.list.noAddresses : (read.error ?? 'The list has no URLs.'),
+                );
                 return;
               }
               setFileError(null);

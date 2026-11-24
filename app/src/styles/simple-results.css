@@ -562,10 +562,15 @@
     line-height: var(--leading-13);
   }
 
+  /* What's wrong there. A block of its own within the line: a short one ("missing (404 Not Found)") stays whole and
+     moves under the address when it doesn't fit beside it, and a long one ("forwards to https://…, which is missing")
+     wraps inside the column. As one unbroken line it ran out of the card, its last words (what is wrong) cut off. */
   .si-fix-leads__wrong {
+    display: inline-block;
+    max-width: 100%;
     margin-left: var(--space-2);
     color: var(--color-error-text);
-    white-space: nowrap;
+    vertical-align: top;
   }
 
   .si-fix-new {

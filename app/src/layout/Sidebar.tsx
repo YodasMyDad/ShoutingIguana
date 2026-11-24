@@ -18,7 +18,13 @@ import {
 import { useMemo } from 'react';
 import { analysisQuery, checksQuery, crawlQuery, libraryQuery } from '../api/queries';
 import { isCrawlStatus, type IssueCounts } from '../api/types';
-import { CRAWL_SECTIONS, REPORT_SECTION, type CrawlSection, type CrawlSectionEntry } from '../app/sections';
+import {
+  CRAWL_SECTIONS,
+  REPORT_SECTION,
+  crawlSectionEntry,
+  type CrawlSection,
+  type CrawlSectionEntry,
+} from '../app/sections';
 import { SIMPLE_SECTIONS } from '../app/modeRoutes';
 import { SIMPLE_SCREENS } from '../app/simpleScreens';
 import logoUrl from '../assets/iguana-64.png';
@@ -65,17 +71,19 @@ export function Sidebar() {
   const crawlId = useSidebarCrawl();
   const crawl = useQuery({ ...crawlQuery(crawlId ?? ''), enabled: crawlId !== undefined }).data;
   const counts = useIssueCounts(crawlId, crawl?.issues != null);
-  const issues = counts
-    ? mode === 'simple'
-      ? counts.error + counts.warning
-      : counts.error + counts.warning + counts.notice
-    : null;
+  // Simple's What to fix lists nothing for a check that read no page ("No pages could be read"), so it counts nothing:
+  // the checks of the site as a whole (its rules file didn't answer) made it "What to fix 1" over an empty screen.
+  const nothingRead = mode === 'simple' && crawl?.pageCount === 0;
+  const issues =
+    counts && !nothingRead
+      ? mode === 'simple'
+        ? counts.error + counts.warning
+        : counts.error + counts.warning + counts.notice
+      : null;
   const report = SIMPLE_SCREENS.report !== null;
   const sections =
     mode === 'simple'
-      ? [...CRAWL_SECTIONS, REPORT_SECTION].filter(
-          (section) => SIMPLE_SECTIONS.includes(section.id) && (section.id !== 'report' || report),
-        )
+      ? SIMPLE_SECTIONS.filter((id) => id !== 'report' || report).map(crawlSectionEntry)
       : CRAWL_SECTIONS;
 
   return (

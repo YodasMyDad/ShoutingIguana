@@ -120,9 +120,11 @@ export function useAppCommands(): void {
 
   // The crawl's sections in this mode: Simple's three (the Report once it exists), or Advanced's seven and the Report.
   const reportExists = SIMPLE_SCREENS.report !== null;
-  const sections = [...CRAWL_SECTIONS, ...(reportExists ? [REPORT_SECTION] : [])].filter(
-    (section) => !simple || SIMPLE_SECTIONS.includes(section.id),
-  );
+  const everySection = [...CRAWL_SECTIONS, ...(reportExists ? [REPORT_SECTION] : [])];
+  // Simple's in its sidebar's order, which is the order of their keys: the palette and the sheet list them as it does.
+  const sections = simple
+    ? SIMPLE_SECTIONS.flatMap((id) => everySection.filter((section) => section.id === id))
+    : everySection;
 
   useCommands(
     () => [

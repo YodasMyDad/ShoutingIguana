@@ -207,7 +207,7 @@ describe('the Summary’s sentence in every state', () => {
     const covers = { ...GARDEN_ANALYSIS.score!.covers, pages: 5, blockedByRobots: 1_080 };
     const sentences = coverageSentences(covers);
     expect(sentences).toContain(
-      'Only 5 pages were found. If your site has more, its links may need JavaScript, which this version doesn’t run.',
+      'Only 5 pages were found. If your site has more, its links may be added by JavaScript: check it again and, under “Pages built by JavaScript”, choose “JavaScript”.',
     );
     expect(sentences.some((sentence) => sentence.includes('1,080 addresses, which weren’t read'))).toBe(true);
   });

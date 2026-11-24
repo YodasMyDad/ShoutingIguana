@@ -247,7 +247,9 @@ function WhatToFix({ crawlId }: { crawlId: string }) {
             </h1>
             {subtitle ? <p className="mt-1.5 text-16 text-text-secondary">{subtitle}</p> : null}
           </div>
-          {results ? (
+          {/* Only over a list: a check that read no page has none to order or copy, and no report to open (it showed
+              all three over "No pages could be read"). */}
+          {results && item?.pageCount !== 0 ? (
             <div className="flex flex-wrap items-center gap-2">
               <Select<PlainCheckSort>
                 label="Order"

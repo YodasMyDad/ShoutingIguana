@@ -263,10 +263,11 @@ export function coverageSentences(covers: Score['covers']): string[] {
       `The site’s rules file for search engines (its “robots.txt”) keeps them out of ${formatCount(covers.blockedByRobots)} ${covers.blockedByRobots === 1 ? 'address, which wasn’t' : 'addresses, which weren’t'} read.`,
     );
   }
-  // Only for a check that read all it could find: one that ended early read few pages because it ended.
+  // Only for a check that read all it could find: one that ended early read few pages because it ended. It said
+  // "its links may need JavaScript, which this version doesn’t run" long after the check could read such pages.
   if (covers.complete && covers.pages < TINY_SITE_PAGES) {
     sentences.push(
-      `Only ${covers.pages === 1 ? '1 page was' : `${formatCount(covers.pages)} pages were`} found. If your site has more, its links may need JavaScript, which this version doesn’t run.`,
+      `Only ${covers.pages === 1 ? '1 page was' : `${formatCount(covers.pages)} pages were`} found. If your site has more, its links may be added by JavaScript: check it again and, under “Pages built by JavaScript”, choose “JavaScript”.`,
     );
   }
   return sentences;

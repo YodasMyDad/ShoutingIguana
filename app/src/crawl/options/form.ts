@@ -236,8 +236,9 @@ function sameExtractionRules(left: readonly ExtractionRuleRow[], right: readonly
     a.length === b.length &&
     a.every((rule, index) => {
       const other = b[index];
+      if (other === undefined) return false;
       return (
-        rule.name === other?.name &&
+        rule.name === other.name &&
         rule.selectorType === other.selectorType &&
         rule.selector === other.selector &&
         rule.enabled === other.enabled

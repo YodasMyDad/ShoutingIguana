@@ -312,6 +312,32 @@ describe.skipIf(TABLE_STUBBED)('What to fix', () => {
 });
 
 // The Shopify lane, phase B: what only Shopify can change is listed apart, with Shopify's reason, never as a thing to fix.
+describe.skipIf(TABLE_STUBBED)('What to fix, for a check that read no page', () => {
+  // A site that didn't answer (2026-11-24): its analysis still holds the checks of the site as a whole, so the screen
+  // said "No pages could be read" under Fix first, Copy this list and Open the report, and the sidebar counted 1.
+  it('offers nothing to order, copy or open, and the sidebar counts nothing', async () => {
+    const nothing = gardenItem({ pageCount: 0 });
+    await open(
+      FIX,
+      GARDEN_ANALYSIS,
+      [],
+      [
+        ['GET', /^\/api\/crawls$/, () => json([nothing])],
+        ['GET', /^\/api\/crawls\/([0-9a-f]{16})$/, () => json(nothing)],
+      ],
+    );
+    const main = within(screen.getByRole('main'));
+    expect(await main.findByRole('heading', { name: 'No pages could be read' })).toBeVisible();
+    expect(main.getByRole('link', { name: 'See the summary' })).toBeVisible();
+    expect(main.queryByRole('button', { name: 'Copy this list' })).toBeNull();
+    expect(main.queryByRole('link', { name: 'Open the report' })).toBeNull();
+    expect(main.queryByRole('combobox', { name: 'Order' })).toBeNull();
+    expect(main.queryByRole('button', { name: /Fix first/ })).toBeNull();
+    const item = within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: /What to fix/ });
+    await waitFor(() => expect(item).toHaveTextContent(/^What to fix$/));
+  });
+});
+
 describe.skipIf(TABLE_STUBBED)('What to fix, with what the site’s platform sets', () => {
   it('lists what Shopify sets apart, each with its reason as given, out of the counts and the parts to fix', async () => {
     await open(FIX, platformOwned(GARDEN_ANALYSIS));

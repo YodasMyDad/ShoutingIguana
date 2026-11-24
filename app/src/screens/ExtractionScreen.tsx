@@ -95,7 +95,7 @@ export function ExtractionScreen() {
             <TextField
               label="Search"
               value={search}
-              className="min-w-(--search-width-min) flex-1"
+              className="min-w-(--extraction-search-min) flex-1"
               spellCheck={false}
               onChange={(event) => {
                 setSearch(event.target.value);

@@ -115,6 +115,58 @@ describe.skipIf(TABLE_STUBBED)('Where it is, in Simple', () => {
     expect(where.getByRole('columnheader', { name: 'What was found' })).toBeVisible();
   });
 
+  // On aptitude.co.uk (2026-11-24): "1,036 words with no subheadings", then "1,036 words" on a line of its own.
+  it('doesn’t repeat as evidence what the line above already says', async () => {
+    const where = await open(
+      'h2-missing',
+      catalogRoutes('h2-missing', 1, [], [page(1, '/blog/', { detail: '1,036 words, no H2', wordCount: 1036 })], {
+        check: { evidence: ['wordCount'] },
+      }),
+    );
+    expect(await where.findByText('1,036 words with no subheadings')).toBeVisible();
+    expect(where.queryByText('1,036 words')).toBeNull();
+  });
+
+  // On gardenfurnituresets.co.uk (2026-11-24): the description two pages share headed the group, and each page under
+  // it said it again, "Search description: “This furniture cover is UV…”".
+  it('doesn’t say under each page the text the group’s pages share', async () => {
+    const shared = 'This furniture cover is UV & water-resistant. It is lightweight and easy to clean.';
+    const where = await open(
+      'description-duplicate',
+      catalogRoutes(
+        'description-duplicate',
+        2,
+        [group({ detail: shared, sharedText: shared, pages: 2 })],
+        [
+          page(1, '/cover-a/', { detail: shared, description: shared }),
+          page(2, '/cover-b/', { detail: shared, description: shared }),
+        ],
+        { check: { evidence: ['description'] } },
+      ),
+    );
+    expect(await where.findByText(`“${shared}”`)).toBeVisible();
+    expect(await where.findByText('Page 2')).toBeVisible();
+    expect(where.queryByText(/^Search description:/)).toBeNull();
+  });
+
+  // The synthetic site (2026-11-24): "The rules file says “Disallow: /private/”, on line 2" named the cause, and was
+  // said again under the address it kept out.
+  it('doesn’t say under an address what names its cause', async () => {
+    const rule = { origin: SITE, reason: 'rule' as const, line: 2, rule: 'Disallow: /private/' };
+    const where = await open(
+      'blocked-by-robots',
+      catalogRoutes(
+        'blocked-by-robots',
+        1,
+        [group({ detail: 'Disallow: /private/, line 2', pages: 1 })],
+        [page(1, '/private/listed', { detail: 'Disallow: /private/, line 2', robotsRule: rule })],
+        { check: { evidence: ['robotsRule'] } },
+      ),
+    );
+    expect(await where.findByText('Page 1')).toBeVisible();
+    expect(where.getAllByText('The rules file says “Disallow: /private/”, on line 2')).toHaveLength(1);
+  });
+
   it('heads a canonical to the first page with the list’s first page, and the later pages that point at it', async () => {
     const where = await open(
       'canonical-to-first-page',

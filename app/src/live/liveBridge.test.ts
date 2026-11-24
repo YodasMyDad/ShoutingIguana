@@ -380,7 +380,7 @@ describe('what the live bridge refreshes', () => {
       expect(stale(gridKey(ID, 0))).toBe(true);
       expect(stale(gridKey(ID, 3))).toBe(true);
       expect(stale(queryKeys.urlDetail(ID, 7))).toBe(true);
-      // Once (its grids, what its extraction rules found and its inspected URL), and only the crawl that ticked.
+      // Once, and only the crawl that ticked: its grids, what its extraction rules found, and its inspected URL.
       expect(refreshes).toHaveBeenCalledTimes(3);
       expect(stale(gridKey(OTHER, 0))).toBe(false);
       expect(stale(queryKeys.urlDetail(OTHER, 7))).toBe(false);

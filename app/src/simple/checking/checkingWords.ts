@@ -164,6 +164,15 @@ function alertWords(
     case 'sitemaps':
       // Good news, not something in the way.
       return null;
+    case 'javascript-rendering':
+      // The engine's words end in the fault as the browser's driver gave it ("Driver not found" and a path),
+      // which is Advanced's to read.
+      return {
+        kind: 'note',
+        level: alert.level,
+        text: 'The browser that reads pages built by JavaScript couldn’t start, so every page is read as the site sent it. A page that fills itself in with a script may look empty. The reason is in Advanced.',
+        actions: [],
+      };
     default:
       // A code from a newer engine: its own words, which it writes for people.
       return { kind: 'note', level: alert.level, text: alert.message, actions: [] };
@@ -239,15 +248,20 @@ export function inTheWay({
 }): SimpleAlert[] {
   const from = runStartedAt === null ? null : instant(runStartedAt);
   const seen = new Set<Kind>();
+  // The same alert comes twice when it's read from the file and heard live (the screen gives both): it is said once.
+  // Its kind kept the others to one, but a note is listed each time, so it was shown twice, under one key.
+  const said = new Set<string>();
   const entries: SimpleAlert[] = [];
   const newestFirst = [...alerts]
     .filter((alert) => from === null || instant(alert.at) >= from)
     .sort((a, b) => instant(b.at) - instant(a.at) || (b.id ?? 0) - (a.id ?? 0));
   for (const alert of newestFirst) {
     const words = alertWords(alert, { site, pages: pagesOf?.(alert) ?? pages });
-    if (!words || (words.kind !== 'note' && seen.has(words.kind))) continue;
+    const key = `${words?.kind ?? ''}:${alertKey(alert)}`;
+    if (!words || said.has(key) || (words.kind !== 'note' && seen.has(words.kind))) continue;
     seen.add(words.kind);
-    entries.push({ key: `${words.kind}:${alert.id ?? alert.code}@${alert.at}`, ...words });
+    said.add(key);
+    entries.push({ key, ...words });
   }
   for (const wait of waits) {
     const words = waitWords(wait);

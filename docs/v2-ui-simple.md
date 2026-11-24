@@ -276,8 +276,9 @@ The sentence is built from counts only:
 | Engine restarting | The app's own banner, as in Advanced |
 
 - **A tiny site (5 pages).** The same layout. The share of pages is coarse, so one page is "many" of five. Under
-  10 pages, the coverage line adds: "Only 5 pages were found. If your site has more, its links may need
-  JavaScript, which this version doesn't run." Why: a script-built site reads as one clean page, and a score of
+  10 pages, the coverage line adds: "Only 5 pages were found. If your site has more, its links may be added by
+  JavaScript: check it again and, under “Pages built by JavaScript”, choose “JavaScript”." (Until 2026-11-24 it ended
+  "which this version doesn't run", from before the check could read such pages.) Why: a script-built site reads as one clean page, and a score of
   100 for it would be a lie.
 - **A huge site (100,000 pages).** The same layout and the same five rows. Numbers take separators. Lists show 25
   at a time. The report is no longer than a small site's ([sizes](#sizes)).

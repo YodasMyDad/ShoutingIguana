@@ -5,7 +5,7 @@ import { Select } from '../../ui/Select';
 import { Switch } from '../../ui/Switch';
 import { TextField } from '../../ui/TextField';
 import { extractionRow, type CrawlForm, type ExtractionRuleRow } from './form';
-import { FIELD_WORDS } from './words';
+import { FIELD_WORDS, SIMPLE_WORDS } from './words';
 
 const SELECTORS: { value: ExtractionSelector; label: string }[] = [
   { value: 'css', label: 'CSS' },
@@ -15,16 +15,18 @@ const SELECTORS: { value: ExtractionSelector; label: string }[] = [
 
 /**
  * The crawl's custom extraction rules: a name, how to find the text, and the selector. A blank row is not sent.
- * The same fields in both modes.
+ * The same fields in both modes, the line above them in each mode's words.
  */
 export function ExtractionRulesField({
   form,
   onChange,
   error,
+  mode = 'advanced',
 }: {
   form: CrawlForm;
   onChange: (form: CrawlForm) => void;
   error?: string | null | undefined;
+  mode?: 'simple' | 'advanced';
 }) {
   const rules = form.extractionRules;
   const update = (extractionRules: ExtractionRuleRow[]) => onChange({ ...form, extractionRules });
@@ -33,7 +35,9 @@ export function ExtractionRulesField({
 
   return (
     <div className="flex flex-col gap-3" data-setting="extractionRules">
-      <p className="text-13 text-text-secondary">{FIELD_WORDS.extractionRules.help}</p>
+      <p className="text-13 text-text-secondary">
+        {mode === 'simple' ? SIMPLE_WORDS.extraction.help : FIELD_WORDS.extractionRules.help}
+      </p>
       {error ? <p className="si-field-error">{error}</p> : null}
       {rules.map((rule, index) => (
         <div key={rule.key} className="flex flex-col gap-2 border-b border-border-subtle pb-3">
@@ -41,7 +45,7 @@ export function ExtractionRulesField({
             <TextField
               label={index === 0 ? 'Rule name' : `Rule ${index + 1} name`}
               value={rule.name}
-              className="min-w-(--search-width-min) flex-1"
+              className="min-w-(--rule-name-min) flex-1"
               spellCheck={false}
               onChange={(event) => change(rule.key, { name: event.target.value })}
             />
