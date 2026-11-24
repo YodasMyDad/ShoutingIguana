@@ -84,8 +84,13 @@ public static class AnalysisFreshness
     /// past the block stores that HTML, parsed once, where an earlier engine stored the block. Analysing a stored crawl
     /// is unchanged: the checks read the facts the crawl stored. The version moves so an analysis stored before this
     /// engine is out of date.
+    /// 25 is the check audit of 2026-11-24 (docs/v2-check-audit.md): a canonical link with hreflang, lang, media or type is
+    /// no canonical, and some twenty checks stopped flagging correct markup or missing real faults (a Sitemap line read as
+    /// the parser reads it, equivalent language codes, digit path segments, every utm_ parameter, CSRF cookies,
+    /// upgrade-insecure-requests, every JavaScript media type, an image in a picture, more image hosts, an offer's
+    /// priceSpecification, readability over prose alone). canonical-invalid-attribute became a Warning.
     /// </summary>
-    public const int VERSION = 24;
+    public const int VERSION = 25;
 
     /// <summary>
     /// The catalog's check ids with their categories and severities, hashed. Titles, descriptions, fixes, why and

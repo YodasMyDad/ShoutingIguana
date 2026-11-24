@@ -338,15 +338,18 @@ wrong · Medium · P/PD/–
 
 #### 12. `canonical-invalid-attribute`: Canonical link with hreflang, lang, media or type
 
-Canonicals · **Notice** · Low · P/PD/–
+Canonicals · **Warning** (a Notice until the check audit of 2026-11-24) · Low · P/PD/–
 
-- **Simple:** "Canonical tags written in a way Google may ignore"
-- **Rule:** an honoured canonical `<link>` that also has `hreflang`, `lang`, `media` or `type`. Detail: the attributes
-  (`media`).
-- **Standard:** *(unverified)*: no Google page read on 2026-11-17 says a canonical with these is ignored; the check rests
-  on Screaming Frog's issue name ("Invalid Attribute In Annotation") alone.
+- **Simple:** "Main addresses written in a way Google ignores"
+- **Rule:** a canonical `<link>` in the head that also has `hreflang`, `lang`, `media` or `type`. Detail: the attributes
+  (`media`). Such a link is no canonical of the page's: it doesn't canonicalise the page, and the other canonical checks
+  leave it out.
+- **Standard:** Google, [how to specify a canonical](https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls)
+  (read 2026-11-24): "rel="canonical" annotations with hreflang, lang, media, and type attributes are not used for
+  canonicalization". As designed on 2026-11-17 this was *(unverified)* and the link still canonicalised the page.
 - **Data:** `CanonicalFact.Attributes` (new).
-- **Plant:** `canonical-media`: the canonical has `media="only screen and (max-width: 640px)"`. Expected **1**.
+- **Plant:** `canonical-media`: the canonical has `media="only screen and (max-width: 640px)"`; `canonical-alternate`:
+  one with `hreflang` naming another page, which stays indexable. Expected **2**.
 - **From:** Screaming Frog Canonicals "Invalid Attribute In Annotation".
 
 #### 13. `canonical-unlinked`: Canonical URL that no page links to
@@ -1653,7 +1656,8 @@ The ten rules most likely to need changing once they meet real sites:
 4. `title-same-as-h1`: Google suggests the very thing it flags, so it rests on its words calling it an opportunity.
 5. `image-hotlinked`: the CDN list and the registrable domain decide every flag.
 6. `x-card-missing`, `x-card-incomplete`, `social-image-too-small`: X's documentation couldn't be read.
-7. `canonical-invalid-attribute`: no Google source found.
+7. `canonical-invalid-attribute`: no Google source found. (Found on 2026-11-24, and the rule changed to match:
+   [the check audit](v2-check-audit.md#the-second-audit-2026-11-24).)
 8. `html-structure-errors`: AngleSharp's error codes are unconfirmed.
 9. `structured-data-schema-errors`: how far to check properties per type, and keeping the vocabulary current.
 10. `sitemap-over-limit` as an Error: that the whole file is refused wasn't confirmed.

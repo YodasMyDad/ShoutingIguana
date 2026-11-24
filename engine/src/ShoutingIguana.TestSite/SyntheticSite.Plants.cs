@@ -119,6 +119,19 @@ public sealed partial class SyntheticSite
             Content = $"<p>{Text("plant-boilerplate", 210)}</p><nav><p>{Text("plant-boilerplate-nav", 750)}</p></nav>"
         });
 
+        // Correct markup the check audit of 2026-11-24 found flagged, each a fault of a check's, not the page's: easy prose
+        // above a long specification list (readability-low), an image in a <picture> whose <img> has no src
+        // (image-missing-src), a brand's two-letter alt (image-alt-unhelpful), a dns-prefetch hint written //
+        // (protocol-relative-links), and a CSRF token cookie without HttpOnly, which a script must read (cookies-insecure).
+        Page("correct-markup", "Correct markup", [], page => page with
+        {
+            ExtraHead = "<link rel=\"dns-prefetch\" href=\"//fonts.planted.example\">",
+            Content = string.Concat(Enumerable.Repeat("<p>The bench sat in the sun. It was a good day for it. We all had a very nice time at home.</p>", 6)) +
+                      $"<h2>The sizes it comes in</h2><ul>{string.Concat(Enumerable.Range(1, 150).Select(line => $"<li>Rectangular aluminium extending table {line}cm</li>"))}</ul>" +
+                      "<picture><source srcset=\"/img/15.jpg\" type=\"image/jpeg\"><img alt=\"A planted bench\" width=\"400\" height=\"300\"></picture>" +
+                      "<img src=\"/img/16.jpg\" alt=\"TV\" width=\"400\" height=\"300\">"
+        }, headers: new Dictionary<string, string> { ["Set-Cookie"] = "XSRF-TOKEN=planted; Path=/; Secure; SameSite=Lax" });
+
         // Hreflang: an alternate calling itself by another code; the HTML and the Link header naming different sets; a
         // version only hreflang leads to; a page whose own code and lang differ.
         Page("hreflang-code-a", "Hreflang code A", ["hreflang-inconsistent-code"], page => page with
@@ -486,6 +499,12 @@ public sealed partial class SyntheticSite
         Page("canonical-media", "Canonical with a media query", ["canonical-invalid-attribute"], page => page with
         {
             Canonical = null, ExtraHead = $"<link rel=\"canonical\" media=\"only screen and (max-width: 640px)\" href=\"{_base}{page.Path}\">"
+        });
+
+        // The same naming another page: Google doesn't use such a link as a canonical, so the page isn't canonicalised by it.
+        Page("canonical-alternate", "Canonical with an hreflang", ["canonical-invalid-attribute"], page => page with
+        {
+            Canonical = null, ExtraHead = $"<link rel=\"canonical\" hreflang=\"en\" href=\"{_base}{PLANTS_PATH}canonical-fragment\">"
         });
 
         Page("noindex", "Noindex page", ["noindex-page"], page => page with { Robots = "noindex" }, inSitemap: false);

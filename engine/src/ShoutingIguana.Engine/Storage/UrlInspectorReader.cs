@@ -628,7 +628,7 @@ public static class UrlInspectorReader
     /// <param name="read">Everything that could say it was read: the page's HTML, or a file's headers.</param>
     private static IndexabilityTest Canonical(GridReadContext context, InspectedUrl self, PageFacts? facts, bool read)
     {
-        if (facts?.Canonicals.FirstOrDefault(fact => fact.Url is not null && (fact.InHead || fact.FromHttpHeader)) is not { Url: { } target })
+        if (facts?.Canonicals.FirstOrDefault(fact => fact.Url is not null && fact.IsHonoured) is not { Url: { } target })
         {
             // Without the HTML, only a canonical in a Link header would have been seen.
             return new IndexabilityTest(IndexabilityTestKind.Canonical, read ? TestOutcome.Pass : TestOutcome.NotChecked);

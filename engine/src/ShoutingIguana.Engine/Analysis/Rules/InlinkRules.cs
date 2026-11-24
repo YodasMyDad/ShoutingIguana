@@ -26,7 +26,7 @@ internal sealed class InlinkRules(UrlTable urls, bool crawlComplete, bool? every
         urls.CountInlinks(page);
 
         // The canonical that decides, as the canonical checks read it: the first in the head or a Link header, naming another URL.
-        if (page.Facts.Canonicals.FirstOrDefault(canonical => canonical is { Url: not null } && (canonical.InHead || canonical.FromHttpHeader)) is { } canonical &&
+        if (page.Facts.Canonicals.FirstOrDefault(canonical => canonical is { Url: not null, IsHonoured: true }) is { } canonical &&
             canonical.Url != page.Url &&
             page.Links.FirstOrDefault(link => link.Kind == LinkKind.Canonical && !link.Flags.HasFlag(LinkFlags.OutsideHead)).ToId is > 0 and var target &&
             target != page.UrlId)
