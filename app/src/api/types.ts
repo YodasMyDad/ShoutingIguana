@@ -289,6 +289,13 @@ export interface CrawlOptions {
    * them. The app asks for it whenever the fallback is on. Left out, the page is recorded as blocked.
    */
   solveChallenges?: boolean | null;
+  /**
+   * With `browserFallback`: a host the headless browser can't read either is read in the computer's own Chrome or
+   * Edge, as itself. The app has no setting for it and sends the engine's default, which is on.
+   */
+  useInstalledBrowser?: boolean | null;
+  /** How long `solveChallenges` waits for a person, in seconds. The app sends the engine's default, five minutes. */
+  challengeWaitSeconds?: number | null;
   proxyUrl?: string | null;
   requestTimeoutSeconds?: number | null;
   maxRetries?: number | null;

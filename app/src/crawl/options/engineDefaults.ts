@@ -40,6 +40,8 @@ export const ENGINE_DEFAULTS = {
   listUrls: [],
   browserFallback: false,
   solveChallenges: false,
+  useInstalledBrowser: true,
+  challengeWaitSeconds: 300,
   proxyUrl: null,
   requestTimeoutSeconds: 20,
   maxRetries: 2,
