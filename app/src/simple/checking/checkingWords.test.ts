@@ -82,6 +82,38 @@ describe('what’s in the way', () => {
     ]);
   });
 
+  it('says the rendering alert by what the engine raised: a download, pages not rendered, or only a block left', () => {
+    const say = (level: AlertEvent['level'], message: string) =>
+      inTheWay({ ...base, alerts: [{ ...alert('javascript-rendering', '2026-11-01T10:00:00Z'), level, message }] });
+    // The first download is no fault.
+    expect(
+      say(
+        'info',
+        'Downloading the browser that renders pages. This happens once, and the crawl goes on when it is done.',
+      ),
+    ).toMatchObject([
+      {
+        level: 'info',
+        text: 'Downloading the browser that reads pages built by JavaScript. This happens once, and the check goes on when it is done.',
+      },
+    ]);
+    const [notRendered] = say(
+      'error',
+      "The browser couldn't start. No page of this crawl is rendered: every page is read as it was sent. Driver not found: C:/app/.playwright/node/win32_x64/node.exe",
+    );
+    expect(notRendered).toMatchObject({ level: 'error' });
+    expect(notRendered?.text).toMatch(/^The browser that reads pages built by JavaScript couldn’t start/);
+    expect(notRendered?.text).not.toMatch(/Driver|node\.exe/);
+    // Rendering off, the browser only the way past a block: the pages were never to be rendered.
+    const [blocked] = say(
+      'error',
+      "The browser couldn't start. A host that blocks plain HTTP stays blocked. The browser couldn't be downloaded. Check the connection, then start the crawl again.",
+    );
+    expect(blocked?.text).toBe(
+      'The browser that gets past a site’s block couldn’t start, so a site that blocks the check stays blocked. The reason is in Advanced.',
+    );
+  });
+
   it('says a Shopify shop turns away checks without a signature, in plain words, once', () => {
     const entries = inTheWay({
       ...base,

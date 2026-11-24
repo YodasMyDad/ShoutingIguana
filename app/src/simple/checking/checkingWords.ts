@@ -3,6 +3,7 @@
 import type { AlertEvent, AlertLevel, CrawlStatus, CrawlWait, HistoryPoint, ProgressEvent } from '../../api/types';
 import type { SettingFocus } from '../../routing/search';
 import { formatCount, formatCountOf } from '../../lib/format';
+import { renderingAlert } from '../../lib/renderingAlert';
 import { simpleReason } from '../../shopify/refusals';
 
 /** What a plain alert offers. Each lands where Advanced's alert does; one to an Advanced-only screen says so. */
@@ -164,15 +165,25 @@ function alertWords(
     case 'sitemaps':
       // Good news, not something in the way.
       return null;
-    case 'javascript-rendering':
+    case 'javascript-rendering': {
       // The engine's words end in the fault as the browser's driver gave it ("Driver not found" and a path),
       // which is Advanced's to read.
-      return {
-        kind: 'note',
-        level: alert.level,
-        text: 'The browser that reads pages built by JavaScript couldn’t start, so every page is read as the site sent it. A page that fills itself in with a script may look empty. The reason is in Advanced.',
-        actions: [],
-      };
+      const rendering = renderingAlert(alert);
+      if (rendering.downloading) {
+        return {
+          kind: 'note',
+          level: 'info',
+          text: 'Downloading the browser that reads pages built by JavaScript. This happens once, and the check goes on when it is done.',
+          actions: [],
+        };
+      }
+      // A check that only had the browser as its way past a block lost that, not its reading of pages.
+      const text =
+        rendering.blocksStay && !rendering.pagesNotRendered
+          ? 'The browser that gets past a site’s block couldn’t start, so a site that blocks the check stays blocked. The reason is in Advanced.'
+          : 'The browser that reads pages built by JavaScript couldn’t start, so every page is read as the site sent it. A page that fills itself in with a script may look empty. The reason is in Advanced.';
+      return { kind: 'note', level: alert.level, text, actions: [] };
+    }
     default:
       // A code from a newer engine: its own words, which it writes for people.
       return { kind: 'note', level: alert.level, text: alert.message, actions: [] };

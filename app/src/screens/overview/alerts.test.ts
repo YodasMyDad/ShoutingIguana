@@ -129,6 +129,69 @@ describe('alerts', () => {
     expect(unknown).toMatchObject({ title: 'A note from the crawl', detail: 'Something new happened.', action: null });
   });
 
+  it('says the browser couldn’t start with what the crawl lost and why, the driver’s fault behind the facts', () => {
+    const [driver] = alertEntries([
+      alert({
+        code: 'javascript-rendering',
+        level: 'error',
+        message:
+          "The browser couldn't start. No page of this crawl is rendered: every page is read as it was sent, and a host that blocks plain HTTP stays blocked. Driver not found: C:/app/.playwright/node/win32_x64/node.exe",
+      }),
+    ]);
+    expect(driver).toMatchObject({
+      level: 'error',
+      title: 'The browser couldn’t start',
+      detail:
+        'No page of this crawl is rendered: every page is read as it was sent. A host that blocks plain HTTP stays blocked.',
+      recorded: 'Driver not found: C:/app/.playwright/node/win32_x64/node.exe',
+    });
+    expect(`${driver?.detail} ${driver?.advice}`).not.toMatch(/Driver|node\.exe/);
+
+    // The engine's own reason is the advice, whole.
+    const [libraries] = alertEntries([
+      alert({
+        code: 'javascript-rendering',
+        level: 'error',
+        message:
+          "The browser couldn't start. A host that blocks plain HTTP stays blocked. The browser needs system libraries this computer doesn't have. Install them, then start the crawl again: sudo apt-get install libnss3 libgbm1",
+      }),
+    ]);
+    expect(libraries).toMatchObject({
+      detail: 'A host that blocks plain HTTP stays blocked.',
+      advice:
+        "The browser needs system libraries this computer doesn't have. Install them, then start the crawl again: sudo apt-get install libnss3 libgbm1",
+    });
+    expect(libraries?.recorded).toBeUndefined();
+
+    // A crawl file of 2.0.3 holds the older sentence.
+    const [older] = alertEntries([
+      alert({
+        code: 'javascript-rendering',
+        message:
+          "JavaScript rendering couldn't start, so pages are read as they were sent. Driver not found: C:/app/node.exe",
+      }),
+    ]);
+    expect(older).toMatchObject({
+      detail: 'No page of this crawl is rendered: every page is read as it was sent.',
+      recorded: 'Driver not found: C:/app/node.exe',
+    });
+
+    const [download] = alertEntries([
+      alert({
+        code: 'javascript-rendering',
+        level: 'info',
+        message:
+          'Downloading the browser that renders pages. This happens once, and the crawl goes on when it is done.',
+      }),
+    ]);
+    expect(download).toMatchObject({
+      level: 'info',
+      title: 'Downloading the browser that renders pages',
+      detail: 'This happens once, and the crawl goes on when it is done.',
+      advice: null,
+    });
+  });
+
   it('shows an alert heard live and read back from the file once, newest first', () => {
     const live = [alert({ id: 1, code: 'sitemaps', at: '2026-11-01T10:00:00.000Z' })];
     const file = [

@@ -4,6 +4,7 @@
 import type { AlertEvent, AlertLevel } from '../../api/types';
 import type { SettingFocus } from '../../routing/search';
 import { failureOf } from '../../lib/failure';
+import { renderingAlert } from '../../lib/renderingAlert';
 import { formatCount, formatCountOf, formatDuration } from '../../lib/format';
 import { reasonSentence } from '../../shopify/refusals';
 
@@ -206,6 +207,30 @@ function words(
         advice: 'The checks that compare pages with the sitemaps are skipped.',
         action: SITEMAPS,
       };
+    case 'javascript-rendering': {
+      const rendering = renderingAlert(alert);
+      if (rendering.downloading) {
+        return {
+          title: 'Downloading the browser that renders pages',
+          detail: 'This happens once, and the crawl goes on when it is done.',
+          advice: null,
+          action: null,
+        };
+      }
+      // What the crawl is not getting, then why in the engine's words. A fault it has no words for is the driver's
+      // ("Driver not found" and a path): behind the facts, never their sentence.
+      const lost = [
+        rendering.pagesNotRendered ? 'No page of this crawl is rendered: every page is read as it was sent.' : '',
+        rendering.blocksStay ? 'A host that blocks plain HTTP stays blocked.' : '',
+      ].filter(Boolean);
+      return {
+        title: 'The browser couldn’t start',
+        detail: lost.length > 0 ? lost.join(' ') : 'Nothing is read in it.',
+        advice: rendering.reason ?? 'Start the crawl again. If the browser still can’t start, install the app again.',
+        action: null,
+        ...(rendering.fault ? { recorded: rendering.fault } : {}),
+      };
+    }
     default:
       // A code from a newer engine: its own words, which it writes for people.
       return { title: 'A note from the crawl', detail: alert.message, advice: null, action: null };
