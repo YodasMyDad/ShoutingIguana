@@ -1054,6 +1054,10 @@ export interface AlertData {
   sampled?: number;
   urlCount?: number;
   durationMs?: number;
+  /** 2.2: the browser a person was shown ("Chrome"): `human-check`, `human-check-passed`, `browser-fallback`, `blocked`. */
+  browser?: string;
+  /** 2.2, `blocked`: what the browser fallback did about it, as one stable word (lib/blockedAlert). */
+  tried?: string;
 }
 
 /** E4: `GET /api/crawls/{id}/history`, one point. File points leave out what the file can't say. */

@@ -434,7 +434,16 @@ describe('a synthetic crawl', () => {
 
   it('fetches four URLs a page unless told how many, and stores HTML only when asked', () => {
     const plain = syntheticCrawlArgs(site);
-    assert.deepEqual(plain, ['crawl', site.url, '--db', 'out.sicrawl', '--max-urls', '160', '--quiet']);
+    assert.deepEqual(plain, [
+      'crawl',
+      site.url,
+      '--db',
+      'out.sicrawl',
+      '--max-urls',
+      '160',
+      '--quiet',
+      '--no-browser-fallback',
+    ]);
     assert.deepEqual(syntheticCrawlArgs({ ...site, storeHtml: true }), [...plain, '--store-html']);
     assert.deepEqual(syntheticCrawlArgs({ ...site, maxUrls: 5_000, storeHtml: true }).slice(4), [
       '--max-urls',

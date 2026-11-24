@@ -15,6 +15,9 @@ internal static class InstalledBrowsers
     /// <summary>What a browser named by <see cref="PATH_VARIABLE"/> is called: which one it is isn't known.</summary>
     public const string NAMED = "the browser";
 
+    /// <summary>The browser's name as a sentence starts with it: "A Chrome", "An Edge".</summary>
+    public static string WithArticle(string name) => (name.Length > 0 && "AEIOUaeiou".Contains(name[0]) ? "An " : "A ") + name;
+
     public static InstalledBrowser? Find()
     {
         if (Environment.GetEnvironmentVariable(PATH_VARIABLE) is { Length: > 0 } named && File.Exists(named))

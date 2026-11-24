@@ -2,6 +2,7 @@
 // plainly with what to do about it; how long is left, as a floor; and the analysis's phases. Pure.
 import type { AlertEvent, AlertLevel, CrawlStatus, CrawlWait, HistoryPoint, ProgressEvent } from '../../api/types';
 import type { SettingFocus } from '../../routing/search';
+import { blockedPlainWords } from '../../lib/blockedAlert';
 import { formatCount, formatCountOf } from '../../lib/format';
 import { renderingAlert } from '../../lib/renderingAlert';
 import { simpleReason } from '../../shopify/refusals';
@@ -55,7 +56,7 @@ const ROBOTS =
   'The site’s rules file for search engines isn’t answering, so the check can’t tell where it may go. It’s waiting, and will try again.';
 /** Asks something of the person, so it is said first and as a warning. */
 const HUMAN =
-  'The site wants to see that you’re a person. A browser window has opened on its page: do what it asks there, and reading the site carries on by itself. Closing the window leaves the site’s pages unread.';
+  'The site wants to see that you’re a person. A browser window has opened on its page, in front of this one: do what it asks there, and reading the site carries on by itself. If you can’t see it, look for the browser on the taskbar or the Dock. Closing the window leaves the site’s pages unread.';
 const DOWN = 'The site has stopped answering. The check is waiting, and will carry on by itself when it’s back.';
 const STOP: SimpleAlertAction = { kind: 'stop', label: 'Stop' };
 
@@ -101,19 +102,25 @@ function alertWords(
 ): { kind: Kind; level: AlertLevel; text: string; actions: SimpleAlertAction[]; shopifySteps?: boolean } | null {
   switch (alert.code) {
     case 'blocked':
-    case 'mostly-forbidden':
+    case 'mostly-forbidden': {
+      // What the browser did about it, where the check says: tried or not, the person asked or not, how it ended.
+      const browser = alert.code === 'blocked' ? blockedPlainWords(alert.data) : null;
       return {
         kind: 'blocked',
         level: 'error',
         text: `The site is turning the check away: its security takes it for a robot.${
           pages === null ? '' : ` ${formatCountOf(pages, 'page')} ${pages === 1 ? 'was' : 'were'} read first.`
-        }`,
+        }${browser ? ` ${browser.what} ${browser.advice}` : ''}`,
         actions: [
+          ...(browser?.next === 'from' && browser.url
+            ? [{ kind: 'newCrawl' as const, label: `Check ${hostOf(browser.url)} instead`, url: browser.url }]
+            : []),
           { kind: 'crawlSettings', label: 'Continue more gently (Polite), in Advanced', focus: 'speed' },
           { kind: 'copy', label: 'What to tell whoever runs the site', text: blockedMessage(site, pages) },
           { kind: 'crawlSettings', label: 'More ways in Advanced', focus: 'headers' },
         ],
       };
+    }
     case 'shopify-unsigned': {
       const count = alert.data?.count;
       const reason = alert.data?.reason;
@@ -180,8 +187,17 @@ function alertWords(
       // Good news, not something in the way.
       return null;
     case 'human-check':
-      // The window is said while it is open, by the wait. Once it has closed there is nothing left to do.
+    case 'human-check-passed':
+      // The window is said while it is open, by the wait. Once it has closed there is nothing left to do: a check
+      // that was done lets the reading carry on, and one that wasn't is said by the block.
       return null;
+    case 'browser-fallback':
+      return {
+        kind: 'note',
+        level: 'info',
+        text: 'The site’s security turned the check away, so its pages are being read in a browser instead. That gets through, and takes longer: one page at a time.',
+        actions: [],
+      };
     case 'javascript-rendering': {
       // The engine's words end in the fault as the browser's driver gave it ("Driver not found" and a path),
       // which is Advanced's to read.

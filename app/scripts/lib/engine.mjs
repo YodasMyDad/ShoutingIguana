@@ -132,10 +132,22 @@ export function buildCli(root = engineRoot()) {
 
 /**
  * The CLI's arguments for a synthetic crawl. `maxUrls` is four URLs a page unless given: enough for the pages, and it
- * leaves most of the planted cases unfetched. `storeHtml` keeps each page's HTML, for the inspector's source.
+ * leaves most of the planted cases unfetched. `storeHtml` keeps each page's HTML, for the inspector's source. The
+ * browser fallback, on by default, is off: the site plants pages that block, and a browser opened for them would read
+ * the rest of the site, slowly, and show a window on the computer running the tests.
  */
 export function syntheticCrawlArgs({ url, out, pages, maxUrls = pages * 4, storeHtml = false }) {
-  return ['crawl', url, '--db', out, '--max-urls', String(maxUrls), '--quiet', ...(storeHtml ? ['--store-html'] : [])];
+  return [
+    'crawl',
+    url,
+    '--db',
+    out,
+    '--max-urls',
+    String(maxUrls),
+    '--quiet',
+    '--no-browser-fallback',
+    ...(storeHtml ? ['--store-html'] : []),
+  ];
 }
 
 /**

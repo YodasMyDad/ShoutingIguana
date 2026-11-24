@@ -144,6 +144,8 @@ describe('New crawl in Simple', () => {
       maxRequestsPerSecond: 2,
       maxUrls: 250,
       checkResources: false,
+      // The browser fallback is on unless turned off, and from the app a person is there to complete a site's check.
+      solveChallenges: true,
     });
   });
 

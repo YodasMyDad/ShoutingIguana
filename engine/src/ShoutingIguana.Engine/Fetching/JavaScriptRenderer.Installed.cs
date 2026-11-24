@@ -484,7 +484,7 @@ internal sealed partial class JavaScriptRenderer
                     observer.OnNotice(new CrawlNotice(
                         CrawlNoticeLevel.Info,
                         "human-check",
-                        $"{hostName} asked to check you're human ({reason}). A {browser.Browser.Name} window opened on the page for you to complete the check.")
+                        $"{hostName} asked to check you're human ({reason}). {InstalledBrowsers.WithArticle(browser.Browser.Name)} window opened on the page for you to complete the check.")
                     {
                         Data = new CrawlNoticeData(Host: hostName, Url: uri.AbsoluteUri, Reason: reason, Browser: browser.Browser.Name)
                     });

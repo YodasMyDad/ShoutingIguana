@@ -1,7 +1,8 @@
 // A site check that read no pages, in Simple's words (docs/v2-ui-simple.md, "Every state": Nothing could be read): how
 // the start address answered, and the next action. Advanced says the same in its words (screens/overview/emptyCrawl.ts).
 import type { RobotsState, UrlRow } from '../api/grids';
-import type { CrawlListItem } from '../api/types';
+import type { AlertData, CrawlListItem } from '../api/types';
+import { blockedPlainWords } from '../lib/blockedAlert';
 
 export type NothingReadAction = 'continue' | 'checkAgain' | 'checkThere' | 'robotsInAdvanced' | 'blockedInAdvanced';
 
@@ -24,11 +25,14 @@ export interface StartRobots {
  * undefined while it isn't known. `robots` is how its origin's robots.txt answered, for a start address robots.txt
  * kept the check from: a file whose rules refuse it, one that answered an error, and one that didn't answer are three
  * different sentences (slice rules, item 2), never "tells checkers to stay out" for a file that couldn't be read.
+ * `blocked` is the facts of the check's `blocked` alert: whether a browser was tried on a site whose security turned
+ * the check away, whether the person was asked to show they're one, and how that ended.
  */
 export function nothingRead(
   item: Pick<CrawlListItem, 'status'>,
   start: UrlRow | null | undefined,
   robots?: StartRobots,
+  blocked?: AlertData | null,
 ): NothingRead {
   const unfinished = item.status === 'stopped' || item.status === 'interrupted';
   const code = start?.statusCode ?? null;
@@ -53,11 +57,20 @@ export function nothingRead(
             : `The address answered with an error${code === null ? '' : ` (a ${code})`}. Check the address, then try again.`,
         action: 'checkAgain',
       };
-    case 'blocked':
-      return {
-        why: 'The site’s security turned the check away before it read a page: it took the check for a robot.',
-        action: 'blockedInAdvanced',
-      };
+    case 'blocked': {
+      const turnedAway =
+        'The site’s security turned the check away before it read a page: it took the check for a robot.';
+      const browser = blockedPlainWords(blocked);
+      if (browser) {
+        return {
+          why: `${turnedAway} ${browser.what} ${browser.advice}`,
+          action:
+            browser.next === 'from' ? 'checkThere' : browser.next === 'otherWays' ? 'blockedInAdvanced' : 'checkAgain',
+          ...(browser.url ? { url: browser.url } : {}),
+        };
+      }
+      return { why: turnedAway, action: 'blockedInAdvanced' };
+    }
     case 'robotsDisallowed':
       return robotsKeptOut(robots, unfinished);
     case 'serverError':

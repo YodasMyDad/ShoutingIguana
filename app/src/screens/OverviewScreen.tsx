@@ -53,6 +53,7 @@ import type { CrawlCounts } from '../crawl/checkSubject';
 import { useAnalysisControl } from './issues/useAnalysisControl';
 import { AlertList } from './overview/AlertList';
 import { alertEntries } from './overview/alerts';
+import { latestBlocked } from '../lib/blockedAlert';
 import { skippedGroups } from './overview/answer';
 import { Categories, FixFirst, SeverityFigures, SkippedChecks } from './overview/AnswerSections';
 import { DepthCard, IndexabilityCard, ResponseCard, StatusCodesCard } from './overview/CrawlSections';
@@ -680,10 +681,13 @@ function NothingCrawled({
   // robots.txt kept the crawl from the start URL: how that file answered says why (rules, an error, no answer).
   const robotsOrigin = startRow?.outcome === 'robotsDisallowed' && startRow.url ? originOf(startRow.url) : null;
   const robots = useQuery({ ...robotsFileQuery(crawlId, robotsOrigin ?? ''), enabled: robotsOrigin !== null });
+  // A start URL a firewall or a check answered: the crawl's alert says whether a browser was tried, and how that ended.
+  const alerts = useQuery({ ...alertsQuery(crawlId), enabled: startRow?.outcome === 'blocked' }).data;
   const reason = emptyCrawl(
     { status: status ?? item.status, fetchedUrlCount: item.fetchedUrlCount },
     startRow,
     robots.data ? { state: robots.data.state, statusCode: robots.data.statusCode } : undefined,
+    latestBlocked(alerts),
   );
   return (
     <Card>

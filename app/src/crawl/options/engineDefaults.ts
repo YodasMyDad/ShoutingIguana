@@ -38,7 +38,7 @@ export const ENGINE_DEFAULTS = {
   excludePatterns: [],
   extractionRules: [],
   listUrls: [],
-  browserFallback: false,
+  browserFallback: true,
   solveChallenges: false,
   useInstalledBrowser: true,
   challengeWaitSeconds: 300,

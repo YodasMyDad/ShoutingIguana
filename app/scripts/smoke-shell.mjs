@@ -704,6 +704,14 @@ try {
             resolve(line.slice('READY '.length).split(' ')[0]);
           });
         });
+        // The test site plants pages that block. The browser fallback, on by default, would open a browser for them:
+        // the crawl's saved defaults turn it off here.
+        const saved = await engine('/api/crawl-options/defaults', {
+          method: 'PUT',
+          body: JSON.stringify({ browserFallback: false }),
+        });
+        expectThat(saved.ok, `the defaults weren't saved (${saved.status})`);
+        await page.reload();
         await home();
         await page.getByPlaceholder('Paste a URL, then press Enter').fill(url);
         await page.keyboard.press('Enter');

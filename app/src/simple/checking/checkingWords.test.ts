@@ -243,7 +243,7 @@ describe('what’s in the way', () => {
     expect(entries.map((entry) => [entry.level, entry.text])).toEqual([
       [
         'warning',
-        'The site wants to see that you’re a person. A browser window has opened on its page: do what it asks there, and reading the site carries on by itself. Closing the window leaves the site’s pages unread.',
+        'The site wants to see that you’re a person. A browser window has opened on its page, in front of this one: do what it asks there, and reading the site carries on by itself. If you can’t see it, look for the browser on the taskbar or the Dock. Closing the window leaves the site’s pages unread.',
       ],
       ['info', 'The site asked the check to slow down, so it has. It will take longer.'],
     ]);

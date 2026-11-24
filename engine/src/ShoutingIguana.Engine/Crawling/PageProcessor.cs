@@ -280,14 +280,15 @@ internal sealed class PageProcessor(
         if (_browserHosts.TryAdd(host, 0))
         {
             var name = scope.HostName(UrlNormalizer.GetHost(uri));
+            var browser = viaBrowser.Outcome != FetchOutcome.Blocked && renderer.ReadsInInstalledBrowser(host) ? renderer.InstalledBrowserName : null;
             observer.OnNotice(new CrawlNotice(
                 CrawlNoticeLevel.Info,
                 "browser-fallback",
-                viaBrowser.Outcome != FetchOutcome.Blocked && renderer.ReadsInInstalledBrowser(host) && renderer.InstalledBrowserName is { } browser
+                browser is not null
                     ? $"{name} blocked plain HTTP ({response.BlockReason}), so its pages are being read in {browser}, as itself: it sends its own user agent, not the crawler's."
                     : $"{name} blocked plain HTTP ({response.BlockReason}), so its pages are being read in a browser.")
             {
-                Data = new CrawlNoticeData(Host: name, Reason: response.BlockReason)
+                Data = new CrawlNoticeData(Host: name, Reason: response.BlockReason, Browser: browser)
             });
         }
 
@@ -317,13 +318,13 @@ internal sealed class PageProcessor(
                 $"{host} is asking to check you're human ({reason}), and that needs a person, whom this crawl was not told to ask. From the command line, crawl again with --solve-challenges: " +
                 "a browser window opens on the page, you complete the check, and the crawl carries on.",
             FallbackVerdict.PersonDidNotFinish =>
-                $"{host} asked to check you're human ({reason}). A {Browser()} window was shown for you, and the check was not completed in the browser window in the time it was given, so its pages are recorded as blocked. Crawl again to be asked once more.",
+                $"{host} asked to check you're human ({reason}). {Browser()} window was shown for you, and the check was not completed in the browser window in the time it was given, so its pages are recorded as blocked. Crawl again to be asked once more.",
             FallbackVerdict.PersonClosedWindow =>
-                $"{host} asked to check you're human ({reason}). A {Browser()} window was shown for you, and it was closed before the check was completed, so its pages are recorded as blocked. Crawl again to be asked once more.",
+                $"{host} asked to check you're human ({reason}). {Browser()} window was shown for you, and it was closed before the check was completed, so its pages are recorded as blocked. Crawl again to be asked once more.",
             FallbackVerdict.RefusedAfterCheck =>
-                $"{host} asked to check you're human ({reason}). The check was completed in the {Browser()} window, and the site then refused the page all the same, so its pages are recorded as blocked.",
+                $"{host} asked to check you're human ({reason}). The check was completed in the {TheBrowser()} window, and the site then refused the page all the same, so its pages are recorded as blocked.",
             FallbackVerdict.WentElsewhere =>
-                $"{host} asked to check you're human ({reason}). The check passed in {Browser()}, and the page then went to {renderer.LandedOn(HostKey(uri)) ?? "another address"}, which is not this address's own answer, so this address is recorded as blocked. Crawl from where it went instead.",
+                $"{host} asked to check you're human ({reason}). The check passed in {TheBrowser()}, and the page then went to {renderer.LandedOn(HostKey(uri)) ?? "another address"}, which is not this address's own answer, so this address is recorded as blocked. Crawl from where it went instead.",
             FallbackVerdict.NoDisplay =>
                 $"{host} is blocking the crawler ({reason}). Getting past it needs a browser window, and this computer has no screen to show one on. Crawl from a desktop computer.",
             FallbackVerdict.NoBrowser =>
@@ -335,7 +336,9 @@ internal sealed class PageProcessor(
         };
         return $"{what} {OWNER_ADVICE}";
 
-        string Browser() => renderer.InstalledBrowserName ?? "browser";
+        // "A Chrome", "An Edge".
+        string Browser() => InstalledBrowsers.WithArticle(renderer.InstalledBrowserName ?? "browser");
+        string TheBrowser() => renderer.InstalledBrowserName ?? "browser";
     }
 
     /// <summary>What the browser fallback did about a blocked host, as the one word the alert's facts carry (<see cref="CrawlNoticeData"/>).</summary>

@@ -294,7 +294,7 @@ test.describe('a crawl of the test site', () => {
   test('says one count wherever it shows, paused part way and once it has finished', async ({ page }) => {
     test.setTimeout(300_000);
     const started = await read<Item>('/api/crawls', {
-      options: { startUrl: env('SI_E2E_TESTSITE'), concurrency: 4, maxRequestsPerSecond: 0 },
+      options: { browserFallback: false, startUrl: env('SI_E2E_TESTSITE'), concurrency: 4, maxRequestsPerSecond: 0 },
     });
     await page.goto(`/crawls/${started.id}/overview`);
     const progress = page.getByRole('region', { name: 'Progress' });

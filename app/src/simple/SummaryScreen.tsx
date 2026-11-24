@@ -31,6 +31,7 @@ import { Card } from '../ui/Card';
 import { RefreshLine } from '../ui/ProgressBar';
 import { longDate } from './dates';
 import { nothingRead, type NothingRead } from './nothingRead';
+import { latestBlocked } from '../lib/blockedAlert';
 import { factsWords } from './plainWords';
 import { summarySubtitle } from './summaryWords';
 import { plainResults } from './results';
@@ -494,10 +495,13 @@ function NothingReadCard({
   const robotsOrigin = startRow?.outcome === 'robotsDisallowed' && startRow.url ? originOf(startRow.url) : null;
   const robots = useQuery({ ...robotsFileQuery(crawlId, robotsOrigin ?? ''), enabled: robotsOrigin !== null });
   const robotsPending = robotsOrigin !== null && robots.isPending;
+  // A site whose security turned the check away: its alert says whether a browser was tried, and how that ended.
+  const alerts = useQuery({ ...alertsQuery(crawlId), enabled: startRow?.outcome === 'blocked' }).data;
   const reason = nothingRead(
     { status: status ?? item.status },
     startRow,
     robots.data ? { state: robots.data.state, statusCode: robots.data.statusCode } : undefined,
+    latestBlocked(alerts),
   );
   return (
     <Card className="flex flex-wrap items-center gap-7 px-8 py-7">
