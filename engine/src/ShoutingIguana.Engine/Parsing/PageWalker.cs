@@ -195,7 +195,7 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
             {
                 text.Append(textNode.Data);
             }
-            else if (child is IText templateNode && !context.InHead)
+            else if (child is IText templateNode && !context.InHead && !context.InNoscript)
             {
                 // Text the content leaves out (menus, header, footer): words of the page all the same.
                 TemplateWordCount += TextMeasures.Words(templateNode.Data);
@@ -224,10 +224,12 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
 
         var name = element.LocalName;
 
-        // An href or src written without its scheme ("//cdn.example.com/app.js") takes the page's.
+        // An href or src written without its scheme ("//cdn.example.com/app.js") takes the page's. Not a dns-prefetch hint's:
+        // a DNS lookup has no scheme, so nothing of it goes over HTTP.
         foreach (var attribute in (string[])["href", "src"])
         {
-            if (element.GetAttribute(attribute)?.TrimStart() is { } value && value.StartsWith("//", StringComparison.Ordinal) && value.Length > 2)
+            if (element.GetAttribute(attribute)?.TrimStart() is { } value && value.StartsWith("//", StringComparison.Ordinal) && value.Length > 2 &&
+                !(name == "link" && HasRelToken(element, "dns-prefetch")))
             {
                 ProtocolRelativeCount++;
                 var written = value.Length > MAX_LABEL_CHARS ? value[..MAX_LABEL_CHARS] : value;
@@ -279,7 +281,8 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
             case "style" or "template" or "base":
                 return;
             case "noscript":
-                childContext = context with { ExcludeText = true };
+                // Parsed with scripting on, its content is one text node of raw markup: no text of the page's, and no words.
+                childContext = context with { ExcludeText = true, InNoscript = true };
                 break;
             case "img":
                 AddImage(element, context);
@@ -497,10 +500,10 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
 
         if (httpEquiv == "content-type" && content is not null)
         {
-            var charsetAt = content.IndexOf("charset=", StringComparison.OrdinalIgnoreCase);
-            if (charsetAt >= 0)
+            // As the Content-Type header's is read: the value ends at a semicolon or a space, quotes or not.
+            if (Fetching.ContentTypeHeader.CharsetOf(content) is { } declared)
             {
-                DeclareCharset(content[(charsetAt + 8)..].Trim().Trim('"', '\''), element);
+                DeclareCharset(declared, element);
             }
 
             return;
@@ -559,6 +562,14 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
         }
     }
 
+    /// <summary>A link that names a page: no type, or HTML's.</summary>
+    private static bool IsHtmlOrUntyped(IElement element) =>
+        NullIfBlank(element.GetAttribute("type"))?.Trim().ToLowerInvariant() is null or "text/html" or "application/xhtml+xml";
+
+    /// <summary>Whether the element's rel has this token, in any case.</summary>
+    private static bool HasRelToken(IElement element, string token) =>
+        element.GetAttribute("rel")?.Split(WHITESPACE.ToCharArray(), StringSplitOptions.RemoveEmptyEntries).Contains(token, StringComparer.OrdinalIgnoreCase) == true;
+
     private void AddLinkElement(IElement element, WalkContext context)
     {
         var rel = element.GetAttribute("rel");
@@ -599,8 +610,10 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
             }
             else if (token.Equals("alternate", StringComparison.OrdinalIgnoreCase))
             {
-                // A media query names a separate version for some screens: a mobile site's.
-                if (element.HasAttribute("media"))
+                // A media query names a separate version for some screens: a mobile site's. Not an alternate stylesheet, a
+                // feed or another file by its type, or the page as printed.
+                if (element.HasAttribute("media") && !HasRelToken(element, "stylesheet") && IsHtmlOrUntyped(element) &&
+                    !string.Equals(element.GetAttribute("media")?.Trim(), "print", StringComparison.OrdinalIgnoreCase))
                 {
                     MobileAlternate ??= NormalizeOrNull(href);
                 }
@@ -654,7 +667,8 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
 
     private void AddScript(IElement element, WalkContext context)
     {
-        var type = element.GetAttribute("type")?.Trim();
+        // The media type alone: "application/ld+json; charset=utf-8" is JSON-LD too.
+        var type = element.GetAttribute("type")?.Split(';', 2)[0].Trim();
         if (string.Equals(type, "application/ld+json", StringComparison.OrdinalIgnoreCase))
         {
             if (JsonLd.Count < MAX_JSON_LD_BLOCKS)

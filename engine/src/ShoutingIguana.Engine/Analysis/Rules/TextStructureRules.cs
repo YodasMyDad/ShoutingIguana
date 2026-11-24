@@ -117,11 +117,14 @@ internal sealed class TextStructureRules(AnalysisSettings settings) : IPageRule
     {
         var language = facts.Language?.Trim();
         var english = language is not null && (language.Equals("en", StringComparison.OrdinalIgnoreCase) || language.StartsWith("en-", StringComparison.OrdinalIgnoreCase));
-        if (!english || facts.WordCount < READABILITY_MIN_WORDS || facts.SentenceCount < READABILITY_MIN_SENTENCES || facts.SyllableCount == 0)
+        // The words the sentences and syllables were counted in: the prose's, or the whole main text's for a page parsed before
+        // the two were told apart.
+        var words = facts.ProseWordCount ?? facts.WordCount;
+        if (!english || words < READABILITY_MIN_WORDS || facts.SentenceCount < READABILITY_MIN_SENTENCES || facts.SyllableCount == 0)
         {
             return null;
         }
 
-        return 206.835 - 1.015 * facts.WordCount / facts.SentenceCount - 84.6 * facts.SyllableCount / facts.WordCount;
+        return 206.835 - 1.015 * words / facts.SentenceCount - 84.6 * facts.SyllableCount / words;
     }
 }

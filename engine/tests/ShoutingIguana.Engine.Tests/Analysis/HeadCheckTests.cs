@@ -248,6 +248,25 @@ public sealed class HeadCheckTests
         Assert.Equal(["link alternate", "link amphtml"], parsed.Facts.HeadTagsInBody);
         Assert.Equal(["utf-8", "latin1"], parsed.Facts.CharsetDeclarations);
         Assert.Equal("https://m.example.com/", parsed.Facts.MobileAlternate);
+
+        // An alternate stylesheet, a feed or a print version with a media query is no mobile version of the page.
+        foreach (var link in (string[])
+                 [
+                     "<link rel=\"alternate stylesheet\" media=\"screen\" title=\"High contrast\" href=\"/contrast.css\">",
+                     "<link rel=\"alternate\" type=\"application/rss+xml\" media=\"all\" href=\"/feed.xml\">",
+                     "<link rel=\"alternate\" media=\"print\" href=\"/print/page\">"
+                 ])
+        {
+            Assert.Null(HtmlPageParser.Parse(RuleHarness.Html(link), new Uri("https://example.com/"), [], TOKEN).Facts.MobileAlternate);
+        }
+
+        // A charset in an http-equiv ends at a semicolon or a space, and may have spaces round its equals sign (the HTML
+        // standard's algorithm for extracting a character encoding from a meta element).
+        string? Declared(string content) =>
+            HtmlPageParser.Parse(RuleHarness.Html($"<meta http-equiv=\"Content-Type\" content=\"{content}\">"), new Uri("https://example.com/"), [], TOKEN).Facts.CharsetDeclarations[^1];
+        Assert.Equal("utf-8", Declared("text/html; charset=utf-8;"));
+        Assert.Equal("utf-8", Declared("text/html; charset = utf-8"));
+        Assert.Equal("iso-8859-1", Declared("text/html; charset='iso-8859-1' ; x=y"));
         Assert.Equal("<img src=\"/t.gif\">", parsed.Facts.HeadEnd!.Element);
         Assert.Empty(parsed.Facts.StructureErrors);
     }

@@ -182,6 +182,18 @@ public sealed class SecurityUrlCheckTests
         Assert.Equal((5, 1, "//fonts.example.net"), (page.Facts.ProtocolRelativeUrls!.Count, page.Facts.ProtocolRelativeUrls.Unlinked, page.Facts.ProtocolRelativeUrls.FirstUnlinked));
     }
 
+    /// <summary>A DNS lookup has no scheme: a dns-prefetch hint written // (WordPress writes one on every page) loads nothing over HTTP.</summary>
+    [Fact]
+    public void ADnsPrefetchHintWrittenWithoutASchemeIsntCounted()
+    {
+        var site = new RuleHarness("http://example.com");
+        site.Ok($"{site.Site}/");
+        var page = site.Page($"{site.Site}/a", RuleHarness.Html("<link rel=\"dns-prefetch\" href=\"//fonts.googleapis.com\"><link rel='DNS-Prefetch preconnect' href='//s.w.org'>"));
+
+        Assert.Null(page.Facts.ProtocolRelativeUrls);
+        Assert.DoesNotContain(new SecurityRules(site.Table()).Check(page), hit => hit.Issue == IssueCatalog.PROTOCOL_RELATIVE_LINKS);
+    }
+
     /// <summary>
     /// A page parsed before links noted how they were written names none: the issue counts them, as it did, in the group
     /// naming no URL.

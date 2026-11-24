@@ -99,7 +99,7 @@ public static class HtmlPageParser
 
         var signals = ReadHeaderSignals(headers, pageUri);
         var fingerprint = ContentFingerprint.Compute(text.AsSpan());
-        var (sentences, syllables) = TextMeasures.SentencesAndSyllables(text.AsSpan());
+        var (sentences, syllables, proseWords) = TextMeasures.SentencesAndSyllables(text.AsSpan());
         var (refresh, refreshLink) = RefreshOf(headers, baseUri, walker.MetaRefresh);
         var facts = new PageFacts
         {
@@ -125,6 +125,7 @@ public static class HtmlPageParser
             PlaceholderText = TextMeasures.Placeholder(text.AsSpan()),
             SentenceCount = sentences,
             SyllableCount = syllables,
+            ProseWordCount = proseWords,
             TotalWordCount = fingerprint.WordCount + walker.TemplateWordCount,
             AnchorIds = walker.AnchorIds,
             Icons = walker.Icons,

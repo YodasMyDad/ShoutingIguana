@@ -21,9 +21,11 @@ public sealed class TextHreflangCheckTests
     [Fact]
     public void TextIsMeasuredInSentencesSyllablesAndWords()
     {
-        Assert.Equal((2, 5), TextMeasures.SentencesAndSyllables("The cat sat. It ran!"));
+        Assert.Equal((2, 5, 5), TextMeasures.SentencesAndSyllables("The cat sat. It ran!"));
         // An abbreviation's stop ends a sentence too, as Flesch counts by hand would not: an estimate, over a page of prose.
-        Assert.Equal((2, 8), TextMeasures.SentencesAndSyllables("A table made... of e.g. 3 legs"));
+        Assert.Equal((2, 8, 8), TextMeasures.SentencesAndSyllables("A table made... of e.g. 3 legs"));
+        // A block with no sentence end is no prose: its words and syllables are left out.
+        Assert.Equal((1, 3, 3), TextMeasures.SentencesAndSyllables($"Garden benches{TextAccumulator.BLOCK_MARK}The cat sat.{TextAccumulator.BLOCK_MARK}Oak table 120cm"));
         Assert.Equal(4, TextMeasures.Words("Four words, here: 42"));
         Assert.Equal("Lorem ipsum dolor sit amet", TextMeasures.Placeholder("Intro. Lorem   ipsum dolor sit amet"));
         Assert.Null(TextMeasures.Placeholder("No placeholder here"));
@@ -111,6 +113,34 @@ public sealed class TextHreflangCheckTests
         var menu = string.Join(' ', Enumerable.Repeat("link", 750));
         Assert.Equal("210 of 960 words are the page's own (22%)", Detail($"<h1>Own</h1><p>{own}</p><nav>{menu}</nav>", IssueCatalog.BOILERPLATE_HEAVY));
         Assert.Null(Detail($"<h1>Few</h1><p>Too few words</p><nav>{menu}</nav>", IssueCatalog.BOILERPLATE_HEAVY));
+
+        // A <noscript>'s content is markup the parser keeps as text (scripting is on): a lazy image's fallback is no word of
+        // the page's. 250 own words and a 300-word menu are 45% the page's own, whatever the fallbacks say.
+        var fallbacks = string.Concat(Enumerable.Repeat(
+            "<img class=\"lazy\" data-src=\"/a-800.jpg\" alt=\"Sofa\"><noscript><img src=\"https://cdn.example.com/a-800.jpg\" alt=\"A garden sofa\" class=\"lazy\" width=\"800\" height=\"600\"></noscript>", 60));
+        Assert.Null(Detail($"<h1>Own</h1><p>{string.Join(' ', Enumerable.Repeat("garden", 249))}</p>{fallbacks}<nav>{string.Join(' ', Enumerable.Repeat("link", 300))}</nav>",
+            IssueCatalog.BOILERPLATE_HEAVY));
+    }
+
+    /// <summary>
+    /// Flesch's reading ease is a measure of sentences: text with no sentence end (a specification list, a product grid, a
+    /// code sample, a heading) is no prose, and its words belong to no sentence. They made every real sentence look longer.
+    /// </summary>
+    [Fact]
+    public void ReadabilityJudgesOnlyTheBlocksOfTextThatHaveSentences()
+    {
+        var prose = string.Concat(Enumerable.Repeat("<p>The cat sat on the mat. It was a good day for it. We all had a very nice time at home.</p>", 6));
+        var list = $"<ul>{string.Concat(Enumerable.Repeat("<li>Rectangular aluminium extending table 180cm</li>", 150))}</ul>";
+        var code = $"<pre>{string.Concat(Enumerable.Repeat("public override void Initialise(ApplicationContext applicationContext)\n", 40))}</pre>";
+
+        Assert.Null(Detail($"<h1>Easy</h1>{prose}{list}", IssueCatalog.READABILITY_LOW));
+        Assert.Null(Detail($"<h1>Easy</h1>{prose}{code}", IssueCatalog.READABILITY_LOW));
+        // Hard prose is still hard beside a list.
+        Assert.NotNull(Detail($"<h1>Hard</h1><p>{string.Concat(Enumerable.Repeat(HARD, 10))}</p>{list}", IssueCatalog.READABILITY_LOW));
+
+        var facts = HtmlPageParser.Parse(RuleHarness.Html(body: $"<h1>Easy</h1>{prose}{list}"), new Uri("https://example.com/"), [], "ShoutingIguana").Facts;
+        Assert.Equal((18, 132), (facts.SentenceCount, facts.ProseWordCount));
+        Assert.Equal(132 + 1 + 150 * 5, facts.WordCount);
     }
 
     [Fact]

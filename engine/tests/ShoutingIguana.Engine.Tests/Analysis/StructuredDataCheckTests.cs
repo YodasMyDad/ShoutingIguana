@@ -102,6 +102,24 @@ public sealed class StructuredDataCheckTests
         Assert.Null(Detail(IssueCatalog.STRUCTURED_DATA_ON_NOINDEX, Page("""{"@context":"https://schema.org","@type":"WebPage"}""", NOINDEX, IndexabilityReason.Noindex)));
     }
 
+    /// <summary>
+    /// An item's itemref names elements elsewhere in the page whose properties are the item's too (the HTML standard's
+    /// Microdata), and a JSON-LD script's type may carry a charset: both are structured data the checks must see.
+    /// </summary>
+    [Fact]
+    public void AnItemrefsPropertiesAndAJsonLdTypeWithAParameterAreRead()
+    {
+        var parsed = HtmlPageParser.Parse(RuleHarness.Html(
+            "<script type=\"application/ld+json; charset=utf-8\">{\"@context\":\"https://schema.org\",\"@type\":\"Organization\",\"name\":\"Acme\"}</script>",
+            """
+            <div itemscope itemtype="https://schema.org/Product" itemref="buy missing buy"><span itemprop="name">Bench</span></div>
+            <div id="buy"><div itemprop="offers" itemscope itemtype="https://schema.org/Offer"><span itemprop="price">9</span></div></div>
+            """), new Uri("https://example.com/p"), [], "ShoutingIguana");
+
+        Assert.Equal(["""{"@context":"https://schema.org","@type":"Organization","name":"Acme"}"""], parsed.Facts.JsonLd);
+        Assert.Equal(["""{"@context":"https://schema.org","@type":"Product","name":"Bench","offers":{"@type":"Offer","price":"9"}}"""], parsed.Facts.Microdata);
+    }
+
     [Fact]
     public void MicrodataIsReadAsJsonLdWithItsSchemaOrgNames()
     {
