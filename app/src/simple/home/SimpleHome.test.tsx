@@ -375,7 +375,7 @@ describe.skipIf(TABLE_STUBBED)('Home in Simple', () => {
     const items = (await screen.findAllByRole('menuitem')).map((item) => item.textContent);
     expect(items).toEqual([
       'Open',
-      'Check again',
+      'Check again…',
       'Update the results',
       'Open the report',
       'Remove from Your sites',

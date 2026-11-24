@@ -256,7 +256,7 @@ function SummaryHeader({
           {item.startUrl ? (
             <Button icon={RefreshCw} asChild>
               <Link to="/new" search={{ url: item.startUrl, from: crawlId }}>
-                Check again
+                Check again…
               </Link>
             </Button>
           ) : null}

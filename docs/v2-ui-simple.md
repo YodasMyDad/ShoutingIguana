@@ -178,7 +178,7 @@ Simple has its own word wherever Advanced's is technical. Each maps to one gloss
   - A check stopped early shows its score as a dashed ring, "so far", and **Continue**.
   - A check never analysed shows no score and **Work out the results**. A file that has moved shows "File not
     found" and "Locate the file…", as in Advanced.
-  - Row actions are Advanced's, in Simple's words: Open, Check again, Continue, Open the report, Show in folder,
+  - Row actions are Advanced's, in Simple's words: Open, Check again…, Continue, Open the report, Show in folder,
     Remove from your sites (undo), Delete file….
 - **First start, no crawls.** The field, then three steps (paste the address; it reads your site, and you can
   close the window; you get a score, a to-do list and a report), and two quiet lines: "Want every URL, filter and
@@ -227,7 +227,8 @@ Simple has its own word wherever Advanced's is technical. Each maps to one gloss
 
 Top to bottom:
 
-1. **The site and when**, with **Check again** and **Open the report**, the primary action.
+1. **The site and when**, with **Check again…** (it opens the form, as the limit banner's does) and **Open the report**,
+   the primary action.
 2. **The score**: a ring with the number, its word (Very good, Good, Needs work, Poor), one plain sentence, what
    the score covers, and "How the score is worked out". Beside it, five counts, each a link to its part of What to
    fix: serious problems, problems worth fixing, things worth a look, checks that found nothing wrong, checks that

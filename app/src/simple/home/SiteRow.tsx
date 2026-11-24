@@ -428,7 +428,7 @@ function RowMenu({ item, kind }: { item: CrawlListItem; kind: ReturnType<typeof 
           disabled={kind === 'missing' || kind === 'unreadable'}
           onSelect={() => void navigate({ to: '/new', search: { from: item.id } })}
         >
-          Check again
+          Check again…
         </MenuItem>
         {controls.canContinue ? (
           <MenuItem icon={Play} onSelect={() => void continueCrawl(item.id)}>

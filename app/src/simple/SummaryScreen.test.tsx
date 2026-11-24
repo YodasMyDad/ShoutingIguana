@@ -480,6 +480,17 @@ describe.skipIf(TABLE_STUBBED)('the Summary in every other state', () => {
     expect(main().getByRole('link', { name: 'Save as PDF' })).toHaveAttribute('href', `${CRAWL}/report?print=true`);
   });
 
+  // It opens the form, so it says so, as the limit banner's "Check again…" does (the audit of 2026-11-24).
+  it('names Check again… with its ellipsis: it opens a form', async () => {
+    await open(GARDEN_ANALYSIS);
+    await site();
+    expect(main().getByRole('link', { name: 'Check again…' })).toHaveAttribute(
+      'href',
+      expect.stringMatching(/^\/new\?/),
+    );
+    expect(main().queryByRole('link', { name: 'Check again' })).toBeNull();
+  });
+
   it('nothing could be read: no score, and why', async () => {
     await open('not-analyzed', gardenItem({ pageCount: 0, analyzedAt: null, issues: null, score: null }));
     await site();
