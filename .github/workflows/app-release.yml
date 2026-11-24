@@ -6,9 +6,21 @@
 # started by hand builds the installers, keeps them as artifacts, and cannot publish: the release job requires the
 # tag push. app.yml and engine.yml stay manual.
 #
-# Unsigned for the beta. Nothing reads the certificate secrets, and the signing step says so on the run summary.
-# The Windows smoke test (install, run, uninstall) still runs. macOS is cross-built from the arm64 runner for x64;
-# that build is not something this Windows machine can try.
+# No certificates. Nothing reads the certificate secrets, and the signing step says so on the run summary. The
+# Windows installer and the Linux packages are unsigned. The macOS app is ad-hoc signed (tauri.conf.json's
+# signingIdentity "-"): no certificate is involved, and macOS still asks the user to allow it, but an app with no
+# signature at all is refused outright on Apple silicon. macOS is cross-built from the arm64 runner for x64.
+#
+# Every leg smoke-tests the installer it built, and in each the packaged engine renders a page a script builds, which
+# downloads Chromium as a user's first rendered crawl does (smoke-sidecar.mjs --render): a release whose installed
+# engine can't start a browser fails here. Windows: scripts/smoke-installer.ps1 (install, the engine on its own,
+# a run, uninstall). Linux: scripts/smoke-installer.sh in fresh containers, so what the runner has installed can't
+# stand in for what the package depends on. macOS: the same script on the disk image, the x64 app under Rosetta.
+# The macOS smoke test had never run when it was added (it can't be tried on Windows), so it reports on the run
+# summary without failing the job (continue-on-error): make it a hard failure once a run has shown it passing.
+#
+# Linux builds on ubuntu-22.04, the oldest runner, so the shell and the libraries the AppImage carries need glibc
+# 2.35 and not 2.39: the AppImage then runs on Ubuntu 22.04, Debian 12 and later.
 name: App release (v2)
 
 on:
@@ -53,7 +65,7 @@ jobs:
             target: aarch64-apple-darwin
             bundles: dmg
             smoke: false
-            signing: "Signing skipped: this build is unsigned. Gatekeeper blocks it until it is allowed in Privacy and Security."
+            signing: "No certificate: this build is ad-hoc signed and not notarised. Gatekeeper blocks it until it is allowed in Privacy and Security."
             summary_extra: ""
           - id: macos-x64
             name: macOS x64
@@ -61,16 +73,16 @@ jobs:
             target: x86_64-apple-darwin
             bundles: dmg
             smoke: false
-            signing: "Signing skipped: this build is unsigned. Gatekeeper blocks it until it is allowed in Privacy and Security."
+            signing: "No certificate: this build is ad-hoc signed and not notarised. Gatekeeper blocks it until it is allowed in Privacy and Security."
             summary_extra: ""
           - id: linux-x64
             name: Linux x64
-            os: ubuntu-24.04
+            os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             bundles: deb,appimage
             smoke: false
             signing: "Signing skipped: this build is unsigned. The .deb and the .AppImage are not signed."
-            summary_extra: "The sidecar publish does not carry ICU, because the engine does not set InvariantGlobalization. Starting it aborts without the system's libicu. The .deb gets that library through WebKitGTK, and the .AppImage bundles it with WebKit."
+            summary_extra: "The sidecar publish does not carry ICU, because the engine does not set InvariantGlobalization. Starting it aborts without the system's libicu. The .deb gets that library through WebKitGTK, and the .AppImage bundles it with WebKit. The .AppImage also carries libssl beside its libcrypto (tauri.conf.json), so the engine never pairs the system's libssl with the bundle's libcrypto."
 
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -86,7 +98,6 @@ jobs:
           dotnet-version: "10.0.4xx"
 
       # The same libraries the shell's Linux job links, plus patchelf, which the .deb and .AppImage bundlers need.
-      # ubuntu-24.04 matches the local Docker check (docs/handoff/2026-11-14/tools/linux-ci.sh).
       - name: System packages
         if: matrix.id == 'linux-x64'
         run: |
@@ -125,9 +136,31 @@ jobs:
 
       # APPIMAGE_EXTRACT_AND_RUN lets linuxdeploy's own AppImage run on a runner without FUSE.
       - name: Release build
+        if: runner.os != 'macOS'
         env:
           APPIMAGE_EXTRACT_AND_RUN: "1"
         run: npm run tauri build -- --target "${{ matrix.target }}" --bundles "${{ matrix.bundles }}"
+
+      # Ad-hoc signed (tauri.conf.json). If the signed bundle can't be made (codesign refusing the app or the sidecar
+      # in it), the release still gets the unsigned bundle earlier releases shipped, and the summary says so. The
+      # second build only bundles again: the compiling is done.
+      - name: Release build (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -uo pipefail
+          if npm run tauri build -- --target "${{ matrix.target }}" --bundles "${{ matrix.bundles }}"; then
+            exit 0
+          fi
+          message="The ad-hoc signed build failed, so this disk image was built again with --no-sign. The app in it has no signature: Apple silicon Macs call it damaged until its quarantine mark is removed (xattr -dr com.apple.quarantine)."
+          echo "::warning::${message}"
+          {
+            echo "### ${{ matrix.name }}: not signed"
+            echo ""
+            echo "${message}"
+          } >> "$GITHUB_STEP_SUMMARY"
+          rm -rf "src-tauri/target/${{ matrix.target }}/release/bundle"
+          npm run tauri build -- --target "${{ matrix.target }}" --bundles "${{ matrix.bundles }}" --no-sign
 
       - name: Installer and checksum (Windows)
         id: installers-win
@@ -224,6 +257,83 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # Each bundle in a fresh container, as root, with only a node binary added: apt installs the .deb with nothing
+      # but its own dependencies, and the AppImage gets only the system libraries every desktop has. The oldest
+      # distribution the README names, and a newer one with another OpenSSL and WebKitGTK.
+      - name: Installer smoke test (Linux)
+        if: matrix.id == 'linux-x64'
+        shell: bash
+        run: |
+          set -uo pipefail
+          installers="${{ steps.installers-unix.outputs.dir }}"
+          node_home="$(dirname "$(dirname "$(readlink -f "$(command -v node)")")")"
+          failed=0
+          for run in "deb ubuntu:22.04" "appimage ubuntu:22.04" "deb debian:13" "appimage debian:13"; do
+            kind="${run%% *}"
+            image="${run##* }"
+            case "$kind" in
+              deb) pattern='*.deb' ;;
+              *) pattern='*.AppImage' ;;
+            esac
+            echo "::group::$kind on $image"
+            log="${RUNNER_TEMP}/smoke-$kind-${image//[:.]/-}.log"
+            docker run --rm --init \
+              -v "$installers:/installers:ro" -v "$PWD/scripts:/scripts:ro" -v "$node_home:/opt/node:ro" \
+              -e PATH=/opt/node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+              "$image" bash -c "bash /scripts/smoke-installer.sh $kind /installers/$pattern" 2>&1 | tee "$log"
+            status=${PIPESTATUS[0]}
+            echo "::endgroup::"
+            {
+              if [ "$status" -eq 0 ]; then
+                echo "### Linux installer smoke test: $kind on $image passed"
+              else
+                echo "### Linux installer smoke test: $kind on $image FAILED"
+              fi
+              echo ""
+              echo '```'
+              grep -E '^smoke-(installer|sidecar):' "$log" | tail -30
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            if [ "$status" -ne 0 ]; then
+              failed=1
+            fi
+          done
+          exit "$failed"
+
+      # Never run before the release that added it: it reports, and does not fail the job. See the header.
+      - name: Installer smoke test (macOS)
+        if: runner.os == 'macOS'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -uo pipefail
+          dmg=""
+          for candidate in "${{ steps.installers-unix.outputs.dir }}"/*.dmg; do
+            dmg="$candidate"
+            break
+          done
+          case "${{ matrix.target }}" in
+            x86_64-*) arch=x86_64 ;;
+            *) arch=arm64 ;;
+          esac
+          log="${RUNNER_TEMP}/smoke-dmg.log"
+          bash scripts/smoke-installer.sh dmg "$dmg" "$arch" 2>&1 | tee "$log"
+          status=${PIPESTATUS[0]}
+          {
+            if [ "$status" -eq 0 ]; then
+              echo "### ${{ matrix.name }} installer smoke test: passed"
+            else
+              echo "### ${{ matrix.name }} installer smoke test: FAILED"
+              echo ""
+              echo "This does not fail the job yet. Read the lines below before telling anyone to download this disk image."
+            fi
+            echo ""
+            echo '```'
+            grep -E '^smoke-(installer|sidecar):' "$log" | tail -40
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
       - name: Browser for the installer smoke test
         if: matrix.smoke
         run: npx playwright install chromium
@@ -294,13 +404,13 @@ jobs:
           cat > notes.md <<EOF
           Shouting Iguana ${VERSION}, from ${GITHUB_SHA}.
 
-          Signing was skipped. The installers are unsigned.
+          No code-signing certificate was used. The Windows installer and the Linux packages are unsigned. The macOS app is ad-hoc signed and not notarised.
 
-          Windows SmartScreen blocks the installer until it earns a reputation, and some managed machines will not run it. macOS Gatekeeper blocks the app until it is allowed in Privacy and Security.
+          Windows SmartScreen blocks the installer until it earns a reputation, and some managed machines will not run it. macOS Gatekeeper blocks the app until it is allowed in System Settings, Privacy & Security, with Open Anyway. The README has the steps.
 
-          - Windows: per-user NSIS installer (x64)
+          - Windows: per-user NSIS installer (x64), for Windows 10 and 11
           - macOS: disk image (arm64 and x64)
-          - Linux: .deb and .AppImage (x64)
+          - Linux: .deb and .AppImage (x64), for Ubuntu 22.04, Debian 12 and later
 
           Each installer is attached with a SHA256 checksum.
 

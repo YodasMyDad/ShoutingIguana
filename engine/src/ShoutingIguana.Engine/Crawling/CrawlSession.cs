@@ -145,6 +145,8 @@ internal sealed class CrawlSession
 
         // Every notice is kept with the crawl, then handed on: the host hears of it with the id the file keeps it under.
         _observer = new NoticeRecorder(new SafeCrawlObserver(observer, _logger), _writer, timeProvider);
+        // Before any renderer can start Playwright, which reads this once.
+        BrowserHostPlatform.UseKnownBuild();
         _fetcher = new HttpFetcher(_options, userAgent, scope, timeProvider);
         _renderer = new JavaScriptRenderer(_options, userAgent, scope, _fetcher.Guard, _gates, _observer, timeProvider,
             loggerFactory.CreateLogger<JavaScriptRenderer>());

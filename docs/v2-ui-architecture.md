@@ -97,7 +97,7 @@ preferences file), `profile.rs` (where its per-user files go), `startup.rs` (whe
   again when it comes (`shell/readiness.ts`); later sidecars are the live bridge's.
 - **Restarts.** Every path ends:
   - a start that never gets ready is tried three times in all (250 ms, then 1 s, between), then it's
-    `failed: start-failed`, however long each try takes (a start times out at 20 s);
+    `failed: start-failed`, however long each try takes (a start times out at 60 s);
   - a sidecar that crashes after it was ready restarts with backoff (250 ms to 4 s), and the sixth crash without five
     minutes of stable running between is `failed: crashed`;
   - exit code 3 (another copy of the app, or its engine, holds the state folder) fails at once, with the shell's plain

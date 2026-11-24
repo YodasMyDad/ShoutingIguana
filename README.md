@@ -70,17 +70,21 @@ The audit as a document: the score, what to fix first, and how the score was cal
 
 Installers are on the GitHub release [app-v2.0.3](https://github.com/YodasMyDad/ShoutingIguana/releases/tag/app-v2.0.3).
 
-| System | File |
-| --- | --- |
-| Windows | NSIS installer, 64-bit, per user |
-| macOS | Disk image for Apple silicon (arm64), and one for Intel (x64) |
-| Linux | `.deb` and AppImage, 64-bit |
+| System | File | Needs |
+| --- | --- | --- |
+| Windows 10 and 11 | NSIS installer, 64-bit, per user | WebView2, which Windows 11 has. If a Windows 10 PC lacks it, the installer downloads it |
+| macOS | Disk image for Apple silicon (arm64), and one for Intel (x64) | Nothing else |
+| Linux | `.deb` and AppImage, 64-bit | Ubuntu 22.04, Debian 12, or newer |
 
-Each file has a SHA256 checksum (`SHA256SUMS-*.txt` on the release).
+Each file has a SHA256 checksum (`SHA256SUMS-*.txt` on the release). The engine is inside the installer: there is no .NET or other runtime to add.
 
-## Opening an unsigned build
+Pages a script builds are rendered in a headless Chromium, which is not in the installer. The first crawl that needs it downloads it once, a few hundred MB on disk, into your user folder, so that crawl needs the internet. The crawl says it is downloading, and goes on when it is done. If the download fails, or the browser can't start, the crawl says so in an alert and reads every page as it was sent. The download does not use the proxy set in the app: behind a proxy, set `HTTPS_PROXY` before starting the app.
 
-This release is not code-signed. Windows and macOS warn the first time you open it.
+The app does not update itself yet. **Settings › Updates** says there is no update information. For a new version, download its installer and run it over the old one.
+
+## Opening it the first time
+
+No release is signed with a paid certificate, so Windows and macOS warn the first time you open it.
 
 ### Windows (SmartScreen)
 
@@ -92,14 +96,28 @@ Some managed PCs block unsigned installers. That is the organisation's policy.
 
 ### macOS (Gatekeeper)
 
+The app is signed without an Apple developer certificate and is not notarised, so macOS asks you to allow it once.
+
 1. Open the disk image. Apple silicon (M1 and later) uses the arm64 image. An Intel Mac uses the x64 image.
-2. Drag **Shouting Iguana** to **Applications**.
-3. The first open is blocked, because Apple cannot check the developer. Control-click the app, choose **Open**, then **Open** again.
-4. The same choice is in **System Settings → Privacy & Security**, as **Open Anyway**, next to the block message.
+2. Drag **Shouting Iguana** to **Applications**, then open it.
+3. macOS says Apple could not verify it. Choose **Done**, not Move to Trash.
+4. Open **System Settings → Privacy & Security** and scroll down to **Security**. Next to the message about Shouting Iguana, choose **Open Anyway**. The button is there for about an hour after step 3.
+5. Choose **Open Anyway** again and enter your password. From then on it opens like any other app.
+
+Control-clicking the app and choosing Open no longer gets past this on macOS 15 and later.
+
+If macOS says the app is damaged and can't be opened, or there is no **Open Anyway**, take the download mark off it in Terminal, then open it again:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Shouting Iguana.app"
+```
 
 ### Linux
 
-The `.deb` and the AppImage are unsigned. Install the `.deb` with your package manager, or mark the AppImage executable and run it. The `.deb` needs the system's `libicu`, which apt installs with WebKit. The AppImage already contains it.
+The `.deb` and the AppImage are unsigned, and are for 64-bit Intel and AMD. Both need glibc 2.35 or newer: Ubuntu 22.04, Debian 12, or anything more recent. They are checked on Ubuntu 22.04, 24.04 and 26.04, and on Debian 12 and 13.
+
+- **`.deb`**: `sudo apt install ./Shouting.Iguana_*_amd64.deb`. apt adds what it needs: WebKitGTK 4.1, GTK 3, the tray library, and the two libraries Chromium needs beyond those (`libnss3`, `libasound2`). A `.sicrawl` file then opens in the app.
+- **AppImage**: `chmod +x` it and run it. It carries WebKitGTK and its other libraries, and uses the graphics and font libraries every desktop already has. If it says FUSE is missing, run it with `--appimage-extract-and-run`. To render pages, Chromium uses the system's own libraries, the ones Chrome needs (`libnss3`, `libasound2`, and the accessibility and X11 libraries a GNOME or KDE desktop has). If one is missing, the crawl's alert names it and the command that installs it.
 
 ## A first crawl
 

@@ -6,9 +6,12 @@ Installs the NSIS bundle silently for the current user, checks it, runs it, and 
 1. Runs the installer with /S into a fresh temporary folder (/D=), as a per-user install.
 2. Checks the install: the shell and the sidecar are there, the uninstaller is registered under HKCU, and Windows
    opens .sicrawl files with the installed app (the merged HKEY_CLASSES_ROOT view, as Explorer reads it).
-3. Runs the installed app through smoke-tauri.mjs (--exe), on temporary data, state and profile folders: it shows the
+3. Runs the installed engine on its own (smoke-sidecar.mjs --render): it crawls a two-page local site and analyses it,
+   then crawls a page whose only link a script adds, with JavaScript rendering on (the browser is downloaded on a
+   machine that has never rendered).
+4. Runs the installed app through smoke-tauri.mjs (--exe), on temporary data, state and profile folders: it shows the
    library, closes, and leaves no sidecar behind.
-4. Runs the uninstaller with /S and checks the folder, the registration, the association and the shortcuts are gone.
+5. Runs the uninstaller with /S and checks the folder, the registration, the association and the shortcuts are gone.
 
 Exits 1 on any failure. Whatever happens, an install it made is uninstalled.
 
@@ -106,13 +109,29 @@ try {
             Write-Host "smoke-installer: installed; .sicrawl opens with $command"
         }
 
-        # 3. The installed app runs: it shows the library, and closing it leaves no sidecar.
+        # 3. The installed engine on its own: it starts, crawls a two-page local site, analyses it, renders a page a
+        # script builds, and stops. Needs no
+        # desktop, so it is checked on every machine.
+        & node (Join-Path $PSScriptRoot 'smoke-sidecar.mjs') --render --sidecar $sidecar
+        if ($LASTEXITCODE -ne 0) { Fail 'the installed engine failed on its own.' }
+
+        # 4. The installed app runs: it shows the library, and closing it leaves no sidecar.
         # A GitHub-hosted Windows job has no interactive desktop, so WebView2 never opens a debugging port.
         # The install, the file association and the uninstall are still checked. A desktop run still fails here.
         & node (Join-Path $PSScriptRoot 'smoke-tauri.mjs') --exe $shell
         if ($LASTEXITCODE -ne 0) {
             if ($env:GITHUB_ACTIONS -eq 'true') {
                 Write-Host 'smoke-installer: the installed app did not open a window on this runner. GitHub-hosted Windows jobs have no interactive desktop, so this check is the one that runs on a real machine.'
+                # What can be seen without the window: the installed shell starts its engine, and the engine goes
+                # when the shell does. Said on the run summary and not judged, until a runner has been seen to pass it.
+                & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'smoke-engine.ps1') -Exe $shell
+                $engine = if ($LASTEXITCODE -eq 0) { 'passed: the installed shell started its engine, and stopping the shell left none behind.' }
+                else { 'FAILED: see the "Installer smoke test" step. This does not fail the job yet.' }
+                Write-Host "smoke-installer: the engine check without a window $engine"
+                if ($env:GITHUB_STEP_SUMMARY) {
+                    $utf8 = New-Object System.Text.UTF8Encoding $false
+                    [IO.File]::AppendAllText($env:GITHUB_STEP_SUMMARY, "### Windows: the installed app without a window$([Environment]::NewLine)$([Environment]::NewLine)The engine check $engine$([Environment]::NewLine)", $utf8)
+                }
             }
             else {
                 Fail 'the installed app failed its smoke test.'
@@ -122,7 +141,7 @@ try {
 }
 finally {
     if ($installed) {
-        # 4. A silent uninstall. The uninstaller copies itself to the temp folder and runs from there, so the wait is
+        # 5. A silent uninstall. The uninstaller copies itself to the temp folder and runs from there, so the wait is
         # for its work, not its process.
         $uninstaller = Join-Path $installDir 'uninstall.exe'
         if (Test-Path -LiteralPath $uninstaller) {

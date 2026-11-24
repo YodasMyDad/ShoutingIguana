@@ -20,7 +20,9 @@ npm ci
 npm run build:sidecar   # the engine as src-tauri/binaries/si-sidecar-<target triple>.exe
 ```
 
-Build the sidecar again whenever the engine changes. `npm run build:sidecar -- --engine-root <folder>` builds it from
+Build the sidecar again whenever the engine changes. It is one file that unpacks all of itself on first start
+(`IncludeAllContentForSelfExtract`), into the app's local data folder when the shell starts it: Playwright's driver
+(`.playwright`) has to be files on disk beside the program, or no page is rendered. `npm run build:sidecar -- --engine-root <folder>` builds it from
 another checkout of the engine, such as a clean worktree while someone edits this one.
 
 ## Run
@@ -85,8 +87,17 @@ npm run tauri build      # src-tauri/target/release/shouting-iguana.exe, and a p
 npm run check:orphans    # closing the app, or killing it, leaves no sidecar behind
 npm run smoke:tauri      # the built app, in its own WebView2: it shows the library from a temp data folder
 npm run smoke:shell      # the five flows walked in the built app: keys, the tray, quitting, the engine restarted
-powershell -File scripts/smoke-installer.ps1   # the installer: silent install, .sicrawl, a run, silent uninstall
+powershell -File scripts/smoke-installer.ps1   # the installer: silent install, .sicrawl, the engine alone, a run, silent uninstall
+node scripts/smoke-sidecar.mjs --render --sidecar <si-sidecar>   # a packaged engine alone: a two-page crawl, then a rendered one
 ```
+
+On Linux and macOS the installer's test is `bash scripts/smoke-installer.sh deb|appimage|dmg <file>`: it installs
+the `.deb` with apt (or runs the AppImage, or mounts the disk image and verifies its signature), runs the engine
+alone, then the app on temporary folders under a virtual display, and checks the shell started its engine, the
+window's page called it, and stopping the app leaves no `si-sidecar`. The release workflow runs it for Linux in fresh
+`ubuntu:22.04` and `debian:13` containers. `docs/handoff/2026-11-24/tools` has the same build and test run in
+Docker from Windows. `scripts/smoke-engine.ps1 -Exe <shell>` is the Windows form of the app check, for a machine
+where `smoke:tauri` can't attach to the window.
 
 Tauri's build needs the sidecar binary to exist, so on a fresh clone or in CI run `npm run build:sidecar` first.
 
@@ -100,7 +111,10 @@ or with a test product name.
 
 `scripts/sign.mjs` Authenticode-signs the sidecar (from `build:sidecar`), the shell, the uninstaller and the installer
 (Tauri's `signCommand`) when a certificate is configured, and otherwise skips them, saying so. Releases come from the
-`App release (v2)` workflow, run by hand.
+`App release (v2)` workflow, on a push of a tag `app-v<version>`. The macOS app is ad-hoc signed (`signingIdentity`
+`"-"` in `tauri.conf.json`, with the hardened runtime off, because the .NET engine has to JIT), and the AppImage is
+given `libssl.so.3` from the build machine (`/usr/lib/x86_64-linux-gnu`, so an AppImage is built on Debian or Ubuntu,
+x64) to go with the `libcrypto` it already carries.
 
 ## Environment variables
 
