@@ -11,7 +11,7 @@ import { SeverityMark } from '../ui/SeverityMark';
 import { SeverityWord } from '../ui/SeverityWord';
 import { plainSeverityCount, type CheckOutcome } from '../ui/severity';
 import { FIX_SECTIONS } from './fixSections';
-import { fixRows, mergedWords, type FixRow } from './fixRows';
+import { fixFirstJobs, mergedWords } from './fixRows';
 import { saysWorse } from './changeLine';
 import {
   bandWord,
@@ -377,23 +377,6 @@ export function FixFirstCard({
         </div>
       ) : null}
     </Card>
-  );
-}
-
-/**
- * The five to fix first as jobs, the model What to fix has (docs/v2-ui-simple.md, "Related problems are one job"): a
- * problem a fix of another among them clears entirely (the analysis's `clears[].all`) folded under that one, within its
- * severity, the row above carrying the points of both. The engine's five stay the five, so "Fixing these four takes the
- * score from 87 to 100" is still its figure: it counts the jobs.
- */
-function fixFirstJobs(results: PlainResults, score: Score | null): FixRow[] {
-  const points = new Map((score?.lines ?? []).map((line) => [line.checkId, line.points]));
-  const order = { sort: 'fixFirst' as const, fixFirst: results.fixFirst.map((entry) => entry.check.id), points };
-  return (['error', 'warning'] as const).flatMap((severity) =>
-    fixRows(
-      results.fixFirst.filter((entry) => entry.outcome === severity),
-      order,
-    ),
   );
 }
 

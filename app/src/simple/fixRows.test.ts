@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { Check, CheckCount, ClearedCheck } from '../api/types';
+import type { Check, CheckCount, ClearedCheck, Score } from '../api/types';
 import type { CheckEntry } from '../screens/issues/checkList';
-import { fixRows } from './fixRows';
+import { fixFirstJobs, fixRows } from './fixRows';
 
 const entry = (id: string, count: number, clears: ClearedCheck[] = [], severity: Check['severity'] = 'error') =>
   ({
@@ -79,6 +79,40 @@ describe('What to fix’s rows', () => {
     ).toEqual([
       ['redirect-broken', ['internal-client-error']],
       ['broken-internal-links', []],
+    ]);
+  });
+});
+
+// The audit of 2026-11-24: Summary folded within its five, so a problem whose fix clears one outside them said +4
+// there beside +8 on What to fix and on its own page.
+describe('Summary’s five to fix first', () => {
+  const lines = (points: Map<string, number>) =>
+    [...points].map(([checkId, value]) => ({ checkId, points: value })) as Score['lines'];
+  const filler = (id: string) => entry(id, 20);
+  // The 404s lead; four more errors fill the five; the links the 404s' fix clears come sixth, outside the five.
+  const errors = [FOUR_O_FOUR, filler('a'), filler('b'), filler('c'), filler('d'), LINKS];
+  const results = { found: { error: errors, warning: [], notice: [] }, fixFirst: errors.slice(0, 5) };
+
+  it('carry the points What to fix’s rows carry, whether or not what a fix clears is among the five', () => {
+    const jobs = fixFirstJobs(results, { lines: lines(POINTS) });
+    const whatToFix = fixRows(errors, {
+      sort: 'fixFirst',
+      fixFirst: errors.map((each) => each.check.id),
+      points: POINTS,
+    });
+    expect(ids(jobs)).toEqual(ids(whatToFix));
+    expect(ids(jobs)[0]).toEqual(['internal-client-error', ['broken-internal-links'], 6]);
+    expect(jobs).toHaveLength(5);
+  });
+
+  it('leave out a job none of the five is part of', () => {
+    const more = { found: { ...results.found, error: [...errors, filler('e')] }, fixFirst: results.fixFirst };
+    expect(fixFirstJobs(more, null).map((row) => row.entry.check.id)).toEqual([
+      'internal-client-error',
+      'a',
+      'b',
+      'c',
+      'd',
     ]);
   });
 });

@@ -2,7 +2,9 @@
 // another clears entirely folded under that one (related checks), each row with the points fixing it gives back.
 // Pure, so every rule is tested.
 import { sortChecks, type CheckEntry, type PlainCheckSort } from '../screens/issues/checkList';
+import type { Score } from '../api/types';
 import { fixShape } from './fixPages';
+import type { PlainResults } from './results';
 
 export interface FixRow {
   entry: CheckEntry;
@@ -71,6 +73,30 @@ export function fixRows(entries: readonly CheckEntry[], order: FixRowOrder): Fix
     [...rows.values()].map((row) => row.entry),
     { sort: order.sort, fixFirst: order.fixFirst, points: combined },
   ).flatMap((entry) => rows.get(entry.check.id) ?? []);
+}
+
+/**
+ * The five to fix first as jobs, the rows What to fix has for them (docs/v2-ui-simple.md, "Related problems are one
+ * job"): a problem a fix of another clears entirely (the analysis's `clears[].all`) is folded under that one, within its
+ * severity, the row above carrying the points of both. The folding is done over all the problems of the severity, as
+ * What to fix does it, not over the five alone: a job's fix gives back the points of what it clears whether or not that
+ * is among the five, so the same problem says the same points here, on What to fix and on its own page (the audit of
+ * 2026-11-24: +4 here beside +8 there). The engine's five stay the five, so "Fixing these four takes the score from 87
+ * to 100" is still its figure: it counts the jobs.
+ */
+export function fixFirstJobs(
+  results: Pick<PlainResults, 'found' | 'fixFirst'>,
+  score: Pick<Score, 'lines'> | null,
+): FixRow[] {
+  const points = new Map((score?.lines ?? []).map((line) => [line.checkId, line.points]));
+  // `found` is in the engine's order to fix them, which is the order What to fix folds in.
+  const fixFirst = [...results.found.error, ...results.found.warning].map((entry) => entry.check.id);
+  const five = new Set(results.fixFirst.map((entry) => entry.check.id));
+  const ofTheFive = (row: FixRow) =>
+    [row.entry, ...row.nested, ...row.merged].some((entry) => five.has(entry.check.id));
+  return (['error', 'warning'] as const).flatMap((severity) =>
+    fixRows(results.found[severity], { sort: 'fixFirst', fixFirst, points }).filter(ofTheFive),
+  );
 }
 
 /**
