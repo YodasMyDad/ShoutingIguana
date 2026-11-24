@@ -63,6 +63,11 @@ export function FixedList({
 
 type Props = Parameters<typeof FixedList>[0];
 
+/** A period's words inside a sentence: "since 24 Nov", its month kept as written. */
+function midSentence(label: string): string {
+  return label.charAt(0).toLowerCase() + label.slice(1);
+}
+
 function FixedRows({
   crawlId,
   check,
@@ -86,7 +91,7 @@ function FixedRows({
   if (rows.isPending) return <p className="text-13 text-text-muted">Reading what it no longer flags…</p>;
   const listed = rows.data.pages.flatMap((page) => page.rows ?? []);
   if (listed.length === 0) {
-    return <p className="text-13 text-text-muted">Nothing it flagged {periodLabel(period).toLowerCase()} is gone.</p>;
+    return <p className="text-13 text-text-muted">Nothing it flagged {midSentence(periodLabel(period))} is gone.</p>;
   }
   return (
     <div className="flex flex-col gap-2">
@@ -170,14 +175,14 @@ function FixedRow({
 }
 
 function FixedGroups(props: Props) {
-  const { crawlId, check, compareWith, period } = props;
+  const { crawlId, check, compareWith } = props;
   const groups = useQuery(fixedQuery(crawlId, check.id, { compareWith, level: 'groups', limit: PAGE }));
   if (groups.error) return <p className="text-13 text-text-muted">What it no longer flags couldn’t be read.</p>;
   if (groups.isPending) return <p className="text-13 text-text-muted">Reading what it no longer flags…</p>;
   const listed = groups.data.groups ?? [];
-  if (listed.length === 0) {
-    return <p className="text-13 text-text-muted">No cause it had {periodLabel(period).toLowerCase()} is gone.</p>;
-  }
+  // No cause is gone, but URLs under causes it still has may be (ten 404s fixed while others still answer 404): they
+  // are listed flat, so the tab's count is never over "No cause is gone".
+  if (listed.length === 0) return <FixedRows {...props} />;
   return (
     <ul className="flex flex-col">
       {listed.map((group) => (

@@ -17,7 +17,7 @@ const PRESETS = [
   { id: 'fast', concurrency: 16, maxRequestsPerSecond: 0 },
 ];
 
-function sidecar(status: CrawlStatus) {
+function sidecar(status: CrawlStatus, signedIn = false) {
   const transport = fakeSidecar([
     ['GET', /^\/api\/crawl-options\/defaults$/, () => json({ options: ENGINE_DEFAULTS, speedPresets: PRESETS })],
     [
@@ -31,19 +31,30 @@ function sidecar(status: CrawlStatus) {
           extraHeaders: { 'X-Allow': '' },
           proxyUrl: 'http://***@proxy.example.com:8080',
           hasRedactedProxyCredentials: true,
+          ...(signedIn
+            ? {
+                extraHeaders: {},
+                proxyUrl: null,
+                hasRedactedProxyCredentials: false,
+                httpLogins: [{ host: '', username: 'audit', password: '' }],
+                hasRedactedAuth: true,
+              }
+            : {}),
         }),
     ],
     [
       'POST',
       /\/continue$/,
       (request) =>
-        (request.body as ContinueCrawlRequest).skipMissingHeaders || (request.body as ContinueCrawlRequest).extraHeaders
+        (request.body as ContinueCrawlRequest).skipMissingHeaders ||
+        (request.body as ContinueCrawlRequest).extraHeaders ||
+        (request.body as ContinueCrawlRequest).httpLogins?.[0]?.password
           ? json(testCrawlItem({ status: 'running' }))
           : problem({
               type: 'needs-secrets',
               title: 'Some settings must be given again.',
               status: 422,
-              missingHeaders: ['X-Allow'],
+              missingHeaders: signedIn ? [] : ['X-Allow'],
               proxyCredentials: false,
             }),
     ],
@@ -133,6 +144,26 @@ describe('the crawl’s settings', () => {
     fireEvent.change(continueCard().getByRole('textbox', { name: 'Header 1 value' }), { target: { value: 's3cret' } });
     fireEvent.click(continueCard().getByRole('button', { name: 'Continue the crawl' }));
     await waitFor(() => expect(lastContinue(transport)).toMatchObject({ extraHeaders: { 'X-Allow': 's3cret' } }));
+  });
+
+  // The audit of 2026-11-24: a crawl that signed in could never be continued once the app had closed. Its file keeps
+  // no password, Continue had nowhere to type one, and the refusal was put down to a proxy password.
+  it('continue a stopped crawl that signed in, asking again for the password its file doesn’t keep', async () => {
+    const transport = sidecar('stopped', true);
+    await open(SETTINGS);
+    await screen.findByRole('region', { name: 'Continue' });
+    expect(await continueCard().findByRole('textbox', { name: 'HTTP sign-in user name' })).toHaveValue('audit');
+    fireEvent.click(continueCard().getByRole('button', { name: 'Continue the crawl' }));
+    expect(await continueCard().findByText(/its passwords and cookie values aren’t in the crawl file/)).toBeVisible();
+    expect(continueCard().queryByText(/proxy’s user name and password/)).toBeNull();
+
+    fireEvent.change(continueCard().getByLabelText('HTTP sign-in password'), { target: { value: 'pa55' } });
+    fireEvent.click(continueCard().getByRole('button', { name: 'Continue the crawl' }));
+    await waitFor(() =>
+      expect(lastContinue(transport)).toMatchObject({
+        httpLogins: [{ host: '', username: 'audit', password: 'pa55' }],
+      }),
+    );
   });
 
   it('continue without the headers, when asked to', async () => {

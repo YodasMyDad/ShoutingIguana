@@ -466,6 +466,21 @@ describe('Home’s crawls running now, by what each is doing (round 5 review R1-
     expect(within(row).queryByRole('button', { name: /Continue/ })).toBeNull();
   });
 
+  // The audit of 2026-11-24: at 1280 px the two wrapped between them, and the second line began "· Continue".
+  it('keeps the dot before Continue with the words before it, so a wrapped line never starts with it', async () => {
+    const STOPPED = site('a000000000000003', 'garden.example', '2026-11-01T10:00:00Z', {
+      status: 'stopped',
+      issues: { error: 4, warning: 8, notice: 3 },
+    });
+    await open(() => json([STOPPED]));
+    const library = await screen.findByRole('region', { name: 'Library' });
+    const row = within(library).getByRole('link', { name: 'garden.example' }).closest('tr')!;
+    const words = within(row).getByText(/^Analysed so far/);
+    expect(words).toHaveClass('whitespace-nowrap');
+    expect(words).toHaveTextContent('Analysed so far ·');
+    expect(within(row).getByRole('button', { name: /Continue/ })).toBeVisible();
+  });
+
   it('says what each of two crawls is doing', async () => {
     const OTHER = site('e000000000000002', 'oakmere.example', '2026-11-02T11:00:00Z', { status: 'running' });
     liveStore.ingest(message('hello', { live: [RUNNING.id, OTHER.id] }));

@@ -11,7 +11,7 @@ import { ENGINE_DEFAULTS } from '../crawl/options/engineDefaults';
 import { keptSecrets, setSecretsStore, type SecretsStore } from '../crawl/secrets';
 import { VALIDATE_DELAY_MS } from '../crawl/options/useValidation';
 import { installKeyboard } from '../keyboard/registry';
-import { pageWords } from './newCrawlWords';
+import { pageWords, renderingNote } from './newCrawlWords';
 import type { Mode } from '../mode/mode';
 import { getSettings, replaceSettings } from '../settings/settingsStore';
 import {
@@ -525,10 +525,32 @@ describe('New crawl, the audit of 2026-11-19 (H-09, H-21)', () => {
     });
   });
 
-  it('says in Advanced that pages’ JavaScript isn’t run', async () => {
+  // It said "their JavaScript isn't run" whatever the rendering mode, beside "Auto, shells only" in the form.
+  it('says in Advanced what the crawl reads, by the rendering mode chosen', async () => {
     sidecar();
     await open('/new', 'advanced');
-    expect(await screen.findByText(/their JavaScript isn’t run/)).toBeVisible();
+    expect(await screen.findByText(/One that is only a shell for its scripts is rendered in a browser/)).toBeVisible();
+    expect(screen.queryByText(/their JavaScript isn’t run/)).toBeNull();
+    expect(renderingNote('off')).toMatch(/their JavaScript isn’t run/);
+    expect(renderingNote('javaScript')).toMatch(/^Every HTML page is rendered in a browser/);
+    expect(renderingNote('matching')).toMatch(/^Only the URLs listed/);
+  });
+
+  // The audit of 2026-11-24. The first Sign in field was named "HTTP sign-in" alone, the cookies had no name, and
+  // the boxes that take a line each (the list, the patterns) were one line tall whatever their rows.
+  it('names each Sign in field by what it takes, and gives the list and pattern boxes their rows', async () => {
+    sidecar();
+    await open('/new', 'advanced');
+    fireEvent.click(await screen.findByRole('button', { name: /^Sign in/ }));
+    expect(screen.getByRole('textbox', { name: 'HTTP sign-in user name' })).toBeVisible();
+    expect(screen.getByLabelText('HTTP sign-in password')).toBeVisible();
+    expect(screen.getByText('Cookies to send')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Add a cookie' })).toHaveClass('si-btn--secondary');
+    fireEvent.click(screen.getByRole('button', { name: /^List mode/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^JavaScript and filters/ }));
+    for (const name of ['Addresses to crawl', 'Only crawl', 'Don’t crawl']) {
+      expect(screen.getByRole('textbox', { name }).parentElement).toHaveClass('si-field', 'h-auto');
+    }
   });
 
   it('keeps Start crawl in view: its row sticks to the foot of the pane in Advanced, not in Simple’s short form', async () => {

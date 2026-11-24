@@ -54,6 +54,23 @@ describe('the crawl settings form', () => {
     ).not.toContain('javaScriptRendering');
   });
 
+  // The form's choices and the sidecar's request both go by name: a number in the form matched no choice (none was
+  // marked, "This crawl's settings" showed nothing), and a number sent back is refused by a current sidecar.
+  it('holds the rendering mode by name whatever the sidecar sent, and sends the name', () => {
+    for (const [sent, name] of [
+      [0, 'off'],
+      [1, 'automatic'],
+      [2, 'matching'],
+      [3, 'javaScript'],
+      ['javaScript', 'javaScript'],
+    ] as const) {
+      const form = formFromOptions({ javaScriptRendering: sent as unknown as 'automatic' });
+      expect(form.javaScriptRendering).toBe(name);
+      expect(optionsFromForm(form).javaScriptRendering).toBe(name);
+    }
+    expect(formFromOptions({}).javaScriptRendering).toBe('automatic');
+  });
+
   it('holds the HTML limit in MB and sends it in bytes', () => {
     const form = formFromOptions({ maxHtmlBytes: 512 * 1024 });
     expect(form.maxHtmlMb).toBe('0.5');

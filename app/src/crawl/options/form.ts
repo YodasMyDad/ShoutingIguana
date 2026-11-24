@@ -182,7 +182,8 @@ export function formFromOptions(options: CrawlOptions, startUrl = ''): CrawlForm
     extraSitemaps: (options.extraSitemaps ?? []).join('\n'),
     storeHtml: options.storeHtml ?? defaults.storeHtml,
     useCookies: options.useCookies ?? defaults.useCookies,
-    javaScriptRendering: options.javaScriptRendering ?? defaults.javaScriptRendering,
+    // By name: a sidecar up to 2.0.3 sent the enum's number, which no choice in the form matches and it refused back.
+    javaScriptRendering: renderingOf(options.javaScriptRendering, defaults.javaScriptRendering),
     renderPatterns: (options.renderPatterns ?? []).join('\n'),
     includePatterns: (options.includePatterns ?? []).join('\n'),
     excludePatterns: (options.excludePatterns ?? []).join('\n'),
@@ -233,13 +234,15 @@ function sameExtractionRules(left: readonly ExtractionRuleRow[], right: readonly
   const b = filledRules(right);
   return (
     a.length === b.length &&
-    a.every(
-      (rule, index) =>
-        rule.name === b[index]?.name &&
-        rule.selectorType === b[index]?.selectorType &&
-        rule.selector === b[index]?.selector &&
-        rule.enabled === b[index]?.enabled,
-    )
+    a.every((rule, index) => {
+      const other = b[index];
+      return (
+        rule.name === other?.name &&
+        rule.selectorType === other.selectorType &&
+        rule.selector === other.selector &&
+        rule.enabled === other.enabled
+      );
+    })
   );
 }
 

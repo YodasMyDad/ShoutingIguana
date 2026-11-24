@@ -505,6 +505,22 @@ export function settingValue(field: CrawlFormField, form: CrawlForm): string {
         .map((rule) => `${rule.enabled ? '' : 'Off: '}${rule.name.trim()} (${SELECTOR_LABELS[rule.selectorType]})`)
         .join('\n');
     }
+    // Who signs in and which cookies go, by name: never a password or a value. Both read as nothing at all before,
+    // so a crawl made signed in looked like one that wasn't.
+    case 'httpLogins': {
+      const logins = form.httpLogins.filter((row) => row.username.trim() !== '');
+      if (logins.length === 0) return 'None';
+      return logins
+        .map((row) => (row.host.trim() !== '' ? `${row.username.trim()} on ${row.host.trim()}` : row.username.trim()))
+        .join('\n');
+    }
+    case 'cookies': {
+      const cookies = form.cookies.filter((row) => row.name.trim() !== '');
+      if (cookies.length === 0) return 'None';
+      return cookies
+        .map((row) => (row.domain.trim() !== '' ? `${row.name.trim()} for ${row.domain.trim()}` : row.name.trim()))
+        .join('\n');
+    }
     case 'proxyUrl':
       return form.proxyUrl.trim() || 'None';
     case 'signatures': {

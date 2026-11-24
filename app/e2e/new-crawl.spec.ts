@@ -93,6 +93,57 @@ test.describe('in Advanced', () => {
     });
   });
 
+  // The audit of 2026-11-24: the sidecar read these two by number only, so choosing a rendering mode or adding an
+  // extraction rule in the form made the crawl unstartable ("This value isn't valid here"). Then the sidebar's Custom
+  // extraction led to the Overview, so what a rule found had no way in.
+  test('a rendering mode and extraction rules chosen in the form start the crawl, and the sidebar leads to what they found', async ({
+    page,
+  }) => {
+    await page.goto(`/new?url=${encodeURIComponent(testSite())}`);
+    await page.getByRole('radio', { name: 'Fast' }).check();
+    await page.getByRole('button', { name: /^JavaScript and filters/ }).click();
+    await page.getByRole('radio', { name: 'Off', exact: true }).check();
+    await expect(page.getByText(/their JavaScript isn’t run/)).toBeVisible();
+    // The pattern boxes keep their rows: one line tall, they cut their own placeholder.
+    const patterns = await page.getByRole('textbox', { name: 'Don’t crawl' }).boundingBox();
+    expect(patterns?.height).toBeGreaterThan(48);
+    await page.getByRole('button', { name: /^Custom extraction/ }).click();
+    await page.getByRole('button', { name: 'Add a rule' }).click();
+    await page.getByRole('textbox', { name: 'Rule name' }).fill('Heading');
+    await page.getByRole('textbox', { name: 'Selector' }).fill('h1');
+    await page.getByRole('button', { name: 'Add a rule' }).click();
+    await page.getByRole('textbox', { name: 'Rule 2 name' }).fill('Title');
+    await page.getByRole('button', { name: 'Selector type: CSS' }).last().click();
+    await page.getByRole('menuitemradio', { name: 'XPath' }).click();
+    await page.getByRole('textbox', { name: 'Selector' }).nth(1).fill('//title');
+    await page.getByRole('button', { name: /^Limits/ }).click();
+    await page.getByRole('textbox', { name: 'URL limit' }).fill('12');
+    await page.getByRole('button', { name: 'Start crawl' }).click();
+    const options = await startedOptions(page);
+    expect(options).toMatchObject({
+      javaScriptRendering: 'off',
+      extractionRules: [
+        { name: 'Heading', selectorType: 'css', selector: 'h1', enabled: true },
+        { name: 'Title', selectorType: 'xPath', selector: '//title', enabled: true },
+      ],
+    });
+
+    const extraction = page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Custom extraction' });
+    await expect(page.getByText('Crawl finished').first()).toBeVisible({ timeout: 30_000 });
+    await extraction.click();
+    await expect(page).toHaveURL(/\/extraction$/);
+    await expect(page.getByRole('heading', { level: 1, name: 'Custom extraction' })).toBeVisible();
+    await expect(page.getByText(/^2 rules, \d+ matches\.$/)).toBeVisible();
+    await expect(page.getByRole('cell', { name: 'XPath //title' }).first()).toBeVisible();
+    // Inside the page's gutter, not against the pane's edge.
+    const [heading, main] = await Promise.all([
+      page.getByRole('heading', { level: 1 }).boundingBox(),
+      page.getByRole('main').boundingBox(),
+    ]);
+    expect((heading?.x ?? 0) - (main?.x ?? 0)).toBeGreaterThanOrEqual(16);
+    await expectNoViolations(page);
+  });
+
   test('validation is the engine’s, beside the field, once it’s left', async ({ page }) => {
     await page.goto(`/new?url=${encodeURIComponent(testSite())}`);
     await page.getByRole('button', { name: /^Advanced/ }).click();

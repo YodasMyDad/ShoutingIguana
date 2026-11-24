@@ -8,6 +8,7 @@ import { crawlOptionDefaultsQuery, crawlOptionsQuery, crawlQuery } from '../api/
 import type { ContinueCrawlRequest, CrawlListItem, CrawlOptions, CrawlStatus, SpeedPreset } from '../api/types';
 import { analyseCrawl } from '../crawl/actions';
 import { ENGINE_DEFAULTS } from '../crawl/options/engineDefaults';
+import { AuthFields } from '../crawl/options/AuthFields';
 import { HeaderRows } from '../crawl/options/CrawlOptionsForm';
 import {
   FIELD_SECTIONS,
@@ -225,6 +226,12 @@ function UsedSettings({ stored }: { stored: CrawlOptions }) {
                     {field === 'headers' && form.headers.length > 0 ? (
                       <span className="text-text-muted"> (values aren’t in the crawl file)</span>
                     ) : null}
+                    {field === 'httpLogins' && form.httpLogins.length > 0 ? (
+                      <span className="text-text-muted"> (the password isn’t in the crawl file)</span>
+                    ) : null}
+                    {field === 'cookies' && form.cookies.length > 0 ? (
+                      <span className="text-text-muted"> (values aren’t in the crawl file)</span>
+                    ) : null}
                     {field === 'proxyUrl' && stored.hasRedactedProxyCredentials ? (
                       <span className="text-text-muted"> (its user name and password aren’t in the crawl file)</span>
                     ) : null}
@@ -242,6 +249,8 @@ function UsedSettings({ stored }: { stored: CrawlOptions }) {
 interface Missing {
   headers: readonly string[];
   proxy: boolean;
+  /** Neither of those: the crawl signed in, and its passwords or cookie values weren't given. */
+  signIn: boolean;
 }
 
 /**
@@ -347,7 +356,11 @@ function ContinuePanel({
       notifyResult('Crawl continued', { description: 'It carries on from where it stopped.' });
     } catch (error) {
       if (isProblem(error, 'needs-secrets')) {
-        setMissing({ headers: error.missingHeaders, proxy: error.proxyCredentials });
+        setMissing({
+          headers: error.missingHeaders,
+          proxy: error.proxyCredentials,
+          signIn: !error.proxyCredentials && error.missingHeaders.length === 0,
+        });
       } else if (isProblem(error, 'invalid-options')) {
         setErrors(formErrors(error.errors));
       } else {
@@ -465,12 +478,28 @@ function ContinuePanel({
               mode="advanced"
             />
           </section>
+          {/* A crawl that signed in: its file keeps who and never the passwords or cookie values, so they are given
+              again here. Without these fields a signed-in crawl could never be continued once the app had closed. */}
+          {stored.hasRedactedAuth || form.httpLogins.length > 0 || form.cookies.length > 0 || form.formUrl !== '' ? (
+            <section aria-labelledby="continue-sign-in-title" className="flex flex-col gap-3" data-setting="auth">
+              <h3 id="continue-sign-in-title" className="si-field-label">
+                {SECTION_TITLES.auth}
+              </h3>
+              <AuthFields form={form} onChange={change} error={null} mode="advanced" />
+            </section>
+          ) : null}
           {missing ? (
             <Callout tone="warning" title="Some settings must be given again" role="alert">
               {missing.headers.length > 0 ? (
                 <p>
                   The values of {missing.headers.join(', ')} aren’t in the crawl file, and weren’t remembered. Type them
                   above, or continue without {missing.headers.length === 1 ? 'it' : 'them'}.
+                </p>
+              ) : null}
+              {missing.signIn ? (
+                <p>
+                  This crawl signed in, and its passwords and cookie values aren’t in the crawl file, and weren’t
+                  remembered: type them under Sign in above.
                 </p>
               ) : null}
               {missing.proxy ? (

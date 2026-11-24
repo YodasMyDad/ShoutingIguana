@@ -143,6 +143,25 @@ describe('the sidebar, open', () => {
   });
 });
 
+describe('the sidebar’s sections', () => {
+  afterEach(() => updateSettings({ mode: 'simple' }));
+
+  // Custom extraction had no link of its own: it fell through to the Overview's, so it led there and was drawn as
+  // the current place beside Overview.
+  it.each(['advanced', 'simple'] as const)('lead each to its own screen, in %s', async (mode) => {
+    updateSettings({ mode });
+    await open(`${CRAWL}/overview`);
+    const nav = within(screen.getByRole('navigation', { name: 'Main' }));
+    const overview = await nav.findByRole('link', { name: mode === 'simple' ? 'Summary' : 'Overview' });
+    const extraction = nav.getByRole('link', { name: mode === 'simple' ? 'Custom data' : 'Custom extraction' });
+    expect(extraction).toHaveAttribute('href', `${CRAWL}/extraction`);
+    expect(extraction).not.toHaveAttribute('aria-current');
+    expect(overview).toHaveAttribute('aria-current', 'page');
+    const hrefs = nav.getAllByRole('link').map((link) => link.getAttribute('href'));
+    expect(new Set(hrefs).size).toBe(hrefs.length);
+  });
+});
+
 describe('the sidebar, on a running crawl’s Overview', () => {
   afterEach(() => liveStore.reset());
 

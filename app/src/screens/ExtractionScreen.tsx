@@ -38,7 +38,7 @@ export function ExtractionScreen() {
   const title = simple ? 'Custom data' : 'Custom extraction';
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-5 px-(--page-gutter) pt-7 pb-6">
       <PageHeader
         title={title}
         subtitle={
@@ -50,6 +50,7 @@ export function ExtractionScreen() {
               : `${formatCountOf(rules.filter((item) => item.enabled).length, 'rule')}, ${formatCountOf(
                   rules.reduce((sum, item) => sum + item.matches, 0),
                   'match',
+                  'matches',
                 )}.`
             : undefined
         }
@@ -94,7 +95,7 @@ export function ExtractionScreen() {
             <TextField
               label="Search"
               value={search}
-              className="min-w-48 flex-1"
+              className="min-w-(--search-width-min) flex-1"
               spellCheck={false}
               onChange={(event) => {
                 setSearch(event.target.value);
@@ -112,7 +113,7 @@ export function ExtractionScreen() {
             <ul className="flex flex-col gap-3">
               {page.rows.map((row) => (
                 <li key={`${row.url}-${row.name}`} className="border-b border-border-subtle pb-3">
-                  <p className="font-semibold">{row.error ? row.error : row.value}</p>
+                  <p className="font-semibold">{row.error ?? row.value}</p>
                   <p className="text-12 text-text-secondary">
                     {row.name} · {row.url}
                     {row.count > 1 ? ` · ${row.count} values` : ''}

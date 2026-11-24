@@ -512,6 +512,7 @@
   --topbar-site-min: 112px; /* how short it's cut, the bar short of room, before it goes */
   --topbar-section-min: 72px; /* the section you're on, cut as short as this and no shorter, before it goes */
   --library-status-width: 240px; /* Home's status column: a file's error wraps inside this, and never wider */
+  --library-error-min: 192px; /* ...and never narrower than this, so it isn't a word a line */
   /*
     Simple's Your sites: the site, its score, what to fix, when, and the row's action. The rows share these columns (a
     subgrid), so the action's is as wide as the widest action listed and the site takes the rest (gallery 6: a fixed
