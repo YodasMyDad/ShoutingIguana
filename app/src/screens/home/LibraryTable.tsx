@@ -429,10 +429,14 @@ function StatusNote({
     case 'unfinished':
       return actions.canContinue ? (
         <span className="block text-12 text-text-muted">
-          <span className="whitespace-nowrap">{item.issues ? 'Analysed so far' : 'Part way'}</span>
+          {/* The dot stays with the words before it: where the two wrap, a line never starts "· Continue". */}
+          <span className="whitespace-nowrap">
+            {item.issues ? 'Analysed so far' : 'Part way'}
+            {superseded ? '' : ' ·'}
+          </span>
           {superseded ? null : (
             <>
-              {' · '}
+              {' '}
               <span className="whitespace-nowrap">
                 <InlineAction words="Continue" crawl={siteName(item)} onClick={() => void continueCrawl(item.id)} />
               </span>
