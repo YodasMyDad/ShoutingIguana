@@ -22,6 +22,9 @@ internal sealed class HttpFetcher : IDisposable
     private const int BLOCK_SAMPLE_BYTES = 64 * 1024;
     private const int MEASURE_BUFFER_BYTES = 64 * 1024;
     private const long MAX_MEASURED_IMAGE_BYTES = 10 * 1024 * 1024;
+
+    /// <summary>A script or stylesheet is counted up to here, eight times what Google reads of one. Past it, it is this big at least.</summary>
+    private const long MAX_MEASURED_RESOURCE_BYTES = 16 * 1024 * 1024;
     private const int MAX_HEADERS = 200;
     /// <summary>Marks a request that carries the crawl's signature, so its response can say so.</summary>
     private static readonly HttpRequestOptionsKey<bool> SIGNED = new("ShoutingIguana.Signed");
@@ -174,6 +177,14 @@ internal sealed class HttpFetcher : IDisposable
                     transferBytes = measured;
                     bodyBytes = transferBytes;
                 }
+            }
+
+            else if (isSuccess && body == FetchBody.None && IsScriptOrStylesheet(contentType))
+            {
+                // A script or stylesheet is not parsed, but how big it is once decompressed is what a search engine's
+                // limit on a file is about, and a CDN that sends it in chunks gives no length at all. So it is read to
+                // the end and counted, and not kept.
+                (transferBytes, bodyBytes) = await MeasureAsync(response, timeout.Token).ConfigureAwait(false);
             }
 
             var blockReason = BlockDetector.Detect(statusCode, headers, isSuccess ? null : text);
@@ -334,6 +345,42 @@ internal sealed class HttpFetcher : IDisposable
     {
         headers.Remove(name);
         headers.TryAddWithoutValidation(name, value);
+    }
+
+    private static bool IsScriptOrStylesheet(string? contentType) =>
+        contentType is "text/css" or "text/javascript" or "application/javascript" or "application/x-javascript" or "application/ecmascript"
+            or "text/ecmascript";
+
+    /// <summary>
+    /// How many bytes the body was sent as, and how many it is once decompressed, up to
+    /// <see cref="MAX_MEASURED_RESOURCE_BYTES"/> of them. A body cut off there has no sent size: the header's stands.
+    /// </summary>
+    private static async Task<(long? Transfer, long Decoded)> MeasureAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        var raw = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        var counting = new CountingStream(raw);
+        await using var stream = Decompress(counting, response.Content.Headers.ContentEncoding);
+        var scratch = ArrayPool<byte>.Shared.Rent(MEASURE_BUFFER_BYTES);
+        try
+        {
+            long decoded = 0;
+            while (decoded < MAX_MEASURED_RESOURCE_BYTES)
+            {
+                var read = await stream.ReadAsync(scratch.AsMemory(0, MEASURE_BUFFER_BYTES), cancellationToken).ConfigureAwait(false);
+                if (read == 0)
+                {
+                    return (counting.BytesRead, decoded);
+                }
+
+                decoded += read;
+            }
+
+            return (null, decoded);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(scratch);
+        }
     }
 
     private static async Task<PooledBuffer> ReadBodyAsync(HttpResponseMessage response, int limit, CancellationToken cancellationToken)
