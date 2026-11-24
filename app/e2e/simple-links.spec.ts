@@ -75,6 +75,25 @@ test.describe('in Simple', () => {
     await expect(sheet(page).getByRole('heading', { level: 1 })).toBeVisible({ timeout: 20_000 });
   });
 
+  // On a real crawl at 1280 px, "forwards to https://…, which is missing (404 Not Found)" was one unbroken line that
+  // ran out of the card, its last words (what is wrong) cut off.
+  test('what’s wrong with a link stays inside its column in a narrow window', async ({ page }) => {
+    const { crawl } = await scoredCrawl();
+    await page.setViewportSize({ width: 960, height: 700 });
+    await page.goto(`/crawls/${crawl.id}/issues/redirect-broken`);
+    const wrong = main(page).locator('.si-fix-leads__wrong');
+    await expect(wrong.first()).toBeVisible({ timeout: 20_000 });
+    const outside = await wrong.evaluateAll((elements) =>
+      elements
+        .filter((element) => {
+          const cell = element.closest('td');
+          return cell !== null && element.getBoundingClientRect().right > cell.getBoundingClientRect().right + 1;
+        })
+        .map((element) => element.textContent),
+    );
+    expect(outside).toEqual([]);
+  });
+
   test('the report’s Save and Spreadsheet of everything open the app’s one export dialog on their choice', async ({
     page,
   }) => {

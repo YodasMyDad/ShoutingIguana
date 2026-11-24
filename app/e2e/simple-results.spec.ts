@@ -283,6 +283,14 @@ test('the sweep: every figure of the Summary, What to fix and one problem lands 
   // What to fix: every problem's count is the engine's, and its page says the same and lists exactly that many.
   await page.goto(`/crawls/${crawl.id}/issues#worth-a-look`);
   await expect(main(page).getByRole('heading', { level: 1, name: 'What to fix' })).toBeVisible();
+  // The lists come after the heading, once the results are read: rows read before then were none (the Serious part
+  // came back empty on a busy machine, and the count below was 12 short).
+  // The three parts are drawn together; a crawl needn't have each.
+  await expect(
+    main(page)
+      .getByRole('region', { name: /^(Serious|Worth fixing|Worth a look) / })
+      .first(),
+  ).toBeVisible();
   const problems = [
     ...(await rowsOf(main(page).getByRole('region', { name: /^Serious / }))),
     ...(await rowsOf(main(page).getByRole('region', { name: /^Worth fixing / }))),
