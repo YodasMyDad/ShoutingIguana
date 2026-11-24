@@ -14,6 +14,7 @@ JavaScript rendering release, tagged 2026-11-20. `app-v2.0.0-beta.3` is list mod
 `app-v2.0.1` is the installer artwork, tagged 2026-11-23: the wizard shows the iguana at this screen's size.
 `app-v2.0.2` is the library status fix, tagged 2026-11-23: an out-of-date crawl no longer stacks its status one word a line.
 `app-v2.0.3` is the layout pass, tagged 2026-11-23: Simple Home's saved-settings line stays a sentence, and the speed card and the check-again note keep each phrase whole.
+`app-v2.1.0` is the pre-launch audit, tagged 2026-11-24: installed builds can render, the app can choose a rendering mode and add extraction rules, 23 checks corrected, rendering two to three times faster, and every installer smoke-tested.
 A version with no hyphen is a full release, not a prerelease.
 
 ## Why
@@ -41,7 +42,67 @@ v2 is a fresh solution that ports the useful logic.
 
 ## Where step 4 stands (2026-11-20)
 
-**2026-11-24, the rendering audit (branch `audit/render`, not merged, not pushed).** Found and fixed in the engine:
+**2026-11-24, the pre-launch audit: `2.1.0`.** The owner asked for a full audit before showing the repo publicly:
+both modes of the UI, every SEO check, JavaScript rendering and browser crawling, and installers that work on every
+OS. Five lanes ran in their own worktrees, were merged, and every check passed on the merged result before the
+version was set to `2.1.0`. This block is the current status.
+
+*What was wrong in `2.0.0` to `2.0.3` and is fixed:*
+
+- **No installed build could render.** The single-file sidecar shipped without Playwright's driver, so rendering, the
+  browser fallback and form sign-in silently read raw HTML. `build-sidecar` now publishes with
+  `IncludeAllContentForSelfExtract`, the driver unpacks beside the engine, and Chromium (headless shell only) downloads
+  on first use. A browser that can't start is one `error` alert in both modes, never a silent fallback.
+- **The app could not choose a rendering mode or add an extraction rule.** The sidecar wrote both enums as numbers
+  and refused their names (422). `NamedOrNumberedEnumConverter`: names out, names or defined numbers in.
+- **The app's own gates were red on `master`** (unit tests and lint). They are green.
+- **The macOS app had no signature**, which Apple silicon reports as "damaged". It is ad-hoc signed
+  (`signingIdentity: "-"`, hardened runtime off for the .NET JIT). The AppImage's engine could not start on Debian
+  (no `libssl`) and needed glibc 2.38; Linux now builds on `ubuntu-22.04` and runs on Ubuntu 22.04+ and Debian 12+.
+- **UI, both modes:** about 25 faults, among them the Custom extraction sidebar link going to Overview, a signed-in
+  crawl that could not be continued after a restart, a Fixed tab that counted 10 and listed none, counts that
+  disagreed between screens, and Simple wording. Settings › Updates no longer pretends to check: the updater is not
+  wired (no `latest.json` is published), so it says the app doesn't update itself and opens the releases page.
+- **SEO checks:** all 170 read against their standards. 42 fired on the three real sites with no wrong flag. 23 had
+  faults found by reading and are fixed, each with a test seen failing. `AnalysisFreshness.VERSION` is **25**. The
+  per-check table is in [v2-check-audit.md](v2-check-audit.md), "The second audit, 2026-11-24".
+- **Rendering:** the defects listed in the next block, then a second pass: scripts and stylesheets are fetched once a
+  crawl (`Fetching/RenderCache.cs`), prefetches are not sent, render slots follow the crawl's concurrency (up to
+  eight), and a script's redirect is followed (plants `/plants/script-redirect` and its target). 40 URLs in
+  JavaScript mode: docusaurus.io 62 s to 22 s, react.dev 69 s to 35 s, vuejs.org 44 s to 25 s.
+
+*Checked on the merged head (`9b9aa9ee`):* engine 2,544, sidecar 339, CLI 45; `si bench --pages 100000` found every
+planted issue with flat memory; app typecheck, lint, format; Vitest 6,354; e2e 299; `tauri build`, `smoke:tauri`,
+`smoke:shell` (19 Advanced, 9 Simple), `check:orphans`; the packaged sidecar's rendered crawl. In Docker, the `.deb`
+and the AppImage installed, ran and rendered on Ubuntu 22.04, 24.04, 26.04 and Debian 12, 13 (before the second
+rendering pass). The release workflow now smoke-tests every leg: Linux and Windows fail the release if the packaged
+app can't do a rendered crawl.
+
+*Not proven:* **macOS, all of it** (signing, launch, rendering): it can't be run on this machine. Its smoke step is
+`continue-on-error` and writes to the run summary; once a run shows it passing, remove `continue-on-error` in
+`app-release.yml`. `smoke-installer.ps1` end to end has only run on runners (the owner's install is on this
+machine). The Chromium download does not use the app's proxy (the README says `HTTPS_PROXY`, untested).
+
+*Left for later, none started:*
+
+- The updater: `createUpdaterArtifacts`, the signing key as secrets, `latest.json` written by the release job, a
+  public repo. Signing proper is still an open talk with the owner.
+- Rendering: a report of what a script changed (raw against rendered), iframe documents, the fixed two-second
+  settle, a script redirect's own label (it reads "meta refresh"), engine memory on a long crawl of a heavy site
+  (791 MB peak on react.dev with five slots; flat on a 1,500-page local run). The browser fallback passes simple
+  blocks only: none of five real Cloudflare managed-challenge or DataDome hosts.
+- Checks: `resource-past-crawl-limit` misses compressed files (the fetcher keeps the compressed size);
+  `security-headers-missing` ignores a policy in a meta tag; `canonical-multiple` lets the first canonical decide; a
+  URL-limited crawl gives partial image counts without saying so; the description-length words still quote
+  characters. 128 checks have never fired on a real site. Missing checks are listed in the audit doc.
+- UI: the default "previous" crawl can be a stopped, limited or list crawl, which makes the comparison's headline
+  mislead (`PreviousCrawls`, `comparable: 'partial'`); a recheck of a signed-in crawl after a restart without
+  Remember; the Summary's "from X to Y" banner can understate against its rows; all field errors at once on the
+  crawl form.
+- The app's `renderingAlert.ts` matches the engine's alert sentences: reword `JavaScriptRenderer.Unavailable` and it
+  must follow.
+
+**2026-11-24, the rendering audit's first pass (history; merged, and superseded by the block above).** Found and fixed in the engine:
 
 - The sidecar wrote the rendering mode and a rule's selector type as numbers and refused the names the app sends, so
   choosing a mode in the app, or adding an extraction rule, was `invalid-options`. Names now, numbers still read.
@@ -68,7 +129,7 @@ script changed (title, canonical, robots as sent and as rendered). A script's re
 fixed at two seconds. The browser fallback does not pass Cloudflare's managed challenge or DataDome. `engine/README.md`
 has how a page is rendered.
 
-**2026-11-24, the whole state.** Steps 1 to 4 are done and released. The latest release is `app-v2.0.3`, a full
+**2026-11-24, the whole state.** Steps 1 to 4 are done and released. The latest release was `app-v2.0.3` that morning (now `app-v2.1.0`), a full
 release for Windows, macOS (arm64 and x64) and Linux. `master` is the only line of work and matches GitHub, where it
 is now the only branch (the 55 old remote branches were deleted that day). Nothing is in flight: no branch holds unmerged work. The only thing left in the plan
 is step 5 (integrations), which is not started and waits for the owner's word. Builds are still unsigned; how to sign
