@@ -149,6 +149,24 @@ describe.skipIf(TABLE_STUBBED)('Where it is, in Simple', () => {
     expect(where.queryByText(/^Search description:/)).toBeNull();
   });
 
+  // The synthetic site (2026-11-24): "The rules file says “Disallow: /private/”, on line 2" named the cause, and was
+  // said again under the address it kept out.
+  it('doesn’t say under an address what names its cause', async () => {
+    const rule = { origin: SITE, reason: 'rule' as const, line: 2, rule: 'Disallow: /private/' };
+    const where = await open(
+      'blocked-by-robots',
+      catalogRoutes(
+        'blocked-by-robots',
+        1,
+        [group({ detail: 'Disallow: /private/, line 2', pages: 1 })],
+        [page(1, '/private/listed', { detail: 'Disallow: /private/, line 2', robotsRule: rule })],
+        { check: { evidence: ['robotsRule'] } },
+      ),
+    );
+    expect(await where.findByText('Page 1')).toBeVisible();
+    expect(where.getAllByText('The rules file says “Disallow: /private/”, on line 2')).toHaveLength(1);
+  });
+
   it('heads a canonical to the first page with the list’s first page, and the later pages that point at it', async () => {
     const where = await open(
       'canonical-to-first-page',

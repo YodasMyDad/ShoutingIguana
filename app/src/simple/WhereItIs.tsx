@@ -616,7 +616,15 @@ function GroupRow({
           {plainDetail(check, row as unknown as Record<string, unknown>) ?? row.detail}
         </span>
       ) : null}
-      <EvidenceLines row={row} check={check} origin={origin} shared={group.sharedText ?? null} />
+      <EvidenceLines
+        row={row}
+        check={check}
+        origin={origin}
+        shared={group.sharedText ?? null}
+        // The cause column names a group by its detail: evidence that says the same ("It couldn’t be reached", the
+        // rules file's line) isn't said again under each address.
+        said={group.sharedText || group.relatedUrl ? null : causeName(check, group.detail)}
+      />
     </>
   );
   return (
