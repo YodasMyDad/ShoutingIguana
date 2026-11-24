@@ -28,7 +28,7 @@ public sealed class CrawlSummaryReaderTests : IAsyncLifetime
     public async Task MatchesTheStatsOfACompletedCrawl()
     {
         var path = _files.NewPath();
-        var options = new CrawlOptions { StartUrl = _server.BaseUri.AbsoluteUri, Concurrency = 8 };
+        var options = new CrawlOptions { StartUrl = _server.BaseUri.AbsoluteUri, Concurrency = 8, BrowserFallback = false };
         var crawl = await TestCrawls.RunAsync(options, path);
         Assert.Equal(CrawlStatus.Completed, crawl.Status);
 
@@ -75,7 +75,7 @@ public sealed class CrawlSummaryReaderTests : IAsyncLifetime
     public async Task AFirstAnalysisThatStoredNothingLeavesTheCrawlUnanalysed()
     {
         var path = _files.NewPath();
-        await TestCrawls.RunAsync(new CrawlOptions { StartUrl = _server.BaseUri.AbsoluteUri, MaxUrls = 10 }, path);
+        await TestCrawls.RunAsync(new CrawlOptions { StartUrl = _server.BaseUri.AbsoluteUri, MaxUrls = 10, BrowserFallback = false }, path);
 
         // A cancelled or failed first analysis leaves its empty tables behind.
         using (var connection = CrawlDatabase.OpenWriter(path))

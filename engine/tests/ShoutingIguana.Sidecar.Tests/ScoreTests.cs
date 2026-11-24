@@ -41,7 +41,7 @@ public sealed class ScoreTests : IAsyncLifetime
     public async Task TheAnalysisServesTheScoreItStoredAndTheLibraryItsHeadline()
     {
         var path = await TestCrawlFiles.CrawlAsync(_site, Path.Combine(_sidecar.DataDirectory, "scored.sicrawl"), analyse: true,
-            options: new CrawlOptions { StartUrl = _site.BaseUri.AbsoluteUri, Concurrency = 8 });
+            options: new CrawlOptions { StartUrl = _site.BaseUri.AbsoluteUri, Concurrency = 8, BrowserFallback = false });
         var id = CrawlIds.For(path);
         var stored = IssueReader.ReadResults(path)!;
         var expected = stored.Score!;
@@ -160,7 +160,7 @@ public sealed class ScoreTests : IAsyncLifetime
         var path = Path.Combine(_sidecar.DataDirectory, "stopped.sicrawl");
         Directory.CreateDirectory(_sidecar.DataDirectory);
         await using (var job = new CrawlEngine(NullLoggerFactory.Instance).Start(
-                         new CrawlRequest(new CrawlOptions { StartUrl = _site.BaseUri.AbsoluteUri, Concurrency = 2, MaxRequestsPerSecond = 100 }, path)))
+                         new CrawlRequest(new CrawlOptions { StartUrl = _site.BaseUri.AbsoluteUri, Concurrency = 2, MaxRequestsPerSecond = 100, BrowserFallback = false }, path)))
         {
             var deadline = DateTime.UtcNow + EventStreamReader.TIMEOUT;
             while (job.Progress.Fetched < 40 && DateTime.UtcNow < deadline)
@@ -185,7 +185,7 @@ public sealed class ScoreTests : IAsyncLifetime
     public async Task WithoutAScoreTheAnalysisSaysWhyAndTheLibrarySaysNull()
     {
         var nowhere = await TestCrawlFiles.CrawlAsync(_site, Path.Combine(_sidecar.DataDirectory, "nowhere.sicrawl"), analyse: true,
-            options: new CrawlOptions { StartUrl = new Uri(_site.BaseUri, "/broken/1").AbsoluteUri, DiscoverSitemaps = false });
+            options: new CrawlOptions { StartUrl = new Uri(_site.BaseUri, "/broken/1").AbsoluteUri, DiscoverSitemaps = false, BrowserFallback = false });
         var analysis = (await _sidecar.GetJsonAsync($"api/crawls/{CrawlIds.For(nowhere)}/analysis")).AsObject();
         Assert.Equal((0L, "noPages"), ((long)analysis["pagesAnalyzed"]!, (string)analysis["noScoreReason"]!));
         Assert.True(analysis.ContainsKey("score") && analysis["score"] is null);

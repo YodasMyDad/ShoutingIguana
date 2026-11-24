@@ -49,7 +49,7 @@ public sealed class LiveDataTests : IAsyncLifetime
     public async Task ACrawlsProgressAndAnalysisComeLiveAndItsAlertsAndHistoryStayWithIt()
     {
         await using var events = await EventStreamReader.ConnectAsync(_sidecar.Client);
-        var started = await StartAsync(new JsonObject { ["startUrl"] = _site.BaseUri.AbsoluteUri, ["concurrency"] = 8 });
+        var started = await StartAsync(new JsonObject { ["startUrl"] = _site.BaseUri.AbsoluteUri, ["browserFallback"] = false, ["concurrency"] = 8 });
         var id = (string)started["id"]!;
         var path = (string)started["path"]!;
 
@@ -164,7 +164,7 @@ public sealed class LiveDataTests : IAsyncLifetime
     public async Task AUiThatOpensMidCrawlGetsItsHistorySinceTheStart()
     {
         await using var events = await EventStreamReader.ConnectAsync(_sidecar.Client);
-        var started = await StartAsync(new JsonObject { ["startUrl"] = _site.BaseUri.AbsoluteUri, ["maxRequestsPerSecond"] = 20, ["concurrency"] = 2 });
+        var started = await StartAsync(new JsonObject { ["startUrl"] = _site.BaseUri.AbsoluteUri, ["browserFallback"] = false, ["maxRequestsPerSecond"] = 20, ["concurrency"] = 2 });
         var id = (string)started["id"]!;
         var path = (string)started["path"]!;
         var early = await events.NextAsync("progress", data => (string?)data["crawlId"] == id && (long?)data["fetched"] >= 5);
@@ -262,7 +262,7 @@ public sealed class LiveDataTests : IAsyncLifetime
     public async Task AlertsAreReadFromTheFileForACrawlThisSidecarDidntRun()
     {
         var path = await TestCrawlFiles.CrawlAsync(_site, Path.Combine(_sidecar.DataDirectory, "by-the-cli.sicrawl"),
-            options: new Engine.Configuration.Models.CrawlOptions { StartUrl = _site.BaseUri.AbsoluteUri });
+            options: new Engine.Configuration.Models.CrawlOptions { StartUrl = _site.BaseUri.AbsoluteUri, BrowserFallback = false });
         var id = Library.CrawlIds.For(path);
 
         var alerts = (await _sidecar.GetJsonAsync($"api/crawls/{id}/alerts")).AsArray();
@@ -328,7 +328,7 @@ public sealed class LiveDataTests : IAsyncLifetime
     public async Task TheHistoryOfACrawlNotLiveHereIsKeptUntilItsFileChanges()
     {
         var path = await TestCrawlFiles.CrawlAsync(_site, Path.Combine(_sidecar.DataDirectory, "history.sicrawl"),
-            options: new Engine.Configuration.Models.CrawlOptions { StartUrl = _site.BaseUri.AbsoluteUri });
+            options: new Engine.Configuration.Models.CrawlOptions { StartUrl = _site.BaseUri.AbsoluteUri, BrowserFallback = false });
         var id = Library.CrawlIds.For(path);
         var first = (await _sidecar.GetJsonAsync($"api/crawls/{id}/history")).ToJsonString();
 
@@ -369,7 +369,7 @@ public sealed class LiveDataTests : IAsyncLifetime
         try
         {
             await using var events = await EventStreamReader.ConnectAsync(_sidecar.Client);
-            var started = await StartAsync(new JsonObject { ["startUrl"] = _site.BaseUri.AbsoluteUri, ["maxRequestsPerSecond"] = 5, ["concurrency"] = 1 });
+            var started = await StartAsync(new JsonObject { ["startUrl"] = _site.BaseUri.AbsoluteUri, ["browserFallback"] = false, ["maxRequestsPerSecond"] = 5, ["concurrency"] = 1 });
             var id = (string)started["id"]!;
             var path = (string)started["path"]!;
             await events.NextAsync("alert", data => (string?)data["crawlId"] == id && (string?)data["code"] == notice.Code);

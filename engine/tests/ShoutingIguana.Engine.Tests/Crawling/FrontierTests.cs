@@ -187,7 +187,7 @@ public sealed class FrontierTests : IAsyncLifetime
             """));
     }
 
-    private CrawlOptions Options() => new() { StartUrl = _synthetic.BaseUri.AbsoluteUri, Concurrency = 8 };
+    private CrawlOptions Options() => new() { StartUrl = _synthetic.BaseUri.AbsoluteUri, Concurrency = 8, BrowserFallback = false };
 
     private static CrawlOptions Options(TestWebHost site) => new() { StartUrl = site.BaseUri.AbsoluteUri, Concurrency = 4 };
 

@@ -99,11 +99,11 @@ public sealed class SignatureFileTests : IAsyncLifetime
         var expired = Write($"Signature-Input: {SyntheticShopify.EXPIRED_SIGNATURE_INPUT}\nSignature: {SyntheticShopify.SIGNATURE}\n");
         var crawl = Path.Combine(_folder, "expired.sicrawl");
 
-        AssertFails(await RunAsync("crawl", _server.BaseUri.AbsoluteUri, "--db", crawl, "--signature-file", expired, "-q", "--no-analyze"),
+        AssertFails(await RunAsync("crawl", _server.BaseUri.AbsoluteUri, NO_BROWSER, "--db", crawl, "--signature-file", expired, "-q", "--no-analyze"),
             $"The Shopify signature for {_server.BaseUri.Authority} expired on 1 January 2026.");
         Assert.False(File.Exists(crawl));
 
-        Assert.Equal(0, (await RunAsync("crawl", _server.BaseUri.AbsoluteUri, "--db", crawl, "--max-urls", "15", "-q")).ExitCode);
+        Assert.Equal(0, (await RunAsync("crawl", _server.BaseUri.AbsoluteUri, NO_BROWSER, "--db", crawl, "--max-urls", "15", "-q")).ExitCode);
         AssertFails(await RunAsync("recheck", crawl, "--check", "title-too-long", "--signature-file", expired), "expired on 1 January 2026");
     }
 
@@ -115,7 +115,7 @@ public sealed class SignatureFileTests : IAsyncLifetime
         var csv = Path.Combine(_folder, "urls.csv");
         var sent = _server.Requests.Watch("Signature");
 
-        var crawled = await RunAsync("crawl", _server.BaseUri.AbsoluteUri, "--db", crawl, "--max-urls", "15", "--signature-file", file);
+        var crawled = await RunAsync("crawl", _server.BaseUri.AbsoluteUri, NO_BROWSER, "--db", crawl, "--max-urls", "15", "--signature-file", file);
         var rechecked = await RunAsync("recheck", crawl, "--check", "title-too-long", "--signature-file", file);
         var exported = await RunAsync("export", crawl, "--kind", "workbook", "--out", Path.Combine(_folder, "all.xlsx"));
         var listed = await RunAsync("export", crawl, "--kind", "urls", "--out", csv);

@@ -98,6 +98,6 @@ public sealed class Socks5CrawlTests : IAsyncLifetime
 
     private CrawlOptions Options(string proxyUrl) => new()
     {
-        StartUrl = _site.BaseUri.AbsoluteUri, ProxyUrl = proxyUrl, MaxRetries = 0, DiscoverSitemaps = false, Concurrency = 4
+        StartUrl = _site.BaseUri.AbsoluteUri, ProxyUrl = proxyUrl, MaxRetries = 0, DiscoverSitemaps = false, Concurrency = 4, BrowserFallback = false
     };
 }

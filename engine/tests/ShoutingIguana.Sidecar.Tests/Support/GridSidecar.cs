@@ -32,7 +32,7 @@ public sealed class GridSidecar : IAsyncLifetime
         Site = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = 60 });
         Sidecar = await TestSidecar.StartAsync();
         Path = await TestCrawlFiles.CrawlAsync(Site, System.IO.Path.Combine(Sidecar.DataDirectory, "site.sicrawl"), analyse: true,
-            options: new CrawlOptions { StartUrl = Site.BaseUri.AbsoluteUri, StoreHtml = true });
+            options: new CrawlOptions { StartUrl = Site.BaseUri.AbsoluteUri, StoreHtml = true, BrowserFallback = false });
         Id = CrawlIds.For(Path);
         LimitedId = CrawlIds.For(await TestCrawlFiles.CrawlAsync(Site, System.IO.Path.Combine(Sidecar.DataDirectory, "limited.sicrawl"), analyse: true));
         FreshId = CrawlIds.For(await TestCrawlFiles.CrawlAsync(Site, System.IO.Path.Combine(Sidecar.DataDirectory, "fresh.sicrawl")));

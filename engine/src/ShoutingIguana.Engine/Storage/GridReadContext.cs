@@ -722,7 +722,7 @@ internal sealed class GridReadContext : IDisposable
         try
         {
             return command.ExecuteScalar() is string json
-                ? StoredJson.Deserialize(json, EngineJsonContext.Default.CrawlOptions, new CrawlOptions { StartUrl = StartUrl }) ?? new CrawlOptions { StartUrl = StartUrl }
+                ? StoredCrawlOptions.Deserialize(json, StartUrl) ?? new CrawlOptions { StartUrl = StartUrl }
                 : new CrawlOptions { StartUrl = StartUrl };
         }
         catch (JsonException)

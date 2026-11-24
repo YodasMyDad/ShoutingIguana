@@ -274,7 +274,7 @@ public sealed class FixLoopRecheckTests(RecheckSite site) : IClassFixture<Rechec
         await using var stream = await EventStreamReader.ConnectAsync(_sidecar.Client);
         var running = await _sidecar.PostAsync("api/crawls", new JsonObject
         {
-            ["options"] = new JsonObject { ["startUrl"] = site.Server.BaseUri.AbsoluteUri, ["maxRequestsPerSecond"] = 2, ["concurrency"] = 1 }, ["analyzeWhenDone"] = false
+            ["options"] = new JsonObject { ["startUrl"] = site.Server.BaseUri.AbsoluteUri, ["browserFallback"] = false, ["maxRequestsPerSecond"] = 2, ["concurrency"] = 1 }, ["analyzeWhenDone"] = false
         });
         Assert.True(running.Status == HttpStatusCode.Created, running.Body?.ToJsonString());
         var runningId = (string)running.Body!["id"]!;

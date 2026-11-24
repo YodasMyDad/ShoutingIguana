@@ -49,11 +49,15 @@ internal static class CrawlCommand
         var list = new Option<string[]>("--list") { Description = "Crawl these URLs instead of following links. A text file is one URL a line. A CSV file has a Url column and an optional Priority column (higher is crawled first). Repeatable." };
         var browserFallback = new Option<bool>("--browser-fallback")
         {
-            Description = "When a host blocks the plain HTTP fetch, read that host's pages in a browser instead: the headless one first, then this computer's Chrome or Edge, as itself, in a window kept out of sight. Not JavaScript rendering."
+            Description = "On by default, so this changes nothing. When a host blocks the plain HTTP fetch, that host's pages are read in a browser instead: the headless one first, then this computer's Chrome or Edge, as itself, in a window kept out of sight. No browser is started until a host blocks. Not JavaScript rendering."
+        };
+        var noBrowserFallback = new Option<bool>("--no-browser-fallback")
+        {
+            Description = "Never read a host that blocks the plain HTTP fetch in a browser: its pages are recorded as blocked."
         };
         var solveChallenges = new Option<bool>("--solve-challenges")
         {
-            Description = "With --browser-fallback: when a site asks to check you're human, show the browser window on that page and wait for you to complete the check."
+            Description = "When a blocked host is read in a browser and the site asks to check you're human, show the browser window on that page and wait for you to complete the check."
         };
         var challengeWait = new Option<int>("--challenge-wait")
         {
@@ -62,7 +66,7 @@ internal static class CrawlCommand
         };
         var noInstalledBrowser = new Option<bool>("--no-installed-browser")
         {
-            Description = "With --browser-fallback: never open this computer's Chrome or Edge. Only the headless browser is used."
+            Description = "When a blocked host is read in a browser: never open this computer's Chrome or Edge. Only the headless browser is used."
         };
         var auth = new Option<string[]>("--auth") { Description = "HTTP Basic and Digest sign-in: user:password for the site, or host=user:password. Repeatable. Not stored in the crawl file." };
         var cookie = new Option<string[]>("--cookie") { Description = "A cookie to send from the start: name=value, or name=value@domain. Repeatable. Not stored in the crawl file." };
@@ -80,7 +84,7 @@ internal static class CrawlCommand
         {
             url, database, resume, maxUrls, maxDepth, concurrency, rate, userAgent, userAgentString, headers, proxy, signatureFiles, timeout,
             ignoreRobots, crawlDelay, noResources, noExternal, noSitemaps, subdomains, anyFolder, followNofollow, storeHtml,
-            render, renderUrls, include, exclude, extract, list, browserFallback, solveChallenges, challengeWait, noInstalledBrowser,
+            render, renderUrls, include, exclude, extract, list, browserFallback, noBrowserFallback, solveChallenges, challengeWait, noInstalledBrowser,
             auth, cookie, formUrl, formUser, formPassword, formUserField, formPasswordField, formSubmit,
             noAnalyze, quiet, verbose
         };
@@ -88,7 +92,7 @@ internal static class CrawlCommand
         // A resumed crawl keeps the scope and rules it started with; only how it talks to the site can change.
         Option[] fixedOnResume = [maxUrls, maxDepth, userAgent, userAgentString, ignoreRobots, crawlDelay, noResources, noExternal,
             noSitemaps, subdomains, anyFolder, followNofollow, storeHtml, render, renderUrls, include, exclude, extract, list, browserFallback,
-            solveChallenges, challengeWait, noInstalledBrowser];
+            noBrowserFallback, solveChallenges, challengeWait, noInstalledBrowser];
 
         command.SetAction((parse, cancellationToken) => CommandErrors.RunAsync(async () =>
         {
@@ -206,6 +210,11 @@ internal static class CrawlCommand
                     return Fail(formError);
                 }
 
+                if (parse.GetValue(browserFallback) && parse.GetValue(noBrowserFallback))
+                {
+                    return Fail("--browser-fallback and --no-browser-fallback can't both be given.");
+                }
+
                 var defaults = new CrawlOptions { StartUrl = startUrl };
                 var customAgent = parse.GetValue(userAgentString);
                 options = defaults with
@@ -234,7 +243,8 @@ internal static class CrawlCommand
                     ExcludePatterns = parse.GetValue(exclude) ?? [],
                     ExtractionRules = extractionRules,
                     ListUrls = listUrls,
-                    BrowserFallback = parse.GetValue(browserFallback),
+                    // On unless turned off: --browser-fallback is from when it was off by default, and still says on.
+                    BrowserFallback = !parse.GetValue(noBrowserFallback) && (parse.GetValue(browserFallback) || defaults.BrowserFallback),
                     UseInstalledBrowser = !parse.GetValue(noInstalledBrowser),
                     SolveChallenges = parse.GetValue(solveChallenges),
                     ChallengeWaitSeconds = Math.Clamp(parse.GetValue(challengeWait), 1, 3600),

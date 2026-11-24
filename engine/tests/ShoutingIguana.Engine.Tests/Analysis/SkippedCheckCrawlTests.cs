@@ -44,7 +44,7 @@ public sealed class SkippedCheckCrawlTests : IAsyncLifetime
     public async Task AVersionLeftUnreadBecauseHreflangIsntFollowedSkipsTheUnlinkedCheck()
     {
         await using var server = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = 60 });
-        var analysis = await CrawlAndAnalyseAsync(new CrawlOptions { StartUrl = server.BaseUri.AbsoluteUri, Concurrency = 8 });
+        var analysis = await CrawlAndAnalyseAsync(new CrawlOptions { StartUrl = server.BaseUri.AbsoluteUri, Concurrency = 8, BrowserFallback = false });
         Assert.DoesNotContain(analysis.Skipped, skip => skip.CheckId == IssueCatalog.HREFLANG_UNLINKED.Id);
         var url = Assert.Single(IssueReader.ReadAll(_path, IssueCatalog.HREFLANG_UNLINKED.Id)).Url;
 
@@ -83,7 +83,7 @@ public sealed class SkippedCheckCrawlTests : IAsyncLifetime
         await using var server = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = 60 });
         var options = new CrawlOptions
         {
-            StartUrl = server.BaseUri.AbsoluteUri, Concurrency = 8, CheckExternalLinks = false, CheckResources = false, DiscoverSitemaps = false
+            StartUrl = server.BaseUri.AbsoluteUri, Concurrency = 8, CheckExternalLinks = false, CheckResources = false, DiscoverSitemaps = false, BrowserFallback = false
         };
 
         var analysis = await CrawlAndAnalyseAsync(options);
@@ -179,7 +179,7 @@ public sealed class SkippedCheckCrawlTests : IAsyncLifetime
         });
 
         // The crawler waits as long as the site asks, so the clock is a fake one, moved on a second at a time.
-        var analysis = await CrawlOnAFakeClockAndAnalyseAsync(new CrawlOptions { StartUrl = site.BaseUri.AbsoluteUri, MaxRetries = 0 });
+        var analysis = await CrawlOnAFakeClockAndAnalyseAsync(new CrawlOptions { StartUrl = site.BaseUri.AbsoluteUri, MaxRetries = 0, BrowserFallback = false });
 
         // Read: the home page, the collection (from the sitemap) and the others.
         var reason = $"{refused} of the {refused + others + 2} pages the crawl tried to read refused it or didn't answer, and pages linked only from them would look orphaned.";
@@ -228,7 +228,7 @@ public sealed class SkippedCheckCrawlTests : IAsyncLifetime
     public async Task WhatRobotsTxtBlocksIsSkippedWhenTheCrawlIgnoredRobotsTxt()
     {
         await using var server = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = 70 });
-        var options = new CrawlOptions { StartUrl = server.BaseUri.AbsoluteUri, Concurrency = 8 };
+        var options = new CrawlOptions { StartUrl = server.BaseUri.AbsoluteUri, Concurrency = 8, BrowserFallback = false };
 
         // By the rules: a product links the private area and a sitemap lists a URL in it, and both are flagged.
         var obeying = await CrawlAndAnalyseAsync(options);
@@ -422,7 +422,7 @@ public sealed class SkippedCheckCrawlTests : IAsyncLifetime
     public async Task NearDuplicatesAreSkippedWithoutTheWholeFingerprint(bool madeBefore, string why)
     {
         await using var server = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = 60 });
-        await CrawlAndAnalyseAsync(new CrawlOptions { StartUrl = server.BaseUri.AbsoluteUri, Concurrency = 8 });
+        await CrawlAndAnalyseAsync(new CrawlOptions { StartUrl = server.BaseUri.AbsoluteUri, Concurrency = 8, BrowserFallback = false });
         Assert.Equal(2, IssueReader.ReadAll(_path, IssueCatalog.NEAR_DUPLICATE_CONTENT.Id).Count());
 
         Execute(madeBefore

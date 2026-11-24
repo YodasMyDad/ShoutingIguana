@@ -15,7 +15,7 @@ namespace ShoutingIguana.Engine.Tests.Crawling;
 /// <summary>
 /// A host that answers plain HTTP with a Cloudflare challenge is read in a browser when the crawl asks for it, and
 /// that HTML is parsed once. The next page on the host is not fetched by HTTP. A challenge the browser also gets
-/// stays a block, and the host stays on HTTP. Off, the default, leaves the challenge as <c>internal-blocked</c>.
+/// stays a block, and the host stays on HTTP. Turned off, the challenge is left as <c>internal-blocked</c>.
 /// </summary>
 public sealed class BrowserFallbackCrawlTests : IAsyncLifetime
 {

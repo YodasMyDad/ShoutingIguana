@@ -16,6 +16,7 @@ namespace ShoutingIguana.Engine.Tests.Storage;
 /// <summary>
 /// Options and thresholds stored by an earlier engine lack the ones added since. Each must read as its default, never as
 /// 0 or false: a new option with any other default would otherwise change a resumed crawl, and what an analysis checks.
+/// The browser fallback is the exception, since its default changed later: see <see cref="StoredCrawlOptionsTests"/>.
 /// </summary>
 public sealed class StoredSettingsTests : IDisposable
 {
@@ -30,6 +31,12 @@ public sealed class StoredSettingsTests : IDisposable
         var stored = Stored(path, "SELECT options_json FROM crawl WHERE id = 1");
         var defaults = Serialized(new CrawlOptions { StartUrl = string.Empty }, EngineJsonContext.Default.CrawlOptions);
         Assert.Contains("concurrency", stored.Select(property => property.Key));
+
+        // The one option whose default changed after crawls were stored without it: a file that lacks the browser
+        // fallback reads as off, as that crawl ran, not as the on a new crawl has (StoredCrawlOptions). This crawl had it on.
+        Assert.True(defaults["browserFallback"]!.GetValue<bool>());
+        Assert.True(stored["browserFallback"]!.GetValue<bool>());
+        defaults["browserFallback"] = false;
 
         foreach (var name in stored.Select(property => property.Key).Where(name => name != "startUrl").ToList())
         {

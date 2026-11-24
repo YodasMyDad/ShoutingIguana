@@ -137,7 +137,7 @@ public sealed class FingerprintLaneTests : IAsyncLifetime
         Assert.Null(reader.ReadPages(reader.ReadUrls()).Single(read => read.UrlId == page).Facts.SimHashLanes);
     }
 
-    private CrawlOptions Options() => new() { StartUrl = _site.BaseUri.AbsoluteUri, Concurrency = 8 };
+    private CrawlOptions Options() => new() { StartUrl = _site.BaseUri.AbsoluteUri, Concurrency = 8, BrowserFallback = false };
 
     /// <summary>The lanes as the columns hold them: their bits as signed 64-bit integers.</summary>
     private static string Signed(SimHashLanes lanes) => string.Join(" | ",

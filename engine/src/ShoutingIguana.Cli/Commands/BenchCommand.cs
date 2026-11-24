@@ -76,7 +76,11 @@ internal static class BenchCommand
             Console.WriteLine($"Starting a synthetic site with {pageCount:N0} pages...");
             using var site = await ChildSiteProcess.StartAsync(pageCount, deadTwin: true, cancellationToken);
 
-            var options = new CrawlOptions { StartUrl = site.BaseUri.ToString(), Concurrency = workers, RequestTimeoutSeconds = 30 };
+            // The browser fallback is off, though a crawl has it on by default: the site plants pages that answer plain HTTP
+            // with a challenge, and what it expects of them (internal-blocked) is what a crawl without a browser records.
+            // With it on, the first of them would start a browser, and the one a browser is let into
+            // (SyntheticSite.BROWSER_FALLBACK_PATH) would have the rest of the site read in it: a benchmark of the browser.
+            var options = new CrawlOptions { StartUrl = site.BaseUri.ToString(), Concurrency = workers, RequestTimeoutSeconds = 30, BrowserFallback = false };
             using var loggerFactory = Logging.Create(verbose: false);
             var observer = new ConsoleCrawlObserver(quiet: false);
 

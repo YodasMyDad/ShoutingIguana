@@ -32,7 +32,7 @@ public sealed class RecheckCrawls : IAsyncLifetime
     public async Task InitializeAsync()
     {
         Server = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = PAGES });
-        Options = new CrawlOptions { StartUrl = Server.BaseUri.AbsoluteUri, Concurrency = 8 };
+        Options = new CrawlOptions { StartUrl = Server.BaseUri.AbsoluteUri, Concurrency = 8, BrowserFallback = false };
         Then = _files.NewPath();
         Assert.Equal(CrawlStatus.Completed, (await TestCrawls.RunAsync(Options, Then)).Status);
         await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(Then);

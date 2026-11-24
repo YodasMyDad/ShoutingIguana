@@ -512,7 +512,7 @@ public sealed class RunningCrawlReadsTests(GridCrawl crawl) : IDisposable
         CrawlDatabase.LogLimitBytes = SMALL_LOG_BYTES;
         await using var site = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = 4_000 });
         var path = _files.NewPath();
-        await using var job = TestCrawls.Start(new CrawlOptions { StartUrl = site.BaseUri.AbsoluteUri, Concurrency = 8 }, path);
+        await using var job = TestCrawls.Start(new CrawlOptions { StartUrl = site.BaseUri.AbsoluteUri, Concurrency = 8, BrowserFallback = false }, path);
         await TestCrawls.WaitUntilAsync(path, "SELECT COUNT(*) FROM links");
 
         // Two readers in relay: each holds its read until the other has begun one, so there's never a moment without one
@@ -569,7 +569,7 @@ public sealed class RunningCrawlReadsTests(GridCrawl crawl) : IDisposable
     {
         await using var site = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = 400 });
         var path = _files.NewPath();
-        await using var job = TestCrawls.Start(new CrawlOptions { StartUrl = site.BaseUri.AbsoluteUri, Concurrency = 4, MaxRequestsPerSecond = 80 }, path);
+        await using var job = TestCrawls.Start(new CrawlOptions { StartUrl = site.BaseUri.AbsoluteUri, Concurrency = 4, MaxRequestsPerSecond = 80, BrowserFallback = false }, path);
         await TestCrawls.WaitUntilAsync(path, "SELECT COUNT(*) FROM links");
 
         var cache = new ReadCache();

@@ -147,7 +147,8 @@ public sealed class AuthCrawlTests : IAsyncLifetime
             Rendering = JavaScriptRendering.Off,
             DiscoverSitemaps = false,
             CheckResources = false,
-            CheckExternalLinks = false
+            CheckExternalLinks = false,
+            BrowserFallback = false
         });
         await using var job = new CrawlEngine(NullLoggerFactory.Instance).Start(new CrawlRequest(options, path));
         return await job.Completion.WaitAsync(TimeSpan.FromSeconds(90));

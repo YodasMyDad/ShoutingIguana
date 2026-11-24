@@ -24,6 +24,14 @@ public sealed class CliTests : IAsyncLifetime
     private readonly string _folder = Path.Combine(Path.GetTempPath(), $"si-cli-{Guid.NewGuid():N}");
     private SyntheticSiteServer _server = null!;
 
+    /// <summary>
+    /// Given to every crawl of the synthetic site here. A crawl has the browser fallback on by default, and the site
+    /// plants pages that answer plain HTTP with a challenge: what it expects of them (internal-blocked) is what a crawl
+    /// without a browser records. With the fallback on, the first would start a browser, and the one a browser is let
+    /// into would have the rest of the site read in it.
+    /// </summary>
+    internal const string NO_BROWSER = "--no-browser-fallback";
+
     public async Task InitializeAsync()
     {
         Directory.CreateDirectory(_folder);
@@ -189,7 +197,7 @@ public sealed class CliTests : IAsyncLifetime
 
         // Never analysed, or no file at all: nothing to show, said in one line.
         var unanalysed = Path.Combine(_folder, "unscored.sicrawl");
-        Assert.Equal(0, (await RunAsync("crawl", _server.BaseUri.AbsoluteUri, "--db", unanalysed, "--max-urls", "20", "-q", "--no-analyze")).ExitCode);
+        Assert.Equal(0, (await RunAsync("crawl", _server.BaseUri.AbsoluteUri, NO_BROWSER, "--db", unanalysed, "--max-urls", "20", "-q", "--no-analyze")).ExitCode);
         AssertFails(await RunAsync("score", unanalysed), "hasn't been analysed yet");
         AssertFails(await RunAsync("score", Path.Combine(_folder, "missing.sicrawl")), "No crawl file");
     }
@@ -219,7 +227,7 @@ public sealed class CliTests : IAsyncLifetime
     public async Task ChecksALimitedCrawlCantSupportAreReportedAsNotChecked()
     {
         var crawl = Path.Combine(_folder, "limited.sicrawl");
-        var result = await RunAsync("crawl", _server.BaseUri.AbsoluteUri, "--db", crawl, "--max-urls", "20", "-q");
+        var result = await RunAsync("crawl", _server.BaseUri.AbsoluteUri, NO_BROWSER, "--db", crawl, "--max-urls", "20", "-q");
         Assert.Equal(0, result.ExitCode);
 
         // Said once, in the summary, not again as a log warning (the console log writes to either stream).
@@ -478,7 +486,7 @@ public sealed class CliTests : IAsyncLifetime
 
         // A crawl never analysed has no report and no workbook, and says how to get one.
         var fresh = Path.Combine(_folder, "fresh.sicrawl");
-        Assert.Equal(0, (await RunAsync("crawl", _server.BaseUri.AbsoluteUri, "--db", fresh, "-q", "--no-analyze", "--max-urls", "10")).ExitCode);
+        Assert.Equal(0, (await RunAsync("crawl", _server.BaseUri.AbsoluteUri, NO_BROWSER, "--db", fresh, "-q", "--no-analyze", "--max-urls", "10")).ExitCode);
         AssertFails(await RunAsync("report", fresh, "--out", Path.Combine(_folder, "report.html")), "si analyze");
         AssertFails(await RunAsync("export", fresh, "--kind", "workbook", "--out", Path.Combine(_folder, "everything.xlsx")), "si analyze");
         AssertFails(await RunAsync("export", fresh, "--kind", "urls", "--out", csv, "--sort", "inlinks:desc"), "needs an analysis");
@@ -502,13 +510,13 @@ public sealed class CliTests : IAsyncLifetime
 
         AssertFails(await RunAsync("stats", notes), "isn't a Shouting Iguana crawl");
         AssertFails(await RunAsync("analyze", notes), "isn't a Shouting Iguana crawl");
-        AssertFails(await RunAsync("crawl", _server.BaseUri.AbsoluteUri, "--db", crawl, "-q"), "already holds a crawl");
+        AssertFails(await RunAsync("crawl", _server.BaseUri.AbsoluteUri, NO_BROWSER, "--db", crawl, "-q"), "already holds a crawl");
         AssertFails(await RunAsync("issues", crawl, "--limit", "-1"), "--limit");
         AssertFails(await RunAsync("issues", crawl, "no-such-issue"), "Unknown issue");
         AssertFails(await RunAsync("issues", crawl, "--csv", Path.Combine(_folder, "missing", "issues.csv")), "doesn't exist");
         AssertFails(await RunAsync("crawl", "--resume", "--db", crawl, "--max-urls", "5"), "--max-urls can't change");
         AssertFails(await RunAsync("crawl", "--resume", "--db", crawl, _server.BaseUri.AbsoluteUri), "the start URL can't change");
-        AssertFails(await RunAsync("crawl", _server.BaseUri.AbsoluteUri, "--db", "", "-q"), "empty");
+        AssertFails(await RunAsync("crawl", _server.BaseUri.AbsoluteUri, NO_BROWSER, "--db", "", "-q"), "empty");
         AssertFails(await RunAsync("issues", crawl, "--csv", ""), "empty");
         AssertFails(await RunAsync("testsite", "--revision", "2"), "--revision must be 0 to 1");
     }
@@ -524,7 +532,7 @@ public sealed class CliTests : IAsyncLifetime
         var keys = _server.Requests.Watch("X-Crawler-Key");
 
         var first = await StopAfterAsync(TimeSpan.FromMilliseconds(800),
-            "crawl", _server.BaseUri.AbsoluteUri, "--db", crawl, "--rate", "20", "--header", "X-Crawler-Key: first", "-q", "--no-analyze");
+            "crawl", _server.BaseUri.AbsoluteUri, NO_BROWSER, "--db", crawl, "--rate", "20", "--header", "X-Crawler-Key: first", "-q", "--no-analyze");
         Assert.Equal(130, first.ExitCode);
         Assert.Equal(["first"], keys.Distinct());
         keys.Clear();
@@ -550,7 +558,7 @@ public sealed class CliTests : IAsyncLifetime
         // The site's own port stands in for the proxy: what matters here is what the crawl file keeps.
         var crawl = Path.Combine(_folder, "proxied.sicrawl");
         var proxy = $"http://crawler:pa55word@127.0.0.1:{_server.BaseUri.Port}/";
-        var crawled = await RunAsync("crawl", _server.BaseUri.AbsoluteUri, "--db", crawl, "--max-urls", "5", "--proxy", proxy, "-q", "--no-analyze");
+        var crawled = await RunAsync("crawl", _server.BaseUri.AbsoluteUri, NO_BROWSER, "--db", crawl, "--max-urls", "5", "--proxy", proxy, "-q", "--no-analyze");
         Assert.True(crawled.ExitCode == 0, crawled.Error);
 
         Assert.Equal($"http://{CrawlOptions.REDACTED}@127.0.0.1:{_server.BaseUri.Port}/", CrawlDatabase.ReadOptions(crawl).ProxyUrl);
@@ -560,6 +568,57 @@ public sealed class CliTests : IAsyncLifetime
         // Giving back the redacted proxy the file stored (as it reads it out) isn't giving the password: still asked for.
         AssertFails(await RunAsync("crawl", "--resume", "--db", crawl, "--proxy", $"http://{CrawlOptions.REDACTED}@127.0.0.1:{_server.BaseUri.Port}/",
             "-q", "--no-analyze"), "Pass --proxy again");
+    }
+
+    /// <summary>
+    /// The browser fallback is on unless <c>--no-browser-fallback</c> is given. <c>--browser-fallback</c>, from when it was
+    /// off by default, is still taken and still means on. A resumed crawl keeps what its file says, and a file from
+    /// before the option, which says nothing, resumes with it off: that crawl never read a host in a browser. The page
+    /// crawled is a 404 that links nowhere, so no browser is started.
+    /// </summary>
+    [Fact]
+    public async Task TheBrowserFallbackIsOnUnlessTurnedOffAndAResumedCrawlKeepsItsOwn()
+    {
+        var start = new Uri(_server.BaseUri, "/broken/1").AbsoluteUri;
+        async Task<string> CrawledAsync(string name, params string[] switches)
+        {
+            var crawl = Path.Combine(_folder, $"fallback-{name}.sicrawl");
+            var result = await RunAsync(["crawl", start, "--db", crawl, "--no-sitemaps", "-q", "--no-analyze", .. switches]);
+            Assert.True(result.ExitCode == 0, result.Error);
+            return crawl;
+        }
+
+        var byDefault = await CrawledAsync("default");
+        Assert.True(CrawlDatabase.ReadOptions(byDefault).BrowserFallback);
+        Assert.False(CrawlDatabase.ReadOptions(byDefault).SolveChallenges);
+        Assert.True(CrawlDatabase.ReadOptions(await CrawledAsync("on", "--browser-fallback")).BrowserFallback);
+        var off = await CrawledAsync("off", NO_BROWSER);
+        Assert.False(CrawlDatabase.ReadOptions(off).BrowserFallback);
+
+        AssertFails(await RunAsync("crawl", start, "--db", Path.Combine(_folder, "fallback-both.sicrawl"), "--browser-fallback", NO_BROWSER, "-q"),
+            "--browser-fallback and --no-browser-fallback can't both be given");
+
+        // Resuming changes neither way, and takes what the file says.
+        AssertFails(await RunAsync("crawl", "--resume", "--db", off, "--browser-fallback"), "--browser-fallback can't change");
+        AssertFails(await RunAsync("crawl", "--resume", "--db", byDefault, NO_BROWSER), "--no-browser-fallback can't change");
+        Assert.Equal(0, (await RunAsync("crawl", "--resume", "--db", off, "-q", "--no-analyze")).ExitCode);
+        Assert.False(CrawlDatabase.ReadOptions(off).BrowserFallback);
+
+        // A file from before the option: resumed, it is not given the new default.
+        await using (var connection = new SqliteConnection($"Data Source={byDefault};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "UPDATE crawl SET options_json = json_remove(options_json, '$.browserFallback')";
+            Assert.Equal(1, await command.ExecuteNonQueryAsync());
+        }
+
+        Assert.Equal(0, (await RunAsync("crawl", "--resume", "--db", byDefault, "-q", "--no-analyze")).ExitCode);
+        Assert.False(CrawlDatabase.ReadOptions(byDefault).BrowserFallback);
+
+        var help = await RunAsync("crawl", "--help");
+        Assert.Contains("--no-browser-fallback", help.Output);
+        Assert.Contains("--browser-fallback", help.Output.Replace("--no-browser-fallback", string.Empty, StringComparison.Ordinal));
     }
 
     /// <summary>Credentials in the start URL are refused: the crawler never sends them, and the URL is stored and logged as it is.</summary>
@@ -578,7 +637,7 @@ public sealed class CliTests : IAsyncLifetime
     public async Task SecretsAreNeverStoredAndResumingAsksForThemAgain()
     {
         var crawl = Path.Combine(_folder, "secret.sicrawl");
-        var started = await RunAsync("crawl", _server.BaseUri.AbsoluteUri, "--db", crawl, "--max-urls", "20",
+        var started = await RunAsync("crawl", _server.BaseUri.AbsoluteUri, NO_BROWSER, "--db", crawl, "--max-urls", "20",
             "--header", "X-Crawler-Key: s3cret-value", "-q", "--no-analyze");
         Assert.Equal(0, started.ExitCode);
 
@@ -674,7 +733,7 @@ public sealed class CliTests : IAsyncLifetime
 
         // Never analysed: the reads that need the URL summary are skipped, so the budget isn't met.
         var unanalysed = Path.Combine(_folder, "unanalysed.sicrawl");
-        Assert.Equal(0, (await RunAsync("crawl", _server.BaseUri.AbsoluteUri, "--db", unanalysed, "--max-urls", "20", "-q", "--no-analyze")).ExitCode);
+        Assert.Equal(0, (await RunAsync("crawl", _server.BaseUri.AbsoluteUri, NO_BROWSER, "--db", unanalysed, "--max-urls", "20", "-q", "--no-analyze")).ExitCode);
         var partial = await RunAsync("readbench", unanalysed, "--runs", "1", "--max-p95-ms", "60000");
         Assert.Equal(1, partial.ExitCode);
         Assert.Contains("has no URL summary, as it was never analysed", partial.Output);
@@ -705,7 +764,7 @@ public sealed class CliTests : IAsyncLifetime
         var crawl = Path.Combine(_folder, "read.sicrawl");
         LinkReads reads;
         await using (var job = new CrawlEngine(NullLoggerFactory.Instance).Start(
-                         new CrawlRequest(new CrawlOptions { StartUrl = _server.BaseUri.AbsoluteUri, Concurrency = 2, MaxRequestsPerSecond = 60 }, crawl)))
+                         new CrawlRequest(new CrawlOptions { StartUrl = _server.BaseUri.AbsoluteUri, Concurrency = 2, MaxRequestsPerSecond = 60, BrowserFallback = false }, crawl)))
         {
             reads = new LinkReads(crawl);
             try
@@ -732,7 +791,7 @@ public sealed class CliTests : IAsyncLifetime
     private async Task<string> CrawlAsync()
     {
         var crawl = Path.Combine(_folder, $"{Guid.NewGuid():N}.sicrawl");
-        var result = await RunAsync("crawl", _server.BaseUri.AbsoluteUri, "--db", crawl, "-q");
+        var result = await RunAsync("crawl", _server.BaseUri.AbsoluteUri, NO_BROWSER, "--db", crawl, "-q");
         Assert.True(result.ExitCode == 0, result.Error);
         Assert.Contains("Done:", result.Output);
         Assert.Contains("checks found something", result.Output);

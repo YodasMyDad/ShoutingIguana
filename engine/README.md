@@ -72,7 +72,7 @@ and the first page of what the biggest check no longer flags, each held to 300 m
 `si crawl --help` lists every option: concurrency and rate cap, user agent presets, extra headers (for firewall
 allowlisting; they are only sent to the site being crawled, and never over plain HTTP when it starts on HTTPS),
 proxy, depth and URL limits, robots.txt, subdomains, start-folder scope, nofollow, stored HTML, JavaScript
-rendering, include and exclude patterns, custom extraction, list mode, `--browser-fallback`, and `--no-analyze`.
+rendering, include and exclude patterns, custom extraction, list mode, `--no-browser-fallback`, and `--no-analyze`.
 
 `--render` is `Off`, `Automatic` (the default: render a page whose HTML is a client-side shell, then parse that
 HTML), `JavaScript` (render every HTML page; a link that was only in the raw HTML is still followed), or `Matching`
@@ -126,10 +126,18 @@ matches nothing on a page is not stored. A rule that fails is stored once and no
 are in the crawl file's `extractions` table. `POST /api/crawls/{id}/extractions` reads the rules and one page of
 them. The desktop app sets the rules on a new crawl, in both modes, and lists the values there too.
 
-`--browser-fallback` reads a host in a browser when plain HTTP is blocked (a Cloudflare challenge or another firewall
+The browser fallback reads a host in a browser when plain HTTP is blocked (a Cloudflare challenge or another firewall
 `BlockDetector` names, not a 429). The first fetch is still HTTP. If a browser gets past the block, that host's later
-pages skip HTTP and are read in that browser, and that HTML is parsed once. It is not JavaScript rendering. Off unless
-the flag is given. The desktop app has the same switch, in both modes.
+pages skip HTTP and are read in that browser, and that HTML is parsed once. It is not JavaScript rendering.
+
+It is on by default (`CrawlOptions.BrowserFallback`; it was off up to 2.1.0). On does nothing until a host blocks: a
+site that answers plain HTTP is crawled without a browser, and none is started or downloaded. The first block starts
+one. A browser that isn't on the computer yet is downloaded then, once, and the crawl says so. `--no-browser-fallback`
+turns it off, and a block is then recorded as a block. `--browser-fallback` is still accepted and changes nothing. The
+desktop app has the same switch, in both modes. `--solve-challenges` stays off unless given, so a crawl run from a
+script never waits for a person. A resumed crawl keeps what it started with, and a crawl file from before the option
+reads as off (`Serialization/StoredCrawlOptions`), which is how that crawl ran. `si bench` and the tests that crawl
+the whole synthetic site turn it off: the site plants pages that challenge plain HTTP, and expects them blocked.
 
 - **Which browser.** A check of the visitor (`BlockDetector.IsCheck`: a Cloudflare challenge, DataDome, HUMAN, Imperva,
   a CAPTCHA) goes to the Chrome or Edge the computer has, or Chromium, or the windowed Chromium the crawl downloads
@@ -150,7 +158,8 @@ the flag is given. The desktop app has the same switch, in both modes.
   what stopped the browser and what the site's owner can do: allow the crawler's user agent or the computer's IP
   address in the firewall. In Cloudflare that is a custom rule; its "verified bots" setting does not cover this crawler.
 - **Where it can't run.** A window needs a display, so on a Linux server or in a container only the headless browser
-  is used, and the alert says so. `--no-installed-browser` keeps to it anywhere.
+  is used, and the alert says so: a host it can't read ends as blocked, and nothing waits. `--no-installed-browser`
+  keeps to it anywhere.
 - The browser's profile is kept (`browser-profile` in the app's state folder, `cli-browser-profile` for `si`), so a
   check passed once holds while its cookie lasts. It is the crawler's own, never the person's.
 

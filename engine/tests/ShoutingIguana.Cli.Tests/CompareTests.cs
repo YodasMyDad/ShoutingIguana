@@ -114,7 +114,7 @@ public sealed class CompareTests : IAsyncLifetime
         AssertFails(await RunAsync("compare", Path.Combine(_folder, "missing.sicrawl"), _then), "No crawl file at");
 
         var unanalysed = Path.Combine(_folder, "unanalysed.sicrawl");
-        Assert.Equal(0, (await RunAsync("crawl", _server.BaseUri.AbsoluteUri, "--db", unanalysed, "--max-urls", "20", "-q", "--no-analyze")).ExitCode);
+        Assert.Equal(0, (await RunAsync("crawl", _server.BaseUri.AbsoluteUri, NO_BROWSER, "--db", unanalysed, "--max-urls", "20", "-q", "--no-analyze")).ExitCode);
         AssertFails(await RunAsync("compare", _now, unanalysed), "hasn't been analysed yet");
 
         var text = Path.Combine(_folder, "notes.sicrawl");
@@ -189,7 +189,7 @@ public sealed class CompareTests : IAsyncLifetime
     private async Task<string> CrawlAsync(string name)
     {
         var crawl = Path.Combine(_folder, $"{name}.sicrawl");
-        var result = await RunAsync("crawl", _server.BaseUri.AbsoluteUri, "--db", crawl, "-q");
+        var result = await RunAsync("crawl", _server.BaseUri.AbsoluteUri, NO_BROWSER, "--db", crawl, "-q");
         Assert.True(result.ExitCode == 0, result.Error);
         return crawl;
     }

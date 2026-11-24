@@ -182,7 +182,7 @@ public sealed class RunningCrawlExportTests : IDisposable
     {
         await using var site = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = 300 });
         var path = _files.NewPath();
-        await using var job = TestCrawls.Start(new CrawlOptions { StartUrl = site.BaseUri.AbsoluteUri, Concurrency = 4, MaxRequestsPerSecond = 80 }, path);
+        await using var job = TestCrawls.Start(new CrawlOptions { StartUrl = site.BaseUri.AbsoluteUri, Concurrency = 4, MaxRequestsPerSecond = 80, BrowserFallback = false }, path);
         await TestCrawls.WaitUntilAsync(path, "SELECT COUNT(*) FROM links");
 
         var cache = new ReadCache();

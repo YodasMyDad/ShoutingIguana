@@ -462,7 +462,7 @@ public sealed class ExportEndpointsTests(GridSidecar grid) : IClassFixture<GridS
     {
         await using var sidecar = await TestSidecar.StartAsync();
         await using var events = await EventStreamReader.ConnectAsync(sidecar.Client);
-        var options = new JsonObject { ["startUrl"] = grid.Site.BaseUri.AbsoluteUri, ["maxRequestsPerSecond"] = 20, ["concurrency"] = 2 };
+        var options = new JsonObject { ["startUrl"] = grid.Site.BaseUri.AbsoluteUri, ["browserFallback"] = false, ["maxRequestsPerSecond"] = 20, ["concurrency"] = 2 };
         var crawl = (await sidecar.PostAsync("api/crawls", new JsonObject { ["options"] = options })).Body!;
         var id = (string)crawl["id"]!;
         await events.NextAsync("progress", data => (string?)data["crawlId"] == id && (long?)data["htmlPages"] >= 5);

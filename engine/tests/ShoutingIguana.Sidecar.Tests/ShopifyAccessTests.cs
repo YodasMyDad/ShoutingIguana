@@ -144,7 +144,7 @@ public sealed class ShopifyAccessTests(RecheckSite site) : IClassFixture<Recheck
 
     private static JsonObject Options(string startUrl, string host, string signatureInput, int? maxUrls = null)
     {
-        var options = new JsonObject { ["startUrl"] = startUrl, ["signatures"] = Signatures(host, signatureInput) };
+        var options = new JsonObject { ["startUrl"] = startUrl, ["browserFallback"] = false, ["signatures"] = Signatures(host, signatureInput) };
         if (maxUrls is { } limit)
         {
             options["maxUrls"] = limit;

@@ -108,7 +108,7 @@ public static class CrawlDatabase
         using var connection = OpenReader(path);
         var json = Scalar(connection, "SELECT options_json FROM crawl WHERE id = 1") as string
                    ?? throw new InvalidOperationException($"'{path}' is not a crawl database.");
-        return StoredJson.Deserialize(json, EngineJsonContext.Default.CrawlOptions, new CrawlOptions { StartUrl = string.Empty })
+        return StoredCrawlOptions.Deserialize(json)
                ?? throw new InvalidOperationException($"'{path}' has unreadable crawl options.");
     }
 

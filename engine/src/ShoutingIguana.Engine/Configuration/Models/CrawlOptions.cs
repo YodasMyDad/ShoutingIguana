@@ -129,10 +129,11 @@ public sealed record CrawlOptions
 
     /// <summary>
     /// When a host blocks the plain HTTP fetch, read that host's pages in a headless browser instead and parse that
-    /// HTML once. Off, the default, leaves a block as a block. A crawl file from before this reads as off: the
-    /// property is absent. This is not <see cref="Rendering"/>.
+    /// HTML once. On unless turned off. No browser is started, or downloaded, until a host blocks: a site that
+    /// answers plain HTTP is crawled without one. Off leaves a block as a block. A crawl file from before this reads
+    /// as off, which is how that crawl ran (<see cref="Serialization.StoredCrawlOptions"/>). This is not <see cref="Rendering"/>.
     /// </summary>
-    public bool BrowserFallback { get; init; }
+    public bool BrowserFallback { get; init; } = true;
 
     /// <summary>
     /// With <see cref="BrowserFallback"/>: a host the headless browser can't read either is read in the Chrome or

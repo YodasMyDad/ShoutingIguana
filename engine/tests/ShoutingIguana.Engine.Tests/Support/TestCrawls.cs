@@ -7,7 +7,17 @@ using ShoutingIguana.Engine.Storage;
 
 namespace ShoutingIguana.Engine.Tests.Support;
 
-/// <summary>Runs crawls for tests and reads what they stored.</summary>
+/// <summary>
+/// Runs crawls for tests and reads what they stored.
+/// <para>
+/// A test's crawl of the synthetic site, or of any site that answers with a block, sets
+/// <see cref="CrawlOptions.BrowserFallback"/> to false unless the fallback is what it tests. A crawl has it on by
+/// default, and the synthetic site plants pages that answer plain HTTP with a challenge: what it expects of them
+/// (internal-blocked) is what a crawl without a browser records. With it on, the first of them starts a real
+/// browser, and the one a browser is let into has the rest of the site read in it. A site that never blocks leaves
+/// the default alone, which is how most tests show that on changes nothing for it.
+/// </para>
+/// </summary>
 internal static class TestCrawls
 {
     public static readonly TimeSpan TIMEOUT = TimeSpan.FromMinutes(2);

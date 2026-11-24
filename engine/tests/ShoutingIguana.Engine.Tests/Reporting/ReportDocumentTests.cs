@@ -1270,7 +1270,7 @@ public sealed class ReportDocumentTests(GridCrawl crawl) : IDisposable
     private async Task<string> CrawlAsync(string name, Func<CrawlOptions, CrawlOptions> change)
     {
         var path = Path.Combine(_folder, name + ".sicrawl");
-        var summary = await TestCrawls.RunAsync(change(new CrawlOptions { StartUrl = crawl.Server.BaseUri.AbsoluteUri, Concurrency = 8 }), path);
+        var summary = await TestCrawls.RunAsync(change(new CrawlOptions { StartUrl = crawl.Server.BaseUri.AbsoluteUri, Concurrency = 8, BrowserFallback = false }), path);
         Assert.Equal(CrawlStatus.Completed, summary.Status);
         await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
         return path;

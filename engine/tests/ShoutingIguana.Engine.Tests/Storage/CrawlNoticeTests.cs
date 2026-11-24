@@ -96,14 +96,14 @@ public sealed class CrawlNoticeTests : IAsyncLifetime
         var path = _files.NewPath();
         var observer = new RecordingObserver();
         await using (var job = new CrawlEngine(NullLoggerFactory.Instance)
-                         .Start(new CrawlRequest(new CrawlOptions { StartUrl = server.BaseUri.AbsoluteUri, MaxRetries = 0 }, path), observer))
+                         .Start(new CrawlRequest(new CrawlOptions { StartUrl = server.BaseUri.AbsoluteUri, MaxRetries = 0, BrowserFallback = false }, path), observer))
         {
             Assert.Equal(CrawlStatus.Completed, (await job.Completion.WaitAsync(TestCrawls.TIMEOUT)).Status);
         }
 
         var live = Assert.Single(observer.Notices, notice => notice.Code == "blocked");
         var stored = Assert.Single(CrawlNoticeReader.Read(path), notice => notice.Code == "blocked");
-        Assert.Equal(new CrawlNoticeData(Host: "127.0.0.1", Reason: "Cloudflare challenge", Count: 1), live.Data);
+        Assert.Equal(new CrawlNoticeData(Host: "127.0.0.1", Reason: "Cloudflare challenge", Count: 1, Tried: "off"), live.Data);
         Assert.Equal(live.Data! with { Count = 3 }, stored.Data);
         Assert.Equal(3, TestCrawls.Count(path, $"SELECT COUNT(*) FROM responses WHERE outcome = {(int)FetchOutcome.Blocked}"));
     }
@@ -320,7 +320,7 @@ public sealed class CrawlNoticeTests : IAsyncLifetime
         Assert.Equal(["kept"], CrawlNoticeReader.Read(path).Select(notice => notice.Code));
     }
 
-    private CrawlOptions Options() => new() { StartUrl = _site.BaseUri.AbsoluteUri };
+    private CrawlOptions Options() => new() { StartUrl = _site.BaseUri.AbsoluteUri, BrowserFallback = false };
 
     private static CrawlNotice Notice(string code) =>
         new(CrawlNoticeLevel.Warning, code, $"The {code} notice.") { At = new DateTimeOffset(2026, 11, 1, 10, 15, 0, TimeSpan.Zero) };

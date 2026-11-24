@@ -134,7 +134,7 @@ public sealed class CrawlHistoryReaderTests : IAsyncLifetime
         Assert.True(CrawlHistoryReader.Read(path).Points[^1].Fetched > last.Fetched);
     }
 
-    private CrawlOptions Options() => new() { StartUrl = _site.BaseUri.AbsoluteUri };
+    private CrawlOptions Options() => new() { StartUrl = _site.BaseUri.AbsoluteUri, BrowserFallback = false };
 
     /// <summary>Each point adds something fetched or found, and the site's own URLs are found by the time they're fetched.</summary>
     private static void AssertRises(IReadOnlyList<CrawlHistoryPoint> points)

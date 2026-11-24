@@ -33,7 +33,7 @@ public sealed class SitemapEntryCrawlTests : IAsyncLifetime
     public async Task TheCrawlKeepsEachEntrysLastmodAndEachFilesSize()
     {
         await using var server = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = 40 });
-        await TestCrawls.RunAsync(new CrawlOptions { StartUrl = server.BaseUri.AbsoluteUri, Concurrency = 8 }, _path);
+        await TestCrawls.RunAsync(new CrawlOptions { StartUrl = server.BaseUri.AbsoluteUri, Concurrency = 8, BrowserFallback = false }, _path);
 
         // The thin plant, in pages-0.xml with a lastmod in the year 3000 and in the extra sitemap without one.
         Assert.Equal(["/sitemaps/extra.xml | null", "/sitemaps/pages-0.xml | 32503680000"], TestCrawls.Rows(_path, """
@@ -73,7 +73,7 @@ public sealed class SitemapEntryCrawlTests : IAsyncLifetime
     public async Task RobotsTxtThatDoesntNameTheSitemapTheCrawlFoundAnywayIsFlagged()
     {
         await using var server = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = 40, SitemapInRobots = false });
-        await TestCrawls.RunAsync(new CrawlOptions { StartUrl = server.BaseUri.AbsoluteUri, Concurrency = 8 }, _path);
+        await TestCrawls.RunAsync(new CrawlOptions { StartUrl = server.BaseUri.AbsoluteUri, Concurrency = 8, BrowserFallback = false }, _path);
         await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(_path);
 
         var origin = server.BaseUri.GetLeftPart(UriPartial.Authority);
@@ -85,7 +85,7 @@ public sealed class SitemapEntryCrawlTests : IAsyncLifetime
     public async Task ACrawlFromBeforeLastmodsSkipsTheLastmodCheck()
     {
         await using var server = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = 40 });
-        await TestCrawls.RunAsync(new CrawlOptions { StartUrl = server.BaseUri.AbsoluteUri, Concurrency = 8 }, _path);
+        await TestCrawls.RunAsync(new CrawlOptions { StartUrl = server.BaseUri.AbsoluteUri, Concurrency = 8, BrowserFallback = false }, _path);
         using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = _path, Pooling = false }.ToString()))
         {
             connection.Open();
