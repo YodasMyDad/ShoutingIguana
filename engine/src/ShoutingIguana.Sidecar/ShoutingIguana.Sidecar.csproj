@@ -9,6 +9,17 @@
         <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
     </PropertyGroup>
 
+    <!--
+        The app ships this as one file. Playwright's driver is a node executable and a folder of scripts
+        (.playwright), which have to be files on disk. A single file carries only the executable unless told to carry
+        everything, and then the scripts were left behind in the publish folder, so the installed app could not render.
+        With this the whole bundle is unpacked on first start, .playwright with it, and AppContext.BaseDirectory is
+        that folder, where Playwright looks.
+    -->
+    <PropertyGroup Condition="'$(PublishSingleFile)' == 'true'">
+        <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
+    </PropertyGroup>
+
     <ItemGroup>
         <PackageReference Include="Serilog" />
         <!-- The browser driver has to sit beside this executable, not only beside the engine. -->
