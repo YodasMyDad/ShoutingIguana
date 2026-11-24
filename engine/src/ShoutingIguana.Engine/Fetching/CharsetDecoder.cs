@@ -74,23 +74,28 @@ internal static partial class CharsetDecoder
 
         var normalized = label.Trim().Trim('"', '\'').ToLowerInvariant();
 
-        // The HTML standard decodes these labels as windows-1252, and a UTF-16 label declared inside
-        // byte content can only be a mistake, so it is read as UTF-8.
+        // The HTML standard decodes these labels as windows-1252.
         if (normalized is "iso-8859-1" or "iso8859-1" or "latin1" or "l1" or "us-ascii" or "ascii")
         {
             return Encoding.GetEncoding(1252);
         }
 
-        if (normalized.StartsWith("utf-16", StringComparison.Ordinal))
+        // A label for UTF-16 on bytes with no byte order mark can only be a mistake: the tag that says so was read as
+        // single bytes. The encoding standard reads such a page as UTF-8. The labels are the standard's, and .NET
+        // knows "unicode" and "ucs-2" as UTF-16 too.
+        if (normalized.StartsWith("utf-16", StringComparison.Ordinal) || normalized is "unicode" or "ucs-2" or "iso-10646-ucs-2"
+            or "csunicode" or "unicodefeff" or "unicodefffe")
         {
             return Encoding.UTF8;
         }
 
         try
         {
-            return Encoding.GetEncoding(normalized);
+            // Nor can any other encoding that doesn't keep ASCII as single bytes: UTF-32, UTF-7.
+            var encoding = Encoding.GetEncoding(normalized);
+            return encoding.CodePage is 1200 or 1201 or 12000 or 12001 or 65000 ? Encoding.UTF8 : encoding;
         }
-        catch (ArgumentException)
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException)
         {
             // Unknown label from the server; fall through to the next sniffing step.
             return null;

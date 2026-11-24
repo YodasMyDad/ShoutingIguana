@@ -76,4 +76,39 @@ public sealed class CharsetDecoderTests
 
     private static byte[] Html(string head, byte[] body) =>
         [.. Encoding.ASCII.GetBytes($"<html><head>{head}</head><body>"), .. body];
+
+    /// <summary>
+    /// A meta tag that names UTF-16 by any of its labels was read as bytes, so the page is not UTF-16: the encoding
+    /// standard reads it as UTF-8. berkshirehathaway.com says charset=unicode, and was stored as one page of garbage.
+    /// </summary>
+    [Theory]
+    [InlineData("unicode")]
+    [InlineData("Unicode")]
+    [InlineData("utf-16")]
+    [InlineData("utf-16le")]
+    [InlineData("utf-16be")]
+    [InlineData("ucs-2")]
+    [InlineData("iso-10646-ucs-2")]
+    [InlineData("csunicode")]
+    [InlineData("unicodefeff")]
+    [InlineData("unicodefffe")]
+    [InlineData("utf-32")]
+    [InlineData("utf-7")]
+    public void AMetaTagThatNamesUtf16IsReadAsUtf8(string label)
+    {
+        var html = $"<html><head><meta http-equiv=\"Content-Type\" content=\"text/html; charset={label}\"><title>Café owners</title></head><body><h1>Hello</h1></body></html>";
+        var decoded = CharsetDecoder.Decode(System.Text.Encoding.UTF8.GetBytes(html), null);
+        Assert.Equal(html, decoded);
+
+        // The same label in the Content-Type header, on bytes with no byte order mark, is the same mistake.
+        Assert.Equal(html, CharsetDecoder.Decode(System.Text.Encoding.UTF8.GetBytes(html), label));
+    }
+
+    [Fact]
+    public void AByteOrderMarkStillWinsOverAMetaTagThatNamesUtf16()
+    {
+        const string HTML = "<html><head><meta charset=\"unicode\"><title>T</title></head></html>";
+        byte[] bytes = [0xFF, 0xFE, .. System.Text.Encoding.Unicode.GetBytes(HTML)];
+        Assert.Equal(HTML, CharsetDecoder.Decode(bytes, null));
+    }
 }
