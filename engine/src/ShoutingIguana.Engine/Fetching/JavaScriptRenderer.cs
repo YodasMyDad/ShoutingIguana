@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Playwright;
 using ShoutingIguana.Engine.Configuration.Models;
@@ -621,8 +622,9 @@ internal sealed partial class JavaScriptRenderer(
     }
 
     /// <summary>
-    /// The scripts' own requests get <see cref="SETTLE_MS"/> to finish. One that is waiting for the crawl's pace has
-    /// not been sent yet, so the page is given that wait, and the quiet after it, again.
+    /// The scripts' own requests get <see cref="SETTLE_MS"/> to finish. A page still busy after that is read as it
+    /// stands, unless the crawl's own pace held one of its requests back in that time: then the time was not the
+    /// page's, and it gets it again, up to <see cref="HELD_PATIENCE"/> times the request timeout.
     /// </summary>
     private async Task SettleAsync(IPage page, HeldRequests held, CancellationToken cancellationToken)
     {
@@ -630,28 +632,32 @@ internal sealed partial class JavaScriptRenderer(
         var watch = Stopwatch.StartNew();
         while (true)
         {
-            try
-            {
-                await page.WaitForLoadStateAsync(LoadState.NetworkIdle, new PageWaitForLoadStateOptions { Timeout = SETTLE_MS })
-                    .ConfigureAwait(false);
-            }
-            catch (TimeoutException)
-            {
-                // The document is parsed and its scripts have run. Later requests can keep the network busy.
-            }
-            catch (PlaywrightException ex) when (ex.Message.Contains("Timeout", StringComparison.OrdinalIgnoreCase))
-            {
-            }
-
-            if (!held.Any || watch.Elapsed >= limit)
+            cancellationToken.ThrowIfCancellationRequested();
+            var waits = held.Waits;
+            if (await IsQuietAsync(page).ConfigureAwait(false) || watch.Elapsed >= limit || (held.Waits == waits && !held.Any))
             {
                 return;
             }
+        }
+    }
 
-            while (held.Any && watch.Elapsed < limit)
-            {
-                await Task.Delay(100, cancellationToken).ConfigureAwait(false);
-            }
+    /// <summary>Whether the page's network went quiet within <see cref="SETTLE_MS"/>.</summary>
+    private static async Task<bool> IsQuietAsync(IPage page)
+    {
+        try
+        {
+            await page.WaitForLoadStateAsync(LoadState.NetworkIdle, new PageWaitForLoadStateOptions { Timeout = SETTLE_MS })
+                .ConfigureAwait(false);
+            return true;
+        }
+        catch (TimeoutException)
+        {
+            // The document is parsed and its scripts have run. Later requests can keep the network busy.
+            return false;
+        }
+        catch (PlaywrightException ex) when (ex.Message.Contains("Timeout", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
         }
     }
 
@@ -702,10 +708,32 @@ internal sealed partial class JavaScriptRenderer(
             "If pages are missing from the crawl, start one at the address it leads to."));
     }
 
+    /// <summary>
+    /// Why the browser couldn't start, for the crawl's alert. Playwright reports missing Linux libraries in a box drawn
+    /// for a terminal, with a command from a build folder: that becomes the libraries and the command that installs them.
+    /// </summary>
+    internal static string PlainReason(string why)
+    {
+        if (!why.Contains("missing dependencies", StringComparison.OrdinalIgnoreCase))
+        {
+            return why;
+        }
+
+        var libraries = LibraryName().Matches(why).Select(match => match.Value).Distinct(StringComparer.Ordinal).ToList();
+        return libraries.Count == 0
+            ? "The browser needs system libraries this computer doesn't have."
+            : "The browser needs system libraries this computer doesn't have. Install them, then start the crawl again: " +
+              "sudo apt-get install " + string.Join(' ', libraries);
+    }
+
+    [GeneratedRegex(@"\blib[a-z0-9][a-z0-9.+-]*", RegexOptions.CultureInvariant)]
+    private static partial Regex LibraryName();
+
     private IBrowser? Unavailable(string why)
     {
         Volatile.Write(ref _unavailable, 1);
         logger.LogWarning("JavaScript rendering is off for this crawl: {Reason}", why);
+        why = PlainReason(why);
         observer.OnNotice(new CrawlNotice(
             CrawlNoticeLevel.Warning,
             "javascript-rendering",
@@ -765,14 +793,14 @@ internal sealed partial class JavaScriptRenderer(
             // One slot for this request, held until it has been answered, so a render's script doesn't open a second
             // connection beside the document. The page's own fetch already took its slot and let it go.
             HostGateLease lease;
-            held.Add(1);
+            var began = held.Begin();
             try
             {
                 lease = await gates.For(uri).AcquireAsync(CancellationToken.None).ConfigureAwait(false);
             }
             finally
             {
-                held.Add(-1);
+                held.End(began);
             }
 
             try
@@ -811,7 +839,7 @@ internal sealed partial class JavaScriptRenderer(
             return false;
         }
 
-        held.Add(1);
+        var began = held.Begin();
         try
         {
             var rules = await read(uri).ConfigureAwait(false);
@@ -819,7 +847,7 @@ internal sealed partial class JavaScriptRenderer(
         }
         finally
         {
-            held.Add(-1);
+            held.End(began);
         }
     }
 
@@ -908,10 +936,31 @@ internal sealed partial class JavaScriptRenderer(
     /// <summary>How many of a browser context's requests are waiting for the crawl's own pace, not for the site.</summary>
     private sealed class HeldRequests
     {
-        private int _count;
+        /// <summary>A wait shorter than this is a gate that was open.</summary>
+        private const int NOTICEABLE_MS = 100;
 
+        private int _count;
+        private int _waits;
+
+        /// <summary>A request is waiting now.</summary>
         public bool Any => Volatile.Read(ref _count) > 0;
 
-        public void Add(int change) => Interlocked.Add(ref _count, change);
+        /// <summary>How many waits long enough to notice have ended.</summary>
+        public int Waits => Volatile.Read(ref _waits);
+
+        public long Begin()
+        {
+            Interlocked.Increment(ref _count);
+            return Stopwatch.GetTimestamp();
+        }
+
+        public void End(long began)
+        {
+            Interlocked.Decrement(ref _count);
+            if (Stopwatch.GetElapsedTime(began).TotalMilliseconds >= NOTICEABLE_MS)
+            {
+                Interlocked.Increment(ref _waits);
+            }
+        }
     }
 }

@@ -217,6 +217,38 @@ public sealed class JavaScriptRendererTests
         Assert.Contains("<h1>Members</h1>", html, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// On Linux the browser needs system libraries. Playwright says which in a box drawn for a terminal, with a command
+    /// from a developer's build folder. The crawl's alert names the libraries and the command that installs them.
+    /// </summary>
+    [Fact]
+    public void MissingSystemLibrariesAreNamedWithTheCommandThatInstallsThem()
+    {
+        const string playwright = """
+
+            ╔══════════════════════════════════════════════════════╗
+            ║ Host system is missing dependencies to run browsers. ║
+            ║ Please install them with the following command:      ║
+            ║                                                      ║
+            ║     pwsh bin/Debug/netX/playwright.ps1 install-deps  ║
+            ║                                                      ║
+            ║ Alternatively, use apt:                              ║
+            ║     apt-get install libnspr4\                        ║
+            ║         libnss3\                                     ║
+            ║         libatk-bridge2.0-0\                          ║
+            ║         libasound2                                   ║
+            ║                                                      ║
+            ║ <3 Playwright Team                                   ║
+            ╚══════════════════════════════════════════════════════╝
+            """;
+
+        Assert.Equal(
+            "The browser needs system libraries this computer doesn't have. Install them, then start the crawl again: " +
+            "sudo apt-get install libnspr4 libnss3 libatk-bridge2.0-0 libasound2",
+            JavaScriptRenderer.PlainReason(playwright));
+        Assert.Equal("Something else went wrong.", JavaScriptRenderer.PlainReason("Something else went wrong."));
+    }
+
     [Fact]
     public async Task ABrowserThatDiedIsStartedAgain()
     {
