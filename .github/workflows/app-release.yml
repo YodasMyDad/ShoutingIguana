@@ -11,7 +11,9 @@
 # signingIdentity "-"): no certificate is involved, and macOS still asks the user to allow it, but an app with no
 # signature at all is refused outright on Apple silicon. macOS is cross-built from the arm64 runner for x64.
 #
-# Every leg smoke-tests the installer it built. Windows: scripts/smoke-installer.ps1 (install, the engine on its own,
+# Every leg smoke-tests the installer it built, and in each the packaged engine renders a page a script builds, which
+# downloads Chromium as a user's first rendered crawl does (smoke-sidecar.mjs --render): a release whose installed
+# engine can't start a browser fails here. Windows: scripts/smoke-installer.ps1 (install, the engine on its own,
 # a run, uninstall). Linux: scripts/smoke-installer.sh in fresh containers, so what the runner has installed can't
 # stand in for what the package depends on. macOS: the same script on the disk image, the x64 app under Rosetta.
 # The macOS smoke test had never run when it was added (it can't be tried on Windows), so it reports on the run

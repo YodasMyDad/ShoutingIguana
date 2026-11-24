@@ -95,6 +95,9 @@ $arguments = @(
     '--self-contained', 'true',
     '-p:PublishSingleFile=true',
     '-p:IncludeNativeLibrariesForSelfExtract=true',
+    # All of the file unpacks on first start, so Playwright's driver (.playwright: node and its scripts) is on disk in
+    # AppContext.BaseDirectory, where Playwright looks. build-sidecar.sh says why.
+    '-p:IncludeAllContentForSelfExtract=true',
     "-p:CustomAfterMicrosoftCommonTargets=$(Join-Path $PSScriptRoot 'sidecar-publish.targets')",
     '-p:DebugType=none',
     "-p:PublishReadyToRun=$readyToRunValue",

@@ -246,7 +246,7 @@ smoke_deb() {
   grep -q '^Exec=shouting-iguana %F' /usr/share/applications/*.desktop 2>/dev/null ||
     fail "the desktop entry doesn't pass the opened file to the app (Exec has no %F)."
   if [ -f /usr/share/mime/globs ]; then
-    grep -q '^application/x-shouting-iguana-crawl:*.sicrawl$' /usr/share/mime/globs ||
+    grep -Fxq 'application/x-shouting-iguana-crawl:*.sicrawl' /usr/share/mime/globs ||
       fail "the system doesn't know .sicrawl files as application/x-shouting-iguana-crawl."
   else
     fail "there is no MIME database (/usr/share/mime/globs) to know .sicrawl files by."

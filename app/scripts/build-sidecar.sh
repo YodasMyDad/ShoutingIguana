@@ -9,6 +9,11 @@
 # Tauri copies it next to the app, without the triple, in dev, build and bundles. IIS's in-process module, which a
 # self-hosted Kestrel never loads, is left out.
 #
+# The single file unpacks all of itself on first start (IncludeAllContentForSelfExtract), not only its native
+# libraries. Playwright's driver is a node executable and a folder of scripts (.playwright) that have to be files on
+# disk, and Playwright looks for them in AppContext.BaseDirectory, which is then the folder the file unpacked into.
+# Without it the scripts stayed behind in the publish folder, and no installed app could render a page.
+#
 # Options:
 #   --engine-root <folder>    The engine folder. Defaults to the repo's engine/, found from this script's location.
 #   --configuration <name>    The .NET build configuration. Release by default.
@@ -86,6 +91,7 @@ dotnet publish "$project" \
   --self-contained true \
   -p:PublishSingleFile=true \
   -p:IncludeNativeLibrariesForSelfExtract=true \
+  -p:IncludeAllContentForSelfExtract=true \
   "-p:CustomAfterMicrosoftCommonTargets=$here/sidecar-publish.targets" \
   -p:DebugType=none \
   "-p:PublishReadyToRun=$ready_to_run" \
