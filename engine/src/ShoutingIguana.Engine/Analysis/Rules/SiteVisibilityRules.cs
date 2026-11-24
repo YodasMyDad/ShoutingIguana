@@ -92,6 +92,6 @@ internal sealed class SiteVisibilityRules(UrlTable urls) : ISiteRule
 
     /// <summary>The canonical that decides the page's indexability (the first Google honours) is the page's own URL on another version of the site.</summary>
     private static bool NamesItselfOnAnotherVersion(AnalyzedPage page) =>
-        page.Facts.Canonicals.FirstOrDefault(canonical => canonical.Url is not null && (canonical.InHead || canonical.FromHttpHeader)) is { Url: { } target } &&
+        page.Facts.Canonicals.FirstOrDefault(canonical => canonical.Url is not null && canonical.IsHonoured) is { Url: { } target } &&
         SiteVersions.Of(page.Uri).Contains(target, StringComparer.Ordinal);
 }

@@ -581,8 +581,14 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
             var token = tokens[range];
             if (token.Equals("canonical", StringComparison.OrdinalIgnoreCase))
             {
-                Canonicals.Add(new CanonicalFact(href, NormalizeOrNull(href), context.InHead, FromHttpHeader: false) { Attributes = CanonicalQualifiers(element) });
-                AddLink(href, LinkKind.Canonical, flags, position, null);
+                // With hreflang, lang, media or type it's an alternate's, which Google doesn't use as a canonical: the fact
+                // is kept for its check, and the page gets no canonical link from it.
+                var qualifiers = CanonicalQualifiers(element);
+                Canonicals.Add(new CanonicalFact(href, NormalizeOrNull(href), context.InHead, FromHttpHeader: false) { Attributes = qualifiers });
+                if (qualifiers is null)
+                {
+                    AddLink(href, LinkKind.Canonical, flags, position, null);
+                }
             }
             else if (token.Equals("alternate", StringComparison.OrdinalIgnoreCase) &&
                      NullIfBlank(element.GetAttribute("hreflang")) is { } language)

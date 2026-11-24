@@ -490,9 +490,9 @@ internal sealed class PageProcessor(
         _ => IndexabilityReason.None
     };
 
-    /// <summary>Only canonicals Google honours count: in the head or in an HTTP header.</summary>
+    /// <summary>Only canonicals Google honours count: in the head or in an HTTP header, and without an alternate's attributes.</summary>
     private static bool CanonicalisedElsewhere(string url, PageFacts? facts) =>
-        facts?.Canonicals.FirstOrDefault(canonical => canonical.Url is not null && (canonical.InHead || canonical.FromHttpHeader))
+        facts?.Canonicals.FirstOrDefault(canonical => canonical.Url is not null && canonical.IsHonoured)
             is { Url: { } target } && target != url;
 
     /// <summary>

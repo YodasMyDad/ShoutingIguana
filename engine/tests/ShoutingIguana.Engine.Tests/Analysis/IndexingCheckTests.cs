@@ -304,6 +304,32 @@ public sealed class IndexingCheckTests
             Hits("c", $"<link rel=\"canonical\" media=\"only screen and (max-width: 640px)\" href=\"{site.Site}/c\">"));
     }
 
+    /// <summary>
+    /// Google: "rel="canonical" annotations with hreflang, lang, media, and type attributes are not used for
+    /// canonicalization". Such a link is no canonical: the page isn't canonicalised by it, it contradicts no noindex, and it
+    /// isn't a second canonical beside the page's real one.
+    /// </summary>
+    [Fact]
+    public void ACanonicalWithAnAlternatesAttributesIsntTakenAsThePagesCanonical()
+    {
+        var site = new RuleHarness();
+        site.Ok($"{site.Site}/other");
+        var rules = new CanonicalRules(site.Table(), site.UrlOf);
+        var qualified = $"<link rel=\"canonical\" hreflang=\"en\" href=\"{site.Site}/other\">";
+        List<IssueHit> Hits(string path, string head) => [.. rules.Check(site.Page($"{site.Site}/{path}", RuleHarness.Html(head)))];
+
+        Assert.Equal([new IssueHit(IssueCatalog.CANONICAL_INVALID_ATTRIBUTE, site.Id($"{site.Site}/a"), "hreflang")], Hits("a", qualified));
+        Assert.Equal([new IssueHit(IssueCatalog.CANONICAL_INVALID_ATTRIBUTE, site.Id($"{site.Site}/b"), "hreflang")],
+            Hits("b", $"<meta name=\"robots\" content=\"noindex\">{qualified}"));
+        Assert.Equal([new IssueHit(IssueCatalog.CANONICAL_INVALID_ATTRIBUTE, site.Id($"{site.Site}/c"), "hreflang")],
+            Hits("c", $"{qualified}<link rel=\"canonical\" href=\"{site.Site}/c\">"));
+
+        // The parse records it, for the check, but not as a canonical link of the page: nothing follows it as one.
+        var parsed = HtmlPageParser.Parse(RuleHarness.Html(qualified), new Uri($"{site.Site}/d"), [], "ShoutingIguana");
+        Assert.Equal("hreflang", Assert.Single(parsed.Facts.Canonicals).Attributes);
+        Assert.DoesNotContain(parsed.Links, link => link.Kind == LinkKind.Canonical);
+    }
+
     [Fact]
     public void ARedirectWhoseLinkHeaderNamesAnotherCanonicalThanWhereItEndsIsFlagged()
     {
