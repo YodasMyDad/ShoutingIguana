@@ -37,6 +37,13 @@ pub struct ShellInfo {
     platform: &'static str,
     debug: bool,
     log_dir: String,
+    /// How a new version arrives in this copy: installed by the app, or downloaded by the user (updates.rs).
+    updates: crate::updates::Arrival,
+    /// The version the run before this one couldn't install, if it couldn't.
+    update_failed: Option<String>,
+    /// The app may ask for a newer version by itself. Not in a test run of the built app, which a notice of a newer
+    /// version would only get in the way of.
+    update_checks: bool,
 }
 
 #[tauri::command]
@@ -53,6 +60,9 @@ pub fn shell_info(app: AppHandle) -> ShellInfo {
         platform,
         debug: cfg!(debug_assertions),
         log_dir: app_log_folder(&app).map(|folder| folder.to_string_lossy().into_owned()).unwrap_or_default(),
+        updates: crate::updates::arrival(),
+        update_failed: crate::updates::failed(&app),
+        update_checks: profile::test_profile().is_none(),
     }
 }
 
@@ -99,9 +109,10 @@ pub async fn update_check(app: AppHandle) -> Result<crate::updates::UpdateCheck,
     crate::updates::check(&app).await
 }
 
-/// Installs the update the last check found, if it is still `version`: the app closes and the installer runs.
+/// Installs the update the last check found, if it is still `version`: the app closes and the installer runs. While
+/// something runs, the update is downloaded and kept instead, and the answer is `waiting`.
 #[tauri::command]
-pub async fn update_install(app: AppHandle, version: String) -> Result<(), String> {
+pub async fn update_install(app: AppHandle, version: String) -> Result<crate::updates::InstallOutcome, String> {
     crate::updates::install(&app, &version).await
 }
 

@@ -27,10 +27,10 @@ export const ERROR_DURATION_MS = 10_000;
  */
 export function notifyResult(
   title: string,
-  options: { id?: string; description?: string; action?: ToastAction; secondary?: ToastAction } = {},
+  options: { id?: string; description?: string; action?: ToastAction; secondary?: ToastAction; duration?: number } = {},
 ) {
   return toast(title, {
-    duration: TOAST_DURATION_MS,
+    duration: options.duration ?? TOAST_DURATION_MS,
     ...(options.id ? { id: options.id } : {}),
     ...(options.description ? { description: options.description } : {}),
     ...(options.action ? { action: options.action } : {}),
