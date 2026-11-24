@@ -41,7 +41,7 @@ export function ExtractionRulesField({
             <TextField
               label={index === 0 ? 'Rule name' : `Rule ${index + 1} name`}
               value={rule.name}
-              className="min-w-40 flex-1"
+              className="min-w-(--search-width-min) flex-1"
               spellCheck={false}
               onChange={(event) => change(rule.key, { name: event.target.value })}
             />

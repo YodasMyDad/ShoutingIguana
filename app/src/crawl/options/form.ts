@@ -234,13 +234,15 @@ function sameExtractionRules(left: readonly ExtractionRuleRow[], right: readonly
   const b = filledRules(right);
   return (
     a.length === b.length &&
-    a.every(
-      (rule, index) =>
-        rule.name === b[index]?.name &&
-        rule.selectorType === b[index]?.selectorType &&
-        rule.selector === b[index]?.selector &&
-        rule.enabled === b[index]?.enabled,
-    )
+    a.every((rule, index) => {
+      const other = b[index];
+      return (
+        rule.name === other?.name &&
+        rule.selectorType === other.selectorType &&
+        rule.selector === other.selector &&
+        rule.enabled === other.enabled
+      );
+    })
   );
 }
 

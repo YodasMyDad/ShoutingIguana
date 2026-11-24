@@ -631,7 +631,7 @@ function RenderingFields({
         columns={2}
         value={form.javaScriptRendering}
         onValueChange={(value) => {
-          onChange({ ...form, javaScriptRendering: value as JavaScriptRendering });
+          onChange({ ...form, javaScriptRendering: value });
           onTouch?.('javaScriptRendering');
         }}
       />
