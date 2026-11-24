@@ -126,13 +126,41 @@ matches nothing on a page is not stored. A rule that fails is stored once and no
 are in the crawl file's `extractions` table. `POST /api/crawls/{id}/extractions` reads the rules and one page of
 them. The desktop app sets the rules on a new crawl, in both modes, and lists the values there too.
 
-`--browser-fallback` reads a host in headless Chromium when plain HTTP is blocked (a Cloudflare challenge or another
-firewall `BlockDetector` names, not a 429). The first fetch is still HTTP. If the browser gets past the block, that
-host's later pages skip HTTP, and that HTML is parsed once. It is not JavaScript rendering. Off unless the flag is
-given. The desktop app has the same switch, in both modes. It gets past a block that only tells a browser from a
-script. It does not get past a challenge that tells a headless browser from a person: on 2026-11-24 Cloudflare's
-managed challenge (stackoverflow.com, npmjs.com, udemy.com, scrapingcourse.com) and DataDome (g2.com) stayed blocked,
-and the crawl kept the 403 and its alert.
+`--browser-fallback` reads a host in a browser when plain HTTP is blocked (a Cloudflare challenge or another firewall
+`BlockDetector` names, not a 429). The first fetch is still HTTP. If a browser gets past the block, that host's later
+pages skip HTTP and are read in that browser, and that HTML is parsed once. It is not JavaScript rendering. Off unless
+the flag is given. The desktop app has the same switch, in both modes.
+
+- **Which browser.** A check of the visitor (`BlockDetector.IsCheck`: a Cloudflare challenge, DataDome, HUMAN, Imperva,
+  a CAPTCHA) goes to the Chrome or Edge the computer has, or Chromium, or the windowed Chromium the crawl downloads
+  when there is none. It is started as a person starts it, with its own profile, in a window kept out of sight, and
+  spoken to over its debugging port. It sends its own user agent, not the crawl's: a check's pass is tied to it.
+  Nothing about it is disguised. Any other block goes to the headless browser first, the one rendering uses.
+- **Why not the headless one.** It tells every page it is automated (`navigator.webdriver`), and so does a Chrome that
+  Playwright drives, or one started with `--remote-debugging-port=0`. Cloudflare's check never clears in any of them.
+  It clears by itself, in about five seconds, in a browser started plainly with a port of its own.
+- **A check that needs a person** (a box to tick, a puzzle) is a block unless `--solve-challenges` is given. Then the
+  window is shown on that page, the crawl says so and waits `--challenge-wait` seconds (300), and goes on in the same
+  browser once the check is passed. Not passed, or the window closed, the host stays blocked for that crawl. The desktop
+  app always asks, and says in both modes that a window is waiting.
+- **Politeness is unchanged.** robots.txt is obeyed as the crawl's own user agent. Each request the browser makes takes
+  its turn on the host's gate, and images, fonts and media are not asked for. The exception is the check itself: the
+  dozen requests it makes of the firewall in a second or two go at the browser's pace, because held back it fails.
+- **A challenge page is never stored as the page.** One that can't be passed is the block it was, and the alert says
+  what stopped the browser and what the site's owner can do: allow the crawler's user agent or the computer's IP
+  address in the firewall. In Cloudflare that is a custom rule; its "verified bots" setting does not cover this crawler.
+- **Where it can't run.** A window needs a display, so on a Linux server or in a container only the headless browser
+  is used, and the alert says so. `--no-installed-browser` keeps to it anywhere.
+- The browser's profile is kept (`browser-profile` in the app's state folder, `cli-browser-profile` for `si`), so a
+  check passed once holds while its cookie lasts. It is the crawler's own, never the person's.
+
+Measured on 2026-11-24 from one home connection, four URLs a host (`docs/handoff/2026-11-24/tools/fallback-probe.py`).
+The headless browser read none of the eleven hosts that blocked plain HTTP. The installed Chrome read nine with nobody
+there: Cloudflare's managed challenge (stackoverflow.com, npmjs.com, udemy.com, scrapingcourse.com's two test pages),
+a Cloudflare block page (whoscored.com), DataDome (g2.com, leboncoin.fr) and HUMAN (fiverr.com). Two asked for a
+person (indeed.com, glassdoor.co.uk), which is what `--solve-challenges` is for. How a site answers depends on the
+address the crawl comes from and how much it has asked lately: the same host can pass one hour and ask for a person the
+next. A person completing a real site's check has not been measured, only the planted one.
 
 `--auth user:password` signs in to the site with HTTP Basic and Digest, and `--auth host=user:password` signs in to
 that host only. The password is sent only there. `--cookie name=value` (or `name=value@domain`) is sent from the first
