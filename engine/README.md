@@ -90,11 +90,23 @@ How a page is rendered (`Fetching/JavaScriptRenderer`):
 - **The crawl's pace holds.** Each request a page makes takes a slot on its host's gate, and is held to robots.txt.
   Time spent waiting for the gate is not counted against the page: at two requests a second a page with thirty
   scripts takes fifteen seconds, and is still rendered.
+- **A script or stylesheet is asked for once a crawl** (`Fetching/RenderCache`). Each page has a browser context of
+  its own, so no cookie or stored value passes between pages, but a 200 for a script or a stylesheet is kept by URL
+  and given to the next page that asks, without a request and without a slot on the gate. It is still held to
+  robots.txt and the private-address check first. Not kept: an answer marked `no-store`, one that sets a cookie or
+  varies by cookie, one over 4 MB, and anything that isn't a GET for a script or stylesheet. The bodies stay under
+  64 MB: the ones asked for longest ago go first. This was chosen over one browser context shared by the
+  crawl, which would share cookies and storage too, and so change what later pages show.
+- **As many pages render at once as the crawl's concurrency**, up to half the processors, a slot for each 512 MB of
+  memory, and eight. A page's requests still take their turn on each host's gate.
+- **A script's redirect is followed.** A page whose script loads another page (it sets the location, or writes a meta
+  refresh) is kept as it was sent and recorded as an instant refresh to where it went (`MetaRefreshFact.FromScript`,
+  a `MetaRefresh` link): the target is queued, the chain is read as any redirect chain, and the `meta-refresh` check
+  flags the page. The crawl is told once. The inspector and exports call it a meta refresh.
 - **The window** is 1,280 by 9,000 pixels, as tall as Google's renderer's, so what loads when it comes into view has
   loaded. Nothing scrolls, so an endless list is read as far as its first screenful goes.
-- **Kept as it was sent:** a page whose script loads another page (a script's redirect is not followed; the crawl is
-  told once), a page the browser is answered anything but a 2xx for, and a page that doesn't finish in the request
-  timeout.
+- **Kept as it was sent:** a page the browser is answered anything but a 2xx for, and a page that doesn't finish in
+  the request timeout.
 - What open shadow roots show is in the HTML. A frame's own document is not. Images, fonts and media are not
   fetched. A service worker is not started. A dialog is dismissed.
 - The page's facts are the rendered HTML's. The HTML as sent is read again only in `JavaScript` mode, for its links.

@@ -78,6 +78,10 @@ public sealed class BrowserFallbackCrawlTests : IAsyncLifetime
         Assert.DoesNotContain(TestCrawls.Rows(path, "SELECT url FROM urls"), url => url.Contains("browser-fallback-next", StringComparison.Ordinal));
         Assert.DoesNotContain(Hits(hits, SyntheticSite.BROWSER_FALLBACK_PATH), hit => hit.FromBrowser);
         Assert.Empty(TestCrawls.Rows(path, "SELECT code FROM notices WHERE code = 'browser-fallback'"));
+
+        // The alert names the setting that might read the site, by the name it has in the app.
+        var alert = Assert.Single(TestCrawls.Rows(path, "SELECT message FROM notices WHERE code = 'blocked'"));
+        Assert.Contains("turn on \"If a site blocks the check\" (\"Browser fallback\" in Advanced) and crawl again", alert, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -91,6 +95,11 @@ public sealed class BrowserFallbackCrawlTests : IAsyncLifetime
         Assert.Equal(((int)FetchOutcome.Blocked).ToString(), Scalar(path, start, "r.outcome"));
         Assert.Equal("Cloudflare challenge", Scalar(path, start, "r.block_reason"));
         Assert.Empty(TestCrawls.Rows(path, "SELECT code FROM notices WHERE code = 'browser-fallback'"));
+
+        // The setting is on already, so the alert doesn't send anyone to it.
+        var alert = Assert.Single(TestCrawls.Rows(path, "SELECT message FROM notices WHERE code = 'blocked'"));
+        Assert.DoesNotContain("turn on", alert, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ask the site owner to allowlist the crawler", alert, StringComparison.Ordinal);
     }
 
     private async Task<CrawlSummary> RunAsync(string path, string start, bool browserFallback)

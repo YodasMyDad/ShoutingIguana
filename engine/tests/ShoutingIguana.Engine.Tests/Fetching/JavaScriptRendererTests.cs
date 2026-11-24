@@ -34,6 +34,18 @@ public sealed class JavaScriptRendererTests
             """),
         ["/leaves"] = Page("""<div id="app"></div><script>location.replace('/landed');</script>"""),
         ["/landed"] = Page("<h1>Landed</h1>"),
+        ["/refreshes"] = Page("""
+            <div id="app"></div><script>
+            const meta = document.createElement('meta');
+            meta.httpEquiv = 'refresh';
+            meta.content = '0; url=/landed';
+            document.head.appendChild(meta);
+            </script>
+            """),
+        ["/leaves-late"] = Page("""<div id="app"></div><script>setTimeout(() => { location.href = '/landed'; }, 300);</script>"""),
+        ["/leaves-for-nothing"] = Page("""<div id="app"></div><script>location.replace('/gone');</script>"""),
+        ["/bundled"] = Page("""<link rel="stylesheet" href="/site.css"><div id="app"></div><script src="/bundle.js"></script><script src="/fresh.js"></script>"""),
+        ["/bundled-too"] = Page("""<link rel="stylesheet" href="/site.css"><div id="app"></div><script src="/bundle.js"></script><script src="/fresh.js"></script>"""),
         ["/shadow"] = Page("""
             <div id="app"></div><my-card><span slot="name">Slotted name</span><i>never shown</i></my-card><script>
             customElements.define('my-card', class extends HTMLElement {
@@ -89,7 +101,7 @@ public sealed class JavaScriptRendererTests
         await using var site = await LoopbackServer.StartAsync(ServeAsync);
         await using var renderer = Renderer(site.BaseUri);
 
-        var html = await renderer.RenderAsync(site.Url("/router"), CancellationToken.None);
+        var html = await HtmlAsync(renderer, site.Url("/router"));
 
         Assert.NotNull(html);
         Assert.Contains("<h1>Routed</h1>", html, StringComparison.Ordinal);
@@ -97,19 +109,147 @@ public sealed class JavaScriptRendererTests
     }
 
     [Fact]
-    public async Task APageItsScriptLeavesIsKeptAsSentAndTheCrawlIsToldOnce()
+    public async Task APageItsScriptLeavesNamesWhereItWentAndTheCrawlIsToldOnce()
     {
         await using var site = await LoopbackServer.StartAsync(ServeAsync);
         var observer = new Notices();
         await using var renderer = Renderer(site.BaseUri, observer);
 
-        Assert.Null(await renderer.RenderAsync(site.Url("/leaves"), CancellationToken.None));
-        Assert.Null(await renderer.RenderAsync(site.Url("/leaves"), CancellationToken.None));
+        var left = await renderer.RenderAsync(site.Url("/leaves"), CancellationToken.None);
+        Assert.Null(left.Html);
+        Assert.Equal(site.Url("/landed"), left.LeftFor);
+
+        // A meta refresh the script writes is the same thing, and so is leaving a moment after the page has loaded.
+        Assert.Equal(site.Url("/landed"), (await renderer.RenderAsync(site.Url("/refreshes"), CancellationToken.None)).LeftFor);
+        Assert.Equal(site.Url("/landed"), (await renderer.RenderAsync(site.Url("/leaves-late"), CancellationToken.None)).LeftFor);
+
+        // Where it lands doesn't have to answer: the crawl finds that out when it fetches it.
+        Assert.Equal(site.Url("/gone"), (await renderer.RenderAsync(site.Url("/leaves-for-nothing"), CancellationToken.None)).LeftFor);
 
         var notice = Assert.Single(observer.Seen, notice => notice.Code == "javascript-redirect");
-        Assert.Equal(CrawlNoticeLevel.Warning, notice.Level);
+        Assert.Equal(CrawlNoticeLevel.Info, notice.Level);
         Assert.Contains(site.Url("/leaves").AbsoluteUri, notice.Message, StringComparison.Ordinal);
         Assert.Contains(site.Url("/landed").AbsoluteUri, notice.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A script and a stylesheet the first page was sent are not asked for again by the second, which still runs
+    /// the script. One the site marks no-store is asked for every time. A data request is never kept.
+    /// </summary>
+    [Fact]
+    public async Task AScriptOnePageWasSentIsNotAskedForAgainByTheNext()
+    {
+        await using var site = await LoopbackServer.StartAsync(ServeAsync);
+        await using var renderer = Renderer(site.BaseUri);
+
+        var first = await HtmlAsync(renderer, site.Url("/bundled"));
+        var second = await HtmlAsync(renderer, site.Url("/bundled-too"));
+
+        Assert.Contains("<h1>Bundled</h1>", first, StringComparison.Ordinal);
+        Assert.Contains("<h1>Bundled</h1>", second, StringComparison.Ordinal);
+        Assert.Equal(1, _requests.Count(path => path == "/bundle.js"));
+        Assert.Equal(1, _requests.Count(path => path == "/site.css"));
+        Assert.Equal(2, _requests.Count(path => path == "/fresh.js"));
+        Assert.Equal(2, _requests.Count(path => path == "/data"));
+
+        var counts = renderer.Counts;
+        Assert.Equal(2, counts.Pages);
+        Assert.Equal(2, counts.FromCache);
+        Assert.Equal(8, counts.Sent);
+        Assert.True(counts.CacheBytes > 0);
+    }
+
+    /// <summary>A kept script is still held to robots.txt: what the crawler is kept out of is not run from memory either.</summary>
+    [Fact]
+    public async Task AKeptScriptIsStillHeldToRobotsTxt()
+    {
+        await using var site = await LoopbackServer.StartAsync(ServeAsync);
+        await using var renderer = Renderer(site.BaseUri);
+        Assert.Contains("<h1>Bundled</h1>", await HtmlAsync(renderer, site.Url("/bundled")), StringComparison.Ordinal);
+
+        renderer.ReadRobotsTxt = _ => Task.FromResult(RobotsTxtParser.Parse("User-agent: *" + Environment.NewLine + "Disallow: /bundle.js", "ShoutingIguana"));
+        var after = await HtmlAsync(renderer, site.Url("/bundled-too"));
+
+        Assert.NotNull(after);
+        Assert.DoesNotContain("<h1>Bundled</h1>", after, StringComparison.Ordinal);
+        Assert.Equal(1, _requests.Count(path => path == "/bundle.js"));
+    }
+
+    [Fact]
+    public void TheCacheStaysInsideItsBudgetAndKeepsOnlyWhatASiteLetsBeKept()
+    {
+        var cache = new RenderCache(budgetBytes: 1_000);
+        var plain = new Dictionary<string, string> { ["content-type"] = "text/javascript", ["content-encoding"] = "gzip", ["content-length"] = "12" };
+
+        Assert.True(cache.Offer("https://example.com/a.js", 200, plain, new byte[400]));
+        Assert.True(cache.Offer("https://example.com/b.js", 200, plain, new byte[400]));
+        Assert.True(cache.TryGet("https://example.com/a.js", out var kept));
+        Assert.Equal(["content-type"], kept.Headers.Select(header => header.Key));
+
+        // A third goes over the budget: the one asked for longest ago is dropped, which is b.
+        Assert.True(cache.Offer("https://example.com/c.js", 200, plain, new byte[400]));
+        Assert.False(cache.TryGet("https://example.com/b.js", out _));
+        Assert.True(cache.TryGet("https://example.com/a.js", out _));
+        Assert.True(cache.TryGet("https://example.com/c.js", out _));
+        Assert.Equal(800, cache.Bytes);
+
+        Assert.False(cache.Offer("https://example.com/big.js", 200, plain, new byte[1_001]));
+        Assert.False(cache.Offer("https://example.com/missing.js", 404, plain, new byte[10]));
+        Assert.False(cache.Offer("https://example.com/private.js", 200, new Dictionary<string, string> { ["Cache-Control"] = "private, no-store" }, new byte[10]));
+        Assert.False(cache.Offer("https://example.com/session.js", 200, new Dictionary<string, string> { ["Set-Cookie"] = "a=b" }, new byte[10]));
+        Assert.False(cache.Offer("https://example.com/varies.js", 200, new Dictionary<string, string> { ["Vary"] = "Accept-Encoding, Cookie" }, new byte[10]));
+        Assert.Equal(800, cache.Bytes);
+
+        // Ten thousand more never take it past the budget.
+        for (var index = 0; index < 10_000; index++)
+        {
+            cache.Offer($"https://example.com/chunk-{index}.js", 200, plain, new byte[300]);
+            Assert.True(cache.Bytes <= 1_000);
+        }
+
+        Assert.True(RenderCache.Serves("GET", "script"));
+        Assert.True(RenderCache.Serves("GET", "stylesheet"));
+        Assert.False(RenderCache.Serves("POST", "script"));
+        Assert.False(RenderCache.Serves("GET", "document"));
+        Assert.False(RenderCache.Serves("GET", "fetch"));
+        Assert.False(RenderCache.Serves("GET", "xhr"));
+    }
+
+    [Theory]
+    [InlineData(5, 32, 64L, 5)]    // the crawl's own setting
+    [InlineData(16, 32, 64L, 8)]   // never more than eight
+    [InlineData(16, 4, 64L, 2)]    // half the processors
+    [InlineData(16, 32, 2L, 4)]    // a slot for each half gigabyte
+    [InlineData(1, 32, 64L, 1)]
+    [InlineData(5, 1, 1L, 1)]      // never fewer than one
+    public void AsManyPagesRenderAtOnceAsTheCrawlAsksAndTheMachineAllows(int concurrency, int processors, long gigabytes, int expected)
+    {
+        Assert.Equal(expected, JavaScriptRenderer.SlotsFor(concurrency, processors, gigabytes * 1024 * 1024 * 1024));
+    }
+
+    /// <summary>
+    /// The site's sign-in goes to the site and its www twin, on any port, and a host's own sign-in to that host. No
+    /// other host is offered a password.
+    /// </summary>
+    [Fact]
+    public void ASignInIsForTheSiteAndItsWwwTwinAndNoOtherHost()
+    {
+        var options = new CrawlOptions
+        {
+            StartUrl = "https://example.com/",
+            HttpLogins =
+            [
+                new SiteLogin { Username = "reader", Password = "let-me-in" },
+                new SiteLogin { Host = "staging.example.net", Username = "tester", Password = "other" }
+            ]
+        };
+
+        Assert.Equal("reader", JavaScriptRenderer.LoginFor(options, new Uri("https://example.com/page"))?.Username);
+        Assert.Equal("reader", JavaScriptRenderer.LoginFor(options, new Uri("https://www.example.com/page"))?.Username);
+        Assert.Equal("tester", JavaScriptRenderer.LoginFor(options, new Uri("https://staging.example.net/app.js"))?.Username);
+        Assert.Null(JavaScriptRenderer.LoginFor(options, new Uri("https://cdn.example.org/app.js")));
+        Assert.Null(JavaScriptRenderer.LoginFor(options, new Uri("https://shop.example.com/")));
+        Assert.Null(JavaScriptRenderer.LoginFor(options, new Uri("https://www.staging.example.net/")));
     }
 
     [Fact]
@@ -118,7 +258,7 @@ public sealed class JavaScriptRendererTests
         await using var site = await LoopbackServer.StartAsync(ServeAsync);
         await using var renderer = Renderer(site.BaseUri);
 
-        var html = await renderer.RenderAsync(site.Url("/shadow"), CancellationToken.None);
+        var html = await HtmlAsync(renderer, site.Url("/shadow"));
 
         Assert.NotNull(html);
         Assert.StartsWith("<!DOCTYPE html>", html, StringComparison.OrdinalIgnoreCase);
@@ -138,7 +278,7 @@ public sealed class JavaScriptRendererTests
         await using var site = await LoopbackServer.StartAsync(ServeAsync);
         await using var renderer = Renderer(site.BaseUri);
 
-        var html = await renderer.RenderAsync(site.Url("/below"), CancellationToken.None);
+        var html = await HtmlAsync(renderer, site.Url("/below"));
 
         Assert.NotNull(html);
         Assert.Contains("/found-below", html, StringComparison.Ordinal);
@@ -150,7 +290,7 @@ public sealed class JavaScriptRendererTests
         await using var site = await LoopbackServer.StartAsync(ServeAsync);
         await using var renderer = Renderer(site.BaseUri);
 
-        Assert.NotNull(await renderer.RenderAsync(site.Url("/worker"), CancellationToken.None));
+        Assert.NotNull(await HtmlAsync(renderer, site.Url("/worker")));
 
         Assert.Contains("/after-register", _requests);
         Assert.DoesNotContain("/sw.js", _requests);
@@ -167,7 +307,7 @@ public sealed class JavaScriptRendererTests
         await using var site = await LoopbackServer.StartAsync(ServeAsync);
         await using var renderer = Renderer(site.BaseUri, requestsPerSecond: 1);
 
-        var html = await renderer.RenderAsync(site.Url("/chained"), CancellationToken.None);
+        var html = await HtmlAsync(renderer, site.Url("/chained"));
 
         Assert.NotNull(html);
         Assert.Contains("<h1>Chained</h1>", html, StringComparison.Ordinal);
@@ -180,7 +320,7 @@ public sealed class JavaScriptRendererTests
         await using var renderer = Renderer(site.BaseUri);
         renderer.ReadRobotsTxt = _ => Task.FromResult(RobotsTxtParser.Parse("User-agent: *\nDisallow: /kept-out/\n", "ShoutingIguana"));
 
-        var html = await renderer.RenderAsync(site.Url("/asks"), CancellationToken.None);
+        var html = await HtmlAsync(renderer, site.Url("/asks"));
 
         Assert.NotNull(html);
         Assert.Contains("<h1>Asked fulfilled rejected</h1>", html, StringComparison.Ordinal);
@@ -198,8 +338,8 @@ public sealed class JavaScriptRendererTests
         await using var site = await LoopbackServer.StartAsync(ServeAsync);
         await using var renderer = Renderer(site.BaseUri);
 
-        Assert.Null(await renderer.RenderAsync(site.Url("/refused"), CancellationToken.None));
-        Assert.Null(await renderer.RenderAsync(site.Url("/members"), CancellationToken.None));
+        Assert.Null(await HtmlAsync(renderer, site.Url("/refused")));
+        Assert.Null(await HtmlAsync(renderer, site.Url("/members")));
     }
 
     [Fact]
@@ -211,7 +351,7 @@ public sealed class JavaScriptRendererTests
             HttpLogins = [new SiteLogin { Username = "reader", Password = "let-me-in" }]
         });
 
-        var html = await renderer.RenderAsync(site.Url("/members"), CancellationToken.None);
+        var html = await HtmlAsync(renderer, site.Url("/members"));
 
         Assert.NotNull(html);
         Assert.Contains("<h1>Members</h1>", html, StringComparison.Ordinal);
@@ -266,8 +406,8 @@ public sealed class JavaScriptRendererTests
         });
         renderer.CreatePlaywright = () => throw new PlaywrightException("Driver not found: /.playwright/node/linux-x64/node");
 
-        Assert.Null(await renderer.RenderAsync(site.Url("/plain"), CancellationToken.None));
-        Assert.Null(await renderer.RenderAsync(site.Url("/router"), CancellationToken.None));
+        Assert.Null(await HtmlAsync(renderer, site.Url("/plain")));
+        Assert.Null(await HtmlAsync(renderer, site.Url("/router")));
         Assert.Null(await renderer.LoadAsync(site.Url("/plain"), "127.0.0.1", CancellationToken.None));
         var refused = await Assert.ThrowsAsync<InvalidOperationException>(() => renderer.SignInAsync(
             new FormLogin { Url = site.Url("/plain").AbsoluteUri, Username = "reader", Password = "let-me-in" }, CancellationToken.None));
@@ -307,16 +447,19 @@ public sealed class JavaScriptRendererTests
         await using var site = await LoopbackServer.StartAsync(ServeAsync);
         var observer = new Notices();
         await using var renderer = Renderer(site.BaseUri, observer);
-        Assert.NotNull(await renderer.RenderAsync(site.Url("/plain"), CancellationToken.None));
+        Assert.NotNull(await HtmlAsync(renderer, site.Url("/plain")));
 
         var browser = (IBrowser)typeof(JavaScriptRenderer).GetField("_browser", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(renderer)!;
         await browser.CloseAsync();
 
-        var html = await renderer.RenderAsync(site.Url("/plain"), CancellationToken.None);
+        var html = await HtmlAsync(renderer, site.Url("/plain"));
         Assert.NotNull(html);
         Assert.Contains("<h1>Plain</h1>", html, StringComparison.Ordinal);
         Assert.DoesNotContain(observer.Seen, notice => notice.Level == CrawlNoticeLevel.Warning);
     }
+
+    private static async Task<string?> HtmlAsync(JavaScriptRenderer renderer, Uri uri) =>
+        (await renderer.RenderAsync(uri, CancellationToken.None)).Html;
 
     private static JavaScriptRenderer Renderer(Uri start, ICrawlObserver? observer = null, double requestsPerSecond = 0,
         Func<CrawlOptions, CrawlOptions>? edit = null)
@@ -338,6 +481,27 @@ public sealed class JavaScriptRendererTests
     {
         var path = context.Request.Path.Value ?? "/";
         _requests.Enqueue(path);
+        if (path is "/bundle.js" or "/fresh.js")
+        {
+            context.Response.ContentType = "text/javascript";
+            if (path == "/fresh.js")
+            {
+                context.Response.Headers.CacheControl = "no-store";
+                await context.Response.WriteAsync("window.fresh = true;");
+                return;
+            }
+
+            await context.Response.WriteAsync("fetch('/data').then(() => { document.getElementById('app').innerHTML = '<h1>Bun' + 'dled</h1>'; });");
+            return;
+        }
+
+        if (path == "/site.css")
+        {
+            context.Response.ContentType = "text/css";
+            await context.Response.WriteAsync("body { margin: 0; }");
+            return;
+        }
+
         if (path == "/sw.js")
         {
             context.Response.ContentType = "text/javascript";
