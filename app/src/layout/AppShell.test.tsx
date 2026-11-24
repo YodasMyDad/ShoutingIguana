@@ -143,6 +143,26 @@ describe('the sidebar, open', () => {
   });
 });
 
+describe('the sidebar’s custom extraction item', () => {
+  afterEach(() => updateSettings({ mode: 'advanced' }));
+
+  // It had no link of its own, so it led to the Overview: "Custom data" was drawn current on the Summary beside
+  // Summary itself, and a click on it went nowhere.
+  it.each([
+    ['simple', 'Custom data', 'Summary'],
+    ['advanced', 'Custom extraction', 'Overview'],
+  ] as const)('leads to its own screen in %s, and isn’t current on the first one', async (mode, name, first) => {
+    updateSettings({ mode });
+    await open(`${CRAWL}/overview`);
+    const nav = within(screen.getByRole('navigation', { name: 'Main' }));
+    const item = await nav.findByRole('link', { name });
+    expect(item).toHaveAttribute('href', `${CRAWL}/extraction`);
+    expect(item).not.toHaveAttribute('aria-current');
+    const current = nav.getAllByRole('link').filter((element) => element.classList.contains('si-current'));
+    expect(current.map((element) => element.textContent)).toEqual([first]);
+  });
+});
+
 describe('the sidebar, on a running crawl’s Overview', () => {
   afterEach(() => liveStore.reset());
 
