@@ -286,6 +286,12 @@ function SectionLink({
           <NavItem to="/crawls/$crawl/report" params={{ crawl: crawlId }} {...props} />
         </li>
       );
+    case 'extraction':
+      return (
+        <li>
+          <NavItem to="/crawls/$crawl/extraction" params={{ crawl: crawlId }} {...props} />
+        </li>
+      );
     default:
       return (
         <li>
