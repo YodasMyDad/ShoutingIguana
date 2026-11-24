@@ -127,6 +127,28 @@ describe.skipIf(TABLE_STUBBED)('Where it is, in Simple', () => {
     expect(where.queryByText('1,036 words')).toBeNull();
   });
 
+  // On gardenfurnituresets.co.uk (2026-11-24): the description two pages share headed the group, and each page under
+  // it said it again, "Search description: “This furniture cover is UV…”".
+  it('doesn’t say under each page the text the group’s pages share', async () => {
+    const shared = 'This furniture cover is UV & water-resistant. It is lightweight and easy to clean.';
+    const where = await open(
+      'description-duplicate',
+      catalogRoutes(
+        'description-duplicate',
+        2,
+        [group({ detail: shared, sharedText: shared, pages: 2 })],
+        [
+          page(1, '/cover-a/', { detail: shared, description: shared }),
+          page(2, '/cover-b/', { detail: shared, description: shared }),
+        ],
+        { check: { evidence: ['description'] } },
+      ),
+    );
+    expect(await where.findByText(`“${shared}”`)).toBeVisible();
+    expect(await where.findByText('Page 2')).toBeVisible();
+    expect(where.queryByText(/^Search description:/)).toBeNull();
+  });
+
   it('heads a canonical to the first page with the list’s first page, and the later pages that point at it', async () => {
     const where = await open(
       'canonical-to-first-page',

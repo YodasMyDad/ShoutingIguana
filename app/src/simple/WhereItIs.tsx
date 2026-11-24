@@ -63,6 +63,13 @@ function saysSomething(check: Pick<Check, 'category'>, column: string, value: un
   return true;
 }
 
+/** Whether a page's value is the text its group shares, whole or as the engine cut it ("This cover is UV…"). */
+function repeatsShared(value: unknown, shared: string | null): boolean {
+  if (!shared || typeof value !== 'string' || value === '') return false;
+  const start = value.replace(/(…|\.\.\.)$/, '').trim();
+  return start !== '' && shared.trim().startsWith(start);
+}
+
 /**
  * A page's evidence in plain words, a line each, muted under what it's about: "The rules file says “Disallow:
  * /cart/”, on line 12", "Forwards to /b/, then /new/, which works". Nothing for a check without evidence.
@@ -72,12 +79,15 @@ function EvidenceLines({
   check,
   origin,
   said = null,
+  shared = null,
 }: {
   row: IssueRow;
   check: Check;
   origin: string | null;
   /** What the line above them already says: evidence that only repeats it ("1,036 words") isn't said again. */
   said?: string | null;
+  /** The text the group's pages share, which heads the group: a page's own copy of it (its description) isn't a line. */
+  shared?: string | null;
 }) {
   const values = row as unknown as Record<string, unknown>;
   // The row's own address, so it's never said to forward to itself or be its own main address (X1); a line two columns
@@ -85,6 +95,7 @@ function EvidenceLines({
   const columns = evidenceOf(check);
   const lines = columns
     .filter((column) => saysSomething(check, column, values[column], columns))
+    .filter((column) => !repeatsShared(values[column], shared))
     .map((column) => plainEvidence(column, values[column], origin, row.url ?? null))
     .filter((line, index, all): line is string => line !== null && all.indexOf(line) === index)
     .filter((line) => !said?.toLowerCase().includes(line.toLowerCase()));
@@ -605,7 +616,7 @@ function GroupRow({
           {plainDetail(check, row as unknown as Record<string, unknown>) ?? row.detail}
         </span>
       ) : null}
-      <EvidenceLines row={row} check={check} origin={origin} />
+      <EvidenceLines row={row} check={check} origin={origin} shared={group.sharedText ?? null} />
     </>
   );
   return (
