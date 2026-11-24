@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 using AngleSharp.Dom;
+using ShoutingIguana.Engine.Analysis;
+using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Urls;
 
@@ -62,10 +64,18 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
         ("nav", LinkPosition.Navigation), ("navbar", LinkPosition.Navigation), ("navigation", LinkPosition.Navigation),
         ("menu", LinkPosition.Navigation), ("main-menu", LinkPosition.Navigation), ("main-nav", LinkPosition.Navigation),
         ("site-nav", LinkPosition.Navigation), ("breadcrumb", LinkPosition.Navigation), ("breadcrumbs", LinkPosition.Navigation),
+        ("mobile-nav", LinkPosition.Navigation), ("mobile-menu", LinkPosition.Navigation),
+
+        // Menus as common builders write them: Max Mega Menu (WordPress) and Weebly.
+        ("mega-menu", LinkPosition.Navigation), ("mega-menu-wrap", LinkPosition.Navigation),
+        ("wsite-menu", LinkPosition.Navigation), ("wsite-menu-default", LinkPosition.Navigation),
         ("header", LinkPosition.Header), ("site-header", LinkPosition.Header), ("masthead", LinkPosition.Header),
         ("footer", LinkPosition.Footer), ("site-footer", LinkPosition.Footer),
         ("sidebar", LinkPosition.Sidebar)
     ];
+
+    /// <summary>The class Shopify's <c>{% form 'localization' %}</c> tag gives the country and language picker, in every theme.</summary>
+    private const string SHOPIFY_LOCALIZATION_FORM = "shopify-localization-form";
 
     /// <summary>Attributes that make a <c>&lt;link rel="canonical"&gt;</c> an alternate's rather than the page's own, in the order a detail names them.</summary>
     private static readonly string[] CANONICAL_QUALIFIERS = ["hreflang", "lang", "media", "type"];
@@ -246,6 +256,13 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
                 element.QuerySelector("input[type=password i]") is not null));
         }
 
+        // A password field outside any form, which a script sends: on an HTTP page it's typed in the clear all the same.
+        if (name == "input" && Forms.Count < MAX_FORMS && string.Equals(element.GetAttribute("type")?.Trim(), "password", StringComparison.OrdinalIgnoreCase) &&
+            element.Closest("form") is null && !Forms.Any(form => form.HasPassword))
+        {
+            Forms.Add(new FormFact(UrlNormalizer.Normalize(baseUri), "get", true));
+        }
+
         // Only <a>, <area>, <link> and <base> take an href: on a <span> or <div>, one that leads somewhere is a link search
         // engines can't follow (a widget's href="javascript:void(0)" or "#reviews" leads nowhere they could go).
         if (name is not ("a" or "area" or "link" or "base") && LeadsSomewhere(element.GetAttribute("href")))
@@ -280,6 +297,17 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
                 return;
             case "style" or "template" or "base":
                 return;
+            case "select" or "datalist" or "textarea":
+                // A form control's own text, not the page's: a country picker's two hundred options, or the embed code a
+                // box offers to copy. No words of the page, so none to count, compare or score for reading ease, and none
+                // of its menus' either (as a <noscript>'s markup is no words at all): a language picker isn't boilerplate.
+                childContext = context with { ExcludeText = true, InNoscript = true };
+                break;
+            case "form" when element.ClassList.Contains(SHOPIFY_LOCALIZATION_FORM):
+                // Shopify's country and language picker: a form of some two hundred buttons, on every page of the shop.
+                // A control as a <select> is, written out.
+                childContext = context with { ExcludeText = true, InNoscript = true };
+                break;
             case "noscript":
                 // Parsed with scripting on, its content is one text node of raw markup: no text of the page's, and no words.
                 childContext = context with { ExcludeText = true, InNoscript = true };
@@ -326,6 +354,12 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
                 if (context.Position == LinkPosition.Content)
                 {
                     childContext = ApplyRegionHints(element, context);
+                }
+                else if (context is { Position: LinkPosition.Header or LinkPosition.Sidebar, ExcludeText: false } && IsNavigation(element))
+                {
+                    // A header's or a sidebar's menu written without <nav> (role="navigation", or a menu's class): the
+                    // template's links, not the page's words, as a <nav> there is.
+                    childContext = context with { Position = LinkPosition.Navigation, ExcludeText = true };
                 }
 
                 break;
@@ -426,6 +460,11 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
         };
     }
 
+    /// <summary>The element is marked as a menu: by its role, or by an id or class that names one (<see cref="REGION_HINTS"/>).</summary>
+    private static bool IsNavigation(IElement element) =>
+        element.GetAttribute("role") == "navigation" ||
+        (RegionFromTokens(element.Id) ?? RegionFromTokens(element.ClassName)) == LinkPosition.Navigation;
+
     private static LinkPosition? RegionFromTokens(string? value)
     {
         if (string.IsNullOrEmpty(value))
@@ -495,6 +534,13 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
                 AddLink(MetaRefresh.Url, LinkKind.MetaRefresh, LinkFlags.None, LinkPosition.Head, null);
             }
 
+            return;
+        }
+
+        // A policy the page sets for itself, where no header does: kept by a name no meta tag's own name can be.
+        if (httpEquiv == "content-security-policy" && !string.IsNullOrWhiteSpace(content))
+        {
+            AddMetaTag(MetaTagFact.CONTENT_SECURITY_POLICY, Clean(content, MAX_META_CHARS));
             return;
         }
 
@@ -770,10 +816,13 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
 
     /// <summary>
     /// An href on an element that can't take one (a <c>&lt;span&gt;</c>, a <c>&lt;div&gt;</c>) leads somewhere: a URL, or
-    /// script that navigates. Not an empty one, a fragment, or script that goes nowhere.
+    /// script that navigates. Not an empty one, a fragment, script that goes nowhere, or an image file's URL: a gallery
+    /// keeps the full-size photo there for its script (Wix's product photos), and no page is lost with it.
     /// </summary>
     private static bool LeadsSomewhere(string? href) => href?.Trim() is { Length: > 0 } written && written[0] != '#' &&
-        (!written.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase) || Navigates(written["javascript:".Length..]));
+        (written.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase)
+            ? Navigates(written["javascript:".Length..])
+            : ResourceTypes.OfUrl(written) != ResourceType.Image);
 
     /// <summary>
     /// Script that takes the visitor to another page, as far as its text shows: it sets the location or an href, opens a
@@ -825,12 +874,16 @@ internal sealed partial class PageWalker(Uri pageUri, Uri baseUri, string robots
         if (Images.Count < MAX_IMAGES)
         {
             var data = url is null ? DataUriBytes(element.GetAttribute("src")) : null;
+
+            // An AMP page's image is sized on its <amp-img>, which keeps the space; the <img> inside it, as the AMP
+            // optimiser writes it, never has a width or height of its own.
+            var sizedBy = element.ParentElement is { LocalName: "amp-img" or "amp-anim" } amp ? amp : null;
             Images.Add(new ImageFact(
                 url,
                 alt is null ? null : Clean(alt, MAX_LABEL_CHARS),
                 alt is not null,
-                NullIfBlank(element.GetAttribute("width")),
-                NullIfBlank(element.GetAttribute("height")),
+                NullIfBlank(element.GetAttribute("width")) ?? NullIfBlank(sizedBy?.GetAttribute("width")),
+                NullIfBlank(element.GetAttribute("height")) ?? NullIfBlank(sizedBy?.GetAttribute("height")),
                 HasSrcset(element),
                 NullIfBlank(element.GetAttribute("loading")))
             {

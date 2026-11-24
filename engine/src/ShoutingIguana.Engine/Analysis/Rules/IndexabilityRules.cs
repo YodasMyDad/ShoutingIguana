@@ -26,10 +26,13 @@ internal sealed class IndexabilityRules : IPageRule
         if (page.Facts.MetaRefresh is { } refresh)
         {
             // A Refresh header works as the tag does, but it's set on the server, not in the page, so the detail says which.
-            var delay = refresh.DelaySeconds is { } seconds ? $" after {RuleText.Count(seconds, "second", "seconds")}" : string.Empty;
+            // A script that sent the browser on has neither: the detail names the script, as there is no tag to look for.
+            var delay = refresh.DelaySeconds is { } seconds && !refresh.FromScript ? $" after {RuleText.Count(seconds, "second", "seconds")}" : string.Empty;
             var action = refresh.Url is { } target ? $"moves to {target}{delay}" : $"reloads the page{delay}";
             yield return new IssueHit(IssueCatalog.META_REFRESH, page.UrlId,
-                refresh.FromHttpHeader ? $"The Refresh header {action}" : $"{char.ToUpperInvariant(action[0])}{action[1..]}");
+                refresh.FromScript ? $"A script {action} as the page loads"
+                : refresh.FromHttpHeader ? $"The Refresh header {action}"
+                : $"{char.ToUpperInvariant(action[0])}{action[1..]}");
         }
     }
 

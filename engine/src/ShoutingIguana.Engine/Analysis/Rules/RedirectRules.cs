@@ -1,6 +1,7 @@
 using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Parsing.Models;
+using ShoutingIguana.Engine.Storage.Models;
 
 namespace ShoutingIguana.Engine.Analysis.Rules;
 
@@ -67,7 +68,8 @@ internal sealed class RedirectRules(UrlTable urls, Func<int, string?> readUrl) :
                 continue;
             }
 
-            if (trace.Hops >= 2 && (id == urls.StartId || url.InSitemap || _linked.Contains(id)))
+            // A way into the chain: the start URL or a URL of the crawl's list, a sitemap's entry, or a link's target.
+            if (trace.Hops >= 2 && (id == urls.StartId || url.Source == DiscoverySource.Seed || url.InSitemap || _linked.Contains(id)))
             {
                 yield return new IssueHit(IssueCatalog.REDIRECT_CHAIN, id, ChainLength(trace), trace.FinalId);
             }

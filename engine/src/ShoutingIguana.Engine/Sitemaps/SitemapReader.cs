@@ -68,6 +68,7 @@ internal static class SitemapReader
         // next one starts, or the file does), at the depth its <loc> was found.
         string? location = null;
         string? lastmod = null;
+        var hasExtension = false;
         var entryDepth = -1;
 
         while (!xml.EOF)
@@ -75,8 +76,8 @@ internal static class SitemapReader
             cancellationToken.ThrowIfCancellationRequested();
             if (location is not null && xml.Depth <= entryDepth && xml.NodeType is XmlNodeType.EndElement or XmlNodeType.Element)
             {
-                yield return new SitemapEntry(location, isIndex, lastmod);
-                (location, lastmod, entryDepth) = (null, null, -1);
+                yield return new SitemapEntry(location, isIndex, lastmod, hasExtension);
+                (location, lastmod, hasExtension, entryDepth) = (null, null, false, -1);
             }
 
             if (xml.NodeType == XmlNodeType.Element)
@@ -98,8 +99,8 @@ internal static class SitemapReader
                         if (location is not null)
                         {
                             // A second <loc> in one entry, or one with no <url> around it: each is an entry of its own.
-                            yield return new SitemapEntry(location, isIndex, lastmod);
-                            lastmod = null;
+                            yield return new SitemapEntry(location, isIndex, lastmod, hasExtension);
+                            (lastmod, hasExtension) = (null, false);
                         }
 
                         (location, entryDepth) = (text, depth);
@@ -111,6 +112,10 @@ internal static class SitemapReader
 
                     continue;
                 }
+                else if (IsExtensionNamespace(xml.NamespaceURI))
+                {
+                    hasExtension = true;
+                }
             }
 
             if (!await xml.ReadAsync().ConfigureAwait(false))
@@ -121,7 +126,7 @@ internal static class SitemapReader
 
         if (location is not null)
         {
-            yield return new SitemapEntry(location, isIndex, lastmod);
+            yield return new SitemapEntry(location, isIndex, lastmod, hasExtension);
         }
     }
 
@@ -208,6 +213,12 @@ internal static class SitemapReader
 
         return null;
     }
+
+    /// <summary>Google's image, video and news sitemap extensions: <c>http://www.google.com/schemas/sitemap-image/1.1</c> and its kin.</summary>
+    private static bool IsExtensionNamespace(string namespaceUri) =>
+        namespaceUri.Contains("/schemas/sitemap-image/", StringComparison.OrdinalIgnoreCase) ||
+        namespaceUri.Contains("/schemas/sitemap-video/", StringComparison.OrdinalIgnoreCase) ||
+        namespaceUri.Contains("/schemas/sitemap-news/", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsSitemapNamespace(string namespaceUri) =>
         namespaceUri.Length == 0 ||

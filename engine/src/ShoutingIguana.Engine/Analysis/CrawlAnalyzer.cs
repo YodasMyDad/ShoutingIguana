@@ -337,7 +337,7 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
                         OtherScheme = reader.ReadOtherSchemeSitemapEntries().Where(entry => mainUrls.All(uri => uri.Scheme != entry.Value.Url))
                             .ToDictionary(),
                         Lastmods = reader.ReadSitemapLastmodFaults(LatestLastmod(reader))
-                    }),
+                    }, new GooglebotAccess(robots, reader.ReadUrl)),
                 new RobotsTxtRules(urls, robots, scope, mainOrigins, reader.ReadSiteVersionOnlyOrigins(), sitemaps), siteVersions,
                 new SiteVisibilityRules(urls), new RedirectHeaderRules(urls, reader.ReadRedirectHeaders, reader.ReadUrl),
                 new PaginationRules(urls, reader.ReadUrlId, reader.ReadUrl), new ResourceRules(urls, reader.ReadContentType),

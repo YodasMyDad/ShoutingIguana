@@ -197,7 +197,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition META_REFRESH = new("meta-refresh", IssueCategory.Redirects, IssueSeverity.Warning,
         "Meta refresh",
-        """The page has a <meta http-equiv="refresh"> tag, or its response a Refresh header, that sends visitors to another URL or reloads the page, at once or after a delay. The detail gives the target and the delay, and says when it's the header.""",
+        """The page has a <meta http-equiv="refresh"> tag, or its response a Refresh header, that sends visitors to another URL or reloads the page, at once or after a delay. A script that sends the browser to another URL as the page loads counts too. The detail gives the target and the delay, and says when it's the header or a script.""",
         """Replace it with a 301 redirect on the server (or 302 if the move is temporary). If the page reloads itself to show new content, update it with script instead, or let visitors refresh.""")
     {
         Why = """Google treats an instant meta refresh as a permanent redirect and a delayed one as temporary, but recommends a server-side redirect wherever you can set one up; that's faster too, as the browser doesn't load the page first. A timed redirect or reload also moves content away while people are reading, which WCAG counts as a failure. A refresh on old URLs where the server can't redirect is an acceptable fallback.""",
@@ -899,7 +899,7 @@ public static class IssueCatalog
     // Sitemaps
     public static readonly IssueDefinition SITEMAP_NON_INDEXABLE = new("sitemap-non-indexable", IssueCategory.Sitemaps, IssueSeverity.Warning,
         "Non-indexable URL in sitemap",
-        """A sitemap lists this internal URL, but it can't be indexed as listed: it redirects, returns a 4xx or 5xx error, is blocked by robots.txt, is noindex or names another URL as canonical. URLs the crawler couldn't check, because of timeouts or firewall blocks, aren't included.""",
+        """A sitemap lists this internal URL, but it can't be indexed as listed: it redirects, returns a 4xx or 5xx error, is blocked by robots.txt, is noindex or names another URL as canonical. URLs the crawler couldn't check aren't included: timeouts, firewall blocks, and URLs robots.txt refuses to this crawler but allows to Googlebot.""",
         """Remove the URL from the sitemap, or replace it with the final, indexable URL, such as the redirect target or the canonical. If the sitemap is generated, fix its filter rather than editing the file.""")
     {
         Why = """A sitemap should list the URLs you want in search results, and Google treats every URL in it as a suggested canonical. Listing URLs that redirect, fail or ask not to be indexed contradicts your other signals and spends crawls on URLs that won't be indexed. It's usually a sitemap generator that doesn't filter by status, noindex or canonical.""",
@@ -939,7 +939,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition SITEMAP_MISSING = new("sitemap-missing", IssueCategory.Sitemaps, IssueSeverity.Notice,
         "No XML sitemap found",
-        """The crawl found no sitemap: none is listed in robots.txt or the crawl settings, and there's none at /sitemap.xml. Reported on the home page, only when sitemap discovery was on and the crawl finished.""",
+        """The crawl found no sitemap: none is listed in robots.txt or the crawl settings, and there's none at /sitemap.xml. Reported on the home page, only when sitemap discovery was on and the crawl finished, and not when the site refused the crawler or /sitemap.xml gave no answer or a server error.""",
         """Publish an XML sitemap of your indexable pages (most CMSs can generate one) and add a Sitemap: line with its full URL to robots.txt.""")
     {
         Why = """A sitemap isn't required: Google finds pages through links, and a small, well-linked site may not need one. It helps most on large sites, new sites with few links from elsewhere, and sites with pages that links don't reach. A sitemap at another path that's only submitted in Search Console isn't visible to this crawl, so this may not be a real gap.""",
@@ -1557,7 +1557,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition HREFLANG_TO_NON_INDEXABLE = new("hreflang-to-non-indexable", IssueCategory.Hreflang, IssueSeverity.Warning,
         "Hreflang points to a non-indexable URL",
-        """This indexable page has hreflang entries whose URLs redirect, are noindex, name another URL as canonical, or are blocked by your robots.txt. Alternates that refused the crawler (a firewall, a bot challenge or a rate limit), and ones on other sites whose robots.txt kept the crawler out, aren't judged: neither says whether search engines can index them.""",
+        """This indexable page has hreflang entries whose URLs redirect, are noindex, name another URL as canonical, or are blocked by your robots.txt. Alternates that refused the crawler (a firewall, a bot challenge or a rate limit), and ones on other sites whose robots.txt kept the crawler out, aren't judged: neither says whether search engines can index them. Nor is an x-default entry whose URL redirects temporarily: a home page that sends each visitor on to their language is what x-default is for.""",
         """Replace each entry with the alternate's final, canonical, indexable URL, and keep the list identical on every page in the set.""")
     {
         Why = """Google generally shows each version's canonical, indexable URL in results, so hreflang should name exactly those URLs. An alternate that redirects or is canonicalised elsewhere isn't the URL that gets indexed, and one that's noindex or blocked can't be shown at all, so the entry for that language is unreliable. Google specifically warns against listing HTTP URLs in hreflang when the pages are on HTTPS.""",
@@ -1778,7 +1778,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition SECURITY_HEADERS_MISSING = new("security-headers-missing", IssueCategory.Security, IssueSeverity.Notice,
         "Security headers missing",
-        """The home page's response lacks one or more of Strict-Transport-Security (checked on HTTPS only), X-Content-Type-Options, Content-Security-Policy, X-Frame-Options (or a CSP frame-ancestors rule) and Referrer-Policy. The detail lists which.""",
+        """The home page's response lacks one or more of Strict-Transport-Security (checked on HTTPS only), X-Content-Type-Options, Content-Security-Policy, X-Frame-Options (or a CSP frame-ancestors rule) and Referrer-Policy. A Content-Security-Policy or a referrer policy the page sets in a meta tag counts as the header would. The detail lists which.""",
         """Add the missing headers on the server, CDN or framework, on every page's response. Start with X-Content-Type-Options set to nosniff and a Referrer-Policy, which rarely break anything. Roll out Content-Security-Policy in report-only mode first, and send Strict-Transport-Security only once HTTPS works everywhere on the site.""")
     {
         Why = """These headers protect visitors: HSTS keeps browsers on HTTPS, CSP limits what injected scripts can do, X-Frame-Options or frame-ancestors stops clickjacking, X-Content-Type-Options stops MIME sniffing, and Referrer-Policy limits which URLs leak to other sites (browsers already default to a safe policy, so it matters least). Google doesn't document them as a ranking factor. Only the home page is checked, as they're normally set site-wide.""",
@@ -1945,7 +1945,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition URL_REPETITIVE_PATH = new("url-repetitive-path", IssueCategory.Urls, IssueSeverity.Notice,
         "URL with a repeating path",
-        """This URL of the site's has a path that repeats itself: one segment three times or more, or the same run of segments twice in a row (/shop/shop/, /a/b/a/b/). Where it's found lists the pages linking to it.""",
+        """This URL of the site's has a path that repeats itself: one segment three times or more, or the same run of segments twice in a row (/shop/shop/, /a/b/a/b/). Only a URL that a page of the crawl links to or uses is judged, and where it's found lists those pages; a URL that only a sitemap lists isn't.""",
         """On the pages that link here, find the link that builds the repeating path, usually a relative address such as shop/ that should start with a slash, and fix that link. Redirect this address to the right one.""")
     {
         Why = """A relative link resolved from the wrong place builds ever-longer URLs, which crawlers can follow without end, each answering with the same page.""",
@@ -2173,7 +2173,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition SOCIAL_IMAGE_TOO_LARGE = new("social-image-too-large", IssueCategory.Html, IssueSeverity.Notice,
         "Open Graph or X image over 5 MB",
-        """This indexable page's og:image or twitter:image is over 5 MB, as received. Only checked when the crawl fetched images. The detail gives the first.""",
+        """This indexable page's og:image or twitter:image is over 5 MB, as received. Where a page names several, the first of each is judged: it's the one networks show. Only checked when the crawl fetched images.""",
         """Use a smaller copy: 1,200 × 630 pixels, saved as JPEG or WebP, is well under 1 MB.""")
     {
         Why = """X doesn't show an image over 5 MB; Facebook's limit is 8 MB, and a large file is slow to fetch for every preview.""",
@@ -2187,7 +2187,7 @@ public static class IssueCatalog
 
     public static readonly IssueDefinition SOCIAL_IMAGE_TOO_SMALL = new("social-image-too-small", IssueCategory.Html, IssueSeverity.Notice,
         "Open Graph or X image too small",
-        """This indexable page's og:image is under 200 × 200 pixels, or the image X uses (twitter:image, else og:image) is under 300 × 157 on a summary_large_image card or 144 × 144 on a summary card. The proportions aren't judged: both networks crop. Only checked when the crawl fetched images. The detail gives the first.""",
+        """This indexable page's og:image is under 200 × 200 pixels, or the image X uses (twitter:image, else og:image) is under 300 × 157 on a summary_large_image card or 144 × 144 on a summary card. The proportions aren't judged: both networks crop. Where a page names several images, the first of each tag is judged: it's the one networks show. Only checked when the crawl fetched images.""",
         """Use an image at least 1,200 × 630 pixels, which suits every network.""")
     {
         Why = """Facebook rejects an image under 200 × 200 pixels and recommends 1,200 × 630; X shows a small image blurred, or none.""",

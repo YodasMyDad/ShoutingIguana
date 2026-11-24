@@ -80,9 +80,13 @@ internal sealed class SocialRules(UrlTable urls) : IPageRule
         string? brokenDetail = null, largeDetail = null, smallDetail = null;
         // The image X uses: its own, else Open Graph's. One file can be named by both, each judged by its own minimum.
         var xImage = page.Links.Any(link => link.Kind == LinkKind.SocialImage && link.Text == "twitter:image") ? "twitter:image" : "og:image";
+        // A network shows the first image a page names; a builder that lists every picture on the page as an og:image
+        // (Weebly) names small ones further down, which nobody is shown. So only each tag's first is measured.
+        HashSet<string> measured = new(StringComparer.Ordinal);
         foreach (var link in page.Links.Where(link => link.Kind == LinkKind.SocialImage))
         {
             var tag = link.Text ?? "og:image";
+            var isFirst = measured.Add(tag);
             if (urls.IsBrokenThroughRedirects(link.ToId))
             {
                 broken.Add(link.ToId);
@@ -102,6 +106,11 @@ internal sealed class SocialRules(UrlTable urls) : IPageRule
             {
                 broken.Add(link.ToId);
                 brokenDetail ??= file.ContentClass == ContentClass.Html ? $"{tag} is a page, not an image" : $"{tag} isn't sent as an image";
+                continue;
+            }
+
+            if (!isFirst)
+            {
                 continue;
             }
 

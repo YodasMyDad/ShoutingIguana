@@ -305,8 +305,8 @@ public sealed class LinksSitemapsRobotsEndpointsTests(GridSidecar grid) : IClass
 
         // The index says how many sitemaps its file lists, beside how many of them the crawl has; a sitemap of URLs lists
         // none, and one that couldn't be read doesn't say.
-        Assert.Equal([4, 0, 0, 0, null], sitemaps.Select(sitemap => (int?)sitemap!["listedSitemaps"]));
-        Assert.Equal((grid.Url("/sitemap.xml"), "robotsTxt", "read", true, 4), ((string?)index["url"], (string?)index["foundVia"], (string?)index["state"], (bool)index["isIndex"]!, (int)index["sitemaps"]!));
+        Assert.Equal([5, 0, 0, 0, 0, null], sitemaps.Select(sitemap => (int?)sitemap!["listedSitemaps"]));
+        Assert.Equal((grid.Url("/sitemap.xml"), "robotsTxt", "read", true, 5), ((string?)index["url"], (string?)index["foundVia"], (string?)index["state"], (bool)index["isIndex"]!, (int)index["sitemaps"]!));
         Assert.Null(index["parentId"]);
         Assert.Equal(["listed", "fetched", "indexable", "nonIndexable", "robotsDisallowed", "redirectingOrBroken"], index["urls"]!.AsObject().Select(property => property.Key));
         Assert.Equal((1, 2), ((long)index["urls"]!["robotsDisallowed"]!, (long)index["urls"]!["redirectingOrBroken"]!));

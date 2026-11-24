@@ -64,9 +64,10 @@ internal sealed partial class CanonicalRules(UrlTable urls, Func<int, string?> r
         var distinct = honoured.Where(canonical => canonical.Url is not null).DistinctBy(canonical => canonical.Url, StringComparer.Ordinal).ToList();
         if (distinct.Count > 1)
         {
-            // Each URL with where it's declared, so the wrong one can be turned off: a tag the template writes, or a header the server sends.
+            // Each URL with where it's declared, so the wrong one can be turned off: a tag the template writes, or a header the
+            // server sends. One on the page's own host is shown as its path, so that two fit and neither is cut away.
             yield return new IssueHit(IssueCatalog.CANONICAL_MULTIPLE, page.UrlId, RuleText.Fit(
-                $"{RuleText.Count(distinct.Count, "URL", "URLs")}: {string.Join(" · ", distinct.Select(canonical => $"{canonical.Url} ({(canonical.FromHttpHeader ? "HTTP header" : "head")})"))}"));
+                $"{RuleText.Count(distinct.Count, "URL", "URLs")}: {string.Join(" · ", distinct.Select(canonical => $"{RuleText.Near(canonical.Url!, page.Url)} ({(canonical.FromHttpHeader ? "HTTP header" : "head")})"))}"));
         }
 
         if (honoured.FirstOrDefault(canonical => canonical is { FromHttpHeader: false, Url: not null } && !IsAbsolute(canonical.Href)) is { } relative)

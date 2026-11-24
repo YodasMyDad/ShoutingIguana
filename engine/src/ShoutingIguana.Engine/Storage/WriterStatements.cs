@@ -124,9 +124,9 @@ internal sealed class WriterStatements : IDisposable
             """, "$url", "$parent");
         _updateSitemap = Prepare(connection, """
             UPDATE sitemaps SET status_code = $status, is_index = $isIndex, url_count = $count, error = $error, is_probe = $isProbe,
-                                listed_sitemaps = $listed, size_bytes = $size
+                                listed_sitemaps = $listed, size_bytes = $size, final_url = $final, extensions_only = $extensions
             WHERE id = $id
-            """, "$status", "$isIndex", "$count", "$error", "$isProbe", "$listed", "$size", "$id");
+            """, "$status", "$isIndex", "$count", "$error", "$isProbe", "$listed", "$size", "$final", "$extensions", "$id");
         _insertSitemapUrl = Prepare(connection,
             "INSERT OR IGNORE INTO sitemap_urls (sitemap_id, url_id, lastmod) VALUES ($sitemap, $url, $lastmod)", "$sitemap", "$url", "$lastmod");
         // The stamp only ever moves forward, even when the clock went back (or two runs fell in one millisecond): an
@@ -284,7 +284,8 @@ internal sealed class WriterStatements : IDisposable
     }
 
     public void UpdateSitemap(SitemapRecord record) =>
-        Run(_updateSitemap, record.StatusCode, record.IsIndex, record.UrlCount, record.Error, record.IsProbe, record.ListedSitemaps, record.SizeBytes, record.Id);
+        Run(_updateSitemap, record.StatusCode, record.IsIndex, record.UrlCount, record.Error, record.IsProbe, record.ListedSitemaps, record.SizeBytes,
+            record.FinalUrl, record.ExtensionsOnly, record.Id);
 
     public void InsertSitemapUrl(int sitemapId, int urlId, long? lastmod = null) => Run(_insertSitemapUrl, sitemapId, urlId, lastmod);
 

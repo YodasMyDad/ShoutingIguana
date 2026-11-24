@@ -74,7 +74,9 @@ internal sealed class SecurityRules(UrlTable urls, HstsPolicy? hsts = null) : IP
 
         // With upgrade-insecure-requests the browser asks for every http:// resource over HTTPS, so none loads insecurely.
         if (!isHttps || page.Headers.Any(header => header.Name == "content-security-policy" &&
-                                                   header.Value.Contains("upgrade-insecure-requests", StringComparison.OrdinalIgnoreCase)))
+                                                   header.Value.Contains("upgrade-insecure-requests", StringComparison.OrdinalIgnoreCase)) ||
+            page.Facts.MetaTags.Any(tag => tag.Name == MetaTagFact.CONTENT_SECURITY_POLICY &&
+                                           tag.Content.Contains("upgrade-insecure-requests", StringComparison.OrdinalIgnoreCase)))
         {
             yield break;
         }
@@ -239,8 +241,9 @@ internal sealed class SecurityRules(UrlTable urls, HstsPolicy? hsts = null) : IP
         }
 
         // Browsers enforce every Content-Security-Policy line, so frame-ancestors in any of them stands in for X-Frame-Options.
+        // A policy the page sets in a meta tag is enforced as the header's is, but for frame-ancestors, which only a header can set.
         var policies = page.Headers.Where(header => header.Name == "content-security-policy").Select(header => header.Value).ToList();
-        if (policies.Count == 0)
+        if (policies.Count == 0 && !page.Facts.MetaTags.Any(tag => tag.Name == MetaTagFact.CONTENT_SECURITY_POLICY))
         {
             missing.Add("Content-Security-Policy");
         }
@@ -250,7 +253,8 @@ internal sealed class SecurityRules(UrlTable urls, HstsPolicy? hsts = null) : IP
             missing.Add("X-Frame-Options");
         }
 
-        if (page.Header("referrer-policy") is null)
+        // <meta name="referrer"> sets the page's referrer policy as the header would.
+        if (page.Header("referrer-policy") is null && !page.Facts.MetaTags.Any(tag => tag is { Name: "referrer", IsProperty: false } && !string.IsNullOrWhiteSpace(tag.Content)))
         {
             missing.Add("Referrer-Policy");
         }

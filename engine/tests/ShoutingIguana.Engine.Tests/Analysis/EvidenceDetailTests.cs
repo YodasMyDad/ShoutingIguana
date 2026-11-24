@@ -72,7 +72,8 @@ public sealed class EvidenceDetailTests
         var page = site.Page($"{site.Site}/a", RuleHarness.Html($"<link rel=\"canonical\" href=\"{site.Site}/a/\">"),
             headers: [new ResponseHeader("link", $"<{site.Site}/b>; rel=\"canonical\"")]);
 
-        Assert.Equal($"2 URLs: {site.Site}/a/ (head) · {site.Site}/b (HTTP header)",
+        // One on the page's own host is its path, so that two long ones both fit the detail.
+        Assert.Equal("2 URLs: /a/ (head) · /b (HTTP header)",
             Detail(new CanonicalRules(site.Table(), site.UrlOf), page, IssueCatalog.CANONICAL_MULTIPLE));
     }
 

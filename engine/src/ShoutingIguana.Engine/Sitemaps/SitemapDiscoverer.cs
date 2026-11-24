@@ -153,6 +153,8 @@ internal sealed class SitemapDiscoverer(
         var lastmods = new List<long?>(BATCH_SIZE);
         CountingStream? counted = null;
         var urlCount = 0;
+        var extensionCount = 0;
+        string? finalUrl = null;
         var isIndex = false;
         var bodyRead = false;
         var turnedAway = false;
@@ -170,6 +172,9 @@ internal sealed class SitemapDiscoverer(
             var (response, lease, location) = await SendAskingAgainAfter429Async(uri, deadline, timeout.Token, cancellationToken).ConfigureAwait(false);
             using var heldLease = lease;
             using var disposeResponse = response;
+
+            // Where a redirect led: the host the file's entries have to be on is the one that served it.
+            finalUrl = location == uri ? null : UrlNormalizer.Normalize(location);
             uri = location;
             statusCode = (int)response.StatusCode;
             if (statusCode is < 200 or >= 300)
@@ -209,6 +214,7 @@ internal sealed class SitemapDiscoverer(
                     batch.Add(links.Create(target, LinkKind.Hyperlink, LinkFlags.None, LinkPosition.Content, null));
                     lastmods.Add(SitemapLastmod.Parse(entry.Lastmod));
                     urlCount++;
+                    extensionCount += entry.HasExtension ? 1 : 0;
                     if (batch.Count == BATCH_SIZE)
                     {
                         await writer.DiscoverAsync(batch, lastmods, sitemapId, cancellationToken).ConfigureAwait(false);
@@ -242,11 +248,17 @@ internal sealed class SitemapDiscoverer(
         // or of nesting, an index still says how many it names.
         await writer.CompleteSitemapAsync(
                 new SitemapRecord(sitemapId, statusCode, isIndex, urlCount, error, isProbe, bodyRead ? children.Count : null, bodyRead ? counted?.BytesRead : null,
-                    turnedAway, brokeOff),
+                    turnedAway, brokeOff, finalUrl, bodyRead ? IsExtensionSitemap(urlCount, extensionCount) : null),
                 cancellationToken)
             .ConfigureAwait(false);
         return (children, urlCount);
     }
+
+    /// <summary>
+    /// An image, video or news sitemap: at least nine in ten of the URLs it lists carry a tag of one of those extensions.
+    /// Not every one, as a news sitemap has the odd entry without (theregister.com's lists 246 URLs, one of them bare).
+    /// </summary>
+    internal static bool IsExtensionSitemap(int urls, int withExtension) => urls > 0 && withExtension * 10L >= urls * 9L;
 
     /// <summary>
     /// Sends for a sitemap, and asks again if its host answers 429, up to <see cref="MAX_TRIES"/> times in all, as a page

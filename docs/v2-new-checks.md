@@ -109,7 +109,10 @@ Facts not stored with the page (`[JsonIgnore]`) aren't needed: every addition is
 ## Storage, crawl and reader changes
 
 - **Two crawl-file columns, no schema version**, added as `listed_sitemaps` was (the writer adds what's missing when it
-  opens a file; `CrawlSchema.VERSION` stays 2, so every crawl stays readable and continuable by either engine):
+  opens a file; `CrawlSchema.VERSION` stays 2, so every crawl stays readable and continuable by either engine). The
+  third audit added two more the same way: `sitemaps.final_url` (where the file was served from, when its URL redirected
+  there: the host `sitemap-url-other-host` holds its entries to) and `sitemaps.extensions_only` (1 for an image, video or
+  news sitemap, which `sitemap-url-repeated` leaves out).
   - `sitemaps.size_bytes`: the sitemap's uncompressed size as read (`sitemap-over-limit`, `sitemap-near-limit`).
   - `sitemap_urls.lastmod`: the entry's `<lastmod>` as Unix seconds, `-1` when it doesn't parse, null when absent
     (`sitemap-lastmod-invalid`). A new `SITEMAP_URL_COLUMNS` list beside `SITEMAP_COLUMNS`.
@@ -687,11 +690,15 @@ Sitemaps · **Notice** · Low · U/N/– (reported once)
 Sitemaps · **Notice** · Low · U/N/S
 
 - **Simple:** "Addresses listed in more than one sitemap"
-- **Rule:** an internal URL that more than one sitemap file lists. Detail: `In 2 sitemaps`.
+- **Rule:** an internal URL that more than one sitemap file lists. Detail: `In 2 sitemaps`. An image, video or news
+  sitemap isn't one of them (at least nine in ten of its entries carry a tag of Google's `image:`, `video:` or `news:`
+  extensions; `sitemaps.extensions_only`): it lists a page again for its images or its news tags, as Jetpack's image
+  sitemap and a Google News sitemap do ([the third audit](v2-check-audit.md#the-third-audit-2026-11-24-real-site-proof)).
 - **Standard:** none (sitemaps.org allows it; it's housekeeping).
 - **Data:** entries per URL from `sitemap_urls` (analysis read).
 - **Evidence:** its found-on lists the sitemaps.
-- **Plant:** `/plants/thin` is also listed in `pages-0.xml`. Expected **1**.
+- **Plant:** `/plants/thin` is also listed in `pages-0.xml`. Expected **1**. `/sitemaps/images.xml` lists the home page
+  and two products again, each with an image: none of them is flagged.
 - **From:** Screaming Frog Sitemaps "URLs In Multiple Sitemaps".
 
 #### 35. `sitemap-lastmod-invalid`: Sitemap lastmod invalid or in the future
@@ -1099,7 +1106,9 @@ HTML · **Notice** · Low · P/RU/T
 - **Simple:** "Share images too small to show well"
 - **Rule:** an `og:image` under 200 × 200 px; or the image X uses (`twitter:image`, else `og:image`) under 300 × 157 for
   `summary_large_image` or 144 × 144 for `summary`. Needs the pixel size (the evidence branch's image reader). The
-  aspect ratio isn't judged: both networks crop. Detail: `og:image is 100 × 100 px, under 200 × 200`.
+  aspect ratio isn't judged: both networks crop. Detail: `og:image is 100 × 100 px, under 200 × 200`. Where a page
+  names several images, only the first of each tag is measured, here and for `social-image-too-large`: it's the one
+  networks show (Weebly lists every picture on the page as an `og:image`).
 - **Standard:** Facebook: "The minimum allowed image dimension is 200 x 200 pixels", 1,200 × 630 recommended. X's
   minimums *(unverified)*.
 - **Data:** `SocialImage` links, `responses.pixel_width`, `pixel_height`. **Evidence:** target facts `pixelWidth`,
@@ -1306,7 +1315,9 @@ URLs · **Notice**: usually a relative link that builds ever-longer URLs, which 
 
 - **Simple:** "Addresses that repeat themselves"
 - **Rule:** an internal URL (page or not) whose path has a segment 3 or more times, or a run of 1 to 3 segments repeated
-  back to back (`/shop/shop/`, `/a/b/a/b/`).
+  back to back (`/shop/shop/`, `/a/b/a/b/`), and that a page of the crawl links to or uses. A URL only a sitemap lists
+  isn't judged: there's no link to fix, and such a path is written on purpose (gov.uk's 25,443
+  `/government/publications/x/x`).
 - **Standard:** none *(Screaming Frog's name only)*.
 - **Plant:** `shop/shop/`. Expected **1**.
 - **From:** Screaming Frog URL "Repetitive Path".

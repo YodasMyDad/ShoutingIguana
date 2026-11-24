@@ -102,7 +102,7 @@ public sealed class IssueSubjectTests(GridCrawl crawl)
         var tracked = site.Fetched($"{site.Site}/brochure.pdf?utm_source=news", FetchOutcome.Success, 200, contentType: "application/pdf");
         var repeated = site.Fetched($"{site.Site}/files/files/a.pdf", FetchOutcome.Success, 200, contentType: "application/pdf");
         var urls = site.Table();
-        urls.CountInlinks(site.Page($"{site.Site}/links", RuleHarness.Html(body: "<a href=\"/brochure.pdf?utm_source=news\">Brochure</a>")));
+        urls.CountInlinks(site.Page($"{site.Site}/links", RuleHarness.Html(body: "<a href=\"/brochure.pdf?utm_source=news\">Brochure</a><a href=\"/files/files/a.pdf\">A</a>")));
         Assert.Equal(start, urls.HomeId);
         var visibility = new SiteVisibilityRules(urls);
         visibility.Observe(hidden);

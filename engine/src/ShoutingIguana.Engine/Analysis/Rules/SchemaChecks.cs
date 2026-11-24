@@ -44,6 +44,12 @@ internal static class SchemaChecks
         var tops = root.ValueKind == JsonValueKind.Array ? root.EnumerateArray().Where(item => item.ValueKind == JsonValueKind.Object).ToList() : [root];
         foreach (var top in tops.Where(top => top.ValueKind == JsonValueKind.Object))
         {
+            // An empty block ({}, as Wix writes beside a page's real one) says nothing, so nothing in it is wrong.
+            if (!top.EnumerateObject().Any())
+            {
+                continue;
+            }
+
             if (!top.TryGetProperty("@context", out var context))
             {
                 faults.Add("No @context");

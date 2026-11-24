@@ -39,7 +39,9 @@ internal sealed class UrlTextRules(UrlTable urls, IReadOnlyList<(int Id, string 
                 yield return new IssueHit(IssueCatalog.URL_TRACKING_PARAMETERS, id, RuleText.Fit(string.Join(", ", tracking)));
             }
 
-            if (IsRepetitive(uri.AbsolutePath))
+            // One a page of the crawl links to or uses: the link that builds the path is there to fix. A URL only a
+            // sitemap lists was written that way on purpose (a publication's attachment under its own name).
+            if (urls.UsedOn(id) > 0 && IsRepetitive(uri.AbsolutePath))
             {
                 yield return new IssueHit(IssueCatalog.URL_REPETITIVE_PATH, id);
             }

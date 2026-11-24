@@ -33,7 +33,7 @@ public sealed class SitemapCheckTests
         Assert.Equal(
         [
             new SitemapEntry("https://example.com/a", false, "2026-11-01"), new SitemapEntry("https://example.com/b", false, "2026-10-01T09:30:00+01:00"),
-            new SitemapEntry("https://example.com/c", false), new SitemapEntry("https://example.com/d", false, "3000-01-01")
+            new SitemapEntry("https://example.com/c", false), new SitemapEntry("https://example.com/d", false, "3000-01-01", HasExtension: true)
         ], entries);
 
         // An index's sitemaps have theirs too; a text sitemap's lines have none.

@@ -132,6 +132,24 @@ public sealed partial class SyntheticSite
                       "<img src=\"/img/16.jpg\" alt=\"TV\" width=\"400\" height=\"300\">"
         }, headers: new Dictionary<string, string> { ["Set-Cookie"] = "XSRF-TOKEN=planted; Path=/; Secure; SameSite=Lax" });
 
+        // Correct markup the audit of 2026-11-24 found flagged on real sites (docs/v2-check-audit.md, the third audit): a
+        // gallery's <div href> holding its full-size photo (uncrawlable-links, Wix), a stray stylesheet link naming the page
+        // itself (content-type-mismatch), an id and its link written with lowercase percent escapes (broken-fragment-links),
+        // two viewport tags that set the same (viewport-invalid), an AMP image sized on its <amp-img>
+        // (image-missing-dimensions), an empty JSON-LD block (structured-data-schema-errors, Wix), and a country picker
+        // and an embed-code box of long words (readability-low, Shopify and WordPress).
+        Page("real-markup", "Real markup", [], page => page with
+        {
+            ExtraHead = "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"><script type=\"application/ld+json\">{}</script>",
+            Content = string.Concat(Enumerable.Repeat("<p>The shed sat in the rain. It was a wet day for it. We all had a very dry time at home.</p>", 6)) +
+                      $"<p>{Text("plant-real-markup", 120)}</p>" +
+                      "<div class=\"media-wrapper\" href=\"/img/17.jpg\"><img src=\"/img/17.jpg\" alt=\"A planted shed\" width=\"400\" height=\"300\"></div>" +
+                      "<link rel=\"stylesheet\" href=\"#\">" +
+                      "<p><a href=\"#%e0%b9%81%e0%b8%81\">Down to the unboxing</a></p><h2 id=\"%e0%b9%81%e0%b8%81\">The unboxing</h2>" +
+                      "<amp-img width=\"400\" height=\"300\" src=\"/img/18.jpg\" alt=\"A planted gate\"><img src=\"/img/18.jpg\" alt=\"A planted gate\"></amp-img>" +
+                      $"<form action=\"/search\"><select name=\"country\">{string.Concat(Enumerable.Range(1, 120).Select(country => $"<option>Institutional organisational territory {country}, internationally</option>"))}</select>" +
+                      "<textarea name=\"embed\">Institutional organisations systematically underestimate considerable organisational complexity.</textarea></form>"
+        });
         // Hreflang: an alternate calling itself by another code; the HTML and the Link header naming different sets; a
         // version only hreflang leads to; a page whose own code and lang differ.
         Page("hreflang-code-a", "Hreflang code A", ["hreflang-inconsistent-code"], page => page with

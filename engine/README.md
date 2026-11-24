@@ -687,7 +687,10 @@ the same way ([below](#time-spent-crawling)), and so is `favicon` ([below](#the-
 fingerprint's `responses.simhash_1` to `_3` the same way: pages fetched before then, and any an earlier engine fetches
 into a newer file, have none. And `sitemaps.listed_sitemaps` (E6): how many sitemaps a sitemap's own file lists, as
 the crawl read it, so an index says how many it names beside how many of them the crawl has; null for a file whose
-body was never read, and for every sitemap an earlier engine read. The crawl's own schema version doesn't change, so either engine reads and continues
+body was never read, and for every sitemap an earlier engine read. `sitemaps.final_url` and `sitemaps.extensions_only`
+came the same way with the third check audit (2026-11-24): where a sitemap was served from, when its URL redirected there (its entries belong on
+that host), and whether it's an image, video or news sitemap (a page it lists again is no repeat); null for every
+sitemap an earlier engine read, which is judged as it was. The crawl's own schema version doesn't change, so either engine reads and continues
 either file. Files are shared, so a notice another program wrote oddly is read as well as it can be (one
 without a code or a message is left out, a missing level reads as a warning and a missing time as the crawl's start),
 and a `notices` table of another shape reads as none; the writer won't continue a crawl whose table it couldn't store

@@ -48,6 +48,12 @@ public sealed class SitemapEntryCrawlTests : IAsyncLifetime
         Assert.Equal(["null"], TestCrawls.Rows(_path, "SELECT coalesce(size_bytes, 'null') FROM sitemaps WHERE url LIKE '%/missing.xml'"));
         Assert.True(TestCrawls.Count(_path, "SELECT size_bytes FROM sitemaps WHERE url LIKE '%/pages-0.xml'") > 1_000);
 
+        // Which file is an image sitemap (every entry carries an image), and where a file was served from when its URL
+        // redirected there: robots.txt names /sitemap.xml, which redirects to the index.
+        Assert.Equal(["/sitemaps/empty.xml | 0", "/sitemaps/extra.xml | 0", "/sitemaps/images.xml | 1", "/sitemaps/missing.xml | null", "/sitemaps/pages-0.xml | 0"],
+            TestCrawls.Rows(_path, "SELECT substr(url, instr(url, '/sitemaps/')) || ' | ' || coalesce(extensions_only, 'null') FROM sitemaps WHERE url LIKE '%/sitemaps/%' ORDER BY url"));
+        Assert.Equal([$"{server.BaseUri}sitemap_index.xml"], TestCrawls.Rows(_path, "SELECT final_url FROM sitemaps WHERE final_url IS NOT NULL"));
+
         await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(_path);
         Assert.Equal(["sitemap-empty", "sitemap-lastmod-invalid"],
             TestCrawls.Rows(_path, "SELECT i.issue FROM issues i JOIN urls u ON u.id = i.url_id WHERE i.issue IN ('sitemap-empty', 'sitemap-lastmod-invalid') ORDER BY i.issue"));
@@ -55,8 +61,11 @@ public sealed class SitemapEntryCrawlTests : IAsyncLifetime
         var site = server.BaseUri.AbsoluteUri;
         Assert.Equal([$"1 entry: 1 in the future ({site}sitemaps/pages-0.xml): {site}plants/thin, lastmod 3000-01-01"],
             TestCrawls.Rows(_path, "SELECT detail FROM issues WHERE issue = 'sitemap-lastmod-invalid'"));
+        // The home page and the first products are in the image sitemap too, each for its image: no repeats. A crawl from
+        // before the engine knew an image sitemap (extensions_only null) reports them, as it did.
         Assert.Equal([$"In 2 sitemaps: {site}sitemaps/pages-0.xml and {site}sitemaps/extra.xml"],
             TestCrawls.Rows(_path, "SELECT detail FROM issues WHERE issue = 'sitemap-url-repeated'"));
+        Assert.Equal(3, TestCrawls.Count(_path, "SELECT COUNT(*) FROM sitemap_urls su JOIN sitemaps s ON s.id = su.sitemap_id WHERE s.url LIKE '%/images.xml'"));
         Assert.Equal(0, TestCrawls.Count(_path, "SELECT COUNT(*) FROM issues WHERE issue = 'robots-txt-no-sitemap'"));
     }
 

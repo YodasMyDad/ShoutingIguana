@@ -367,9 +367,16 @@ internal static class CrawlSchema
     /// unread), and for every sitemap an engine from before the column read.</item>
     /// <item><c>size_bytes</c> is the file's size as read, uncompressed (the protocol's 50 MB limit is on that), to its end
     /// or to where reading it stopped. Null as <c>listed_sitemaps</c> is.</item>
+    /// <item><c>final_url</c> is where the file was served from, when its URL redirected there (a sitemap asked for on the
+    /// bare domain and served by www): the host its entries have to be on. Null for a file that didn't redirect, one that
+    /// gave no answer, and every sitemap an engine from before the column read.</item>
+    /// <item><c>extensions_only</c> is 1 for an image, video or news sitemap: at least nine in ten of the URLs it lists
+    /// carry a tag of one of Google's sitemap extensions, so the file is there for those tags, and a page it lists again
+    /// isn't a repeat. 0 for any other file that was read; null as <c>listed_sitemaps</c> is.</item>
     /// </list>
     /// </summary>
-    public static readonly (string Name, string Type)[] SITEMAP_COLUMNS = [("listed_sitemaps", "INTEGER"), ("size_bytes", "INTEGER")];
+    public static readonly (string Name, string Type)[] SITEMAP_COLUMNS =
+        [("listed_sitemaps", "INTEGER"), ("size_bytes", "INTEGER"), ("final_url", "TEXT"), ("extensions_only", "INTEGER")];
 
     /// <summary>
     /// The <c>sitemap_urls</c> columns added since the table was first created, added as <see cref="SITEMAP_COLUMNS"/> are:

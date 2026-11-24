@@ -74,10 +74,13 @@ internal sealed class AnalysisReader : IDisposable
         static string Authority(string column) =>
             $"substr({column}, instr({column}, '://') + 3, instr(substr({column}, instr({column}, '://') + 3), '/') - 1)";
 
+        // Where the file was served from, when its URL redirected there: a sitemap asked for on the bare domain and
+        // served by www lists www URLs, and those are on its own host.
+        var served = HasColumn("sitemaps", "final_url") ? "COALESCE(s.final_url, s.url)" : "s.url";
         using var command = _connection.CreateCommand();
         command.CommandText = $"""
             SELECT id FROM (
-                SELECT su.url_id AS id, {Authority("u.url")} AS entry, {Authority("s.url")} AS sitemap
+                SELECT su.url_id AS id, {Authority("u.url")} AS entry, {Authority(served)} AS sitemap
                 FROM sitemap_urls su JOIN sitemaps s ON s.id = su.sitemap_id JOIN urls u ON u.id = su.url_id)
             WHERE entry NOT IN ({string.Join(", ", siteAuthorities.Select((_, index) => $"$site{index}"))})
             GROUP BY id HAVING MAX(entry = sitemap) = 0
@@ -499,14 +502,20 @@ internal sealed class AnalysisReader : IDisposable
         return faults;
     }
 
-    /// <summary>The URLs more than one sitemap file lists, with the sitemaps that do, in the order the crawl found them.</summary>
+    /// <summary>
+    /// The URLs more than one sitemap file lists, with the sitemaps that do, in the order the crawl found them. An image,
+    /// video or news sitemap (<c>extensions_only</c>) isn't one of them: it lists a page again for its images or its news
+    /// tags, as Google's extensions have it, beside the sitemap that lists the page itself.
+    /// </summary>
     public Dictionary<int, IReadOnlyList<string>> ReadRepeatedSitemapEntries()
     {
+        var plain = HasColumn("sitemaps", "extensions_only") ? "COALESCE(s.extensions_only, 0) = 0" : "1";
         Dictionary<int, List<string>> repeated = [];
-        Rows("""
-            SELECT su.url_id, s.url FROM sitemap_urls su JOIN sitemaps s ON s.id = su.sitemap_id
-            WHERE su.url_id IN (SELECT url_id FROM sitemap_urls GROUP BY url_id HAVING COUNT(DISTINCT sitemap_id) > 1)
-            GROUP BY su.url_id, s.id ORDER BY su.url_id, s.id
+        Rows($"""
+            WITH plain AS (SELECT su.url_id, su.sitemap_id FROM sitemap_urls su JOIN sitemaps s ON s.id = su.sitemap_id WHERE {plain})
+            SELECT p.url_id, s.url FROM plain p JOIN sitemaps s ON s.id = p.sitemap_id
+            WHERE p.url_id IN (SELECT url_id FROM plain GROUP BY url_id HAVING COUNT(DISTINCT sitemap_id) > 1)
+            GROUP BY p.url_id, s.id ORDER BY p.url_id, s.id
             """, reader =>
         {
             var id = reader.GetInt32(0);

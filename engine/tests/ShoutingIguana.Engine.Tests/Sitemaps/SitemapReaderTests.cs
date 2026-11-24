@@ -20,7 +20,24 @@ public sealed class SitemapReaderTests
             </urlset>
             """);
 
-        Assert.Equal([new SitemapEntry("https://example.com/a", false, "2026-01-01"), new SitemapEntry("https://example.com/b", false)], entries);
+        // The image's own location is no entry; the entry that carries it says so, as an image sitemap's entries all do.
+        Assert.Equal([new SitemapEntry("https://example.com/a", false, "2026-01-01", HasExtension: true), new SitemapEntry("https://example.com/b", false)], entries);
+    }
+
+    /// <summary>A Google News sitemap (theregister.com's, cnx-software.com's) and a video sitemap: every entry carries its extension's tag.</summary>
+    [Fact]
+    public async Task NotesTheEntriesOfANewsOrVideoSitemap()
+    {
+        var entries = await ReadAsync("""
+            <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:news="http://www.google.com/schemas/sitemap-news/0.9"
+                    xmlns:video="http://www.google.com/schemas/sitemap-video/1.1" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+              <url><news:news><news:title>A story</news:title></news:news><loc>https://example.com/story</loc></url>
+              <url><loc>https://example.com/film</loc><video:video><video:title>A film</video:title></video:video></url>
+              <url><loc>https://example.com/plain</loc><xhtml:link rel="alternate" hreflang="de" href="https://example.com/de/plain"/></url>
+            </urlset>
+            """);
+
+        Assert.Equal([true, true, false], entries.Select(entry => entry.HasExtension));
     }
 
     [Fact]

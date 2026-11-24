@@ -25,7 +25,8 @@ internal sealed class ResourceRules(UrlTable urls, Func<int, string?> readConten
     {
         foreach (var link in page.Links)
         {
-            if (link.Kind is not (LinkKind.Script or LinkKind.Stylesheet or LinkKind.Image) ||
+            // A stray tag naming the page itself (a stylesheet link whose href is "#") is no file sent with the wrong type.
+            if (link.Kind is not (LinkKind.Script or LinkKind.Stylesheet or LinkKind.Image) || link.ToId == page.UrlId ||
                 urls[link.ToId] is not { Fetched: true, Outcome: FetchOutcome.Success } file)
             {
                 continue;

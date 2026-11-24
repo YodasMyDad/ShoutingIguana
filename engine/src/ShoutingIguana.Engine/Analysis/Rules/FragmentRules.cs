@@ -132,9 +132,28 @@ internal sealed class FragmentRules(UrlTable urls, Func<int, PageFacts?> readFac
     /// checks that matches no id as written or decoded. Never on a page whose ids were capped, which can't prove one missing.
     /// </summary>
     internal static bool Misses(string raw, IReadOnlyList<string> ids) =>
-        ids.Count < PageWalker.MAX_IDS && Checkable(raw) is { } fragment && !ids.Contains(raw, StringComparer.Ordinal) && !ids.Contains(fragment, StringComparer.Ordinal);
+        ids.Count < PageWalker.MAX_IDS && Checkable(raw) is { } fragment && !ids.Contains(raw, StringComparer.Ordinal) && !ids.Contains(fragment, StringComparer.Ordinal) &&
+        !ids.Any(id => id.Contains('%') && string.Equals(UpperEscapes(id), raw, StringComparison.Ordinal));
 
-    private static HashSet<ulong> HashIds(IReadOnlyList<string> ids) => ids.Select(Hash).ToHashSet();
+    /// <summary>
+    /// The ids, and each id holding percent escapes once more with their hex digits in capitals: a link's fragment is
+    /// stored that way (the URL's normal form), so id="%e0%b9%81" is found by the href="#%e0%b9%81" written beside it.
+    /// </summary>
+    private static HashSet<ulong> HashIds(IReadOnlyList<string> ids)
+    {
+        var hashes = ids.Select(Hash).ToHashSet();
+        hashes.UnionWith(ids.Where(id => id.Contains('%')).Select(id => Hash(UpperEscapes(id))));
+        return hashes;
+    }
+
+    private static string UpperEscapes(string id) => string.Create(id.Length, id, static (span, text) =>
+    {
+        for (var i = 0; i < text.Length; i++)
+        {
+            var escaped = (i >= 1 && text[i - 1] == '%') || (i >= 2 && text[i - 2] == '%');
+            span[i] = escaped && Uri.IsHexDigit(text[i]) ? char.ToUpperInvariant(text[i]) : text[i];
+        }
+    });
 
     private static ulong Hash(string text) => XxHash3.HashToUInt64(MemoryMarshal.AsBytes(text.AsSpan()));
 

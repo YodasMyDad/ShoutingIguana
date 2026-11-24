@@ -15,6 +15,9 @@ public sealed partial class SyntheticSite
     public const int CATEGORY_COUNT = 20;
     public const int IMAGE_COUNT = 100;
     public const int SITEMAP_CHUNK_SIZE = 10_000;
+
+    /// <summary>How many of the first pages the image sitemap lists again.</summary>
+    private const int IMAGE_SITEMAP_PAGES = 3;
     public const string PLANTS_PATH = "/plants/";
 
     /// <summary>The planted page custom extraction reads, and the three values its rules find there.</summary>
@@ -239,6 +242,13 @@ public sealed partial class SyntheticSite
         if (_options.Sitemaps && path == "/sitemaps/extra.xml")
         {
             return Xml(RenderExtraSitemap());
+        }
+
+        // An image sitemap, as Jetpack writes one beside its page sitemap: it lists pages the page sitemap lists, each for
+        // its images. No repeat (sitemap-url-repeated flags none of them).
+        if (_options.Sitemaps && path == "/sitemaps/images.xml")
+        {
+            return Xml(RenderImageSitemap());
         }
 
         // A sitemap the index lists that lists nothing: sitemap-empty.
@@ -1035,9 +1045,11 @@ public sealed partial class SyntheticSite
             xml.Append("<sitemap><loc>").Append(_base).Append("/sitemaps/pages-").Append(chunk).Append(".xml</loc></sitemap>");
         }
 
-        // The last entry doesn't exist: a planted sitemap error, which revision 1 mends. The one before it lists nothing.
+        // The last entry doesn't exist: a planted sitemap error, which revision 1 mends. The one before it is the image
+        // sitemap, and the one before that lists nothing.
         xml.Append("<sitemap><loc>").Append(_base).Append("/sitemaps/extra.xml</loc></sitemap>");
         xml.Append("<sitemap><loc>").Append(_base).Append("/sitemaps/empty.xml</loc></sitemap>");
+        xml.Append("<sitemap><loc>").Append(_base).Append("/sitemaps/images.xml</loc></sitemap>");
         if (Revision == 0)
         {
             xml.Append("<sitemap><loc>").Append(_base).Append("/sitemaps/missing.xml</loc></sitemap>");
@@ -1060,6 +1072,20 @@ public sealed partial class SyntheticSite
         if (chunk == 0)
         {
             xml.Append("<url><loc>").Append(_base).Append(PLANTS_PATH).Append("thin</loc><lastmod>3000-01-01</lastmod></url>");
+        }
+
+        return xml.Append("</urlset>").ToString();
+    }
+
+    /// <summary>The home page and the first products again, each with an image of its own: an image sitemap's entries.</summary>
+    private string RenderImageSitemap()
+    {
+        var xml = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\"?><urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\" " +
+                                    "xmlns:image=\"http://www.google.com/schemas/sitemap-image/1.1\">");
+        for (var page = 0; page < Math.Min(PageCount, IMAGE_SITEMAP_PAGES); page++)
+        {
+            xml.Append("<url><loc>").Append(_base).Append(page == 0 ? "/" : $"/p/{page}").Append("</loc><image:image><image:loc>")
+                .Append(_base).Append("/img/").Append(page).Append(".jpg</image:loc></image:image></url>");
         }
 
         return xml.Append("</urlset>").ToString();

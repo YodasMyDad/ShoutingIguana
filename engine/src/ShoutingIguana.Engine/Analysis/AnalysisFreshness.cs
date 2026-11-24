@@ -89,8 +89,17 @@ public static class AnalysisFreshness
     /// the parser reads it, equivalent language codes, digit path segments, every utm_ parameter, CSRF cookies,
     /// upgrade-insecure-requests, every JavaScript media type, an image in a picture, more image hosts, an offer's
     /// priceSpecification, readability over prose alone). canonical-invalid-attribute became a Warning.
+    /// 26 is the real-site proof of 2026-11-24 (docs/v2-check-audit.md, the third audit): the checks run on some forty
+    /// real sites, and some twenty-five stopped flagging what those sites showed to be right, or started catching what
+    /// they missed (an image or news sitemap's entries are no repeats; a sitemap served from where its URL redirects; a
+    /// sitemap URL robots.txt refuses this crawler and allows Googlebot; no sitemap only where the guess at it was
+    /// answered; an x-default that redirects by language; an AMP copy's pagination; a numbered series read with a gap; a
+    /// repeating path only where a page links to it; the first share image only; a policy set in a meta tag; a redirect
+    /// chain entered at a listed URL; "More →" as generic link text). What the parse
+    /// changed (a form control's text and a header's menu aren't the page's words, an image file on a div's href is no
+    /// link, an AMP image's size, a password field outside a form, a meta Content-Security-Policy) takes a new crawl.
     /// </summary>
-    public const int VERSION = 25;
+    public const int VERSION = 26;
 
     /// <summary>
     /// The catalog's check ids with their categories and severities, hashed. Titles, descriptions, fixes, why and

@@ -15,6 +15,14 @@ internal sealed class StructuredDataRules : IPageRule
 {
     private const int MAX_FAULTS = 3;
 
+    /// <summary>
+    /// The parser's message without its advice to a programmer: "…contains a trailing comma at the end which is not supported
+    /// in this mode. Change the reader options." says, to a site's owner, that the block has a trailing comma.
+    /// </summary>
+    private static string ForAnOwner(string message) => message
+        .Replace(" which is not supported in this mode", string.Empty, StringComparison.Ordinal)
+        .Replace(" Change the reader options.", string.Empty, StringComparison.Ordinal);
+
     public IEnumerable<IssueHit> Check(AnalyzedPage page)
     {
         string? syntaxError = null;
@@ -41,7 +49,7 @@ internal sealed class StructuredDataRules : IPageRule
             catch (JsonException exception)
             {
                 // Page content is untrusted input, so a parse failure is an expected outcome here, not a bug.
-                syntaxError ??= InBlock(number, jsonLd.Count, Where(exception, block), IssueFaults.WithoutPosition(exception.Message));
+                syntaxError ??= InBlock(number, jsonLd.Count, Where(exception, block), IssueFaults.WithoutPosition(ForAnOwner(exception.Message)));
                 continue;
             }
 

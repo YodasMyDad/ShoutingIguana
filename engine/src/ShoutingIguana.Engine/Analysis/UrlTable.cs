@@ -288,6 +288,9 @@ internal sealed class UrlTable
     /// </summary>
     public bool IsOnCanonicalLoop(int id) => _canonicalLoops.Contains(id);
 
+    /// <summary>The page a canonicalised page names as its canonical, or 0 for a page that isn't canonicalised.</summary>
+    public int CanonicalTarget(int id) => _canonicalTargets.GetValueOrDefault(id);
+
     /// <summary>The pages of the canonical loop a page is on, in the order its canonicals lead, starting with it; empty when it's on none.</summary>
     public IReadOnlyList<int> CanonicalLoop(int id)
     {

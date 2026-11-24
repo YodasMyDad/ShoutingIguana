@@ -20,6 +20,14 @@ internal sealed class TextStructureRules(AnalysisSettings settings) : IPageRule
     /// <summary>The most characters of the heading skipped to a detail quotes.</summary>
     private const int SKIPPED_HEADING_MAX = 60;
 
+    /// <summary>
+    /// A reading ease under its limit, as a detail writes it: to the whole number, or to a tenth (cut, not rounded) where
+    /// the whole number would be the limit itself: "29.7, under 30", never "30, under 30".
+    /// </summary>
+    internal static string Shown(double ease, int limit) => Math.Round(ease) < limit
+        ? Math.Round(ease).ToString("0", CultureInfo.InvariantCulture)
+        : (Math.Floor(ease * 10) / 10).ToString("0.0", CultureInfo.InvariantCulture);
+
     public IEnumerable<IssueHit> Check(AnalyzedPage page)
     {
         if (!page.IsIndexable)
@@ -68,7 +76,7 @@ internal sealed class TextStructureRules(AnalysisSettings settings) : IPageRule
         if (ReadingEase(facts) is { } ease && ease < settings.ReadabilityMinScore)
         {
             yield return new IssueHit(IssueCatalog.READABILITY_LOW, page.UrlId,
-                string.Create(CultureInfo.InvariantCulture, $"Reading ease {Math.Round(ease):0}, under {settings.ReadabilityMinScore} (very difficult)"));
+                string.Create(CultureInfo.InvariantCulture, $"Reading ease {Shown(ease, settings.ReadabilityMinScore)}, under {settings.ReadabilityMinScore} (very difficult)"));
         }
 
         // A page low-word-count flags is that check's: this one is about the share, on a page with words enough.

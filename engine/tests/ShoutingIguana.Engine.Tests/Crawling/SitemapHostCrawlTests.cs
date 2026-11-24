@@ -6,6 +6,7 @@ using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Engine.Tests.Fetching;
+using ShoutingIguana.Engine.Tests.Support;
 
 namespace ShoutingIguana.Engine.Tests.Crawling;
 
@@ -99,6 +100,54 @@ public sealed class SitemapHostCrawlTests : IAsyncLifetime
         // dead through this proxy, are no problem of the site's.
         Assert.Equal(0, analysis.Issues.Single(issue => issue.Issue == IssueCatalog.DUPLICATE_SITE_VERSION).Count);
         Assert.DoesNotContain(IssueReader.ReadAll(_path), row => row.Issue is "internal-unreachable" or "robots-txt-unreachable-other-origin");
+    }
+
+    /// <summary>
+    /// cs.stanford.edu/~knuth/ (the audit of real sites, 2026-11-24): the site answers on the bare domain, and its
+    /// /sitemap.xml redirects to www, which serves a sitemap of www URLs. Those are on the host that served the file, so
+    /// they're on their sitemap's host; an entry on a third host still isn't.
+    /// </summary>
+    [Fact]
+    public async Task ASitemapServedFromWhereItsUrlRedirectsListsThatHostsUrls()
+    {
+        const string WWW = "http://www.example.com";
+        await using var site = await LoopbackServer.StartAsync(context =>
+        {
+            var path = context.Request.Path.Value ?? "/";
+            if (context.Request.Host.Host == "www.example.com")
+            {
+                return path switch
+                {
+                    "/sitemap.xml" => Xml(context, Sitemap($"{WWW}/events/a", $"{WWW}/events/b", "http://elsewhere.example.com/c")),
+                    _ => Status(context, 404)
+                };
+            }
+
+            switch (path)
+            {
+                case "/sitemap.xml":
+                    context.Response.StatusCode = 301;
+                    context.Response.Headers.Location = WWW + path;
+                    return Task.CompletedTask;
+                case "/~knuth/":
+                    return Html(context, "<a href=\"/~knuth/a\">A</a>");
+                case "/~knuth/a":
+                    return Html(context, "<p>A page</p>");
+                default:
+                    return Status(context, 404);
+            }
+        });
+
+        var options = new CrawlOptions { StartUrl = "http://example.com/~knuth/", ProxyUrl = site.BaseUri.AbsoluteUri, MaxRetries = 0, CheckExternalLinks = false };
+        await using (var job = new CrawlEngine(NullLoggerFactory.Instance).Start(new CrawlRequest(options, _path)))
+        {
+            Assert.Equal(CrawlStatus.Completed, (await job.Completion.WaitAsync(TimeSpan.FromMinutes(1))).Status);
+        }
+
+        await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(_path);
+
+        Assert.Equal([$"http://example.com/sitemap.xml | {WWW}/sitemap.xml | 3"], TestCrawls.Rows(_path, "SELECT url || ' | ' || final_url || ' | ' || url_count FROM sitemaps"));
+        Assert.Equal(["http://elsewhere.example.com/c"], IssueReader.ReadIssues(_path, IssueCatalog.SITEMAP_URL_OTHER_HOST.Id, 10).Select(row => row.Url));
     }
 
     private string Twin(string path) => $"http://www.127.0.0.1:{_server.BaseUri.Port}{path}";

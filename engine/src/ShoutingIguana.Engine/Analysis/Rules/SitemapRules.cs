@@ -16,7 +16,7 @@ namespace ShoutingIguana.Engine.Analysis.Rules;
 /// such as www.example.com pages in example.com's sitemap. URLs off the site are always on another host.
 /// </param>
 internal sealed class SitemapRules(UrlTable urls, IReadOnlyList<StoredSitemap> sitemaps, CrawlOptions options, bool crawlComplete,
-    IReadOnlySet<int>? offHostEntries = null, SitemapEntryFacts? entries = null) : ISiteRule
+    IReadOnlySet<int>? offHostEntries = null, SitemapEntryFacts? entries = null, GooglebotAccess? googlebot = null) : ISiteRule
 {
     private const int LISTED_FAILURES = 3;
     private const int LISTED_FILES = 3;
@@ -92,7 +92,10 @@ internal sealed class SitemapRules(UrlTable urls, IReadOnlyList<StoredSitemap> s
 
             // A PDF or image listed in a sitemap is fine, and URLs the crawler couldn't check are reported as
             // response problems instead. What's left is pages that can't be indexed.
-            var unverified = url.Outcome is FetchOutcome.Blocked or FetchOutcome.Timeout or FetchOutcome.NetworkError or FetchOutcome.ProcessingError;
+            // A site that turns every crawler away but the search engines it names refused this crawl, not Google: what
+            // its pages are to Google wasn't read, as with a firewall's block.
+            var unverified = url.Outcome is FetchOutcome.Blocked or FetchOutcome.Timeout or FetchOutcome.NetworkError or FetchOutcome.ProcessingError ||
+                             (url.Outcome == FetchOutcome.RobotsDisallowed && googlebot?.Allows(id) == true);
             var nonIndexable = url.Outcome != FetchOutcome.Success || url.IndexabilityReason != IndexabilityReason.None;
             if (url.InSitemap && nonIndexable && !unverified)
             {
@@ -119,8 +122,13 @@ internal sealed class SitemapRules(UrlTable urls, IReadOnlyList<StoredSitemap> s
             yield return new IssueHit(IssueCatalog.SITEMAP_ERROR, urls.HomeId, listed + more) { Files = [.. failed.Select(sitemap => sitemap.Url)] };
         }
 
+        // "None at /sitemap.xml" takes an answer that says so. A site that turned the crawl away at its home page (a
+        // firewall's challenge answers every URL alike), and a guess that got no answer, a 429 or a server error, say
+        // nothing about whether the file is there.
         var anyFound = sitemaps.Any(sitemap => !sitemap.IsProbe || sitemap.Error is null);
-        if (crawlComplete && options.DiscoverSitemaps && !anyFound)
+        var unanswered = urls[urls.HomeId].Outcome == FetchOutcome.Blocked ||
+                         sitemaps.Any(sitemap => sitemap is { IsProbe: true, Error: not null, StatusCode: null or 429 or >= 500 });
+        if (crawlComplete && options.DiscoverSitemaps && !anyFound && !unanswered)
         {
             // Where the crawler looked: the conventional /sitemap.xml it tried, which the Sitemaps screen lists.
             var tried = sitemaps.Where(sitemap => sitemap.IsProbe).Select(sitemap => sitemap.Url).ToList();

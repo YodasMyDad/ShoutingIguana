@@ -215,10 +215,10 @@ internal sealed class LinkStructureRules(AnalysisSettings settings, UrlTable url
         _ => "content"
     };
 
-    /// <summary>Lowercase, with the spaces and punctuation round it taken off: "Read more…" is "read more".</summary>
+    /// <summary>Lowercase, with the spaces and punctuation round it taken off: "Read more…" and "Read more →" are "read more".</summary>
     private static string Normalise(string text) =>
         string.Join(' ', text.ToLowerInvariant().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
-            .Trim(text.Where(character => char.IsPunctuation(character) || char.IsSymbol(character)).Distinct().ToArray());
+            .Trim([' ', .. text.Where(character => char.IsPunctuation(character) || char.IsSymbol(character)).Distinct()]);
 
     /// <summary>The pages on other sites the page links to that answered, with a page or a redirect, slower than the limit; and the slowest time.</summary>
     private (TargetSet Slow, int SlowestMs) SlowExternal(List<StoredLink> hyperlinks)

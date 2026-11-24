@@ -44,6 +44,13 @@ internal sealed class DuplicateRules(AnalysisSettings settings) : ISiteRule
     private readonly List<PageFingerprint> _fingerprints = [];
     private readonly List<(int From, int To)> _pagination = [];
 
+    /// <summary>
+    /// The first paginated page seen of each series its URL numbers it in (<c>/news/page/9/</c> is of <c>/news/</c>'s), by
+    /// the first page's URL: a crawl that stopped at its URL limit read pages 2 and 9 and none between, and their
+    /// rel=next/prev alone doesn't join them.
+    /// </summary>
+    private readonly Dictionary<string, int> _numberedSeries = new(StringComparer.Ordinal);
+
     // The fingerprints of a bucket too full to compare in full, gathered in its order (see CompareBucket).
     private PageFingerprint[] _bucket = [];
 
@@ -69,11 +76,27 @@ internal sealed class DuplicateRules(AnalysisSettings settings) : ISiteRule
     public void Observe(AnalyzedPage page)
     {
         // Every page's rel=next/prev, so a noindex page in the middle still joins the series.
+        var paginated = false;
         foreach (var link in page.Links)
         {
             if (link.Kind == LinkKind.Pagination && link.ToId != page.UrlId)
             {
                 _pagination.Add((page.UrlId, link.ToId));
+                paginated = true;
+            }
+        }
+
+        // And a paginated page whose URL numbers it joins the others numbered from the same first page.
+        if (paginated && CanonicalRules.PageNumber(page.Uri) is { } numbered)
+        {
+            var first = numbered.FirstPages.Min(StringComparer.Ordinal)!;
+            if (_numberedSeries.TryGetValue(first, out var other))
+            {
+                _pagination.Add((page.UrlId, other));
+            }
+            else
+            {
+                _numberedSeries[first] = page.UrlId;
             }
         }
 

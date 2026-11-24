@@ -39,8 +39,11 @@ internal sealed class PaginationRules(UrlTable urls, Func<string, int> readUrlId
         var prev = Targets(page, isNext: false);
         _series[page.UrlId] = (next, prev);
 
-        // Pages it links to with <a href>, its sections included: a fragment doesn't make another page.
+        // Pages it links to with <a href>, its sections included: a fragment doesn't make another page. A link to a copy
+        // of a page counts for the page the copy names as its canonical: an AMP page's pager links the AMP copy of the
+        // next page, while its rel="next" names the page itself.
         var linked = page.Links.Where(link => link.Kind == LinkKind.Hyperlink).Select(link => link.ToId).ToHashSet();
+        linked.UnionWith(linked.Select(urls.CanonicalTarget).Where(id => id > 0).ToList());
         TargetSet unlinked = new(), broken = new(), nonIndexable = new();
         string? unlinkedDetail = null, brokenDetail = null, nonIndexableDetail = null;
         foreach (var (target, rel) in next.Select(id => (id, NEXT)).Concat(prev.Select(id => (id, PREV))))
@@ -123,7 +126,9 @@ internal sealed class PaginationRules(UrlTable urls, Func<string, int> readUrlId
         }
 
         var following = next[0];
-        if (urls[following].IsPage && !(_series.TryGetValue(following, out var after) && after.Prev.Contains(page)))
+        // A copy of a page (an AMP version) is pointed back to by its canonical: the series is the canonical pages'.
+        if (urls[following].IsPage && !(_series.TryGetValue(following, out var after) &&
+                                        (after.Prev.Contains(page) || (urls.CanonicalTarget(page) is > 0 and var canonical && after.Prev.Contains(canonical)))))
         {
             return RuleText.Fit($"{Near(following, page)} doesn't point back");
         }

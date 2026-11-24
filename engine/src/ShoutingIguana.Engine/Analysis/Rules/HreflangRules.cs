@@ -90,11 +90,20 @@ internal sealed class HreflangRules(UrlTable urls, Func<int, string?>? readUrl =
             yield return new IssueHit(IssueCatalog.HREFLANG_SELF_ONLY, page.UrlId);
         }
 
+        // x-default is for a home page that sends each visitor on to their language (Google's own example), which answers
+        // with a temporary redirect: an entry naming one is doing its job. A permanent redirect is an old address, as ever.
+        var selectors = page.Links
+            .Where(link => link.Kind == LinkKind.Hreflang && !link.Flags.HasFlag(LinkFlags.OutsideHead) && link.ToId != page.UrlId)
+            .GroupBy(link => link.ToId)
+            .Where(entries => entries.All(link => string.Equals(link.Text, "x-default", StringComparison.OrdinalIgnoreCase)) &&
+                              urls[entries.Key] is { Outcome: FetchOutcome.Redirect, StatusCode: 302 or 303 or 307 })
+            .Select(entries => entries.Key)
+            .ToHashSet();
         TargetSet broken = new(), nonIndexable = new();
         foreach (var target in HonouredTargets(page))
         {
             var status = urls[target];
-            if (!status.Fetched)
+            if (!status.Fetched || selectors.Contains(target))
             {
                 continue;
             }

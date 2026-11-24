@@ -14,6 +14,15 @@ internal sealed class HtmlRules : IPageRule
     /// <summary>The narrowest most-zoom that lets text be enlarged to 200%, as WCAG asks (axe's meta-viewport rule).</summary>
     private const double MIN_MAXIMUM_SCALE = 2;
 
+    /// <summary>The least of a head-tags-in-body detail that names the tags, when its cause is long.</summary>
+    private const int MIN_TAGS_NAMED = 24;
+
+    /// <summary>
+    /// The most of the element that ended a head early its detail shows: with the line, the whole cause then fits whatever
+    /// tags are named before it, and a template's one fault reads the same on every page.
+    /// </summary>
+    private const int MAX_CAUSE = 40;
+
     /// <summary>The WHATWG labels of UTF-8.</summary>
     private static readonly HashSet<string> UTF8 = new(["utf-8", "utf8", "unicode-1-1-utf-8"], StringComparer.OrdinalIgnoreCase);
 
@@ -113,10 +122,13 @@ internal sealed class HtmlRules : IPageRule
             null => string.Empty,
             { Implicit: false, Line: { } line } => string.Create(CultureInfo.InvariantCulture, $", after <body> on line {line:N0}"),
             { Implicit: false } => ", after <body>",
-            { Line: { } at } => string.Create(CultureInfo.InvariantCulture, $": {headEnd.Element} on line {at:N0} ended the head early"),
-            _ => $": {char.ToUpperInvariant(headEnd.Element[0])}{headEnd.Element[1..]} ended the head early"
+            { Line: { } at } => string.Create(CultureInfo.InvariantCulture, $": {RuleText.Cut(headEnd.Element, MAX_CAUSE)} on line {at:N0} ended the head early"),
+            _ => $": {char.ToUpperInvariant(headEnd.Element[0])}{RuleText.Cut(headEnd.Element, MAX_CAUSE)[1..]} ended the head early"
         };
-        return RuleText.Fit($"{what} {verb} in the body{cause}");
+        // The cause is what there is to fix, and one fault of the template's writes the same one on every page: the list
+        // of tags gives way to it, not the other way round.
+        var tail = $" {verb} in the body{cause}";
+        return RuleText.Fit(RuleText.Cut(what, Math.Max(RuleText.DETAIL_MAX - tail.Length, MIN_TAGS_NAMED)) + tail);
     }
 
     /// <summary>What's wrong with the page's viewport meta tags: zoom stopped or limited, no width, two that differ. Empty with none, or no viewport.</summary>
@@ -148,14 +160,20 @@ internal sealed class HtmlRules : IPageRule
             faults.Add("no width or initial-scale");
         }
 
-        if (viewports.Select(Compact).Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1)
+        if (viewports.Select(Settings).Distinct(StringComparer.Ordinal).Count() > 1)
         {
             faults.Add(RuleText.Count(viewports.Count, "viewport tag", "viewport tags") + " that differ");
         }
 
         return faults;
 
-        static string Compact(string content) => string.Concat(content.Where(character => !char.IsWhiteSpace(character)));
+        // What a tag sets, however it's written: the settings in order of name, a number as its value (1 and 1.0 are one scale).
+        static string Settings(string content) => string.Join(',', content
+            .Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(setting => setting.Split('=', 2) is [var key, var value]
+                ? $"{key.Trim().ToLowerInvariant()}={(double.TryParse(value.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var number) ? number.ToString("R", CultureInfo.InvariantCulture) : value.Trim().ToLowerInvariant())}"
+                : setting.ToLowerInvariant())
+            .Order(StringComparer.Ordinal));
     }
 
     /// <summary>

@@ -23,12 +23,20 @@ internal sealed class PerformanceRules(AnalysisSettings settings) : IPageRule
 
         if (page.BodyBytes > settings.LargePageBytes)
         {
-            yield return new IssueHit(IssueCatalog.LARGE_PAGE, page.UrlId, $"{RuleText.Size(page.BodyBytes.Value)}, over {RuleText.LimitSize(settings.LargePageBytes)}");
+            yield return new IssueHit(IssueCatalog.LARGE_PAGE, page.UrlId, $"{Measured(page.BodyBytes.Value, settings.LargePageBytes)}, over {RuleText.LimitSize(settings.LargePageBytes)}");
         }
 
         if (page.BodyBytes > GOOGLEBOT_HTML_BYTES)
         {
-            yield return new IssueHit(IssueCatalog.HTML_PAST_CRAWL_LIMIT, page.UrlId, $"{RuleText.Size(page.BodyBytes.Value)}, past the {RuleText.LimitSize(GOOGLEBOT_HTML_BYTES)} Google reads");
+            yield return new IssueHit(IssueCatalog.HTML_PAST_CRAWL_LIMIT, page.UrlId, $"{Measured(page.BodyBytes.Value, GOOGLEBOT_HTML_BYTES)}, past the {RuleText.LimitSize(GOOGLEBOT_HTML_BYTES)} Google reads");
         }
     }
+
+    /// <summary>
+    /// A size past its limit, as a detail says it: "2.3 MB", or to the byte where a rounded size would read as the limit
+    /// itself ("2,097,400 bytes", not "2.0 MB, past the 2 MB").
+    /// </summary>
+    private static string Measured(long bytes, long limit) => RuleText.Size(bytes) == RuleText.Size(limit)
+        ? string.Create(CultureInfo.InvariantCulture, $"{bytes:N0} bytes")
+        : RuleText.Size(bytes);
 }
