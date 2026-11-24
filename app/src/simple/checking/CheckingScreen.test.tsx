@@ -162,6 +162,16 @@ describe.skipIf(TABLE_STUBBED)('checking a site, in Simple', () => {
     ).toBeVisible();
   });
 
+  it('tells the person a browser window is waiting for them when the site wants to see a person', async () => {
+    await open();
+    await heard(progress(40, { waits: [{ reason: 'humanCheck', host: 'example.com', durationMs: 240_000 }] }));
+    expect(
+      await main().findByText(
+        'The site wants to see that you’re a person. A browser window has opened on its page: do what it asks there, and reading the site carries on by itself. Closing the window leaves the site’s pages unread.',
+      ),
+    ).toBeVisible();
+  });
+
   // Views 06 and 31 of gallery 7: Still to check 0 and "Nearly done" while Advanced said 1,041 /p/ URLs were left.
   it('counts what a section the site limits still holds, and never says "Nearly done" while it does', async () => {
     await open();

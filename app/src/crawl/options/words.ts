@@ -149,7 +149,7 @@ export const FIELD_WORDS: Record<CrawlFormField, FieldWords> = {
   },
   browserFallback: {
     label: 'Browser fallback',
-    help: 'When a host blocks the plain HTTP fetch, a Cloudflare challenge or another firewall, read that host’s pages in a browser instead and parse that HTML once. This is not JavaScript rendering. Off leaves a block as a block.',
+    help: 'When a host blocks the plain HTTP fetch, a Cloudflare challenge or another firewall, read that host’s pages in a browser instead and parse that HTML once. A site that checks the visitor is human is read in this computer’s Chrome or Edge, which sends its own user agent, in a window kept out of sight. If the check needs a person, the window is shown for you to complete it. This is not JavaScript rendering. Off leaves a block as a block.',
   },
 };
 
@@ -264,7 +264,7 @@ export const SIMPLE_WORDS = {
   },
   browserFallback: {
     label: 'If a site blocks the check',
-    help: 'Read that site’s pages in a browser instead. Off leaves them unread.',
+    help: 'Read that site’s pages in a browser instead. If the site wants to see that you’re a person, a browser window opens for you to do what it asks. Off leaves them unread.',
   },
   extraction: {
     label: 'Pull out your own data',

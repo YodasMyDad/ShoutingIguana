@@ -217,6 +217,28 @@ describe('what’s in the way', () => {
     ]);
   });
 
+  it('says first, as a warning, that a browser window is waiting for the person', () => {
+    const entries = inTheWay({
+      ...base,
+      // The engine's note that the window opened is the same news, and is old once the window has closed.
+      alerts: [alert('human-check', '2026-11-01T07:00:00Z', { host: 'example.com' }, 1)],
+      waits: [
+        { reason: 'backoff', host: 'example.com', durationMs: 2000 },
+        { reason: 'humanCheck', host: 'example.com', durationMs: 240_000 },
+      ],
+    });
+    expect(entries.map((entry) => [entry.level, entry.text])).toEqual([
+      [
+        'warning',
+        'The site wants to see that you’re a person. A browser window has opened on its page: do what it asks there, and reading the site carries on by itself. Closing the window leaves the site’s pages unread.',
+      ],
+      ['info', 'The site asked the check to slow down, so it has. It will take longer.'],
+    ]);
+    expect(
+      inTheWay({ ...base, alerts: [alert('human-check', '2026-11-01T07:00:00Z', { host: 'example.com' }, 1)] }),
+    ).toEqual([]);
+  });
+
   it('says the slowdown beside a section the site limits: they are two things', () => {
     const entries = inTheWay({
       ...base,

@@ -179,7 +179,7 @@ public sealed class BrowserFallbackCrawlTests : IAsyncLifetime
         Assert.Empty(TestCrawls.Rows(path, "SELECT code FROM notices WHERE code IN ('browser-fallback', 'human-check')"));
         var alert = Assert.Single(TestCrawls.Rows(path, "SELECT message FROM notices WHERE code = 'blocked'"));
         Assert.Contains("is asking to check you're human (Cloudflare challenge), and that needs a person", alert, StringComparison.Ordinal);
-        Assert.Contains("\"Ask me to complete a site's human check\"", alert, StringComparison.Ordinal);
+        Assert.Contains("crawl again with --solve-challenges", alert, StringComparison.Ordinal);
     }
 
     /// <summary>

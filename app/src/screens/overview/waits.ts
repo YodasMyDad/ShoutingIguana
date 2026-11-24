@@ -55,6 +55,11 @@ function words(wait: CrawlWait): Omit<WaitEntry, 'key'> {
         title: 'The site isn’t answering',
         detail: `${host} hasn’t answered for ${time(wait.durationMs)}. The crawl stops after 10 minutes of it, and can be continued later.`,
       };
+    case 'humanCheck':
+      return {
+        title: 'Waiting for you',
+        detail: `${host} is asking to check you’re human. A browser window is open on its page: complete the check there and the crawl carries on. It waits ${time(wait.durationMs)} more, then records the site’s pages as blocked. Closing the window does the same.`,
+      };
     case 'sectionLimited':
       return {
         title: 'Reading some pages slowly',
@@ -80,6 +85,7 @@ const MORE_NOUNS: Record<CrawlWaitReason, readonly [string, string]> = {
   siteDown: ['origin', 'origins'],
   robotsTxtCoolDown: ['wait', 'waits'],
   sectionLimited: ['section', 'sections'],
+  humanCheck: ['check', 'checks'],
 };
 
 /** The waits to list, as the engine ordered them (the longest first), then "and 212 more hosts" where it says so. */

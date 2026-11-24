@@ -261,7 +261,7 @@ internal sealed class PageProcessor(
         var what = renderer.VerdictFor(HostKey(uri)) switch
         {
             FallbackVerdict.NeedsPerson =>
-                $"{host} is asking to check you're human ({reason}), and that needs a person. Crawl again with \"Ask me to complete a site's human check\" on: " +
+                $"{host} is asking to check you're human ({reason}), and that needs a person, whom this crawl was not told to ask. From the command line, crawl again with --solve-challenges: " +
                 "a browser window opens on the page, you complete the check, and the crawl carries on.",
             FallbackVerdict.PersonDidNotFinish =>
                 $"{host} asked to check you're human ({reason}), and the check was not completed in the browser window, so its pages are recorded as blocked. Crawl again to be asked once more.",

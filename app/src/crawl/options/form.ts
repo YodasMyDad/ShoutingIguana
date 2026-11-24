@@ -314,6 +314,8 @@ export function optionsFromForm(form: CrawlForm, { secrets = true }: { secrets?:
     extractionRules: filledRules(form.extractionRules),
     listUrls: list.error ? lines(form.listUrls) : list.urls,
     browserFallback: form.browserFallback,
+    // The app can show the person what to do, so a check that needs them is always shown.
+    solveChallenges: form.browserFallback,
     httpLogins: httpLoginsOf(form, secrets),
     cookies: cookiesOf(form, secrets),
     formLogin: formLoginOf(form, secrets),
