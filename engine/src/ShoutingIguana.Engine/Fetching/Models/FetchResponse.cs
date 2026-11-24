@@ -64,6 +64,12 @@ internal sealed record FetchResponse
     /// </summary>
     public bool FromBrowser { get; init; }
 
+    /// <summary>
+    /// Where the page's script sent the browser when the page was rendered: it set the location, or wrote a meta
+    /// refresh. The body is still the HTTP one. The crawl follows this as it follows an instant meta refresh.
+    /// </summary>
+    public Uri? ScriptRedirect { get; init; }
+
     /// <summary>A network-level failure that is worth retrying.</summary>
     public bool IsTransientFailure { get; init; }
 

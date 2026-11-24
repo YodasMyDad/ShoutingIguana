@@ -7,6 +7,7 @@ using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Engine.Fetching;
+using ShoutingIguana.Engine.Parsing.Models;
 using ShoutingIguana.Engine.Serialization;
 using ShoutingIguana.Engine.Storage;
 using ShoutingIguana.Engine.Storage.Models;
@@ -166,6 +167,54 @@ public sealed class JavaScriptRenderingTests
         Assert.Equal(0, Count(plain, $"SELECT COUNT(*) FROM urls WHERE url = '{site.Root}rendered-only'"));
     }
 
+    /// <summary>
+    /// A page whose script sends the browser on is a redirect: it is recorded as forwarding to where it went, that
+    /// page is crawled, and the checks see an instant refresh. A crawl that doesn't render never learns of it.
+    /// </summary>
+    [Fact]
+    public async Task AScriptsRedirectIsFollowedLikeAnyRedirect()
+    {
+        await using var site = await TinySite.StartAsync();
+        var options = new CrawlOptions { StartUrl = site.Root + "hop", DiscoverSitemaps = false, CheckResources = false, CheckExternalLinks = false };
+        var followed = await CrawlAsync(site, options);
+
+        Assert.Equal("Hop target", Text(followed, $"SELECT r.title FROM urls u JOIN responses r ON r.url_id = u.id WHERE u.url = '{site.Root}hop-target'"));
+        Assert.Equal("Further on", Text(followed, $"SELECT r.title FROM urls u JOIN responses r ON r.url_id = u.id WHERE u.url = '{site.Root}further-on'"));
+        Assert.Equal(1, Count(followed, $"""
+            SELECT COUNT(*) FROM links l
+            JOIN urls f ON f.id = l.from_id
+            JOIN urls t ON t.id = l.to_id
+            WHERE f.url = '{site.Root}hop' AND t.url = '{site.Root}hop-target' AND l.kind = {(int)LinkKind.MetaRefresh}
+            """));
+
+        await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(followed);
+        Assert.Equal(1, Count(followed, $"""
+            SELECT COUNT(*) FROM issues i JOIN urls u ON u.id = i.url_id
+            WHERE i.issue = 'meta-refresh' AND u.url = '{site.Root}hop'
+            """));
+
+        var plain = await CrawlAsync(site, options with { Rendering = JavaScriptRendering.Off });
+        Assert.Equal(0, Count(plain, $"SELECT COUNT(*) FROM urls WHERE url = '{site.Root}hop-target'"));
+    }
+
+    /// <summary>Two pages whose scripts send the browser to each other: each is read once, and the crawl ends.</summary>
+    [Fact]
+    public async Task ScriptsThatRedirectInACircleEndTheCrawl()
+    {
+        await using var site = await TinySite.StartAsync();
+        var path = await CrawlAsync(site, new CrawlOptions
+        {
+            StartUrl = site.Root + "loop-a", DiscoverSitemaps = false, CheckResources = false, CheckExternalLinks = false
+        });
+
+        Assert.Equal(2, Count(path, $"""
+            SELECT COUNT(*) FROM links l JOIN urls f ON f.id = l.from_id JOIN urls t ON t.id = l.to_id
+            WHERE l.kind = {(int)LinkKind.MetaRefresh} AND f.url LIKE '{site.Root}loop-%' AND t.url LIKE '{site.Root}loop-%'
+            """));
+        Assert.Equal(2, Count(path, $"SELECT COUNT(*) FROM urls u JOIN responses r ON r.url_id = u.id WHERE u.url LIKE '{site.Root}loop-%' AND r.status_code = 200"));
+        await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
+    }
+
     [Fact]
     public async Task JavaScriptModeRendersAFullPageAndKeepsALinkTheScriptRemoved()
     {
@@ -216,6 +265,12 @@ public sealed class JavaScriptRenderingTests
         return path;
     }
 
+    private static string? Text(string path, string sql)
+    {
+        using var connection = CrawlDatabase.OpenReader(path);
+        return CrawlDatabase.Scalar(connection, sql) as string;
+    }
+
     private static long Count(string path, string sql)
     {
         using var connection = CrawlDatabase.OpenReader(path);
@@ -260,6 +315,10 @@ public sealed class JavaScriptRenderingTests
             _stop.Dispose();
         }
 
+        /// <summary>A shell whose script sends the browser on. The address is in two pieces, so the HTML doesn't hold it whole.</summary>
+        private static string Leaves(string title, string target) =>
+            $"<!DOCTYPE html><html><head><title>{title}</title></head><body><div id=\"app\"></div><script>location.replace('{target}');</script></body></html>";
+
         private async Task ServeAsync(CancellationToken cancellationToken)
         {
             while (!cancellationToken.IsCancellationRequested)
@@ -285,6 +344,11 @@ public sealed class JavaScriptRenderingTests
                     "/links" => (200, "text/html; charset=utf-8", "<!DOCTYPE html><html><head><title>Links</title></head><body><a href=\"/ok\">Ok</a><a href=\"/trap?sort=price\">Sort</a></body></html>"),
                     "/ok" => (200, "text/html; charset=utf-8", "<!DOCTYPE html><html><head><title>Ok</title></head><body><h1>Ok</h1></body></html>"),
                     "/photo.jpg" => (200, "image/jpeg", "not-a-real-jpeg"),
+                    "/hop" => (200, "text/html; charset=utf-8", Leaves("Hop", "/hop-' + 'target")),
+                    "/hop-target" => (200, "text/html; charset=utf-8", "<!DOCTYPE html><html><head><title>Hop target</title></head><body><h1>Hop target</h1><p>Where the script sends the browser.</p><a href=\"/further-on\">Further on</a></body></html>"),
+                    "/further-on" => (200, "text/html; charset=utf-8", "<!DOCTYPE html><html><head><title>Further on</title></head><body><h1>Further on</h1></body></html>"),
+                    "/loop-a" => (200, "text/html; charset=utf-8", Leaves("Loop A", "/loop-' + 'b")),
+                    "/loop-b" => (200, "text/html; charset=utf-8", Leaves("Loop B", "/loop-' + 'a")),
                     _ => (404, "text/plain", "missing")
                 };
                 var bytes = Encoding.UTF8.GetBytes(body);

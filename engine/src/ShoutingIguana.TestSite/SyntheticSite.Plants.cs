@@ -1063,10 +1063,21 @@ public sealed partial class SyntheticSite
         // raw HTML does not contain. The crawl renders the page and parses that HTML once.
         var shell = PlantPage("js-shell", "JS catalogue");
         var rendered = Render(shell);
-        plants.Add(new Plant(shell.Path, 200, Linked: true, InSitemap: true, ["image-missing-alt"], () => Html(ClientShell(rendered))));
+        plants.Add(new Plant(shell.Path, 200, Linked: true, InSitemap: true, ["image-missing-alt"], () => Html(ClientShell(rendered, "/plants/js-shell.js"))));
         plants.Add(new Plant(PLANTS_PATH + "js-shell.js", 200, Linked: false, InSitemap: false, [],
             () => new SyntheticResponse(200, "application/javascript", ShellScript(rendered), null, null), IsPage: false, IsAnalysed: false));
         Page("js-rendered-product", "JS rendered product", ["not-in-sitemap"], inSitemap: false, linked: false);
+
+        // A shell whose script sends the browser on to another page. Nothing in its HTML names that page, and nothing
+        // else links it or lists it, so only a crawl that renders the shell and follows the script's redirect reads it.
+        // The shell is then a page that forwards at once, as an instant meta refresh is.
+        var leaving = PlantPage("script-redirect", "Script redirect");
+        plants.Add(new Plant(leaving.Path, 200, Linked: true, InSitemap: false, ["meta-refresh"],
+            () => Html(ClientShell(Render(leaving), "/plants/script-redirect.js"))));
+        plants.Add(new Plant(PLANTS_PATH + "script-redirect.js", 200, Linked: false, InSitemap: false, [],
+            () => new SyntheticResponse(200, "application/javascript", "location.replace('/plants/' + 'script-redirect-target');", null, null),
+            IsPage: false, IsAnalysed: false));
+        Page("script-redirect-target", "Script redirect target", ["not-in-sitemap"], inSitemap: false, linked: false);
 
         // The hub links to redirects, and to the unreachable URL, the redirect loop and the redirect to a 404, which are
         // all broken, so it carries those link issues itself.
@@ -1131,10 +1142,10 @@ public sealed partial class SyntheticSite
     }));
 
     /// <summary>The raw HTML: the document's head, an empty mount, and the address of the script that fills it in.</summary>
-    private static string ClientShell(string renderedDocument)
+    private static string ClientShell(string renderedDocument, string script)
     {
         var bodyAt = renderedDocument.IndexOf("<body>", StringComparison.Ordinal);
-        return renderedDocument[..bodyAt] + "<body><div id=\"app\"></div><script src=\"/plants/js-shell.js\"></script></body></html>";
+        return renderedDocument[..bodyAt] + $"<body><div id=\"app\"></div><script src=\"{script}\"></script></body></html>";
     }
 
     /// <summary>

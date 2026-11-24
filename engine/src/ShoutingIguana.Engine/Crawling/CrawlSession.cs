@@ -569,6 +569,9 @@ internal sealed class CrawlSession
     /// </summary>
     private async Task CloseAsync()
     {
+        // No page is being read any more. Closing the browser takes a few hundred milliseconds and nothing below needs
+        // it, so it closes while the crawl file does, not after.
+        var browserClosed = _renderer.DisposeAsync().AsTask();
         try
         {
             if (!_writer.Completion.IsCompleted)
@@ -589,7 +592,7 @@ internal sealed class CrawlSession
             finally
             {
                 _fetcher.Dispose();
-                await _renderer.DisposeAsync().ConfigureAwait(false);
+                await browserClosed.ConfigureAwait(false);
             }
         }
 

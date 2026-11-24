@@ -239,6 +239,16 @@ internal sealed class PageProcessor(
         return viaBrowser;
     }
 
+    /// <summary>
+    /// What to do about a host that blocks the crawler. With the browser fallback off, turning it on comes first: it
+    /// is the one thing here that needs nobody else, though it only gets past a block that lets a browser through.
+    /// </summary>
+    private string BlockedAdvice(string host, string reason) => options.BrowserFallback
+        ? $"{host} is blocking the crawler ({reason}). Try a slower crawl rate or a different user agent, or ask the site owner to allowlist the crawler."
+        : $"{host} is blocking the crawler ({reason}). In the crawl's settings, turn on \"If a site blocks the check\" (\"Browser fallback\" in Advanced) and crawl again: " +
+          "some sites let a browser in where they refuse a crawler. If it is still blocked, try a slower crawl rate or a different user agent, " +
+          "or ask the site owner to allowlist the crawler.";
+
     /// <summary>Internal pages only. A status check is not parsed into page facts, and a 429 is not a firewall block.</summary>
     private bool FallsBack(FrontierItem item) =>
         options.BrowserFallback && item is { Mode: FetchMode.Crawl, IsInternal: true };
@@ -261,8 +271,14 @@ internal sealed class PageProcessor(
             return response;
         }
 
-        var rendered = await renderer.RenderAsync(uri, cancellationToken).ConfigureAwait(false);
-        if (rendered is null)
+        var result = await renderer.RenderAsync(uri, cancellationToken).ConfigureAwait(false);
+        if (result.LeftFor is { } target)
+        {
+            // The script left for another page. This one is kept as it was sent, and forwards there.
+            return response with { ScriptRedirect = target };
+        }
+
+        if (result.Html is not { } rendered)
         {
             return response;
         }
@@ -331,6 +347,18 @@ internal sealed class PageProcessor(
         }
 
         var facts = parsed?.Facts;
+        if (facts is { MetaRefresh: null } && response.ScriptRedirect is { } scripted && item.Mode == FetchMode.Crawl)
+        {
+            // A redirect the page's script made is an instant refresh nothing in the HTML announces: the same forward,
+            // followed and judged the same way.
+            facts = facts with { MetaRefresh = new MetaRefreshFact(0, scripted.AbsoluteUri, FromScript: true) };
+            var forward = links.Create(scripted, LinkKind.MetaRefresh, LinkFlags.None, LinkPosition.Head, null);
+            if (!outLinks.Any(link => link.Url == forward.Url && link.Kind == LinkKind.MetaRefresh))
+            {
+                outLinks.Add(forward);
+            }
+        }
+
         var isParsedHtml = facts is not null && response.IsHtml && response.Body is not null;
         if (isParsedHtml)
         {
@@ -549,7 +577,7 @@ internal sealed class PageProcessor(
                 observer.OnNotice(new CrawlNotice(
                     CrawlNoticeLevel.Warning,
                     "blocked",
-                    $"{host} is blocking the crawler ({reason}). Try a slower crawl rate or a different user agent, or ask the site owner to allowlist the crawler.")
+                    BlockedAdvice(host, reason))
                 {
                     Data = new CrawlNoticeData(Host: host, Reason: reason, Count: 1)
                 });

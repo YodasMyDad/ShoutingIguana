@@ -394,7 +394,7 @@ public sealed class IssueGroupReaderTests(GridCrawl crawl)
     public void ACheckRowsFilterAndSortAsTheUrlGridDoes()
     {
         // The check with the most distinct details, so a sort by detail has runs of equal values to page through.
-        var check = Checks().Where(check => IssueCatalog.Find(check)!.Grouping != IssueGrouping.None)
+        var check = Checks().Where(check => IssueCatalog.Find(check)!.Grouping != IssueGrouping.None && Flagged(check).Count > PAGE)
             .OrderByDescending(check => Flagged(check).Select(issue => issue.Detail).Distinct().Count()).ThenBy(check => check, StringComparer.Ordinal).First();
         var flagged = Flagged(check);
         Assert.True(flagged.Count > PAGE, $"{check}: {flagged.Count} rows");

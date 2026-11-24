@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Text;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
@@ -5,6 +7,7 @@ using Microsoft.Playwright;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Crawling.Models;
+using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Robots;
 using ShoutingIguana.Engine.Urls;
 
@@ -12,9 +15,11 @@ namespace ShoutingIguana.Engine.Fetching;
 
 /// <summary>
 /// Renders one page in a headless Chromium, after the HTTP fetch, and returns the HTML the page has once its scripts
-/// have run. One browser for the crawl, started the first time a page needs it and closed with the crawl. Two pages
-/// render at once. Each request the browser makes takes one slot on that host's gate, the same politeness as a
-/// fetch, and images, fonts and media are not requested. A private address is not requested. The returned HTML is what
+/// have run. One browser for the crawl, started the first time a page needs it and closed with the crawl. As many
+/// pages render at once as the crawl's concurrency, up to what the machine has processors and memory for
+/// (<see cref="SlotsFor"/>). Each request the browser makes takes one slot on that host's gate, the same politeness
+/// as a fetch, and images, fonts and media are not requested. A script or a stylesheet one page was sent is kept
+/// for the crawl (<see cref="RenderCache"/>), so the next page is not sent it again: that takes no slot. A private address is not requested. The returned HTML is what
 /// the crawl parses, once; nothing here writes the crawl file.
 /// <para>
 /// A page is done when its document is parsed and the network has then been quiet, or <see cref="SETTLE_MS"/> have
@@ -34,8 +39,11 @@ internal sealed partial class JavaScriptRenderer(
     TimeProvider timeProvider,
     ILogger<JavaScriptRenderer> logger) : IAsyncDisposable
 {
-    /// <summary>Pages rendered at once. Each one is a browser, so this stays small whatever the crawl's concurrency.</summary>
-    private const int RENDER_SLOTS = 2;
+    /// <summary>The most pages rendered at once, whatever the crawl's concurrency and the machine.</summary>
+    private const int MAX_RENDER_SLOTS = 8;
+
+    /// <summary>What one page being rendered is allowed for: a renderer process and its share of the browser.</summary>
+    private const long BYTES_PER_SLOT = 512L * 1024 * 1024;
 
     /// <summary>How long to wait, after the document is parsed, for the scripts' own requests to finish.</summary>
     private const int SETTLE_MS = 2_000;
@@ -89,7 +97,12 @@ internal sealed partial class JavaScriptRenderer(
     private readonly bool _startsOnHttps = options.StartUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
     private readonly SignatureBook _signatures = new(options.Signatures, timeProvider);
     private readonly List<Cookie> _jar = SeedJar(options);
-    private readonly SemaphoreSlim _slots = new(RENDER_SLOTS, RENDER_SLOTS);
+    private readonly SemaphoreSlim _slots = NewSlots(options.Concurrency);
+    private readonly RenderCache _cache = new();
+    private long _requestsSent;
+    private readonly ConcurrentDictionary<string, long> _sentByKind = new(StringComparer.Ordinal);
+    private long _requestsFromCache;
+    private long _pagesRendered;
     private readonly SemaphoreSlim _launch = new(1, 1);
 
     /// <summary>
@@ -111,24 +124,50 @@ internal sealed partial class JavaScriptRenderer(
     private int _scriptRedirectSaid;
 
     /// <summary>
-    /// The HTML the browser has for <paramref name="uri"/>, or null to keep the HTTP response: rendering is off for
-    /// the rest of the crawl, the browser couldn't start, or the page navigated away.
+    /// Pages to render at once: the crawl's concurrency, but no more than half the processors, than a slot for each
+    /// <see cref="BYTES_PER_SLOT"/> of memory, or than <see cref="MAX_RENDER_SLOTS"/>. Never fewer than one. A page's
+    /// requests still take their turn on each host's gate, so more slots don't ask a host for more at once.
     /// </summary>
-    public async Task<string?> RenderAsync(Uri uri, CancellationToken cancellationToken)
+    internal static int SlotsFor(int concurrency, int processors, long memoryBytes)
+    {
+        var machine = Math.Min(processors / 2, (int)Math.Min(memoryBytes / BYTES_PER_SLOT, MAX_RENDER_SLOTS));
+        return Math.Clamp(Math.Min(concurrency, machine), 1, MAX_RENDER_SLOTS);
+    }
+
+    private static SemaphoreSlim NewSlots(int concurrency)
+    {
+        var slots = SlotsFor(concurrency, Environment.ProcessorCount, GC.GetGCMemoryInfo().TotalAvailableMemoryBytes);
+        return new SemaphoreSlim(slots, slots);
+    }
+
+    /// <summary>How many requests rendered pages made of sites, and how many were answered from the crawl's own cache.</summary>
+    internal (long Pages, long Sent, long FromCache, long CacheBytes) Counts =>
+        (Interlocked.Read(ref _pagesRendered), Interlocked.Read(ref _requestsSent), Interlocked.Read(ref _requestsFromCache), _cache.Bytes);
+
+    /// <summary>
+    /// The HTML the browser has for <paramref name="uri"/>, or none to keep the HTTP response: rendering is off for
+    /// the rest of the crawl, the browser couldn't start, or the page didn't load. When the page's script loaded
+    /// another page, the result names where it went, and the HTTP response is kept.
+    /// </summary>
+    public async Task<RenderResult> RenderAsync(Uri uri, CancellationToken cancellationToken)
     {
         if (Volatile.Read(ref _unavailable) == 1)
         {
-            return null;
+            return RenderResult.None;
         }
 
         await _slots.WaitAsync(cancellationToken).ConfigureAwait(false);
         IBrowserContext? context = null;
+
+        // Each document the tab asks for of its own accord. A router that rewrites the address asks for none; a script
+        // that leaves the page asks for the next one.
+        var documents = new ConcurrentQueue<string>();
         try
         {
             var browser = await BrowserAsync().ConfigureAwait(false);
             if (browser is null)
             {
-                return null;
+                return RenderResult.None;
             }
 
             var started = Stopwatch.StartNew();
@@ -137,51 +176,61 @@ internal sealed partial class JavaScriptRenderer(
 
             var page = await context.NewPageAsync().ConfigureAwait(false);
             using var _ = cancellationToken.Register(() => page.CloseAsync());
-
-            // Each document the tab asks for. A router that rewrites the address asks for none; a script that leaves does.
-            var documents = 0;
             page.Request += (_, request) =>
             {
-                if (IsMainDocument(request, page))
+                if (IsMainDocument(request, page) && request.RedirectedFrom is null)
                 {
-                    Interlocked.Increment(ref documents);
+                    documents.Enqueue(request.Url);
                 }
             };
 
             var navigation = page.GotoAsync(uri.AbsoluteUri, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded, Timeout = 0 });
-            if (!await InThePagesTimeAsync(navigation, held, cancellationToken).ConfigureAwait(false))
+            if (!await InThePagesTimeAsync(navigation, held, cancellationToken, () => LeftFor(documents, uri) is not null).ConfigureAwait(false))
             {
+                // A script that leaves before the page has loaded interrupts the load, and pages that send the
+                // browser to each other never finish one: where it first went is all there is to know.
+                if (LeftFor(documents, uri) is { } gone)
+                {
+                    return Left(uri, gone);
+                }
+
                 logger.LogDebug("Rendering {Url} timed out; keeping the HTTP HTML", uri);
-                return null;
+                return RenderResult.None;
             }
 
             var answer = await navigation.ConfigureAwait(false);
-            if (answer is not { Status: >= 200 and < 300 })
+            if (LeftFor(documents, uri) is null && answer is not { Status: >= 200 and < 300 })
             {
                 // The plain fetch read this page. A firewall's challenge, or a sign-in page, is not that page rendered.
                 logger.LogDebug("The browser was answered {Status} for {Url}; keeping the HTTP HTML", answer?.Status, uri);
-                return null;
+                return RenderResult.None;
             }
 
             await SettleAsync(page, held, cancellationToken).ConfigureAwait(false);
 
-            if (!Stayed(page.Url, uri) && Volatile.Read(ref documents) > 1)
+            if (LeftFor(documents, uri) is { } target)
             {
-                logger.LogDebug("Rendered {Url} navigated to {Final}; keeping the HTTP HTML", uri, page.Url);
-                SayScriptRedirect(uri, page.Url);
-                return null;
+                return Left(uri, target);
             }
 
             var html = await HtmlAsync(page).ConfigureAwait(false);
+            Interlocked.Increment(ref _pagesRendered);
             logger.LogDebug("Rendered {Url} in {ElapsedMs} ms", uri, started.ElapsedMilliseconds);
-            return html;
+            return new RenderResult(html);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // A crawl that is stopping closed the page: the URL is not read, rather than kept without its render.
             cancellationToken.ThrowIfCancellationRequested();
+
+            // A script that leaves while the page is still loading interrupts that load.
+            if (LeftFor(documents, uri) is { } target)
+            {
+                return Left(uri, target);
+            }
+
             logger.LogDebug(ex, "Rendering {Url} failed; keeping the HTTP HTML", uri);
-            return null;
+            return RenderResult.None;
         }
         finally
         {
@@ -194,11 +243,43 @@ internal sealed partial class JavaScriptRenderer(
         }
     }
 
+    /// <summary>
+    /// The first other page the tab went to of its own accord, when it did: a script set the location, or wrote a
+    /// meta refresh. A page that loaded itself again has not left.
+    /// </summary>
+    private static Uri? LeftFor(ConcurrentQueue<string> documents, Uri requested)
+    {
+        foreach (var url in documents.Skip(1))
+        {
+            if (Uri.TryCreate(url, UriKind.Absolute, out var target) && target.Scheme is "http" or "https" && !Stayed(url, requested))
+            {
+                return target;
+            }
+        }
+
+        return null;
+    }
+
+    private RenderResult Left(Uri uri, Uri target)
+    {
+        logger.LogDebug("Rendered {Url} went on to {Target}; keeping the HTTP HTML and following it", uri, target);
+        SayScriptRedirect(uri, target.AbsoluteUri);
+        return new RenderResult(null, target);
+    }
+
     public async ValueTask DisposeAsync()
     {
         await _launch.WaitAsync().ConfigureAwait(false);
         try
         {
+            var (pages, sent, fromCache, cacheBytes) = Counts;
+            if (sent + fromCache > 0)
+            {
+                logger.LogInformation(
+                    "Rendered {Pages} pages: {Sent} requests sent ({Kinds}), {FromCache} answered from the crawl's cache ({CacheBytes} bytes kept)",
+                    pages, sent, string.Join(", ", _sentByKind.OrderByDescending(kind => kind.Value).Select(kind => $"{kind.Value} {kind.Key}")), fromCache, cacheBytes);
+            }
+
             await CloseFallbackAsync().ConfigureAwait(false);
             if (_browser is not null)
             {
@@ -361,7 +442,6 @@ internal sealed partial class JavaScriptRenderer(
             ExtraHTTPHeaders = new Dictionary<string, string> { ["Accept-Language"] = options.AcceptLanguage },
             JavaScriptEnabled = true,
             ViewportSize = new ViewportSize { Width = VIEWPORT_WIDTH, Height = VIEWPORT_HEIGHT },
-            HttpCredentials = SiteLogin(),
 
             // A service worker's requests are not routed, so they would miss the host's gate and the private-address check.
             ServiceWorkers = ServiceWorkerPolicy.Block
@@ -377,22 +457,30 @@ internal sealed partial class JavaScriptRenderer(
     }
 
     /// <summary>
-    /// The HTTP sign-in for the site being crawled, which the browser answers a 401 with as the plain fetch does. It
-    /// is given to the start URL's origin only: a browser has one sign-in, and no other server is to be offered it.
+    /// The HTTP sign-in the crawl was given for <paramref name="uri"/>'s host, as the plain fetch reads the same
+    /// list: a sign-in with no host, or with the site's, is for the site and its www twin; one with another host is
+    /// for that host alone. Null for every other host, which is never offered a password.
     /// </summary>
-    private HttpCredentials? SiteLogin()
+    internal static SiteLogin? LoginFor(CrawlOptions options, Uri uri)
     {
         if (!Uri.TryCreate(options.StartUrl, UriKind.Absolute, out var start))
         {
             return null;
         }
 
+        var host = UrlNormalizer.GetHost(uri);
         var site = CrawlScope.SiteHost(UrlNormalizer.GetHost(start));
-        var login = options.HttpLogins.FirstOrDefault(login =>
-            login.Username.Length > 0 && (login.Host.Length == 0 || CrawlScope.SiteHost(login.Host.ToLowerInvariant()) == site));
-        return login is null
-            ? null
-            : new HttpCredentials { Username = login.Username, Password = login.Password, Origin = start.GetLeftPart(UriPartial.Authority) };
+        foreach (var login in options.HttpLogins)
+        {
+            var named = login.Host.Trim().ToLowerInvariant();
+            var forSite = named.Length == 0 || CrawlScope.SiteHost(named) == site;
+            if (login.Username.Length > 0 && (forSite ? CrawlScope.SiteHost(host) == site : host == named))
+            {
+                return login;
+            }
+        }
+
+        return null;
     }
 
     private static List<Cookie> SeedJar(CrawlOptions options)
@@ -595,9 +683,10 @@ internal sealed partial class JavaScriptRenderer(
     /// <summary>
     /// Waits for <paramref name="work"/> for as long as one request may take, counting only the time in which none of
     /// the page's requests is waiting for the crawl's own pace. False when that time, or
-    /// <see cref="HELD_PATIENCE"/> times it in all, is used up: the caller then closes the page.
+    /// <see cref="HELD_PATIENCE"/> times it in all, is used up, or when <paramref name="giveUp"/> says there is no
+    /// point in waiting: the caller then closes the page.
     /// </summary>
-    private async Task<bool> InThePagesTimeAsync(Task work, HeldRequests held, CancellationToken cancellationToken)
+    private async Task<bool> InThePagesTimeAsync(Task work, HeldRequests held, CancellationToken cancellationToken, Func<bool>? giveUp = null)
     {
         var budget = TimeSpan.FromSeconds(options.RequestTimeoutSeconds);
         var spent = TimeSpan.Zero;
@@ -614,7 +703,7 @@ internal sealed partial class JavaScriptRenderer(
             }
 
             last = now;
-            if (spent >= budget || now >= budget * HELD_PATIENCE)
+            if (spent >= budget || now >= budget * HELD_PATIENCE || (!work.IsCompleted && giveUp?.Invoke() == true))
             {
                 // Whatever it throws once the page is closed has been answered here.
                 _ = work.ContinueWith(static done => done.Exception, TaskScheduler.Default);
@@ -697,7 +786,7 @@ internal sealed partial class JavaScriptRenderer(
         }
     }
 
-    /// <summary>Said once a crawl: a script's redirect is not followed, and its page is kept as it was sent.</summary>
+    /// <summary>Said once a crawl: a page's script sent the browser on, and the crawl follows it.</summary>
     private void SayScriptRedirect(Uri uri, string final)
     {
         if (Interlocked.Exchange(ref _scriptRedirectSaid, 1) == 1)
@@ -706,10 +795,13 @@ internal sealed partial class JavaScriptRenderer(
         }
 
         observer.OnNotice(new CrawlNotice(
-            CrawlNoticeLevel.Warning,
+            CrawlNoticeLevel.Info,
             "javascript-redirect",
-            $"{uri.AbsoluteUri} sends the browser on to {final} with a script. A script's redirect is not followed, so the page is kept as it was sent. " +
-            "If pages are missing from the crawl, start one at the address it leads to."));
+            $"{uri.AbsoluteUri} sends the browser on to {final} with a script. The crawl follows that as it follows a redirect. " +
+            "Search engines follow a script's redirect only once they have rendered the page, so a redirect the server sends is surer.")
+        {
+            Data = new CrawlNoticeData(Url: uri.AbsoluteUri)
+        });
     }
 
     /// <summary>
@@ -779,7 +871,7 @@ internal sealed partial class JavaScriptRenderer(
                 return;
             }
 
-            if (request.ResourceType is "image" or "media" or "font" or "websocket")
+            if (request.ResourceType is "image" or "media" or "font" or "websocket" || IsAskedAhead(request))
             {
                 await route.AbortAsync().ConfigureAwait(false);
                 return;
@@ -791,13 +883,31 @@ internal sealed partial class JavaScriptRenderer(
                 return;
             }
 
+            // A script or stylesheet an earlier page was sent is given again from the crawl's cache. It was allowed
+            // above, as every request is, and the site is not asked, so it takes no slot on the host's gate.
+            var cacheable = RenderCache.Serves(request.Method, request.ResourceType);
+            if (cacheable && _cache.TryGet(uri.AbsoluteUri, out var kept))
+            {
+                Interlocked.Increment(ref _requestsFromCache);
+                await route.FulfillAsync(new RouteFulfillOptions { Status = kept.Status, Headers = kept.Headers, BodyBytes = kept.Body })
+                    .ConfigureAwait(false);
+                return;
+            }
+
             var headers = new Dictionary<string, string>(request.Headers, StringComparer.OrdinalIgnoreCase);
-            if (scope.IsInternal(uri) && (uri.Scheme == Uri.UriSchemeHttps || !_startsOnHttps))
+            var mayCarrySecrets = uri.Scheme == Uri.UriSchemeHttps || !_startsOnHttps;
+            if (scope.IsInternal(uri) && mayCarrySecrets)
             {
                 foreach (var (name, value) in options.ExtraHeaders)
                 {
                     headers[name] = value;
                 }
+            }
+
+            // HTTP Basic up front, as the plain fetch sends it, to the hosts the sign-in is for and to no other.
+            if (mayCarrySecrets && LoginFor(options, uri) is { } login)
+            {
+                headers["Authorization"] = "Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes($"{login.Username}:{login.Password}"));
             }
 
             if (_signatures.For(uri) is { } signature)
@@ -823,7 +933,14 @@ internal sealed partial class JavaScriptRenderer(
             try
             {
                 var fetched = await route.FetchAsync(new RouteFetchOptions { Headers = headers }).ConfigureAwait(false);
+                Interlocked.Increment(ref _requestsSent);
+                _sentByKind.AddOrUpdate(request.ResourceType, 1, static (_, count) => count + 1);
                 lease.ReportStatus(fetched.Status, null, uri);
+                if (cacheable && fetched.Status == 200)
+                {
+                    _cache.Offer(uri.AbsoluteUri, fetched.Status, fetched.Headers, await fetched.BodyAsync().ConfigureAwait(false));
+                }
+
                 await route.FulfillAsync(new RouteFulfillOptions { Response = fetched }).ConfigureAwait(false);
             }
             finally
@@ -866,6 +983,19 @@ internal sealed partial class JavaScriptRenderer(
         {
             held.End(began);
         }
+    }
+
+    /// <summary>
+    /// A request for where a visitor might go next, not for this page: a prefetch link, which the browser marks, or
+    /// the Next.js router fetching the routes its links name. The page is the same without them, and a site is
+    /// spared most of what a render would otherwise ask of it.
+    /// </summary>
+    private static bool IsAskedAhead(IRequest request)
+    {
+        var headers = request.Headers;
+        return (headers.TryGetValue("sec-purpose", out var purpose) && purpose.Contains("prefetch", StringComparison.OrdinalIgnoreCase)) ||
+               (headers.TryGetValue("purpose", out var older) && older.Contains("prefetch", StringComparison.OrdinalIgnoreCase)) ||
+               headers.ContainsKey("next-router-prefetch");
     }
 
     private static bool IsTopDocument(IRequest request)
