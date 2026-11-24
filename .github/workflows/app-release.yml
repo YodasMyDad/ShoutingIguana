@@ -16,8 +16,8 @@
 # engine can't start a browser fails here. Windows: scripts/smoke-installer.ps1 (install, the engine on its own,
 # a run, uninstall). Linux: scripts/smoke-installer.sh in fresh containers, so what the runner has installed can't
 # stand in for what the package depends on. macOS: the same script on the disk image, the x64 app under Rosetta.
-# The macOS smoke test had never run when it was added (it can't be tried on Windows), so it reports on the run
-# summary without failing the job (continue-on-error): make it a hard failure once a run has shown it passing.
+# The macOS smoke test can't be tried on Windows. It first ran, and passed on both Macs, in the app-v2.1.0 run, and
+# has been a hard failure since.
 #
 # Linux builds on ubuntu-22.04, the oldest runner, so the shell and the libraries the AppImage carries need glibc
 # 2.35 and not 2.39: the AppImage then runs on Ubuntu 22.04, Debian 12 and later.
@@ -300,10 +300,9 @@ jobs:
           done
           exit "$failed"
 
-      # Never run before the release that added it: it reports, and does not fail the job. See the header.
+      # A failure fails the job: it passed on both Macs in the app-v2.1.0 run. See the header.
       - name: Installer smoke test (macOS)
         if: runner.os == 'macOS'
-        continue-on-error: true
         shell: bash
         run: |
           set -uo pipefail
@@ -325,7 +324,7 @@ jobs:
             else
               echo "### ${{ matrix.name }} installer smoke test: FAILED"
               echo ""
-              echo "This does not fail the job yet. Read the lines below before telling anyone to download this disk image."
+              echo "This fails the job. Read the lines below."
             fi
             echo ""
             echo '```'

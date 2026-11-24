@@ -78,10 +78,15 @@ and the AppImage installed, ran and rendered on Ubuntu 22.04, 24.04, 26.04 and D
 rendering pass). The release workflow now smoke-tests every leg: Linux and Windows fail the release if the packaged
 app can't do a rendered crawl.
 
-*Not proven:* **macOS, all of it** (signing, launch, rendering): it can't be run on this machine. Its smoke step is
-`continue-on-error` and writes to the run summary; once a run shows it passing, remove `continue-on-error` in
-`app-release.yml`. `smoke-installer.ps1` end to end has only run on runners (the owner's install is on this
-machine). The Chromium download does not use the app's proxy (the README says `HTTPS_PROXY`, untested).
+*The release run (`app-v2.1.0`, run 45384484607): green on all four legs.* Both Macs passed their first ever smoke
+test: the disk image's app is ad-hoc signed and verifies (deep, strict), the engine starts and is guarded by its
+token, the window's page calls it, a rendered crawl finds the script-only page (9 s on arm64, 27 s on x64 under
+Rosetta, browser download included), and quitting leaves no sidecar. That step is now a hard failure. Gatekeeper
+still rejects the app as downloaded, as expected for a build that is not notarised: the README's Open Anyway steps
+are what a user does. The owner's install was upgraded to `2.1.0`, and the audit worktrees and branches are gone.
+
+*Not proven:* nobody has opened the app by hand on a real Mac or a Linux desktop (only runners and containers).
+`smoke-installer.ps1` end to end has only run on runners (the owner's install is on this machine). The Chromium download does not use the app's proxy (the README says `HTTPS_PROXY`, untested).
 
 *Left for later, none started:*
 
