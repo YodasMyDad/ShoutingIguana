@@ -256,7 +256,7 @@ pub async fn install(app: &AppHandle, version: &str) -> Result<InstallOutcome, S
     let shell = app.try_state::<Shell>().ok_or("The app isn't ready.")?;
     let updates = app.try_state::<Updates>().ok_or("The app isn't ready.")?;
     if arrival() == Arrival::Download {
-        return Err("This copy of Shouting Iguana can't install a new version itself. Download it instead.".to_owned());
+        return Err("This copy of Shouting Iguana can’t install a new version itself. Download it instead.".to_owned());
     }
     let update = lock(&updates.found)
         .clone()
@@ -337,12 +337,13 @@ async fn installer(app: &AppHandle, updates: &Updates, update: &Update) -> Resul
         })
 }
 
-/// A download that failed, in plain words: one whose signature doesn't match is refused, and says so.
+/// A download that failed, in plain words: one whose signature doesn't match is refused, and says so. The page shows
+/// these as they are, so they are written as its own words are.
 fn download_failure_words(problem: CheckProblem) -> &'static str {
     if problem == CheckProblem::Untrusted {
-        "The download's signature didn't match this app's, so it was thrown away. Nothing was installed."
+        "The download’s signature didn’t match this app’s, so it was thrown away. Nothing was installed."
     } else {
-        "The update couldn't be downloaded. Check the internet connection, then try again."
+        "The update couldn’t be downloaded. Check the internet connection, then try again."
     }
 }
 
@@ -466,10 +467,10 @@ mod tests {
         use tauri_plugin_updater::Error;
         let tampered = check_problem(&Error::SignatureUtf8("not a signature".into()));
         assert_eq!(tampered, CheckProblem::Untrusted);
-        assert!(download_failure_words(tampered).contains("signature didn't match"));
+        assert!(download_failure_words(tampered).contains("signature didn’t match"));
         assert!(download_failure_words(tampered).contains("Nothing was installed"));
         let missing = check_problem(&Error::Network("Download request failed with status: 404".into()));
-        assert!(download_failure_words(missing).contains("couldn't be downloaded"));
+        assert!(download_failure_words(missing).contains("couldn’t be downloaded"));
     }
 
     #[test]
