@@ -36,6 +36,11 @@ namespace ShoutingIguana.Sidecar.Serialization;
         typeof(CamelCaseEnumConverter<OutOfDateReason>),
         typeof(CamelCaseEnumConverter<UserAgentPreset>),
 
+        // Without these two the options gave both as numbers and refused the words the UI sends: every custom
+        // extraction rule, and any JavaScript rendering choice but the one that came, was "This value isn't valid here".
+        typeof(CamelCaseOrNumberEnumConverter<JavaScriptRendering>),
+        typeof(CamelCaseOrNumberEnumConverter<ExtractionSelector>),
+
         // The grids (E3a).
         typeof(CamelCaseEnumConverter<SummaryUnavailableReason>),
         typeof(CamelCaseEnumConverter<ResourceType>),

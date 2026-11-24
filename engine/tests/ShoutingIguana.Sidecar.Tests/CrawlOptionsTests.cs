@@ -143,6 +143,40 @@ public sealed class CrawlOptionsTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// JavaScript rendering and a custom extraction rule's selector type go out as words and are taken as the words
+    /// the UI sends. They went out as numbers and the words were refused ("This value isn't valid here"), so no rule
+    /// could be added and the rendering choice couldn't be changed. A number, as 2.0.3 saved in defaults.json, still reads.
+    /// </summary>
+    [Fact]
+    public async Task RenderingAndSelectorTypesAreWordsBothWays()
+    {
+        var defaults = await _sidecar.GetJsonAsync("api/crawl-options/defaults");
+        Assert.Equal("automatic", (string?)defaults["options"]!["javaScriptRendering"]);
+
+        var words = await _sidecar.PostAsync("api/crawl-options/validate", JsonNode.Parse("""
+            {"startUrl":"https://example.com/","javaScriptRendering":"javaScript",
+             "extractionRules":[{"name":"Heading","selectorType":"css","selector":"h1","enabled":true},
+                                {"name":"Price","selectorType":"xPath","selector":"//span[@class='price']"},
+                                {"name":"Sku","selectorType":"regex","selector":"SKU: ([A-Z0-9]+)"}]}
+            """));
+        Assert.Equal(HttpStatusCode.OK, words.Status);
+        Assert.Equal("""{"errors":{}}""", words.Body!.ToJsonString());
+
+        var saved = await _sidecar.SendAsync(HttpMethod.Put, "api/crawl-options/defaults", JsonNode.Parse("""
+            {"javaScriptRendering":"off","extractionRules":[{"name":"Price","selectorType":"xPath","selector":"//b"}]}
+            """));
+        Assert.Equal(HttpStatusCode.OK, saved.Status);
+        var read = (await _sidecar.GetJsonAsync("api/crawl-options/defaults"))["options"]!;
+        Assert.Equal("off", (string?)read["javaScriptRendering"]);
+        Assert.Equal("xPath", (string?)read["extractionRules"]![0]!["selectorType"]);
+
+        var numbers = await _sidecar.PostAsync("api/crawl-options/validate", JsonNode.Parse("""
+            {"startUrl":"https://example.com/","javaScriptRendering":1,"extractionRules":[{"name":"Heading","selectorType":0,"selector":"h1"}]}
+            """));
+        Assert.Equal("""{"errors":{}}""", numbers.Body!.ToJsonString());
+    }
+
+    /// <summary>
     /// A property the body's own shape doesn't have is a bad request, even when its name is an option's: a top-level
     /// option on the start wrapper, or an option the continue body doesn't take. A wrong-typed value of a real option
     /// stays a field error. The old reader keyed any such name as an option, giving `invalid-options` by mistake.
