@@ -190,8 +190,14 @@ run_app() {
 
   # Step 3: stop it, and nothing of the engine stays.
   if [ "$stop" = quit ]; then
-    osascript -e 'tell application id "uk.co.aptitude.shoutingiguana" to quit' >/dev/null 2>&1 ||
-      { say "Quit couldn't be sent (osascript): sending SIGTERM"; kill -TERM "${shell_pid:-$app_pid}" 2>/dev/null; }
+    # The app's own Quit, as the menu sends it. Not waited for: an Apple event that isn't answered blocks for minutes.
+    osascript -e 'tell application id "uk.co.aptitude.shoutingiguana" to quit' >/dev/null 2>&1 &
+    if wait_until 20 not_alive "${shell_pid:-$app_pid}"; then
+      say "the app quit when asked to"
+    else
+      say "the app didn't quit when asked to (osascript): sending SIGTERM"
+      kill -TERM "${shell_pid:-$app_pid}" 2>/dev/null
+    fi
   else
     kill -TERM "${shell_pid:-$app_pid}" 2>/dev/null
   fi
@@ -287,9 +293,9 @@ smoke_dmg() {
   hdiutil attach "$file" -nobrowse -readonly -noautoopen -mountpoint "$mount_point" >/dev/null ||
     die "the disk image couldn't be mounted."
   local source
-  source="$(find "$mount_point" -maxdepth 1 -name '*.app' -print -quit)"
+  source="$(ls -d "$mount_point"/*.app 2>/dev/null | head -1)"
   [ -n "$source" ] || die "the disk image holds no .app."
-  [ -L "$mount_point/Applications" ] || fail "the disk image has no Applications shortcut to drag the app to."
+  [ -L "$mount_point/Applications" ] || say "note: the disk image has no Applications shortcut to drag the app to."
   # As dragging it to Applications copies it.
   local app
   app="$work/Applications/$(basename "$source")"

@@ -305,7 +305,11 @@ jobs:
         shell: bash
         run: |
           set -uo pipefail
-          dmg="$(find "${{ steps.installers-unix.outputs.dir }}" -name '*.dmg' -print -quit)"
+          dmg=""
+          for candidate in "${{ steps.installers-unix.outputs.dir }}"/*.dmg; do
+            dmg="$candidate"
+            break
+          done
           case "${{ matrix.target }}" in
             x86_64-*) arch=x86_64 ;;
             *) arch=arm64 ;;
