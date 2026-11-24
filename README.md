@@ -78,6 +78,8 @@ Installers are on the GitHub release [app-v2.0.3](https://github.com/YodasMyDad/
 
 Each file has a SHA256 checksum (`SHA256SUMS-*.txt` on the release). The engine is inside the installer: there is no .NET or other runtime to add.
 
+Pages a script builds are rendered in a headless Chromium, which is not in the installer. The first crawl that needs it downloads it once, a few hundred MB on disk, into your user folder, so that crawl needs the internet. The crawl says it is downloading, and goes on when it is done. If the download fails, or the browser can't start, the crawl says so in an alert and reads every page as it was sent. The download does not use the proxy set in the app: behind a proxy, set `HTTPS_PROXY` before starting the app.
+
 The app does not update itself yet. **Settings › Updates** says there is no update information. For a new version, download its installer and run it over the old one.
 
 ## Opening it the first time
@@ -114,8 +116,8 @@ xattr -dr com.apple.quarantine "/Applications/Shouting Iguana.app"
 
 The `.deb` and the AppImage are unsigned, and are for 64-bit Intel and AMD. Both need glibc 2.35 or newer: Ubuntu 22.04, Debian 12, or anything more recent. They are checked on Ubuntu 22.04, 24.04 and 26.04, and on Debian 12 and 13.
 
-- **`.deb`**: `sudo apt install ./Shouting.Iguana_*_amd64.deb`. apt adds what it needs: WebKitGTK 4.1, GTK 3 and the tray library.
-- **AppImage**: `chmod +x` it and run it. It carries WebKitGTK and its other libraries, and uses the graphics and font libraries every desktop already has. If it says FUSE is missing, run it with `--appimage-extract-and-run`.
+- **`.deb`**: `sudo apt install ./Shouting.Iguana_*_amd64.deb`. apt adds what it needs: WebKitGTK 4.1, GTK 3, the tray library, and the two libraries Chromium needs beyond those (`libnss3`, `libasound2`). A `.sicrawl` file then opens in the app.
+- **AppImage**: `chmod +x` it and run it. It carries WebKitGTK and its other libraries, and uses the graphics and font libraries every desktop already has. If it says FUSE is missing, run it with `--appimage-extract-and-run`. To render pages, Chromium uses the system's own libraries, the ones Chrome needs (`libnss3`, `libasound2`, and the accessibility and X11 libraries a GNOME or KDE desktop has). If one is missing, the crawl's alert names it and the command that installs it.
 
 ## A first crawl
 

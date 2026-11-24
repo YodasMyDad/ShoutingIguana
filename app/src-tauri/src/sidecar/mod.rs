@@ -45,7 +45,10 @@ pub const SIDECAR_LOG: &str = "sidecar";
 pub const GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(30 + 5);
 
 /// A sidecar that hasn't written its ready line by then is killed, and counts as a failed start.
-const START_TIMEOUT: Duration = Duration::from_secs(20);
+/// A minute, not seconds: the first start of each version unpacks the whole single file (about 250 MB in several
+/// hundred files, Playwright's driver among them), which a slow disk or a virus scanner can stretch well past the
+/// second or so it takes on a fast one.
+const START_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// A sidecar that isn't serving yet has no crawls to stop, so at quit it gets this long rather than the graceful
 /// shutdown time. So does one still running at exit, the last safety net.

@@ -16,7 +16,8 @@
 #      under a virtual display on Linux: the shell's log says its engine is ready on a port; that port answers 401
 #      without the token (so it is the engine, and it is guarded); a si-sidecar process runs on the test's state
 #      folder; the engine's own log shows the window's page calling it with the token (GET /api/crawls, 200), which
-#      is the page loaded in the webview and talking to the engine; the shell is still running after that.
+#      is the page loaded in the webview and talking to the engine; the shell is still running after that; and the
+#      engine it started unpacked Playwright's driver into the app's own folder.
 #   3. Stopping the app (Quit on macOS, SIGTERM on Linux, where there's no window manager to close a window with)
 #      leaves no si-sidecar behind.
 #
@@ -32,9 +33,10 @@ DISPLAY_NUMBER=99
 # What an AppImage leaves to the system, because every desktop has it (the AppImage excludelist): a bare container
 # doesn't, so the test installs these for the AppImage. Named here so the README's list is this one.
 APPIMAGE_SYSTEM_PACKAGES="libfribidi0 libfontconfig1 libfreetype6 libharfbuzz0b libx11-6 libx11-xcb1 libxcb1 libwayland-client0 libgbm1 libdrm2 libgl1 libegl1 libgles2 libexpat1 libgpg-error0 libcom-err2 zlib1g"
-# What the browser the engine downloads for JavaScript rendering needs and an AppImage doesn't carry. The .deb
-# depends on these (tauri.conf.json); a desktop usually has them.
-APPIMAGE_BROWSER_PACKAGES="libnss3 libasound2"
+# What the browser the engine downloads for JavaScript rendering needs of the system: it runs outside the AppImage, so
+# the libraries the AppImage carries for itself are no use to it. A GTK desktop has them all, and the .deb gets them
+# through its dependencies (libnss3 and libasound2 are named in tauri.conf.json, the rest come with GTK).
+APPIMAGE_BROWSER_PACKAGES="libnss3 libasound2 libdbus-1-3 libatk1.0-0 libatk-bridge2.0-0 libatspi2.0-0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libxkbcommon0"
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 kind="${1:-}"
@@ -193,6 +195,14 @@ run_app() {
     tail -30 "$run/app.out" >&2
   fi
 
+  # The shell's engine unpacked Playwright's driver into the app's own folder, where it looks for it: without the
+  # driver no crawl renders a page.
+  if [ -n "$(find "$run/profile/engine" -path '*/.playwright/package/cli.js' 2>/dev/null | head -1)" ]; then
+    say "the engine unpacked the browser driver (.playwright) into the app's folder"
+  else
+    fail "the engine the shell started has no browser driver (.playwright/package/cli.js) under $run/profile/engine."
+  fi
+
   # Step 3: stop it, and nothing of the engine stays.
   if [ "$stop" = quit ]; then
     # The app's own Quit, as the menu sends it. Not waited for: an Apple event that isn't answered blocks for minutes.
@@ -269,12 +279,14 @@ smoke_appimage() {
   chmod +x "$image"
   if command -v apt-get >/dev/null && command -v dpkg >/dev/null; then
     local absent=() package
+    as_root env DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null 2>&1
     for package in $APPIMAGE_SYSTEM_PACKAGES $APPIMAGE_BROWSER_PACKAGES; do
+      # The name this release has it under: some libraries gained a t64 suffix (Ubuntu 24.04, Debian 13).
+      if [ -n "$(apt-cache show "${package}t64" 2>/dev/null)" ]; then package="${package}t64"; fi
       dpkg -s "$package" >/dev/null 2>&1 || absent+=("$package")
     done
     if [ ${#absent[@]} -gt 0 ]; then
       say "installing the system libraries an AppImage expects of a desktop: ${absent[*]}"
-      as_root env DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null 2>&1
       apt_install "${absent[@]}" || die "couldn't install ${absent[*]}."
     fi
   fi
@@ -288,6 +300,7 @@ smoke_appimage() {
   # With what the AppImage's own start script sets (its GTK hook), as the shell and so its engine get it.
   (
     export APPDIR="$root"
+    set +u
     for hook in "$root"/apprun-hooks/*.sh; do
       # shellcheck disable=SC1090
       [ -f "$hook" ] && . "$hook"

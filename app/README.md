@@ -20,7 +20,9 @@ npm ci
 npm run build:sidecar   # the engine as src-tauri/binaries/si-sidecar-<target triple>.exe
 ```
 
-Build the sidecar again whenever the engine changes. `npm run build:sidecar -- --engine-root <folder>` builds it from
+Build the sidecar again whenever the engine changes. It is one file that unpacks all of itself on first start
+(`IncludeAllContentForSelfExtract`), into the app's local data folder when the shell starts it: Playwright's driver
+(`.playwright`) has to be files on disk beside the program, or no page is rendered. `npm run build:sidecar -- --engine-root <folder>` builds it from
 another checkout of the engine, such as a clean worktree while someone edits this one.
 
 ## Run
@@ -86,7 +88,7 @@ npm run check:orphans    # closing the app, or killing it, leaves no sidecar beh
 npm run smoke:tauri      # the built app, in its own WebView2: it shows the library from a temp data folder
 npm run smoke:shell      # the five flows walked in the built app: keys, the tray, quitting, the engine restarted
 powershell -File scripts/smoke-installer.ps1   # the installer: silent install, .sicrawl, the engine alone, a run, silent uninstall
-node scripts/smoke-sidecar.mjs --sidecar <si-sidecar>   # a packaged engine alone: it crawls and analyses a two-page local site
+node scripts/smoke-sidecar.mjs --render --sidecar <si-sidecar>   # a packaged engine alone: a two-page crawl, then a rendered one
 ```
 
 On Linux and macOS the installer's test is `bash scripts/smoke-installer.sh deb|appimage|dmg <file>`: it installs

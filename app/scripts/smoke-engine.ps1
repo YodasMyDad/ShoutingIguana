@@ -7,7 +7,7 @@ What smoke-installer.sh checks on Linux and macOS, for a machine where smoke-tau
 GitHub-hosted runner). It starts the shell on temporary data, state and profile folders, then checks:
 1. The shell's log says its engine is ready on a port.
 2. That port answers 401 without the token: it is the engine, and it is guarded.
-3. A si-sidecar.exe runs on the test's state folder.
+3. A si-sidecar.exe runs on the test's state folder, and it unpacked Playwright's driver into the app's own folder.
 4. Once the shell has gone (its window closed, or the process ended when it has none), no such si-sidecar.exe is left.
 
 It also says whether the window's page called the engine (the engine's own log), without failing on it: that needs a
@@ -95,6 +95,11 @@ try {
         } $PageTimeout
         if ($called) { Write-Host 'smoke-engine: the window''s page called the engine with the token (GET /api/crawls, 200)' }
         else { Write-Host 'smoke-engine: the window''s page did not call the engine: no window here (not a failure of this check).' }
+        # The engine unpacked Playwright's driver into the app's own folder: without it no crawl renders a page.
+        $driver = Get-ChildItem -Path (Join-Path $temp 'profileengine') -Recurse -Filter 'cli.js' -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -like '*.playwrightpackagecli.js' } | Select-Object -First 1
+        if ($driver) { Write-Host 'smoke-engine: the engine unpacked the browser driver (.playwright) into the app''s folder' }
+        else { Fail "the engine the shell started has no browser driver (.playwrightpackagecli.js) under $tempprofileengine." }
         if ($shell.HasExited) { Fail "the shell has stopped by itself (exit code $($shell.ExitCode))." }
     }
 }

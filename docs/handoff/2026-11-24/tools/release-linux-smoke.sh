@@ -6,7 +6,8 @@
 #   bash docs/handoff/2026-11-24/tools/release-linux-smoke.sh <work>/out/bundle debian:13 appimage
 #
 # The container gets the bundles, the scripts and a node binary (the si-rel-opt volume the build filled), all
-# read-only, and nothing else: apt installs the .deb with only its own dependencies. Seen passing on 2026-11-24 for
+# read-only, and nothing else: apt installs the .deb with only its own dependencies. The rendered crawl downloads
+# Chromium in each container, so it needs the internet. Seen passing on 2026-11-24 for
 # both bundles on ubuntu:22.04, ubuntu:24.04, ubuntu:26.04, debian:12 and debian:13.
 set -euo pipefail
 bundles="$1"
