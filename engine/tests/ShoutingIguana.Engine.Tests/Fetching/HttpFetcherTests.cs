@@ -171,6 +171,16 @@ public sealed class HttpFetcherTests : IAsyncLifetime
         Assert.Equal("No response within 1 seconds", response.Error);
     }
 
+    /// <summary>A connection that can't be made gives up after 10 seconds of a 20-second request, and was said to have waited 20.</summary>
+    [Fact]
+    public void ATimeoutNamesTheLimitThatWasHit()
+    {
+        var request = TimeSpan.FromSeconds(20);
+        var connect = TimeSpan.FromSeconds(10);
+        Assert.Equal("No response within 10 seconds", HttpFetcher.TimeoutError(requestTimeUp: false, request, connect));
+        Assert.Equal("No response within 20 seconds", HttpFetcher.TimeoutError(requestTimeUp: true, request, connect));
+    }
+
     [Fact]
     public async Task ReadsRetryAfterInSeconds()
     {

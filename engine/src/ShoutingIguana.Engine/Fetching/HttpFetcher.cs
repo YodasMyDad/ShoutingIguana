@@ -37,7 +37,11 @@ internal sealed class HttpFetcher : IDisposable
     private readonly TimeProvider _timeProvider;
     private readonly SignatureBook _signatures;
     private readonly string _userAgent;
+    /// <summary>A connection that isn't made in this long is not going to be, however long the request may take.</summary>
+    private const int MAX_CONNECT_SECONDS = 10;
+
     private readonly TimeSpan _timeout;
+    private readonly TimeSpan _connectTimeout;
 
     /// <summary>The proxy's address has a user name and password, which a SOCKS5 proxy's refusal is told against.</summary>
     private readonly bool _proxyHasLogin;
@@ -51,6 +55,7 @@ internal sealed class HttpFetcher : IDisposable
         _signatures = new SignatureBook(options.Signatures, timeProvider);
         _userAgent = userAgent.Header;
         _timeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds);
+        _connectTimeout = TimeSpan.FromSeconds(Math.Min(MAX_CONNECT_SECONDS, options.RequestTimeoutSeconds));
         Guard = new PrivateNetworkGuard(options.StartUrl);
         var proxy = ProxyFactory.Create(options.ProxyUrl);
         _proxyHasLogin = proxy?.Credentials is not null;
@@ -63,7 +68,7 @@ internal sealed class HttpFetcher : IDisposable
             CookieContainer = _cookies,
             Credentials = SiteCredentials.Cache(options),
             PreAuthenticate = true,
-            ConnectTimeout = TimeSpan.FromSeconds(Math.Min(10, options.RequestTimeoutSeconds)),
+            ConnectTimeout = _connectTimeout,
             PooledConnectionLifetime = TimeSpan.FromMinutes(5),
             PooledConnectionIdleTimeout = TimeSpan.FromMinutes(1),
             MaxConnectionsPerServer = 64,
@@ -199,7 +204,7 @@ internal sealed class HttpFetcher : IDisposable
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return Failed(uri, FetchOutcome.Timeout, $"No response within {_timeout.TotalSeconds:0} seconds", true, stopwatch);
+            return Failed(uri, FetchOutcome.Timeout, TimeoutError(timeout.IsCancellationRequested, _timeout, _connectTimeout), true, stopwatch);
         }
         catch (HttpRequestException exception) when (exception.InnerException is PrivateNetworkAddressException)
         {
@@ -498,6 +503,13 @@ internal sealed class HttpFetcher : IDisposable
 
         return null;
     }
+
+    /// <summary>
+    /// What a timeout says: the limit that was hit. A connection that couldn't be made gives up at the connect limit,
+    /// before the request's own time is up, and the message must not name the longer one.
+    /// </summary>
+    internal static string TimeoutError(bool requestTimeUp, TimeSpan request, TimeSpan connect) =>
+        $"No response within {(requestTimeUp ? request : connect).TotalSeconds:0} seconds";
 
     internal static FetchOutcome Classify(int statusCode, string? blockReason) =>
         blockReason is not null
