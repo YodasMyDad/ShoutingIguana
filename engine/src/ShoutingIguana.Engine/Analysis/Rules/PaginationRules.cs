@@ -61,7 +61,9 @@ internal sealed class PaginationRules(UrlTable urls, Func<string, int> readUrlId
                 continue;
             }
 
-            if (status is { IsInternal: true, IsPage: true } && !linked.Contains(target))
+            // A page of the series the crawl only asked the status of (it doesn't follow these links unless told to, and
+            // nothing else led there) is as much a page with no link to it, as where a button loads the next page.
+            if (status is { IsInternal: true, Outcome: FetchOutcome.Success, IsHtml: true } && !linked.Contains(target))
             {
                 unlinked.Add(target);
                 unlinkedDetail ??= RuleText.Fit($"{rel} {readUrl(target)} has no link");

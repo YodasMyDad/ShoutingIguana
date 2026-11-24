@@ -48,9 +48,9 @@ public sealed class SitemapEntryCrawlTests : IAsyncLifetime
         Assert.Equal(["null"], TestCrawls.Rows(_path, "SELECT coalesce(size_bytes, 'null') FROM sitemaps WHERE url LIKE '%/missing.xml'"));
         Assert.True(TestCrawls.Count(_path, "SELECT size_bytes FROM sitemaps WHERE url LIKE '%/pages-0.xml'") > 1_000);
 
-        // Which file is an image sitemap (every entry carries an image), and where a file was served from when its URL
+        // Which file is an image sitemap (every entry carries an image) or a feed, and where a file was served from when its URL
         // redirected there: robots.txt names /sitemap.xml, which redirects to the index.
-        Assert.Equal(["/sitemaps/empty.xml | 0", "/sitemaps/extra.xml | 0", "/sitemaps/images.xml | 1", "/sitemaps/missing.xml | null", "/sitemaps/pages-0.xml | 0"],
+        Assert.Equal(["/sitemaps/empty.xml | 0", "/sitemaps/extra.xml | 0", "/sitemaps/feed.rss | 1", "/sitemaps/images.xml | 1", "/sitemaps/missing.xml | null", "/sitemaps/pages-0.xml | 0"],
             TestCrawls.Rows(_path, "SELECT substr(url, instr(url, '/sitemaps/')) || ' | ' || coalesce(extensions_only, 'null') FROM sitemaps WHERE url LIKE '%/sitemaps/%' ORDER BY url"));
         Assert.Equal([$"{server.BaseUri}sitemap_index.xml"], TestCrawls.Rows(_path, "SELECT final_url FROM sitemaps WHERE final_url IS NOT NULL"));
 

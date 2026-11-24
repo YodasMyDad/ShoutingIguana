@@ -37,6 +37,8 @@ internal static class CrawlCommand
         var subdomains = new Option<bool>("--subdomains") { Description = "Treat every subdomain as part of the site." };
         var anyFolder = new Option<bool>("--any-folder") { Description = "Crawl outside the start URL's folder." };
         var followNofollow = new Option<bool>("--follow-nofollow") { Description = "Follow nofollow links." };
+        var crawlHreflang = new Option<bool>("--crawl-hreflang") { Description = "Fetch URLs that only an hreflang link names." };
+        var crawlPagination = new Option<bool>("--crawl-pagination") { Description = "Fetch URLs that only a rel=\"next\" or rel=\"prev\" link names." };
         var storeHtml = new Option<bool>("--store-html") { Description = "Keep compressed HTML of every page." };
         var render = new Option<JavaScriptRendering?>("--render")
         {
@@ -79,7 +81,7 @@ internal static class CrawlCommand
         var command = new Command("crawl", "Crawl a site into a .sicrawl file.")
         {
             url, database, resume, maxUrls, maxDepth, concurrency, rate, userAgent, userAgentString, headers, proxy, signatureFiles, timeout,
-            ignoreRobots, crawlDelay, noResources, noExternal, noSitemaps, subdomains, anyFolder, followNofollow, storeHtml,
+            ignoreRobots, crawlDelay, noResources, noExternal, noSitemaps, subdomains, anyFolder, followNofollow, crawlHreflang, crawlPagination, storeHtml,
             render, renderUrls, include, exclude, extract, list, browserFallback, solveChallenges, challengeWait, noInstalledBrowser,
             auth, cookie, formUrl, formUser, formPassword, formUserField, formPasswordField, formSubmit,
             noAnalyze, quiet, verbose
@@ -87,7 +89,7 @@ internal static class CrawlCommand
 
         // A resumed crawl keeps the scope and rules it started with; only how it talks to the site can change.
         Option[] fixedOnResume = [maxUrls, maxDepth, userAgent, userAgentString, ignoreRobots, crawlDelay, noResources, noExternal,
-            noSitemaps, subdomains, anyFolder, followNofollow, storeHtml, render, renderUrls, include, exclude, extract, list, browserFallback,
+            noSitemaps, subdomains, anyFolder, followNofollow, crawlHreflang, crawlPagination, storeHtml, render, renderUrls, include, exclude, extract, list, browserFallback,
             solveChallenges, challengeWait, noInstalledBrowser];
 
         command.SetAction((parse, cancellationToken) => CommandErrors.RunAsync(async () =>
@@ -227,6 +229,8 @@ internal static class CrawlCommand
                     IncludeSubdomains = parse.GetValue(subdomains),
                     StayInStartFolder = !parse.GetValue(anyFolder),
                     FollowNofollow = parse.GetValue(followNofollow),
+                    CrawlHreflang = parse.GetValue(crawlHreflang),
+                    CrawlPagination = parse.GetValue(crawlPagination),
                     StoreHtml = parse.GetValue(storeHtml),
                     Rendering = parse.GetValue(render) ?? defaults.Rendering,
                     RenderPatterns = parse.GetValue(renderUrls) ?? [],

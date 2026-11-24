@@ -285,6 +285,14 @@ public sealed partial class SyntheticSite
             return Xml(RenderImageSitemap());
         }
 
+        // An RSS feed listed as a sitemap, as All in One SEO writes a sitemap.rss beside its sitemap.xml (the fourth pass:
+        // freebsdfoundation.org, servercore.com): it lists the newest pages again, with a feed's dates. Not empty, no
+        // repeats and no unreadable lastmod (sitemap-empty, sitemap-url-repeated and sitemap-lastmod-invalid flag nothing).
+        if (_options.Sitemaps && path == "/sitemaps/feed.rss")
+        {
+            return Xml(RenderFeedSitemap());
+        }
+
         // A sitemap the index lists that lists nothing: sitemap-empty.
         if (_options.Sitemaps && path == "/sitemaps/empty.xml")
         {
@@ -1079,11 +1087,12 @@ public sealed partial class SyntheticSite
             xml.Append("<sitemap><loc>").Append(_base).Append("/sitemaps/pages-").Append(chunk).Append(".xml</loc></sitemap>");
         }
 
-        // The last entry doesn't exist: a planted sitemap error, which revision 1 mends. The one before it is the image
-        // sitemap, and the one before that lists nothing.
+        // The last entry doesn't exist: a planted sitemap error, which revision 1 mends. The two before it are the image
+        // sitemap and the feed, and the one before those lists nothing.
         xml.Append("<sitemap><loc>").Append(_base).Append("/sitemaps/extra.xml</loc></sitemap>");
         xml.Append("<sitemap><loc>").Append(_base).Append("/sitemaps/empty.xml</loc></sitemap>");
         xml.Append("<sitemap><loc>").Append(_base).Append("/sitemaps/images.xml</loc></sitemap>");
+        xml.Append("<sitemap><loc>").Append(_base).Append("/sitemaps/feed.rss</loc></sitemap>");
         if (Revision == 0)
         {
             xml.Append("<sitemap><loc>").Append(_base).Append("/sitemaps/missing.xml</loc></sitemap>");
@@ -1123,6 +1132,20 @@ public sealed partial class SyntheticSite
         }
 
         return xml.Append("</urlset>").ToString();
+    }
+
+    private string RenderFeedSitemap()
+    {
+        var xml = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\"?><rss version=\"2.0\" xmlns:atom=\"http://www.w3.org/2005/Atom\"><channel>" +
+                                    "<title>Synthetic site</title><link><![CDATA[").Append(_base).Append("/]]></link>")
+            .Append("<atom:link href=\"").Append(_base).Append("/sitemaps/feed.rss\" rel=\"self\" type=\"application/rss+xml\"/>");
+        for (var page = 0; page < Math.Min(PageCount, IMAGE_SITEMAP_PAGES); page++)
+        {
+            xml.Append("<item><guid><![CDATA[").Append(_base).Append(page == 0 ? "/" : $"/p/{page}").Append("]]></guid><link><![CDATA[")
+                .Append(_base).Append(page == 0 ? "/" : $"/p/{page}").Append("]]></link><pubDate><![CDATA[Fri, 20 Nov 2026 17:01:41 +0000]]></pubDate></item>");
+        }
+
+        return xml.Append("</channel></rss>").ToString();
     }
 
     private string RenderExtraSitemap()

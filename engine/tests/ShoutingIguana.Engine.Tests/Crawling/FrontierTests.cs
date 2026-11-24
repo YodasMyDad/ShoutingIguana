@@ -1,3 +1,5 @@
+using ShoutingIguana.Engine.Analysis;
+using ShoutingIguana.Engine.Analysis.Models;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Crawling.Models;
@@ -175,16 +177,77 @@ public sealed class FrontierTests : IAsyncLifetime
             Assert.Equal(TestCrawls.Rows(sitemapFirst, table), TestCrawls.Rows(linksFirst, table));
         }
 
-        // Both crawl every page in full, each at the depth of its shortest link, followed or not. The https:// version is
-        // only probed, a status check.
+        // Both crawl every page in full, each at the depth of its shortest link, followed or not. /de/ has no link: only
+        // an hreflang entry names it, which the crawl doesn't follow, so it is read as a page the sitemap lists, at no
+        // click depth. The https:// version is only probed, a status check.
         string Row(string path, int depth) => $"{origin}{path} | 1 | {(int)FetchMode.Crawl} | {depth} | {(int)UrlState.Done} | {(int)SkipReason.None}";
         var probe = $"https{origin[4..]}/ | 1 | {(int)FetchMode.Check} | 0 | {(int)UrlState.Done} | {(int)SkipReason.None}";
-        List<string> expected = [Row("/", 0), Row("/about", 1), Row("/de/", 1), Row("/embed", 1), Row("/embed-held", 1), Row("/private", 1), Row("/sitemap-only", CrawlDepth.UNLINKED), probe];
+        List<string> expected = [Row("/", 0), Row("/about", 1), Row("/de/", CrawlDepth.UNLINKED), Row("/embed", 1), Row("/embed-held", 1), Row("/private", 1), Row("/sitemap-only", CrawlDepth.UNLINKED), probe];
         Assert.Equal(expected.Order(StringComparer.Ordinal), TestCrawls.Rows(linksFirst, CrawlTables.URLS));
         Assert.Equal(0, TestCrawls.Count(linksFirst, $"""
             SELECT COUNT(*) FROM responses r JOIN urls u ON u.id = r.url_id
             WHERE r.word_count IS NULL AND u.source <> {(int)DiscoverySource.SiteVersion}
             """));
+    }
+
+    /// <summary>
+    /// The fourth pass's cases, as the real pages have them: goodsmile.info names /zh/ as its zh-TW version, a 404 no
+    /// page links to; wisepilgrim.com's home page names its versions by hreflang alone; montreuxjazzfestival.com/fr/news/
+    /// names its second page in rel="next" and has no link to it. The crawl follows none of these links unless told to,
+    /// and a URL only they name used to be left unasked, so a version that was gone was never found. Now it is asked how
+    /// it answers, last of all and at no click depth, and never read: what it links to stays out of the crawl.
+    /// </summary>
+    [Fact]
+    public async Task AUrlOnlyHreflangOrRelNextNamesIsAskedHowItAnswersAndNotRead()
+    {
+        await using var site = await TestWebHost.StartAsync((_, _) => Serve(new(StringComparer.Ordinal)
+        {
+            ["/"] = Page("Home",
+                """<link rel="alternate" href="/" hreflang="ja" /><link rel="alternate" href="/de/" hreflang="de" /><link rel="alternate" href="/zh/" hreflang="zh-TW" /><link rel="next" href="/page/2/">""",
+                """<a href="/about">About</a> <button type="button">Load more</button>"""),
+            ["/about"] = Page("About", string.Empty, "<p>About the test site.</p>"),
+            ["/de/"] = Page("Startseite", """<link rel="alternate" href="/" hreflang="ja" /><link rel="alternate" href="/de/" hreflang="de" />""", """<a href="/de/nur-hier">Nur hier</a>"""),
+            ["/de/nur-hier"] = Page("Nur hier", string.Empty, "<p>Only the German version links here.</p>"),
+            ["/page/2/"] = Page("Page 2", """<link rel="prev" href="/">""", """<a href="/page/2/more">More</a>"""),
+            ["/page/2/more"] = Page("More", string.Empty, "<p>Only page 2 links here.</p>")
+        }));
+        var origin = site.BaseUri.GetLeftPart(UriPartial.Authority);
+        var path = _files.NewPath();
+        await using (var job = TestCrawls.Start(Options(site), path))
+        {
+            Assert.Equal(CrawlStatus.Completed, (await job.Completion.WaitAsync(TestCrawls.TIMEOUT)).Status);
+        }
+
+        string Row(string url, FetchMode mode, int depth) => $"{origin}{url} | 1 | {(int)mode} | {depth} | {(int)UrlState.Done} | {(int)SkipReason.None}";
+        var rows = TestCrawls.Rows(path, $"{CrawlTables.URLS} WHERE source <> {(int)DiscoverySource.SiteVersion} AND url NOT LIKE '%/robots.txt' AND url NOT LIKE '%/sitemap.xml'");
+        Assert.Equal(new[]
+        {
+            Row("/", FetchMode.Crawl, 0), Row("/about", FetchMode.Crawl, 1), Row("/de/", FetchMode.Check, CrawlDepth.UNLINKED),
+            Row("/page/2/", FetchMode.Check, CrawlDepth.UNLINKED), Row("/zh/", FetchMode.Check, CrawlDepth.UNLINKED)
+        }.Order(StringComparer.Ordinal), rows);
+
+        var analysis = await new CrawlAnalyzer(Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance).AnalyzeAsync(path);
+        var home = IssueReader.ReadAll(path).Where(issue => issue.Url == origin + "/").Select(issue => issue.Issue).ToList();
+        Assert.Contains(IssueCatalog.HREFLANG_BROKEN_TARGET.Id, home);
+        Assert.Contains(IssueCatalog.PAGINATION_NOT_LINKED.Id, home);
+        Assert.DoesNotContain(IssueCatalog.HREFLANG_TO_NON_INDEXABLE.Id, home);
+        Assert.DoesNotContain(IssueCatalog.HREFLANG_MISSING_RETURN.Id, home);
+
+        // /de/ answered and wasn't read, so which versions nothing links to can't be told, and the check says so.
+        Assert.Contains(new SkippedCheck(IssueCatalog.HREFLANG_UNLINKED.Id, SkippedCheckReasons.HREFLANG_OFF,
+            "Hreflang links weren't followed in this crawl, and 1 language version they name wasn't read."), analysis.Skipped);
+
+        // Told to follow them, the crawl reads both as pages, with what they link to.
+        var followed = _files.NewPath();
+        await using (var job = TestCrawls.Start(Options(site) with { CrawlHreflang = true, CrawlPagination = true }, followed))
+        {
+            Assert.Equal(CrawlStatus.Completed, (await job.Completion.WaitAsync(TestCrawls.TIMEOUT)).Status);
+        }
+
+        var read = TestCrawls.Rows(followed, CrawlTables.URLS);
+        Assert.Contains(Row("/de/", FetchMode.Crawl, 1), read);
+        Assert.Contains(Row("/de/nur-hier", FetchMode.Crawl, 2), read);
+        Assert.Contains(Row("/page/2/more", FetchMode.Crawl, 2), read);
     }
 
     private CrawlOptions Options() => new() { StartUrl = _synthetic.BaseUri.AbsoluteUri, Concurrency = 8 };

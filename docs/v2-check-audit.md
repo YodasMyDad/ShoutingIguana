@@ -778,6 +778,8 @@ columns, so its repeats and its host are judged as they were.
 
 27 checks. None of the crawled pages has the fault, by an independent scan where one can be made.
 
+The fourth pass, below, went to each of these faults and found a real page for all but one (`hreflang-unlinked`).
+
 - **The fault is rare, and none of forty sites has it:** `soft-404` (every site crawled answers 404 for a missing
   page, tried by hand; paulgraham.com redirects one to its home page, which this check doesn't cover),
   `redirect-temporary-cached`, `robots-txt-unreachable`, `site-hidden-from-search`, `unavailable-after-passed`,
@@ -871,3 +873,186 @@ Not built here, by the audit's rule:
 - Hreflang entries written as relative URLs (crawler-test), which Google requires in full.
 - A URL listed twice in one sitemap file (gov.uk's `sitemap_10.xml` has two).
 - `blocked-by-robots` saying when Googlebot is allowed where this crawler isn't (theregister.com's 300).
+
+## The fourth pass, 2026-11-24: the last 29
+
+The third audit left 29 checks with no true firing on a real page: 27 that had never fired, and two
+(`content-type-mismatch`, `pagination-not-linked`) that had fired only wrongly. A broad crawl doesn't find these; the
+faults are rare, or sit where a crawl of a few hundred URLs never looks. This pass went to each fault instead: found
+real pages that have it, confirmed each by hand, and only then crawled them. The fixes are on `fix/checks`.
+
+### In short
+
+- **28 of the 29 are now proven on a real page, every one on an ordinary site**: none needed a target made for
+  testing crawlers. One, `hreflang-unlinked`, is still unproven: what it needs and what was tried is below.
+- **Of the 170, 169 are proven on a real page** (the 141 of the third audit and these 28).
+- **One check flagged what was right.** `sitemap-empty` called an RSS feed empty: All in One SEO declares a
+  `sitemap.rss` in robots.txt beside its `sitemap.xml`, Google takes a feed as a sitemap, and the reader looked only
+  for `<loc>`. Two of the first four real firings were this (freebsdfoundation.org, servercore.com, 50 pages listed in
+  each). The plugin is among WordPress's most installed.
+- **Four checks missed a real fault, three of them for one cause.** A URL that only an hreflang or a
+  `rel="next"`/`"prev"` link names was never asked for, since the crawl follows neither unless told to: so
+  `hreflang-broken-target` couldn't see a version that is gone unless a link led there too (goodsmile.info's `/zh/`),
+  nor `pagination-broken` a next page that is gone, nor `pagination-not-linked` a next page nothing links to, which
+  is the fault it is for. The crawl now asks how such a URL answers. And `unavailable-after-passed` couldn't read
+  a date with a European zone's letters (dargaud.com: `Saturday, 04-Oct-25 00:00:00 CEST`).
+- **One check ran where it couldn't know.** A crawl of a URL list judged what links to a page (`hreflang-unlinked`,
+  `canonical-unlinked`, `non-indexable-inlinks-only`), with only the listed pages' links read. Skipped now, saying why.
+- **One check's evidence read wrong**: `social-tags-multiple` quoted two descriptions that start alike as the same
+  text twice.
+- **The CLI gained `--crawl-hreflang` and `--crawl-pagination`**, options the app has had: without the first,
+  `hreflang-unlinked` couldn't be reached from the command line at all.
+- `AnalysisFreshness.VERSION` 28. No catalog text changed, so the app's copy of the catalog stands. One skip reason
+  is new (`url-list`).
+
+### How it was checked
+
+**Finding the pages.** A public list of the million most-visited domains (Tranco), sampled at random below the top
+5,000, and each sampled site looked at once, by a script, at the crawler's own pace for one site: no site was crawled
+to find a fault.
+
+| Look | Sites | What was read of each |
+| --- | ---: | --- |
+| Home pages | 48,000 | The home page with its redirects and headers, robots.txt, the first sitemap, one made-up address, up to three language versions the page names, the page its `rel="next"` names |
+| Inner pages | 20,000 | The home page and up to four pages it links to (dated kinds first: news, events, jobs), and how the home page's first eight scripts and stylesheets are sent |
+| Canonicals | 7,800 | The home page and the page its canonical names, where the home page has no link to it |
+
+The looks named candidates, by regular expression, and were wrong often enough that none counts for anything here: a
+canonical inside an HTML comment (olamgroup.com), a canonical that was a script's text and not the page's
+(derichebourg.com). For `unavailable-after-passed` nothing short of reading every event page of a site that sends the rule found a
+date that had passed (dargaud.com: 193 agenda pages asked for their headers, ten with the rule, one of them past).
+
+**Crawling them.** Some 140 crawls with the CLI at its polite defaults, robots.txt obeyed, `--store-html`, none past a
+block and none asked again after one:
+
+- a crawl of a URL list, of the page or the pair of pages, for a check that judges a page (`--list`);
+- a crawl of 25 to 60 URLs from the home page for one that judges the site (sitemaps, robots.txt, the home page's
+  noindex) or a file a page uses;
+- a whole crawl, to 1,500 URLs with images, files and other sites' links left out, for the checks that need every
+  page: `canonical-unlinked`, `non-indexable-inlinks-only`, `hreflang-unlinked`, and the three the crawl now asks
+  unlinked URLs for.
+
+**Reading every firing by hand**: the live page fetched again with `curl`, its markup or its headers against the
+check's words and against what the detail says; counts taken again without the engine where a check counts (the
+sitemap dates, the inline images' decoded sizes, the scripts' sizes decompressed, the pages of a site with a link to
+the page said to have none).
+
+### The 29
+
+Every page is an ordinary site's. "Fixed" is a fault found here and mended (below); a number is the URLs flagged.
+
+| Check | Seen on | What the page has | Verdict |
+| --- | --- | --- | --- |
+| `soft-404` | aacc.edu `/404/`, kmp.com `/404-seite-nicht-gefunden/`, localwineevents.com `/error-404`, navitaire.com, siris.nl, thelostwords.org | 200 OK, indexable, a title or H1 such as "404 - Anne Arundel Community College", 33 to 156 words. Each is what the site answers a made-up address with: three redirect it to an error page of their own, three serve the error at the address asked for | right |
+| `redirect-temporary-cached` | remotevs.com, autosecurite.be, malgari.com | remotevs.com's `/` answers 302 to a language's folder (`/en/` to the crawl, `/ko/` to a later request) with `Cache-Control: max-age=15552000`: "302 Found, cached for 180 days". The other two 30 days | right |
+| `robots-txt-unreachable` | kalingauniversity.edu.in, indiancountrytodaymedianetwork.com, lifeagents.ai | robots.txt answers 500 (to a browser's and Googlebot's user agent too, tried on the first) while the home page answers 200 | right |
+| `site-hidden-from-search` | technomancy.us, targetscan.org, northamptonshire.gov.uk, opendatakit.org, its-dienst.de, arrakis.se, question-orthographe.fr | technomancy.us: `<meta name="googlebot" content="noindex">` on 428 of 450 pages. targetscan.org: a research database whose home page is `noindex,nofollow`, so nothing past it was read. The rest: the home page is noindex and the only page read (northamptonshire.gov.uk's and opendatakit.org's say the site is retired) | right |
+| `unavailable-after-passed` | dargaud.com `/agenda/antoine-pedron-paris` | `X-Robots-Tag: unavailable_after: Saturday, 04-Oct-25 00:00:00 CEST`, over a year past, on an event page still served | fixed: not read before |
+| `translation-blocked` | mapress.com (2 pages), spiko.io | `X-Robots-Tag: notranslate`; `<meta name="googlebot" content="notranslate">` | right |
+| `indexifembedded-without-noindex` | clackamas.edu `/student-life/events`, instantmarkets.com | `<meta name="googlebot" content="indexifembedded">` beside `index,follow` | right |
+| `canonical-invalid` | twu.edu, wasabi.com, airportinformation.com, superviral.in | `<link rel="canonical" href="">` on three home pages; `href="httpss://superviral.in/"` | right |
+| `canonical-loop` | e-thrift.gr | `/` names `/index.php?route=common/home`, which names `/`: "A loop of 2: / → /index.php?route=common/home → back to /" | right |
+| `canonical-on-redirect` | gov.br `/cvm` | 301 to `/cvm/` with `Link: <http://www.gov.br/cvm>; rel="canonical"` | right |
+| `canonical-fragment` | naamayehuda.com, an attachment page | `href="…/boy-with-fish/#main"` | right |
+| `canonical-invalid-attribute` | rosepassion.com `/en`, elparking.com (2 pages) | `<link rel="canonical" href="…" hreflang="es" />` | right |
+| `sitemap-empty` | caat.org.uk `/wp-sitemap.xml`, immregistries.org `/sitemap.xml` | A `<urlset>` with no URL in it; a 200 answer with no bytes | fixed: two more were feeds, not empty |
+| `sitemap-lastmod-invalid` | hi.org 6, adwmg.com 4, colocall.net 57, headed2.com 7, effi.org 151, vu.edu.bd 326, ghostwriter-ai.com 1; eichendorff21.de 1, necrologicorato.it 22 | Not dates: `0-00-00T00:00:00+00:00`, `2026-02-30T22:00:11+01:00`, `10.07.2017`, `Thu, 19 Sep 2013 23:01:48 -0400`, `-0001-11-30T00:00:00+00:00`, `2025-1-11`. In the future: a page dated 15 December, notices dated two to four days ahead. Every count matches the file read without the engine | right |
+| `image-inline-large` | bragi.com, carelonbehavioralhealth.com, eichendorff21.de (3 pages), powersoftt.com (9) | `data:` images of 14,462 and 17,572 bytes decoded, said as "14 KB" and "17 KB"; up to 156 KB | right |
+| `hreflang-outside-head` | mile.app `/en`, vlcc.com | All 23 (and 6) entries after `<body>`, with the canonical and the robots tag. Both sites are built with Next.js, which can stream a page's metadata into the body | right; see below |
+| `hreflang-lang-mismatch` | josko.com `/cs/`, garantieavantageplus.ca `/en/`, wisepilgrim.com `/de`, `/fr` | The Czech page says `lang="de"`, the English one `lang="fr"`, the German and French ones `lang="en"` | right |
+| `social-tags-multiple` | mghclaycenter.org, tusk.org, americanalpineclub.org, homewellcares.com, newmediacampaigns.com, securetechalliance.org, bid416.com, morgan-motor.com 35, awebsitethatworksforyou.com.au 133 | Two `og:title` ("Home" and "Home - Tusk"), two `twitter:card` ("summary" and "summary_large_image"): a theme and a plugin each writing them | fixed: evidence |
+| `lang-invalid` | bofrost.at, epson.ca, wwe-media.de, operatorratunkowy.pl | `lang="de_AT"`, `en_CA`, `de_DE`, `pl_PL` | right |
+| `pagination-broken` | morgan-motor.com `/news/`, verano.com `/blog/` | `rel="next"` names `/page/2/`, a 404 no link leads to: "rel="next" returns 404 Not Found" | fixed: not reachable before |
+| `resource-past-crawl-limit` | docs.bokeh.org, plotly.com | `searchindex.js`, 3,958,868 bytes decompressed: "3.8 MB once decompressed (676 KB as sent)". plotly's own library, 4,815,814, and MathJax's `tex-svg.js`, 2,108,580: "2,108,580 bytes once decompressed (503 KB as sent)" | right |
+| `url-multiple-slashes` | vapeitalia.it, tiemposur.com.ar, bid416.com | The home page links `//ritardispedizioni`, `//contenidos/portada`, `//page/Payments`, each a 200 page with no canonical to the plain address | right; narrow, see below |
+| `canonical-unlinked` | plankreis.at, powersoftt.com 18, awebsitethatworksforyou.com.au 3, tenstorrent.com 162 | plankreis.at: `/` names `/start`, a page of its own that none of the site's pages links to. powersoftt.com: links say `?service=Insights+and+reports`, the canonical `?service=Insights%20and%20reports` | right |
+| `hreflang-broken-target` | goodsmile.info, powersoftt.com 44, monkeyapp.org 48 | goodsmile.info names `/zh/` as its zh-TW version, a 404 with no link to it. powersoftt.com: four versions (`/in/`, `/ae/`, `/qa/`, `/sa/`) all 404, named on every page, linked on none | fixed: not reachable before |
+| `non-indexable-inlinks-only` | technomancy.us 15 | `/talks/fediverse/` has no noindex and its one link is from `/talks/`, which has | right |
+| `hreflang-unlinked` | – | – | not seen; see below |
+| `hreflang-inconsistent-code` | atos.com | `/en-it/` names `/en-na/` as `en-us`; `/en-na/` calls itself `en`: "Names /en-na/ as "en-us"; /en-na/ calls itself "en"" | right |
+| `content-type-mismatch` | sotcom.ru, ancestrees.com, careofcarl.se | `main.js` and `main.css` sent as `application/octet-stream`; a stylesheet's address answered with an HTML page; another site's script sent as `text/html` | right |
+| `pagination-not-linked` | montreuxjazzfestival.com `/fr/news/`, afghan-wireless.com 3 | `rel="next"` names `/fr/news/page/2/`, a 200 page, and the page has no `<a>` to it | fixed: not reachable before |
+
+### What changed
+
+"Seen on" is where the fault was, before and after.
+
+| Check | What was wrong | Now | Seen on, before → after |
+| --- | --- | --- | --- |
+| `sitemap-empty` (wrong flag), and every sitemap check | An RSS 2.0 or Atom feed listed as a sitemap was read for `<loc>` alone, so it listed nothing | `SitemapReader` reads a feed as Google does: each item's `<link>` (each entry's, in Atom), with its date. The entries are marked as an image sitemap's are, as a feed lists again what the page sitemap lists, so they are no repeats; a feed's RFC 822 date is no unreadable lastmod | freebsdfoundation.org 1 → 0, servercore.com 1 → 0 (*crawled again*); caat.org.uk's and immregistries.org's stand |
+| `hreflang-broken-target`, `pagination-broken` (missed) | A URL only hreflang or `rel="next"`/`"prev"` names was skipped, the crawl following neither by default, so one that is gone was found only where a link led to it as well | The crawl asks how it answers, as it does an image: a status check, never read, at no click depth, after every linked URL and within the URL limit. A link to it, found before or after, reads it as any page (`CrawlWriter`) | powersoftt.com 0 → 44 pages, each naming four versions that are 404; morgan-motor.com `/news/` and verano.com `/blog/` 0 → 1 |
+| `pagination-not-linked` (missed) | Judged only a next page the crawl had read, which by default is one something links to: the fault itself kept it out | A next page that answers a status check as HTML is judged too | montreuxjazzfestival.com `/fr/news/` |
+| `unavailable-after-passed` (missed) | A date with its zone in letters was read for the American zones and GMT alone | CET, CEST, WET, WEST, EET, EEST, BST, MSK, JST, AEST, AEDT, NZST and NZDT too: what PHP's `DATE_RFC850` writes on a European server | dargaud.com 0 → 1 |
+| `hreflang-unlinked`, `canonical-unlinked`, `non-indexable-inlinks-only`, `orphan-page` (ran where it couldn't know) | A crawl of a URL list reads the listed pages and follows no link, and these ran on it all the same | Skipped on a list crawl, reason `url-list`: "The crawl read a list of URLs, so links from the site's other pages weren't read." | wisepilgrim.com (3 addresses listed): `hreflang-unlinked` 2 → skipped. vlm.be: `non-indexable-inlinks-only` 1 → skipped |
+| `social-tags-multiple` (evidence) | Two values that start alike were cut at the same place: "Quality in-home c…" · "Quality in-home c…", on a check that says they differ | Each is shown from the word they part at: "…are committed t…" · "…know there's" | homewellcares.com; morgan-motor.com: "…global" · "…global audience,…" |
+| The CLI | No way to turn on two crawl options the app has | `--crawl-hreflang`, `--crawl-pagination` | – |
+
+On the synthetic site: `/plants/hreflang-broken` names a second 404 that nothing links to;
+`/plants/series-gone-only` and `/plants/series-load-more/` name next pages nothing links to, one gone and one there;
+`/plants/unavailable-after-header` sends dargaud.com's header; `/sitemaps/feed.rss` is a feed in the sitemap index,
+listing the home page and two products again.
+
+**What a URL-limited crawl still doesn't see.** The new status checks come last, so that they never take a linked
+page's place: a crawl that stops at its URL limit doesn't reach them (goodsmile.info at 60 URLs: `/zh/` not asked for,
+nothing flagged). A whole crawl does.
+
+**A page only hreflang names has no click depth now.** It used to be given the depth of the page naming it plus one,
+though no link leads there. Where a sitemap lists it too it is read as a page, after the linked ones, and shown with
+no depth.
+
+### Still unproven
+
+**One check, `hreflang-unlinked`.** It needs four things at once: a language version that is an indexable page; that
+no page of the site links to and no sitemap lists; a crawl told to follow hreflang, since otherwise the version is
+never read and the check is skipped, saying so (tenstorrent.com: "171 language versions they name weren't read"); and
+a crawl of the whole site, under its URL limit. What was tried:
+
+- **The home-page look**: of 315 multilingual sites, 152 have a home page that names a version it has no `<a>` to (a
+  language picker written by a script, mostly), and on 112 of those the first sitemap doesn't list the version either.
+  A home page without the link is far from a site without it.
+- **Eleven of those crawled whole, hreflang followed** (`--crawl-hreflang`, 1,500 URLs, images, files and other
+  sites' links left out). Three finished under the limit, and none has such a version, by a count made without the
+  engine too: meltingspot.io (1,440 pages, 442 versions named), jsl.com.br (351 pages, 66 named) and
+  syncpayments.com.br (50 pages: its `?lang=en` version names the plain address as its canonical, so it's no indexable
+  page and rightly isn't judged). Five ran past 1,500 URLs and were skipped for it, each saying so: cosmonova.net,
+  poleasingowe.pl, medicare-group.hu, optika-fielmann.ua and afghan-wireless.com. wisepilgrim.com was stopped with
+  over 54,000 URLs queued (a list crawl of three of its addresses had flagged `/de` and `/fr`, which is the wrong run
+  now skipped), taittowers.com as too slow to finish, and pzps.pl's robots.txt answered 503.
+- **So what would prove it** is a small site whose versions are named by hreflang alone on every page, not only its
+  home page, and left out of its sitemap: none was found among 48,000 home pages. It stays proven on the synthetic
+  site (`/plants/hreflang-only-b`) alone.
+
+### Left, and why
+
+- **`soft-404` passes over an error page of 300 words or more, and one that names a canonical.** safarilounge.jp
+  answers a made-up address 200 with the title "404 Not Found | Safari Lounge" and 660 words, most of them its menus;
+  gbvlearningnetwork.ca's error page (title "404 Error", 109 words) names `/page-not-found.html` as its canonical, so
+  it isn't indexable and isn't judged. Both are the rule as written.
+- **`url-multiple-slashes` only reports a `//` address that is an indexable page.** Ten sites that link such addresses
+  were tried: on seven the address redirects to the plain one or names it as canonical (sait.ca, ispydiy.com, momo.com,
+  artsana.com, people.co.jp, hokugin.co.jp, tusk.org), which `links-to-redirects` and `canonicalised-page` report
+  instead. The link is as wrong on those.
+- **`<link rel="canonical" href="#">`** (sanmarusan.net) is a template's placeholder and isn't flagged: it resolves to
+  the page itself, and the fragment check passes over an empty fragment.
+- **`hreflang-outside-head` and `canonical-outside-head` on a Next.js site that streams its metadata** (mile.app,
+  vlcc.com): true of the HTML as served, to this crawler and to a request with Googlebot's user agent alike. Next's
+  script is meant to move the tags into the head in a browser; whether Google's rendering then takes them wasn't
+  learnt. The site's own remedy is Next's `htmlLimitedBots` setting.
+- **`sitemap-lastmod-invalid` says "lastmod not a date" without quoting it**: the crawl keeps a lastmod as a time or
+  as unreadable, not as written. The detail names the file and the first entry, which finds it.
+- **`canonical-multiple` now has a real page for the owner's decision**: vlm.be's `/nl` and `/nl/` each carry two
+  canonical links, `/nl/` and `/nl`, in that order.
+- **`robots-txt-unreachable` makes for a slow crawl**: the crawler asks again every two minutes before it gives up,
+  so the crawl of indiancountrytodaymedianetwork.com, which read nothing, took four and a half minutes.
+- **The app's words for "Crawl hreflang targets" and "Crawl pagination targets"** say such a URL is fetched only with
+  the option on. It's read as a page only then; it is asked how it answers either way. Not changed here
+  (`app/src/crawl/options/words.ts`).
+
+### Seen on the sites, not faults of a check
+
+- **A language redirect cached for half a year** (remotevs.com): the home page sends each visitor to their language
+  with a 302 any proxy may keep for 180 days, which is the fault `redirect-temporary-cached` is for.
+- **A site that hides from Google alone** (technomancy.us): `googlebot` noindex on 428 of its 450 pages, on purpose by
+  the look of it. `site-hidden-from-search` is true to its words; the owner knows.
+- **tenstorrent.com names `/en/…` as every page's canonical and links none of them** (162), and its 171 language
+  versions are named by hreflang alone: `hreflang-unlinked` was skipped there, saying so.

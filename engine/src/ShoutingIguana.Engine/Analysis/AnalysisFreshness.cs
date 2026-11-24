@@ -100,8 +100,15 @@ public static class AnalysisFreshness
     /// link, an AMP image's size, a password field outside a form, a meta Content-Security-Policy) takes a new crawl.
     /// 27: resource-past-crawl-limit judges a script or stylesheet by its size once decompressed, which the crawl counts
     /// from 2.1.1 on, and its detail says so. A crawl from before has only the bytes sent, and is judged by those.
+    /// 28 is the fourth pass of 2026-11-24 (docs/v2-check-audit.md, the last 29): a crawl of a URL list no longer judges
+    /// what links to a page (hreflang-unlinked, canonical-unlinked, non-indexable-inlinks-only); an unavailable_after
+    /// date is read with a European zone's letters (CET, CEST and their kin), as PHP writes it; and social-tags-multiple
+    /// shows two values that start alike from where they part. What the crawl changed takes a new crawl: a language
+    /// version or a page of a series that only hreflang or rel="next"/"prev" names is now asked how it answers, so
+    /// hreflang-broken-target and pagination-broken find one that is gone and pagination-not-linked one a button loads;
+    /// and an RSS or Atom feed listed as a sitemap is read as one, where sitemap-empty used to call it empty.
     /// </summary>
-    public const int VERSION = 27;
+    public const int VERSION = 28;
 
     /// <summary>
     /// The catalog's check ids with their categories and severities, hashed. Titles, descriptions, fixes, why and

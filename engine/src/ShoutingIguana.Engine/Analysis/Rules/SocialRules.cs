@@ -231,7 +231,29 @@ internal sealed class SocialRules(UrlTable urls) : IPageRule
         var quotes = shown.Sum(tag => tag.Values.Count);
         var frame = shown.Sum(tag => tag.Counted.Length) + "; ".Length * (shown.Count - 1) + "\"\"".Length * quotes + " · ".Length * (quotes - shown.Count);
         var cut = Math.Min(RuleText.QUOTE_MAX, ShareOf(RuleText.DETAIL_MAX - frame, [.. shown.SelectMany(tag => tag.Values).Select(RuleText.Length)]));
-        return RuleText.Fit(string.Join("; ", shown.Select(tag => tag.Counted + string.Join(" · ", tag.Values.Select(value => RuleText.Quote(value, cut))))));
+        return RuleText.Fit(string.Join("; ", shown.Select(tag => tag.Counted + string.Join(" · ", FromWhereTheyPart(tag.Values, cut).Select(value => RuleText.Quote(value, cut))))));
+    }
+
+    /// <summary>
+    /// A tag's values as the detail quotes them. Two that start alike for longer than the cut would read as one value given
+    /// twice, on a check that says they differ, so each is then shown from the word they part at: "…are committed" and
+    /// "…know there's". Values the cut leaves different are shown whole from their start.
+    /// </summary>
+    private static List<string> FromWhereTheyPart(List<string> values, int cut)
+    {
+        if (cut == int.MaxValue || values.Select(value => RuleText.Cut(value, cut)).Distinct(StringComparer.Ordinal).Count() == values.Count)
+        {
+            return values;
+        }
+
+        var shared = 0;
+        while (values.All(value => shared < value.Length && value[shared] == values[0][shared]))
+        {
+            shared++;
+        }
+
+        var from = shared == 0 ? 0 : values[0].LastIndexOf(' ', shared - 1) + 1;
+        return from == 0 ? values : [.. values.Select(value => "…" + value[from..])];
     }
 
     /// <summary>

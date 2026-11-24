@@ -83,6 +83,12 @@ public sealed class IndexingCheckTests
         Assert.Equal("unavailable_after: 2026-11-17T11:00:00Z, passed", Detail("f", header: "googlebot: unavailable_after: 2026-11-17T11:00:00Z"));
         Assert.Null(Detail("g", header: "bingbot: unavailable_after: 2020-01-01"));
         Assert.Null(Detail("h", header: "unavailable_after: 2026-11-17T13:00:00Z"));
+
+        // The fourth pass's case (dargaud.com/agenda/antoine-pedron-paris, sent on 24 Nov 2026): Drupal writes the date as
+        // PHP's DATE_RFC850 does, with the server's own zone by its letters, and a French server's is CET or CEST. Read with
+        // the American zones alone it was no date, so a page a year past its date was passed over.
+        Assert.Equal("unavailable_after: Saturday, 04-Oct-25 00:00:00 CEST, passed", Detail("i", header: "unavailable_after: Saturday, 04-Oct-25 00:00:00 CEST"));
+        Assert.Null(Detail("j", header: "unavailable_after: Monday, 01-Feb-27 00:00:00 CET"));
     }
 
     [Theory]
