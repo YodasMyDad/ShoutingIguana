@@ -429,11 +429,14 @@ internal sealed class AnalysisReader : IDisposable
 
     /// <summary>
     /// The internal URLs an hreflang link names that the crawl left unread because it doesn't follow their kind of link
-    /// (hreflang, unless the crawl was told to).
+    /// (hreflang, unless the crawl was told to): ones that answered its status check, which is all such a URL gets, and
+    /// in a crawl made before it checked them, ones it skipped.
     /// </summary>
     public long ReadUnreadHreflangTargets() => Convert.ToInt64(CrawlDatabase.Scalar(_connection, $"""
         SELECT COUNT(*) FROM urls u
-        WHERE u.is_internal = 1 AND u.state = {(int)UrlState.Skipped} AND u.skip_reason = {(int)SkipReason.NotFollowedByOption}
+        WHERE u.is_internal = 1
+          AND ((u.state = {(int)UrlState.Skipped} AND u.skip_reason = {(int)SkipReason.NotFollowedByOption})
+            OR (u.fetch_mode = {(int)FetchMode.Check} AND EXISTS (SELECT 1 FROM responses r WHERE r.url_id = u.id AND r.outcome = {(int)FetchOutcome.Success})))
           AND EXISTS (SELECT 1 FROM links l WHERE l.to_id = u.id AND l.kind = {(int)LinkKind.Hreflang})
         """), CultureInfo.InvariantCulture);
 

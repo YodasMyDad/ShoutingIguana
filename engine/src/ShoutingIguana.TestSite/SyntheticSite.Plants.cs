@@ -402,6 +402,23 @@ public sealed partial class SyntheticSite
         {
             ExtraHead = $"<link rel=\"next\" href=\"{PLANTS_PATH}gone-redirect\">"
         });
+        // The fourth pass's case (montreuxjazzfestival.com/fr/news/, afghan-wireless.com): a list with no link to its next
+        // page, as one that loads more with a button has none, so only rel="next" names page 2. The crawl doesn't follow
+        // rel="next", and still asks how page 2 answers.
+        Page("series-load-more/", "Series that loads more", ["pagination-not-linked"], page => page with
+        {
+            ExtraHead = $"<link rel=\"next\" href=\"{PLANTS_PATH}series-load-more/page/2/\">", Content = page.Content + "<p><button type=\"button\">Load more</button></p>"
+        });
+        // Page 2 is only asked how it answers: never read, so it's no page of the crawl's.
+        var loadedMore = PlantPage("series-load-more/page/2/", "Series that loads more, second page");
+        plants.Add(new Plant(loadedMore.Path, 200, Linked: false, InSitemap: false, [],
+            () => new SyntheticResponse(200, HTML, Render(loadedMore), null, null, SECURITY_HEADERS), IsPage: false));
+        // As morgan-motor.com/news/ and verano.com/blog/: a rel="next" to a page that is gone and that no link leads to.
+        Page("series-gone-only", "Series next gone", ["pagination-broken"], page => page with
+        {
+            ExtraHead = $"<link rel=\"next\" href=\"{PLANTS_PATH}series-gone-only/page/2/\">"
+        });
+        Other("series-gone-only/page/2/", 404, linked: false, ["internal-client-error"], () => NotFound(PLANTS_PATH + "series-gone-only/page/2/"));
         Page("series-noindex", "Series with a noindex next page", ["pagination-to-non-indexable", "pagination-sequence-error"], page => page with
         {
             ExtraHead = $"<link rel=\"next\" href=\"{PLANTS_PATH}noindex\">", Content = page.Content + $"<p><a href=\"{PLANTS_PATH}noindex\">Next page</a></p>"
@@ -578,6 +595,10 @@ public sealed partial class SyntheticSite
         // A date to drop out of search that has passed is flagged; one still to come isn't.
         Page("unavailable-after", "Date to leave search passed", ["unavailable-after-passed"], page => page with { Robots = "unavailable_after: 2020-01-01" });
         Page("unavailable-later", "Date to leave search to come", [], page => page with { Robots = "unavailable_after: 2099-01-01" });
+        // As dargaud.com sends it for an event that is over (the fourth pass): in a header, the date as PHP's DATE_RFC850
+        // writes it on a French server.
+        Page("unavailable-after-header", "Event that is over", ["unavailable-after-passed"],
+            headers: new() { ["X-Robots-Tag"] = "unavailable_after: Saturday, 04-Oct-25 00:00:00 CEST" });
         Page("image-preview-none", "Image previews blocked", ["media-preview-blocked"], page => page with { Robots = "max-image-preview:none" });
         Page("notranslate", "Translation blocked", ["translation-blocked"], page => page with { Robots = "notranslate" });
         Page("indexifembedded", "Embedding rule on its own", ["indexifembedded-without-noindex"], page => page with { Robots = "indexifembedded" });
@@ -774,10 +795,14 @@ public sealed partial class SyntheticSite
         {
             ExtraHead = Hreflang(("en-UK", "hreflang-bad-code"), ("x-default", "hreflang-bad-code"))
         });
+        // Two versions that are gone: one a link elsewhere on the site leads to as well, and one that only hreflang names,
+        // with no link to it anywhere, as goodsmile.info's /zh/ is (the fourth pass). The crawl doesn't follow hreflang, and
+        // still asks how that version answers.
         Page("hreflang-broken", "Hreflang to a 404", ["hreflang-broken-target"], page => page with
         {
-            ExtraHead = Hreflang(("en", "hreflang-broken"), ("de", "gone"), ("x-default", "hreflang-broken"))
+            ExtraHead = Hreflang(("en", "hreflang-broken"), ("de", "gone"), ("zh-TW", "hreflang-gone-zh/"), ("x-default", "hreflang-broken"))
         });
+        Other("hreflang-gone-zh/", 404, linked: false, ["internal-client-error"], () => NotFound(PLANTS_PATH + "hreflang-gone-zh/"));
         Page("hreflang-conflict", "Hreflang conflict", ["hreflang-duplicate-code", "hreflang-missing-return"], page => page with
         {
             ExtraHead = Hreflang(("en", "hreflang-conflict"), ("en", "hreflang-fr"), ("x-default", "hreflang-conflict"))

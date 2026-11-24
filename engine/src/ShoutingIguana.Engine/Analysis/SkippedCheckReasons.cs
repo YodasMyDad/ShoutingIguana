@@ -33,6 +33,9 @@ public static class SkippedCheckReasons
     /// <summary>The crawl stayed in its start folder, so links from the rest of the site weren't read.</summary>
     public const string START_FOLDER = "start-folder";
 
+    /// <summary>The crawl read a list of URLs and followed no link, so links from the site's other pages weren't read.</summary>
+    public const string URL_LIST = "url-list";
+
     /// <summary>
     /// The crawl didn't start at the site's root (its start URL has a path other than <c>/</c>), so its first page isn't
     /// known to be the site's home page, which a check of the site as a whole is judged by.

@@ -776,6 +776,16 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
 
         var skip = FollowDecision(link, pageNoFollow);
 
+        // A language version or a page of a series the crawl wasn't told to follow is still asked how it answers, as an
+        // image is, or one that is gone would never be found. It is never read, and no link leads to it, so it has no
+        // click depth: it waits for every linked URL and takes what the URL limit has left. A followed link to it, found
+        // before or after, reads it as any page.
+        if (skip == SkipReason.None && IsStatusOnly(link))
+        {
+            link = link with { IsCrawlable = false };
+            depth = CrawlDepth.UNLINKED;
+        }
+
         // Depth-limited crawls don't follow links on pages only a sitemap lists, or the sitemap would lift the limit
         // for everything those pages lead to. A redirect is part of fetching the listed URL, so it keeps the exemption.
         var exemptFromDepthLimit = sourceDepth >= CrawlDepth.UNLINKED && link.Kind.KeepsDepth();
@@ -1066,8 +1076,6 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
         {
             LinkKind.Hyperlink when noFollow && !_options.FollowNofollow => SkipReason.NoFollow,
             LinkKind.Canonical when !_options.CrawlCanonicals => SkipReason.NotFollowedByOption,
-            LinkKind.Hreflang when !_options.CrawlHreflang => SkipReason.NotFollowedByOption,
-            LinkKind.Pagination when !_options.CrawlPagination => SkipReason.NotFollowedByOption,
             LinkKind.Image or LinkKind.Script or LinkKind.Stylesheet or LinkKind.Media or LinkKind.Icon or LinkKind.Iframe or LinkKind.SocialImage
                 when !_options.CheckResources => SkipReason.ResourcesDisabled,
             _ => SkipReason.None
@@ -1080,6 +1088,18 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
 
         return reason == SkipReason.None && !_filter.Allows(link.Url) ? SkipReason.Excluded : reason;
     }
+
+    /// <summary>
+    /// An hreflang or rel="next"/"prev" link the crawl wasn't told to follow: its URL is status-checked, not read. The
+    /// crawl follows neither unless told to, as a version or a page of a series nothing else leads to is rare, but the
+    /// checks of what such a link names (broken, redirected) need to know how it answers.
+    /// </summary>
+    private bool IsStatusOnly(OutLink link) => link.Kind switch
+    {
+        LinkKind.Hreflang => !_options.CrawlHreflang,
+        LinkKind.Pagination => !_options.CrawlPagination,
+        _ => false
+    };
 
     private void SetState(string url, UrlState state)
     {

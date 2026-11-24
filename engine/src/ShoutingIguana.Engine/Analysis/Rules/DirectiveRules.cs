@@ -31,7 +31,11 @@ internal sealed class DirectiveRules(UrlTable urls, string robotsToken) : IPageR
     private static readonly (string Zone, string Offset)[] ZONES =
     [
         ("GMT", "+00:00"), ("UTC", "+00:00"), ("UT", "+00:00"), ("EST", "-05:00"), ("EDT", "-04:00"), ("CST", "-06:00"),
-        ("CDT", "-05:00"), ("MST", "-07:00"), ("MDT", "-06:00"), ("PST", "-08:00"), ("PDT", "-07:00")
+        ("CDT", "-05:00"), ("MST", "-07:00"), ("MDT", "-06:00"), ("PST", "-08:00"), ("PDT", "-07:00"),
+        // What PHP's DATE_RFC850 (Drupal's, WordPress's) writes on a European server, and the other zones whose letters
+        // mean one thing: dargaud.com sends "Saturday, 04-Oct-25 00:00:00 CEST".
+        ("CET", "+01:00"), ("CEST", "+02:00"), ("WET", "+00:00"), ("WEST", "+01:00"), ("EET", "+02:00"), ("EEST", "+03:00"),
+        ("BST", "+01:00"), ("MSK", "+03:00"), ("JST", "+09:00"), ("AEST", "+10:00"), ("AEDT", "+11:00"), ("NZST", "+12:00"), ("NZDT", "+13:00")
     ];
 
     /// <summary>RFC 822 and 850 forms (with the zone as an offset) that the lenient parse may not take.</summary>

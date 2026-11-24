@@ -118,7 +118,7 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
             var finished = status == CrawlStatus.Completed;
             var crawlComplete = finished && (reader.ReadSitemapsDone() || !options.DiscoverSitemaps);
             var limitSkips = reader.ReadLimitSkips();
-            var everyLinkingPage = finished && SeesEveryLinkingPage(limitSkips, scope, urls, notes, skipped, orphansJudged: crawlComplete);
+            var everyLinkingPage = finished && SeesEveryLinkingPage(limitSkips, scope, urls, options.IsListMode, notes, skipped, orphansJudged: crawlComplete);
             var linksComplete = crawlComplete && everyLinkingPage;
             if (!finished)
             {
@@ -588,12 +588,23 @@ public sealed class CrawlAnalyzer(ILoggerFactory loggerFactory)
     /// Orphans would be checked, every sitemap having been read: they're skipped with a note for what keeps pages out. When
     /// they aren't, they already have their reason, and only unlinked canonicals are skipped here.
     /// </param>
-    private bool SeesEveryLinkingPage(Dictionary<SkipReason, long> limitSkips, CrawlScope scope, UrlTable urls, List<string> notes,
+    private bool SeesEveryLinkingPage(Dictionary<SkipReason, long> limitSkips, CrawlScope scope, UrlTable urls, bool listCrawl, List<string> notes,
         Dictionary<IssueDefinition, SkippedCheck> skipped, bool orphansJudged)
     {
         var complete = true;
         IssueDefinition[] checks = orphansJudged ? [IssueCatalog.ORPHAN_PAGE, .. LinkingPageChecks] : LinkingPageChecks;
         string? Note(string note) => orphansJudged ? note : null;
+
+        // A crawl of a list reads the addresses it was given and follows no link: a page of the list that only the
+        // site's other pages link to would look unlinked.
+        if (listCrawl)
+        {
+            Skip(notes, skipped, Note("Orphan pages weren't checked: the crawl read a list of URLs, so links from the site's other pages weren't read."),
+                SkippedCheckReasons.URL_LIST, "The crawl read a list of URLs, so links from the site's other pages weren't read.",
+                checks);
+            complete = false;
+        }
+
         foreach (var (reason, limit, code) in new[]
                  {
                      (SkipReason.DepthLimit, "depth limit", SkippedCheckReasons.DEPTH_LIMIT), (SkipReason.UrlLimit, "URL limit", SkippedCheckReasons.URL_LIMIT)

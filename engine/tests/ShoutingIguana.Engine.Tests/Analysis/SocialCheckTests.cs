@@ -47,6 +47,30 @@ public sealed class SocialCheckTests
         Assert.Equal("2 og:title, 2 twitter:card", IssueCatalog.SOCIAL_TAGS_MULTIPLE.FaultOf!("2 og:title, 2 twitter:card"));
     }
 
+    /// <summary>
+    /// The fourth pass's case (homewellcares.com): a theme and a plugin each write og:description, and the two start with
+    /// the same sentence. Cut to fit, they read as one value twice, "Quality in-home c…" · "Quality in-home c…", on a check
+    /// that says they differ. Each is shown from the word they part at.
+    /// </summary>
+    [Fact]
+    public void ValuesThatStartAlikeAreShownFromWhereTheyPart()
+    {
+        var detail = Detail(CARD +
+            "<meta property=\"og:title\" content=\"HomeWell Cares Services\" />" +
+            "<meta property=\"og:description\" content=\"Quality in-home care because life happens at home. We are committed to helping people live life more fully, from being a helpful companion to those who struggle.\" />" +
+            "<meta property=\"og:image\" content=\"https://example.com/img/share.jpg\">" +
+            "<meta property=\"og:title\" content=\"HomeWell Care Services | In-Home Care\"/>" +
+            "<meta property=\"og:description\" content=\"Quality in-home care because life happens at home.   We know there&#039;s\"/>",
+            IssueCatalog.SOCIAL_TAGS_MULTIPLE)!;
+
+        Assert.True(detail.Length <= RuleText.DETAIL_MAX, detail);
+        // The titles part within the cut, so they are quoted from their start, as ever.
+        Assert.StartsWith("2 og:title: \"HomeWell Cares S", detail);
+        Assert.Contains("; 2 og:description: \"…are committed", detail);
+        Assert.EndsWith(" · \"…know there's\"", detail);
+        Assert.Equal("2 og:title, 2 og:description", IssueCatalog.SOCIAL_TAGS_MULTIPLE.FaultOf!(detail));
+    }
+
     [Fact]
     public void AMetaTagSaysWhetherItWasWrittenAsAProperty()
     {
