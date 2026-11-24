@@ -17,7 +17,6 @@ import { createInterface } from 'node:readline';
 import { chromium } from '@playwright/test';
 import { appRoot, buildCli } from './lib/engine.mjs';
 import {
-  UPDATE_ANSWERS,
   Walk,
   appPage,
   builtApp,
@@ -25,7 +24,7 @@ import {
   shellEnvironment,
   simpleTrayProblems,
   trayWords,
-  updateTruth,
+  updateWordsProblem,
   verdict,
 } from './lib/shell.mjs';
 
@@ -267,28 +266,26 @@ try {
     return `the report, the window "${title}"`;
   });
 
-  await walk.step('Settings › Updates checks GitHub’s releases and says which case it is, in plain words', async () => {
-    // What GitHub answers, asked from here: the words must say that case (round 5's polish: a 404, no release with
-    // update information yet, said to check the internet connection).
-    const truth = await updateTruth();
-    await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Settings' }).click();
-    await page.getByRole('main').getByRole('link', { name: 'Updates', exact: true }).click();
-    await page.getByRole('button', { name: 'Check for updates' }).click();
-    const answer = page.getByText(UPDATE_ANSWERS).first();
-    await answer.waitFor({ timeout: 30_000 });
-    const words = (await page.getByRole('main').innerText())
-      .split('\n')
-      .filter((line) => /version|GitHub|update/i.test(line));
-    expectThat(
-      !words.some((line) => /error sending|reqwest|json|404/i.test(line)),
-      `a raw error: ${words.join(' | ')}`,
-    );
-    expectThat(truth.words.test(words.join('\n')), `GitHub ${truth.said}, and the app said: ${words.join(' | ')}`);
-    if (truth.not)
-      expectThat(!truth.not.test(words.join('\n')), `GitHub ${truth.said}, and the app said: ${words.join(' | ')}`);
-    if (options.shots) await page.screenshot({ path: path.join(options.shots, 'simple-05-updates.png') });
-    return words.slice(-3).join(' | ');
-  });
+  await walk.step(
+    'Settings › Updates says this version doesn’t update itself, and offers the releases page',
+    async () => {
+      // The releases publish no update information, so the in-app check isn't offered: it could only say there was
+      // nothing to read, which reads as "nothing newer" once a newer release exists.
+      await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Settings' }).click();
+      await page.getByRole('main').getByRole('link', { name: 'Updates', exact: true }).click();
+      // Seen, not pressed: it opens the system's browser.
+      await page.getByRole('button', { name: 'Open the releases page' }).waitFor({ timeout: 30_000 });
+      await page
+        .getByText(/^\d+\.\d+\.\d+/)
+        .first()
+        .waitFor({ timeout: 30_000 });
+      const said = (await page.getByRole('main').innerText()).replace(/\s+/g, ' ');
+      const wrong = updateWordsProblem(said);
+      expectThat(wrong === null, `Settings › Updates: ${wrong}`);
+      if (options.shots) await page.screenshot({ path: path.join(options.shots, 'simple-05-updates.png') });
+      return 'no check offered, the releases page is a button away';
+    },
+  );
 
   await walk.step(
     'quitting with a check running asks "Stop checking and quit?"; Cancel keeps both, then it quits',

@@ -14,9 +14,8 @@ import {
   shellMemory,
   simpleTrayProblems,
   trayWords,
-  UPDATE_ANSWERS,
-  updateTruth,
-  updateWordsFor,
+  UPDATE_CHECK_WORDS,
+  updateWordsProblem,
   verdict,
   withDebuggingPort,
 } from './shell.mjs';
@@ -296,21 +295,13 @@ test('Simple’s tray says checking, then working out the results, then nothing,
   ]);
 });
 
-// Round 5's polish: GitHub answering 404 (no release with update information yet) read as "check the internet connection".
-test('what Settings › Updates must say follows what GitHub answered', async () => {
-  const words = (status) => updateWordsFor(status);
-  assert.match('No update information yet', words(404).words);
-  assert.match('Check the internet connection, then try again.', words(404).not);
-  assert.match('Couldn’t reach GitHub', words(null).words);
-  assert.match('Version 2.1.0 is available', words(200).words);
-  assert.match('You have the newest version, 2.0.0.', words(200).words);
-  assert.match('No update information yet', UPDATE_ANSWERS);
-  const asked = [];
-  const answered = await updateTruth((url) => {
-    asked.push(url);
-    return Promise.resolve({ status: 404 });
-  });
-  assert.equal(answered.said, 'answered 404');
-  assert.match(asked[0], /^https:\/\/github\.com\/.*\/latest\.json$/);
-  assert.equal((await updateTruth(() => Promise.reject(new Error('offline')))).said, 'didn’t answer');
+// The in-app updater isn't offered: the releases publish no update information, so a check could only mislead.
+test('Settings › Updates says the version doesn’t update itself, and nothing of a check', () => {
+  const honest = 'This version 2.0.3 This version doesn’t update itself. New versions are published on GitHub';
+  assert.equal(updateWordsProblem(honest), null);
+  assert.match(updateWordsProblem('This version 2.0.3 Check for updates'), /doesn’t say/);
+  assert.match(updateWordsProblem(`${honest} No update information yet`), /speaks of a check/);
+  assert.match(updateWordsProblem(`${honest} You have the newest version, 2.0.3.`), /speaks of a check/);
+  assert.match(updateWordsProblem(honest.replace('2.0.3', '')), /version running/);
+  assert.match('Check the internet connection, then try again.', UPDATE_CHECK_WORDS);
 });

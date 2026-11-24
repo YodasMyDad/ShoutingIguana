@@ -866,7 +866,7 @@ So every section, every setting and every word is the same in Simple as in Advan
 | Data folder | Where crawls are saved, and Change folder… |
 | Shortcuts | The keys that work in the mode shown (the `?` sheet's list) |
 | Diagnostics | Copy diagnostics, the log folders |
-| Updates | The version, the engine's, Check for updates |
+| Updates | The version, the engine's, that this version doesn't update itself, and Open the releases page |
 | About | The versions, the folders, the licences |
 
 - **No mode filtering and no note**: Simple's list of four sections and its "… are Advanced settings. Show them in

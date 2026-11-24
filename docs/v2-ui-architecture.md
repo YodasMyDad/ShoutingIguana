@@ -1817,7 +1817,12 @@ folders (gap 31). The shell's modules: `updates.rs`, `secrets.rs`, `data_folder.
   `parseShellDragDrop`), opens the crawl files as a launch's are (`openCrawlPaths`) and says why for any other file.
   Because the shell takes the drop, HTML5 drag and drop events don't reach the page in the app: anything dragged
   inside the page (a column, say) uses pointer events.
-- **Updates** (`updates.rs`, Settings › Updates' `UpdatePanel`). `tauri-plugin-updater`, driven by the shell's own
+- **Updates** (`updates.rs`, `UpdatePanel`). **Not offered since 2026-11-24**: the releases publish no `latest.json`,
+  so a check could only say there was no update information, which reads as "nothing newer" once a newer release
+  exists. Settings › Updates (`sections/Updates.tsx`) says "This version doesn't update itself", shows the version
+  and has **Open the releases page** (the repository's newest release, in the system's browser). Nothing checks in
+  the background. The plugin, its config, the commands and `UpdatePanel` (its stories and tests) stay, for the day
+  the release workflow publishes update information; what follows describes them. `tauri-plugin-updater`, driven by the shell's own
   commands only (`update_check`, `update_install`; the webview isn't granted the plugin's): Check for updates reads
   `latest.json` from this repository's newest GitHub release
   (`https://github.com/YodasMyDad/ShoutingIguana/releases/latest/download/latest.json`, in `tauri.conf.json`'s

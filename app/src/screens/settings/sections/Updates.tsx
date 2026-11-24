@@ -1,32 +1,29 @@
 import { useQuery } from '@tanstack/react-query';
+import { ExternalLink } from 'lucide-react';
 import { healthQuery } from '../../../api/queries';
+import { Button } from '../../../ui/Button';
 import { Fact, Facts } from '../../../ui/Facts';
 import { SectionPage } from '../SectionPage';
 import { useShellInfo } from '../../../shell/useShellInfo';
-import { ipc } from '../../../shell/ipc';
-import { isTauri } from '../../../lib/platform';
-import { UpdatePanel, type Updater } from '../updates/UpdatePanel';
+import { openInBrowser } from '../../../shell/os';
 
-/** The shell's updater (src-tauri/src/updates.rs). */
-const SHELL_UPDATER: Updater = {
-  check: ipc.updateCheck,
-  install: ipc.updateInstall,
-  onProgress: ipc.onUpdateProgress,
-};
+/** Where each version's installers are published. */
+export const RELEASES_URL = 'https://github.com/YodasMyDad/ShoutingIguana/releases/latest';
 
 export const id = 'updates';
 export const title = 'Updates';
 export const order = 70;
 
 /**
- * The version running, and a new one: Check for updates, what's new, and Install and restart on the user's word
- * (docs/v2-ui-architecture.md, "Updates"). In a browser there's nothing to update: the app installs them.
+ * The version running, and where a new one comes from. This version doesn't update itself: the releases publish no
+ * update information for the shell's updater (updates.rs, `UpdatePanel`) to read, so the section says so plainly and
+ * opens the releases page in the browser instead of offering a check that can only say there's nothing to read.
  */
 export function Section() {
   const shell = useShellInfo();
   const health = useQuery(healthQuery());
   return (
-    <SectionPage title="Updates" purpose="The version you have, and how a new one arrives.">
+    <SectionPage title="Updates" purpose="The version you have, and where to get a new one.">
       <Facts auto>
         <Fact label="This version" className="font-mono text-12">
           {shell ? shell.appVersion : 'Running in a browser'}
@@ -35,14 +32,15 @@ export function Section() {
           {health.data?.engineVersion ?? (health.error ? 'Not connected' : '…')}
         </Fact>
       </Facts>
-      {isTauri ? (
-        <UpdatePanel updater={SHELL_UPDATER} />
-      ) : (
+      <div className="flex w-full flex-col items-start gap-3">
         <p className="text-13 text-text-secondary">
-          The installed app checks for new versions here. A new version comes as a new installer: run it, and your
-          crawls and settings stay as they are.
+          This version doesn’t update itself. New versions are published on GitHub: compare the newest one there with
+          the version above, then download its installer and run it. Your crawls and settings stay as they are.
         </p>
-      )}
+        <Button size="sm" icon={ExternalLink} onClick={() => void openInBrowser(RELEASES_URL)}>
+          Open the releases page
+        </Button>
+      </div>
     </SectionPage>
   );
 }

@@ -91,7 +91,7 @@ export const SETTINGS_PLACES: readonly SettingsPlace[] = [
   {
     section: 'updates',
     title: 'Settings: Updates',
-    keywords: ['app', 'preferences', 'version', 'upgrade', 'new version', 'check for updates'],
+    keywords: ['app', 'preferences', 'version', 'upgrade', 'new version', 'releases', 'download'],
   },
   {
     section: 'about',

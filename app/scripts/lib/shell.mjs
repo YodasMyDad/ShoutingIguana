@@ -1,6 +1,5 @@
 // The built app from outside, for `npm run smoke:shell`: the environment of a test run, the script's options, the
 // steps of a walk and what they come to. Nothing here starts anything, so all of it is tested (shell.test.mjs).
-import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 /** WebView2 reads extra browser arguments from here: how a run of the app gets its DevTools port. */
@@ -315,37 +314,25 @@ export function simpleTrayProblems({ tooltips, menus, shown = tooltips }) {
   return problems;
 }
 
-/** What Settings › Updates says once a check has an answer, whichever it is. */
-export const UPDATE_ANSWERS =
-  /You have the newest version|is available|No update information yet|Couldn’t reach GitHub|couldn’t be read|can’t be trusted|Updates can’t be checked|Updates couldn’t be checked/;
+/**
+ * What Settings › Updates says: this version doesn't update itself, and the releases page is a button away. The
+ * in-app updater isn't offered (the releases publish no update information for it).
+ */
+export const UPDATE_WORDS = /This version doesn’t update itself\./;
+
+/** What Settings › Updates must not say: the words of a check for updates, which this version doesn't offer. */
+export const UPDATE_CHECK_WORDS =
+  /Check for updates|You have the newest version|No update information|Couldn’t reach GitHub|internet connection/;
 
 /**
- * What Settings › Updates must say, by what GitHub answered when asked the same: the update information, so a newer
- * version or the newest; an error status (a 404: no release has update information yet), so no update information
- * yet, never the internet connection (round 5's polish); no answer, so the connection.
- * @param {number | null} status GitHub's HTTP status, or null for no answer
+ * What's wrong with Settings › Updates' words, or null: it says the version doesn't update itself, names the version
+ * running, and says nothing of a check.
+ * @param {string} said the section's text
  */
-export function updateWordsFor(status) {
-  if (status === null) return { said: 'didn’t answer', words: /Couldn’t reach GitHub/, not: null };
-  if (status >= 200 && status < 300)
-    return {
-      said: `answered ${status}`,
-      words: /is available|You have the newest version/,
-      not: /internet connection/,
-    };
-  return { said: `answered ${status}`, words: /No update information yet/, not: /internet connection/ };
-}
-
-/**
- * Asks GitHub for the app's update information, as the shell's updater does (its endpoint in tauri.conf.json), and
- * says what Settings › Updates must say of it (`updateWordsFor`).
- * @param {typeof fetch} fetcher
- */
-export async function updateTruth(fetcher = fetch) {
-  const config = path.join(import.meta.dirname, '..', '..', 'src-tauri', 'tauri.conf.json');
-  const endpoint = JSON.parse(readFileSync(config, 'utf8')).plugins.updater.endpoints[0];
-  const status = await fetcher(endpoint, { redirect: 'follow', signal: AbortSignal.timeout(20_000) })
-    .then((response) => response.status)
-    .catch(() => null);
-  return updateWordsFor(status);
+export function updateWordsProblem(said) {
+  if (!UPDATE_WORDS.test(said)) return `it doesn’t say the version doesn’t update itself: ${said}`;
+  const check = UPDATE_CHECK_WORDS.exec(said);
+  if (check) return `it speaks of a check ("${check[0]}"): ${said}`;
+  if (!/\d+\.\d+\.\d+/.test(said)) return `it doesn’t say the version running: ${said}`;
+  return null;
 }
