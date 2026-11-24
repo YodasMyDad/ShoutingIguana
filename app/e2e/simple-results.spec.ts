@@ -447,7 +447,11 @@ test('a title or description too long says where Google will likely cut it, one 
   // heading explains), then its length and how far over it is. One too short says "Only 16 characters long", as it did.
   const lines: [string, RegExp, 'title' | 'description' | null][] = [
     ['title-too-long', /^“.+”[\d,]+ characters: Google will likely cut off about the last [\d,]+\.$/, 'title'],
-    ['description-too-long', /^“.+”[\d,]+ characters: Google will likely cut off about the last [\d,]+\.$/, 'description'],
+    [
+      'description-too-long',
+      /^“.+”[\d,]+ characters: Google will likely cut off about the last [\d,]+\.$/,
+      'description',
+    ],
     ['title-too-short', /^Only [\d,]+ characters? long$/, null],
     // A short description is quoted under its length: it is short enough to show whole.
     ['description-too-short', /^Only [\d,]+ characters? long\s*Search description: “.+”$/, null],
