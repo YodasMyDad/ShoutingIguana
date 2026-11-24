@@ -24,13 +24,19 @@ internal sealed partial class JavaScriptRenderer
     /// the site's page. The HTML is the page. The caller parses it once. This is not JavaScript rendering.
     /// </summary>
     /// <param name="blockReason">What plain HTTP was refused with. Null for a host a browser already reads.</param>
-    public async Task<FetchResponse?> LoadAsync(Uri uri, string hostKey, CancellationToken cancellationToken, string? blockReason = null)
+    /// <param name="mayAsk">
+    /// False for a check of another version of the site (<c>http</c>, or without <c>www</c>): it is read only in a
+    /// browser that already reads the host, nobody is asked to complete a check for it, and a refusal of it leaves
+    /// the host's pages where they were.
+    /// </param>
+    public async Task<FetchResponse?> LoadAsync(Uri uri, string hostKey, CancellationToken cancellationToken, string? blockReason = null,
+        bool mayAsk = true)
     {
         var session = _fallbackHosts.GetOrAdd(hostKey, static _ => new FallbackHost());
         await session.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (session.GaveUp)
+            if (session.GaveUp || (!mayAsk && !session.Headless && !session.Installed))
             {
                 return null;
             }
@@ -47,10 +53,15 @@ internal sealed partial class JavaScriptRenderer
                 }
             }
 
-            var installed = await LoadInstalledAsync(uri, session, cancellationToken).ConfigureAwait(false);
+            var installed = await LoadInstalledAsync(uri, session, mayAsk, cancellationToken).ConfigureAwait(false);
             if (installed is { Outcome: not FetchOutcome.Blocked })
             {
                 session.Installed = true;
+                return installed;
+            }
+
+            if (!mayAsk)
+            {
                 return installed;
             }
 
@@ -185,6 +196,11 @@ internal sealed partial class JavaScriptRenderer
             session.Gate.Dispose();
         }
 
+        foreach (var (host, session) in _fallbackHosts.Where(host => host.Value.ReadInInstalled > 0))
+        {
+            logger.LogInformation("{Count} pages of {Host} were read in the computer's own browser", session.ReadInInstalled, host);
+        }
+
         _fallbackHosts.Clear();
         await CloseInstalledAsync().ConfigureAwait(false);
     }
@@ -286,5 +302,11 @@ internal sealed partial class JavaScriptRenderer
         public int PersonChecks { get; set; }
 
         public FallbackVerdict Verdict { get; set; }
+
+        /// <summary>For <see cref="FallbackVerdict.WentElsewhere"/>: the address the page left for once its check had passed.</summary>
+        public string? LandedOn { get; set; }
+
+        /// <summary>How many of the host's pages the installed browser has read.</summary>
+        public int ReadInInstalled { get; set; }
     }
 }

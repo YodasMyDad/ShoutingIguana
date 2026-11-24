@@ -58,6 +58,12 @@ internal sealed class PageProcessor(
     private int _internalForbidden;
     private int _forbiddenReported;
     private int _startLeftReported;
+
+    /// <summary>
+    /// Done once the crawl's first page has its answer, by whatever way it was read. A check of another version of the
+    /// site that plain HTTP was refused waits for it, to be asked in the browser if that is how the site is read.
+    /// </summary>
+    private volatile Task _startRead = Task.CompletedTask;
     private long _work;
 
     // The first of the site's hosts that answered 429 to a request without a signature, with what was wrong with the
@@ -151,7 +157,7 @@ internal sealed class PageProcessor(
         if (item.IsInternal)
         {
             ObserveShopify(uri, shopifySignal);
-            WatchForBlocking(uri, response);
+            WatchForBlocking(uri, response, isProbe);
             if (response.IsRateLimited)
             {
                 refusalNote = NoteShopifyRefusal(item, uri, response);
@@ -197,12 +203,59 @@ internal sealed class PageProcessor(
         bool isRetry, bool isProbe)
     {
         var http = () => fetcher.FetchAsync(uri, body, cancellationToken, singleAttempt: isRetry || isProbe, holdBackThrottled: item.IsInternal);
+        var host = HostKey(uri);
         if (!FallsBack(item))
         {
-            return await http().ConfigureAwait(false);
+            var plain = await http().ConfigureAwait(false);
+            return isProbe ? await ProbeInTheBrowserAsync(uri, host, plain, cancellationToken).ConfigureAwait(false) : plain;
         }
 
-        var host = HostKey(uri);
+        if (item is { Depth: 0, Source: not DiscoverySource.SiteVersion })
+        {
+            TaskCompletionSource read = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            _startRead = read.Task;
+            try
+            {
+                return await FetchInTheBrowserIfBlockedAsync(uri, host, http, cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                read.TrySetResult();
+            }
+        }
+
+        return await FetchInTheBrowserIfBlockedAsync(uri, host, http, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The site's other versions (http, without www) are asked for once each, to see where they lead. Where the site's
+    /// firewall refused one and a browser is reading the site, it is asked for there, with the pass the browser has:
+    /// otherwise the versions of a protected site could never be compared. Nobody is asked to complete a check for one.
+    /// </summary>
+    private async Task<FetchResponse> ProbeInTheBrowserAsync(Uri uri, string host, FetchResponse plain, CancellationToken cancellationToken)
+    {
+        if (!options.BrowserFallback || plain is not { Outcome: FetchOutcome.Blocked } || plain.IsRateLimited)
+        {
+            return plain;
+        }
+
+        await _startRead.WaitAsync(cancellationToken).ConfigureAwait(false);
+        if (!_browserHosts.ContainsKey(host))
+        {
+            return plain;
+        }
+
+        var viaBrowser = await renderer.LoadAsync(uri, host, cancellationToken, mayAsk: false).ConfigureAwait(false);
+
+        // A probe is a status, as plain HTTP's is: the page it may have come with is not read.
+        return viaBrowser is { FromBrowser: true, Outcome: not FetchOutcome.Blocked, IsRateLimited: false }
+            ? viaBrowser with { Body = null, BodyBytes = null, BodyTruncated = false }
+            : plain;
+    }
+
+    private async Task<FetchResponse> FetchInTheBrowserIfBlockedAsync(Uri uri, string host, Func<Task<FetchResponse>> http,
+        CancellationToken cancellationToken)
+    {
         if (_browserHosts.ContainsKey(host))
         {
             var again = await renderer.LoadAsync(uri, host, cancellationToken).ConfigureAwait(false);
@@ -264,7 +317,13 @@ internal sealed class PageProcessor(
                 $"{host} is asking to check you're human ({reason}), and that needs a person, whom this crawl was not told to ask. From the command line, crawl again with --solve-challenges: " +
                 "a browser window opens on the page, you complete the check, and the crawl carries on.",
             FallbackVerdict.PersonDidNotFinish =>
-                $"{host} asked to check you're human ({reason}), and the check was not completed in the browser window, so its pages are recorded as blocked. Crawl again to be asked once more.",
+                $"{host} asked to check you're human ({reason}). A {Browser()} window was shown for you, and the check was not completed in the browser window in the time it was given, so its pages are recorded as blocked. Crawl again to be asked once more.",
+            FallbackVerdict.PersonClosedWindow =>
+                $"{host} asked to check you're human ({reason}). A {Browser()} window was shown for you, and it was closed before the check was completed, so its pages are recorded as blocked. Crawl again to be asked once more.",
+            FallbackVerdict.RefusedAfterCheck =>
+                $"{host} asked to check you're human ({reason}). The check was completed in the {Browser()} window, and the site then refused the page all the same, so its pages are recorded as blocked.",
+            FallbackVerdict.WentElsewhere =>
+                $"{host} asked to check you're human ({reason}). The check passed in {Browser()}, and the page then went to {renderer.LandedOn(HostKey(uri)) ?? "another address"}, which is not this address's own answer, so this address is recorded as blocked. Crawl from where it went instead.",
             FallbackVerdict.NoDisplay =>
                 $"{host} is blocking the crawler ({reason}). Getting past it needs a browser window, and this computer has no screen to show one on. Crawl from a desktop computer.",
             FallbackVerdict.NoBrowser =>
@@ -275,7 +334,26 @@ internal sealed class PageProcessor(
             _ => $"{host} is blocking the crawler ({reason}). Try a slower crawl rate."
         };
         return $"{what} {OWNER_ADVICE}";
+
+        string Browser() => renderer.InstalledBrowserName ?? "browser";
     }
+
+    /// <summary>What the browser fallback did about a blocked host, as the one word the alert's facts carry (<see cref="CrawlNoticeData"/>).</summary>
+    private string TriedFor(Uri uri) => !options.BrowserFallback
+        ? "off"
+        : renderer.VerdictFor(HostKey(uri)) switch
+        {
+            FallbackVerdict.NeedsPerson => "needsPerson",
+            FallbackVerdict.PersonDidNotFinish => "notCompleted",
+            FallbackVerdict.PersonClosedWindow => "windowClosed",
+            FallbackVerdict.RefusedAfterCheck => "refusedAfterCheck",
+            FallbackVerdict.WentElsewhere => "wentElsewhere",
+            FallbackVerdict.NoDisplay => "noDisplay",
+            FallbackVerdict.NoBrowser => "noBrowser",
+            FallbackVerdict.InstalledBrowserOff => "ownBrowserOff",
+            FallbackVerdict.StillBlocked => "refused",
+            _ => "notTried"
+        };
 
     /// <summary>Internal pages only. A status check is not parsed into page facts, and a 429 is not a firewall block.</summary>
     private bool FallsBack(FrontierItem item) =>
@@ -574,7 +652,7 @@ internal sealed class PageProcessor(
     /// The site's hosts are named as progress names them: the start URL's host for it and its www twin. A 429 is the
     /// site asking the crawler to slow down, which it does by itself, not a block: it is said once per host, with the pace.
     /// </summary>
-    private void WatchForBlocking(Uri uri, FetchResponse response)
+    private void WatchForBlocking(Uri uri, FetchResponse response, bool isProbe)
     {
         // A 429 that limits one section is said by the section's own notice, as its URLs are held back.
         if (response.IsRateLimited && gates.For(uri).LimitedSectionOf(uri) is null)
@@ -600,15 +678,22 @@ internal sealed class PageProcessor(
         {
             // Once per host: the first blocked response raises it, and the file counts the rest when it's read back.
             // A host a browser is reading is not blocking the crawl: what was refused is a check of another version of it.
+            // With the browser fallback on, such a check never raises the alert: it is answered while the browser is
+            // still at the site's first page, before anyone can say what the browser did, and the host's alert is said once.
             var host = scope.HostName(UrlNormalizer.GetHost(uri));
-            if (!(_browserHosts.ContainsKey(HostKey(uri)) && renderer.VerdictFor(HostKey(uri)) == FallbackVerdict.None) && _blockedHostsReported.TryAdd(host, true))
+            if (!(isProbe && options.BrowserFallback) &&
+                !(_browserHosts.ContainsKey(HostKey(uri)) && renderer.VerdictFor(HostKey(uri)) == FallbackVerdict.None) &&
+                _blockedHostsReported.TryAdd(host, true))
             {
+                var tried = TriedFor(uri);
                 observer.OnNotice(new CrawlNotice(
                     CrawlNoticeLevel.Warning,
                     "blocked",
                     BlockedAdvice(uri, host, reason))
                 {
-                    Data = new CrawlNoticeData(Host: host, Reason: reason, Count: 1)
+                    Data = new CrawlNoticeData(Host: host, Reason: reason, Count: 1, Tried: tried,
+                        Browser: tried is "notCompleted" or "windowClosed" or "refusedAfterCheck" or "wentElsewhere" ? renderer.InstalledBrowserName : null,
+                        Url: tried == "wentElsewhere" ? renderer.LandedOn(HostKey(uri)) : null)
                 });
             }
         }

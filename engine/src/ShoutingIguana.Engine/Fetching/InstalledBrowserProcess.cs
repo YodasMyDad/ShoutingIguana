@@ -100,6 +100,7 @@ internal sealed class InstalledBrowserProcess : IAsyncDisposable
 
             var endpoint = await EndpointAsync(port, process, browser, cancellationToken).ConfigureAwait(false);
             var connection = await DevToolsConnection.ConnectAsync(endpoint, cancellationToken).ConfigureAwait(false);
+            await KeepOutOfSightAsync(process, cancellationToken).ConfigureAwait(false);
             return new InstalledBrowserProcess(process, connection, browser, profile, temporary, profileLock, logger);
         }
         catch
@@ -116,13 +117,34 @@ internal sealed class InstalledBrowserProcess : IAsyncDisposable
         }
     }
 
-    /// <summary>Puts the window that holds <paramref name="targetId"/> in front of the person, on that tab.</summary>
-    public async Task ShowAsync(string targetId, CancellationToken cancellationToken)
+    /// <summary>
+    /// Puts the window that holds <paramref name="targetId"/> in front of the person, on that tab: restored, whole
+    /// and in the middle of the main screen, with its taskbar button, and with the keyboard where the system allows.
+    /// </summary>
+    public async Task<WindowShown> ShowAsync(string targetId, CancellationToken cancellationToken)
     {
         var window = await WindowAsync(targetId, cancellationToken).ConfigureAwait(false);
+        var screen = await ScreenAsync(targetId, cancellationToken).ConfigureAwait(false);
+        var place = WindowPlacement.Centred(screen);
+
+        // A window's place can only be set once it is restored, so that comes first, by itself.
         await SetBoundsAsync(window, new { windowState = "normal" }, cancellationToken).ConfigureAwait(false);
-        await SetBoundsAsync(window, new { left = 80, top = 80, width = 1100, height = 800 }, cancellationToken).ConfigureAwait(false);
+        await SetBoundsAsync(window, new { left = place.Left, top = place.Top, width = place.Width, height = place.Height }, cancellationToken)
+            .ConfigureAwait(false);
         await Connection.SendAsync("Target.activateTarget", new { targetId }, cancellationToken: cancellationToken).ConfigureAwait(false);
+        bool? inFront = OperatingSystem.IsWindows() ? BrowserWindows.BringToFront(_process.Id) : null;
+
+        var bounds = await BoundsAsync(window, cancellationToken).ConfigureAwait(false);
+        if (!WindowPlacement.IsOn(bounds, screen))
+        {
+            // A window that was still being restored can miss its first move.
+            await SetBoundsAsync(window, new { windowState = "normal" }, cancellationToken).ConfigureAwait(false);
+            await SetBoundsAsync(window, new { left = place.Left, top = place.Top, width = place.Width, height = place.Height }, cancellationToken)
+                .ConfigureAwait(false);
+            bounds = await BoundsAsync(window, cancellationToken).ConfigureAwait(false);
+        }
+
+        return new WindowShown(bounds, screen, inFront);
     }
 
     /// <summary>Puts the window out of sight again.</summary>
@@ -133,11 +155,81 @@ internal sealed class InstalledBrowserProcess : IAsyncDisposable
         {
             await SetBoundsAsync(window, new { windowState = "normal" }, cancellationToken).ConfigureAwait(false);
             await SetBoundsAsync(window, new { left = OFF_SCREEN, top = OFF_SCREEN }, cancellationToken).ConfigureAwait(false);
+            BrowserWindows.KeepOffTaskbar(_process.Id);
         }
         else
         {
             await SetBoundsAsync(window, new { windowState = "minimized" }, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>Where the window that holds <paramref name="targetId"/> is now.</summary>
+    public async Task<WindowBounds> BoundsAsync(string targetId, CancellationToken cancellationToken) =>
+        await BoundsAsync(await WindowAsync(targetId, cancellationToken).ConfigureAwait(false), cancellationToken).ConfigureAwait(false);
+
+    /// <summary>Whether the browser's window is the one in front. Null where that can't be asked.</summary>
+    public bool? IsInFront => OperatingSystem.IsWindows() ? BrowserWindows.IsInFront(_process.Id) : null;
+
+    private async Task<WindowBounds> BoundsAsync(int windowId, CancellationToken cancellationToken)
+    {
+        var result = await Connection.SendAsync("Browser.getWindowBounds", new { windowId }, cancellationToken: cancellationToken).ConfigureAwait(false);
+        var bounds = result.GetProperty("bounds");
+        int Read(string name) => bounds.TryGetProperty(name, out var value) && value.TryGetInt32(out var number) ? number : 0;
+        return new WindowBounds(Read("left"), Read("top"), Read("width"), Read("height"),
+            bounds.TryGetProperty("windowState", out var state) ? state.GetString() ?? "normal" : "normal");
+    }
+
+    /// <summary>
+    /// The main screen, less its taskbar or dock. Windows is asked. Elsewhere a blank tab of the browser says what
+    /// screen its window is on: never the site's page, which is left alone while its check runs.
+    /// </summary>
+    private async Task<ScreenArea> ScreenAsync(string targetId, CancellationToken cancellationToken)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return BrowserWindows.WorkArea() ?? WindowPlacement.AssumedScreen;
+        }
+
+        try
+        {
+            var targets = await Connection.SendAsync("Target.getTargets", cancellationToken: cancellationToken).ConfigureAwait(false);
+            var blank = targets.GetProperty("targetInfos").EnumerateArray().FirstOrDefault(target =>
+                target.GetProperty("type").GetString() == "page" && target.GetProperty("targetId").GetString() != targetId &&
+                target.GetProperty("url").GetString() == "about:blank");
+            if (blank.ValueKind != JsonValueKind.Object)
+            {
+                return WindowPlacement.AssumedScreen;
+            }
+
+            var attached = await Connection.SendAsync("Target.attachToTarget", new { targetId = blank.GetProperty("targetId").GetString(), flatten = true },
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+            var sessionId = attached.GetProperty("sessionId").GetString()!;
+            try
+            {
+                var measured = await Connection.SendAsync("Runtime.evaluate",
+                    new { expression = "[screen.availLeft || 0, screen.availTop || 0, screen.availWidth, screen.availHeight].join(',')", returnByValue = true },
+                    sessionId, cancellationToken).ConfigureAwait(false);
+                var parts = (measured.GetProperty("result").GetProperty("value").GetString() ?? string.Empty).Split(',');
+                if (parts.Length == 4 && parts.All(part => int.TryParse(part, NumberStyles.Integer, CultureInfo.InvariantCulture, out _)))
+                {
+                    var numbers = parts.Select(part => int.Parse(part, CultureInfo.InvariantCulture)).ToArray();
+                    if (numbers[2] > 0 && numbers[3] > 0)
+                    {
+                        return new ScreenArea(numbers[0], numbers[1], numbers[2], numbers[3]);
+                    }
+                }
+            }
+            finally
+            {
+                await Connection.SendAsync("Target.detachFromTarget", new { sessionId }, cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException and not OutOfMemoryException)
+        {
+            _logger.LogDebug(ex, "The screen could not be measured");
+        }
+
+        return WindowPlacement.AssumedScreen;
     }
 
     private async Task<int> WindowAsync(string targetId, CancellationToken cancellationToken)
@@ -173,6 +265,23 @@ internal sealed class InstalledBrowserProcess : IAsyncDisposable
         if (_temporaryProfile)
         {
             DeleteProfile(_profile, _logger);
+        }
+    }
+
+    /// <summary>
+    /// On Windows the window is drawn far off the screen, and its taskbar button is taken away: pressed, it would show
+    /// nothing. The window is given a moment to exist.
+    /// </summary>
+    private static async Task KeepOutOfSightAsync(Process process, CancellationToken cancellationToken)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        for (var attempt = 0; attempt < 30 && !process.HasExited && !BrowserWindows.KeepOffTaskbar(process.Id); attempt++)
+        {
+            await Task.Delay(100, cancellationToken).ConfigureAwait(false);
         }
     }
 

@@ -52,6 +52,13 @@ public sealed partial class SyntheticSite
     /// </summary>
     public const string HUMAN_CHECK_ASK_PATH = PLANTS_PATH + "human-check-ask";
 
+    /// <summary>
+    /// As <see cref="HUMAN_CHECK_ASK_PATH"/>, and once the person has passed the check the page loads again and the site
+    /// answers it with a redirect, as a site does that sends each visitor to its pages for their country: to
+    /// <see cref="HUMAN_CHECK_NEXT_PATH"/>, or with <c>away</c> in its query to another host, which is another site.
+    /// </summary>
+    public const string HUMAN_CHECK_MOVED_PATH = PLANTS_PATH + "human-check-moved";
+
     /// <summary>The next page on the host behind the check. It redirects to <see cref="HUMAN_CHECK_LAST_PATH"/>.</summary>
     public const string HUMAN_CHECK_NEXT_PATH = PLANTS_PATH + "human-check-next";
 

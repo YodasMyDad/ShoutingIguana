@@ -213,6 +213,99 @@ public sealed class BrowserFallbackCrawlTests : IAsyncLifetime
         Assert.Contains("window opened on the page for you to complete the check", asked, StringComparison.Ordinal);
         Assert.Empty(TestCrawls.Rows(path, "SELECT code FROM notices WHERE code = 'blocked'"));
         Assert.Single(TestCrawls.Rows(path, "SELECT code FROM notices WHERE code = 'browser-fallback'"));
+
+        // How the check ended is said too, with the browser it was completed in.
+        var passed = Assert.Single(TestCrawls.Rows(path, "SELECT message FROM notices WHERE code = 'human-check-passed'"));
+        Assert.Contains("check was completed. The crawl is reading the site in", passed, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// What a real site did (indeed.com, 2026-11-24): the person ticked the box, the page loaded again, and the site
+    /// answered that load with a redirect to its pages for the visitor's country. The page was on the screen and the
+    /// crawl stored the address as blocked. The redirect is the address's answer: it is stored, and followed in the
+    /// same browser, with the pass, through the host's next pages. The log says each step, for a person to read back.
+    /// </summary>
+    [Fact]
+    public async Task ARedirectAfterACheckAPersonCompletesIsFollowedInTheSameBrowser()
+    {
+        if (!CanOpenABrowser())
+        {
+            return;
+        }
+
+        var path = NewDatabase();
+        var start = new Uri(_server.BaseUri, SyntheticSite.HUMAN_CHECK_MOVED_PATH + "?shown=1").AbsoluteUri;
+        var next = new Uri(_server.BaseUri, SyntheticSite.HUMAN_CHECK_NEXT_PATH).AbsoluteUri;
+        var last = new Uri(_server.BaseUri, SyntheticSite.HUMAN_CHECK_LAST_PATH).AbsoluteUri;
+        var hits = _server.Requests.WatchHits();
+        using var log = new CapturingLoggerFactory();
+
+        var summary = await RunAsync(path, start, browserFallback: true, useInstalledBrowser: true, solveChallenges: true, log: log);
+        Assert.Equal(CrawlStatus.Completed, summary.Status);
+
+        Assert.Equal("302", Scalar(path, start, "r.status_code"));
+        Assert.Equal(((int)FetchOutcome.Redirect).ToString(), Scalar(path, start, "r.outcome"));
+        Assert.Equal("", Scalar(path, start, "COALESCE(r.block_reason, '')"));
+        Assert.Equal("301", Scalar(path, next, "r.status_code"));
+        Assert.Equal("200", Scalar(path, last, "r.status_code"));
+        Assert.Equal("Human check passed, last page | Synthetic Store planted page", Scalar(path, last, "r.title"));
+        Assert.DoesNotContain(Hits(hits, SyntheticSite.HUMAN_CHECK_NEXT_PATH), hit => !hit.FromBrowser);
+        Assert.DoesNotContain(Hits(hits, SyntheticSite.HUMAN_CHECK_LAST_PATH), hit => !hit.FromBrowser);
+
+        Assert.Single(TestCrawls.Rows(path, "SELECT code FROM notices WHERE code = 'human-check'"));
+        Assert.Single(TestCrawls.Rows(path, "SELECT code FROM notices WHERE code = 'human-check-passed'"));
+        Assert.Empty(TestCrawls.Rows(path, "SELECT code FROM notices WHERE code IN ('blocked', 'start-redirects-away')"));
+
+        // The window the person was shown was whole on the main screen, restored, and the log has every step in order.
+        var said = log.Messages.Where(message => message.StartsWith("Information ", StringComparison.Ordinal)).ToList();
+        var steps = new[]
+        {
+            "Human check: 127.0.0.1 asks for a person (Cloudflare challenge)",
+            "window is shown at",
+            "Human check: 127.0.0.1's check was completed after",
+            "127.0.0.1's check cleared, and " + start + " answered 302, a redirect to " + next,
+            "Read " + next + " in",
+            "Read " + last + " in",
+            "pages of 127.0.0.1 were read in the computer's own browser"
+        };
+        var at = -1;
+        foreach (var step in steps)
+        {
+            var found = said.FindIndex(at + 1, message => message.Contains(step, StringComparison.Ordinal));
+            Assert.True(found > at, $"The log doesn't say \"{step}\" after step {at}:\n{string.Join('\n', said)}");
+            at = found;
+        }
+
+        var shown = said.Single(message => message.Contains("window is shown at", StringComparison.Ordinal));
+        Assert.Contains("normal", shown, StringComparison.Ordinal);
+        Assert.Contains("whole on the screen: True", shown, StringComparison.Ordinal);
+        Assert.DoesNotContain(log.Messages, message => message.Contains(SyntheticSite.HUMAN_CHECK_ASK_COOKIE, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The same, where the redirect leads to another site, as indeed.com's did (to uk.indeed.com): the crawl stores
+    /// the redirect and says there is nothing more to crawl from here and where to start instead. Not a block.
+    /// </summary>
+    [Fact]
+    public async Task ARedirectToAnotherSiteAfterACheckIsSaidNotBlocked()
+    {
+        if (!CanOpenABrowser())
+        {
+            return;
+        }
+
+        var path = NewDatabase();
+        var start = new Uri(_server.BaseUri, SyntheticSite.HUMAN_CHECK_MOVED_PATH + "?shown=1&away=1").AbsoluteUri;
+
+        var summary = await RunAsync(path, start, browserFallback: true, useInstalledBrowser: true, solveChallenges: true);
+        Assert.Equal(CrawlStatus.Completed, summary.Status);
+
+        Assert.Equal("302", Scalar(path, start, "r.status_code"));
+        Assert.Equal(((int)FetchOutcome.Redirect).ToString(), Scalar(path, start, "r.outcome"));
+        var away = Assert.Single(TestCrawls.Rows(path, "SELECT message FROM notices WHERE code = 'start-redirects-away'"));
+        Assert.Contains($"http://localhost:{_server.BaseUri.Port}{SyntheticSite.HUMAN_CHECK_LAST_PATH}", away, StringComparison.Ordinal);
+        Assert.Single(TestCrawls.Rows(path, "SELECT code FROM notices WHERE code = 'human-check-passed'"));
+        Assert.Empty(TestCrawls.Rows(path, "SELECT code FROM notices WHERE code = 'blocked'"));
     }
 
     /// <summary>A check nobody completes in the time given is a block, the alert says what happened, and the host is not asked about again.</summary>
@@ -238,6 +331,11 @@ public sealed class BrowserFallbackCrawlTests : IAsyncLifetime
         var alert = Assert.Single(TestCrawls.Rows(path, "SELECT message FROM notices WHERE code = 'blocked'"));
         Assert.Contains("the check was not completed in the browser window", alert, StringComparison.Ordinal);
 
+        // The alert's facts say what the browser fallback did, for the app to put in its own words.
+        var facts = Assert.Single(TestCrawls.Rows(path, "SELECT data FROM notices WHERE code = 'blocked'"));
+        Assert.Contains("\"tried\":\"notCompleted\"", facts, StringComparison.Ordinal);
+        Assert.Empty(TestCrawls.Rows(path, "SELECT code FROM notices WHERE code = 'human-check-passed'"));
+
         // While the window was up, progress said the crawl was waiting for a person, and for which host.
         var wait = Assert.Single(observer.HumanChecks.DistinctBy(check => check.Host));
         Assert.Equal("127.0.0.1", wait.Host);
@@ -247,7 +345,8 @@ public sealed class BrowserFallbackCrawlTests : IAsyncLifetime
     private static bool CanOpenABrowser() => InstalledBrowsers.Find() is not null && InstalledBrowsers.HasDisplay();
 
     private async Task<CrawlSummary> RunAsync(string path, string start, bool browserFallback, bool useInstalledBrowser = false,
-        bool solveChallenges = false, int challengeWaitSeconds = 60, ICrawlObserver? observer = null, int concurrency = 2)
+        bool solveChallenges = false, int challengeWaitSeconds = 60, ICrawlObserver? observer = null, int concurrency = 2,
+        Microsoft.Extensions.Logging.ILoggerFactory? log = null)
     {
         var options = new CrawlOptions
         {
@@ -262,7 +361,7 @@ public sealed class BrowserFallbackCrawlTests : IAsyncLifetime
             SolveChallenges = solveChallenges,
             ChallengeWaitSeconds = challengeWaitSeconds
         };
-        await using var job = new CrawlEngine(NullLoggerFactory.Instance).Start(new CrawlRequest(options, path), observer);
+        await using var job = new CrawlEngine(log ?? NullLoggerFactory.Instance).Start(new CrawlRequest(options, path), observer);
         return await job.Completion.WaitAsync(TimeSpan.FromSeconds(120));
     }
 
