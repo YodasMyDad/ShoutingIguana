@@ -48,5 +48,11 @@ public enum CrawlWaitReason
     /// time, an interval apart learned from its 429s and what got through, while the rest goes on. Host. Section: the
     /// section, "/products/". Urls: how many are left. Duration: how long until the next of them is tried.
     /// </summary>
-    SectionLimited
+    SectionLimited,
+
+    /// <summary>
+    /// One of the site's hosts asked to check the visitor is human, and a browser window is open on that page for a
+    /// person to complete the check. The duration is how long the crawl still waits for them.
+    /// </summary>
+    HumanCheck
 }

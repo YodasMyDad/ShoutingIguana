@@ -34,6 +34,37 @@ public sealed partial class SyntheticSite
     /// <inheritdoc cref="BROWSER_FALLBACK_PATH"/>
     public const string BROWSER_FALLBACK_NEXT_PATH = PLANTS_PATH + "browser-fallback-next";
 
+    /// <summary>
+    /// A page behind a check that clears by itself in a person's browser, as Cloudflare's "Just a moment..." does. Every
+    /// request without the pass is a 403 challenge. The challenge's script sets the pass, a cookie made from the
+    /// browser's user agent, and loads the page again, unless the browser says it is automated
+    /// (<c>navigator.webdriver</c>), as the headless browser the crawl downloads does. Not linked from the site, and
+    /// not a plant: only a crawl started here asks for it. It links to <see cref="HUMAN_CHECK_NEXT_PATH"/>.
+    /// </summary>
+    public const string HUMAN_CHECK_PATH = PLANTS_PATH + "human-check";
+
+    /// <summary>
+    /// The same, with a check that needs a person: the pass is set when the button is pressed. So a test can be the
+    /// person, <c>?shown=1</c> on the address presses it once the window is on the screen in front of them.
+    /// </summary>
+    public const string HUMAN_CHECK_ASK_PATH = PLANTS_PATH + "human-check-ask";
+
+    /// <summary>The next page on the host behind the check. It redirects to <see cref="HUMAN_CHECK_LAST_PATH"/>.</summary>
+    public const string HUMAN_CHECK_NEXT_PATH = PLANTS_PATH + "human-check-next";
+
+    /// <inheritdoc cref="HUMAN_CHECK_NEXT_PATH"/>
+    public const string HUMAN_CHECK_LAST_PATH = PLANTS_PATH + "human-check-last";
+
+    /// <summary>The cookie that carries the pass for <see cref="HUMAN_CHECK_PATH"/>.</summary>
+    public const string HUMAN_CHECK_COOKIE = "si_clearance";
+
+    /// <summary>The cookie that carries the pass for <see cref="HUMAN_CHECK_ASK_PATH"/>.</summary>
+    public const string HUMAN_CHECK_ASK_COOKIE = "si_clearance_ask";
+
+    /// <summary>The pass for a browser with this user agent. Another browser's pass is not this one's.</summary>
+    public static string Clearance(string userAgent) =>
+        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes("synthetic-clearance:" + userAgent)))[..32].ToLowerInvariant();
+
     /// <summary>The planted page a list crawl fetches, and the page it links to, which that crawl records and does not fetch.</summary>
     public const string LIST_MODE_PATH = PLANTS_PATH + "list-mode";
 

@@ -80,6 +80,21 @@ internal sealed record CrawlOptionsDto
     /// block. This is not JavaScript rendering.
     /// </summary>
     public bool? BrowserFallback { get; init; }
+
+    /// <summary>
+    /// With <see cref="BrowserFallback"/>: a host the headless browser can't read either is read in the computer's own
+    /// Chrome or Edge, as itself. Left out, it is.
+    /// </summary>
+    public bool? UseInstalledBrowser { get; init; }
+
+    /// <summary>
+    /// With <see cref="BrowserFallback"/>: when a site's check needs a person, show the browser window on that page and
+    /// wait for them. Left out, the page is recorded as blocked.
+    /// </summary>
+    public bool? SolveChallenges { get; init; }
+
+    /// <summary>How long <see cref="SolveChallenges"/> waits for a person. Left out, five minutes.</summary>
+    public int? ChallengeWaitSeconds { get; init; }
     public string? ProxyUrl { get; init; }
     public int? RequestTimeoutSeconds { get; init; }
     public int? MaxRetries { get; init; }
@@ -132,6 +147,9 @@ internal sealed record CrawlOptionsDto
         ExtractionRules = (options.ExtractionRules ?? []).Select(ExtractionRuleDto.From).ToList(),
         ListUrls = List(options.ListUrls),
         BrowserFallback = options.BrowserFallback,
+        UseInstalledBrowser = options.UseInstalledBrowser,
+        SolveChallenges = options.SolveChallenges,
+        ChallengeWaitSeconds = options.ChallengeWaitSeconds,
         ProxyUrl = options.ProxyUrl,
         RequestTimeoutSeconds = options.RequestTimeoutSeconds,
         MaxRetries = options.MaxRetries,
@@ -202,6 +220,9 @@ internal sealed record CrawlOptionsDto
             ExtractionRules = ExtractionRules is null ? defaults.ExtractionRules : ExtractionRules.Select(rule => rule.ToRule()).ToList(),
             ListUrls = ListUrls is null ? defaults.ListUrls : [.. ListUrls],
             BrowserFallback = BrowserFallback ?? defaults.BrowserFallback,
+            UseInstalledBrowser = UseInstalledBrowser ?? defaults.UseInstalledBrowser,
+            SolveChallenges = SolveChallenges ?? defaults.SolveChallenges,
+            ChallengeWaitSeconds = ChallengeWaitSeconds ?? defaults.ChallengeWaitSeconds,
             ProxyUrl = ProxyUrl ?? defaults.ProxyUrl,
             RequestTimeoutSeconds = RequestTimeoutSeconds ?? defaults.RequestTimeoutSeconds,
             MaxRetries = MaxRetries ?? defaults.MaxRetries,

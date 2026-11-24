@@ -1,3 +1,4 @@
+using ShoutingIguana.Engine.Fetching;
 using System.Net;
 using System.Text.Json;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
@@ -62,6 +63,9 @@ internal sealed class SidecarHost : IAsyncDisposable
             : throw new InvalidOperationException("A sidecar needs a token, unless it runs for development."));
 
         var stateLock = StateFolderLock.Acquire(options.StateDirectory);
+
+        // The browser a blocked host is read in keeps its profile with the app's state, so a check passed in one crawl holds for the next.
+        BrowserProfile.Folder = Path.Combine(options.StateDirectory, "browser-profile");
         WebApplication? app = null;
         try
         {

@@ -369,6 +369,12 @@ public sealed class SyntheticSiteServer : IAsyncDisposable
             return site.BrowserFallbackNextDocument();
         }
 
+        if (path is SyntheticSite.HUMAN_CHECK_PATH or SyntheticSite.HUMAN_CHECK_ASK_PATH or SyntheticSite.HUMAN_CHECK_NEXT_PATH or
+            SyntheticSite.HUMAN_CHECK_LAST_PATH)
+        {
+            return HumanCheck(site, request, path);
+        }
+
         if (path == SyntheticSite.BROWSER_FALLBACK_PATH &&
             (request.Headers.ContainsKey("Sec-Fetch-Mode") || request.Headers.ContainsKey("sec-ch-ua")))
         {
@@ -376,6 +382,30 @@ public sealed class SyntheticSiteServer : IAsyncDisposable
         }
 
         return response;
+    }
+
+    /// <summary>
+    /// The pages behind a human check (<see cref="SyntheticSite.HUMAN_CHECK_PATH"/>). The pass is a cookie made from the
+    /// user agent that asks, so a pass handed to another client is refused, as Cloudflare's is.
+    /// </summary>
+    private static SyntheticResponse HumanCheck(SyntheticSite site, HttpRequest request, string path)
+    {
+        var clearance = SyntheticSite.Clearance(request.Headers.UserAgent.ToString());
+        var ask = path == SyntheticSite.HUMAN_CHECK_ASK_PATH;
+        var passed = path switch
+        {
+            SyntheticSite.HUMAN_CHECK_PATH => request.Cookies[SyntheticSite.HUMAN_CHECK_COOKIE] == clearance,
+            SyntheticSite.HUMAN_CHECK_ASK_PATH => request.Cookies[SyntheticSite.HUMAN_CHECK_ASK_COOKIE] == clearance,
+            _ => request.Cookies[SyntheticSite.HUMAN_CHECK_COOKIE] == clearance || request.Cookies[SyntheticSite.HUMAN_CHECK_ASK_COOKIE] == clearance
+        };
+        if (!passed)
+        {
+            return SyntheticSite.HumanCheckChallenge(ask, clearance);
+        }
+
+        return path == SyntheticSite.HUMAN_CHECK_NEXT_PATH
+            ? new SyntheticResponse(301, "text/html; charset=utf-8", null, null, SyntheticSite.HUMAN_CHECK_LAST_PATH)
+            : site.HumanCheckDocument(path);
     }
 
     private static async Task ServeAsync(HttpContext context, SyntheticResponse response)

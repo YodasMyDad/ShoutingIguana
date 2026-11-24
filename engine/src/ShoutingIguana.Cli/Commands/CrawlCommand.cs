@@ -1,5 +1,6 @@
 using System.CommandLine;
 using ShoutingIguana.Cli.Output;
+using ShoutingIguana.Engine.Fetching;
 using ShoutingIguana.Engine.Configuration;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling;
@@ -48,7 +49,20 @@ internal static class CrawlCommand
         var list = new Option<string[]>("--list") { Description = "Crawl these URLs instead of following links. A text file is one URL a line. A CSV file has a Url column and an optional Priority column (higher is crawled first). Repeatable." };
         var browserFallback = new Option<bool>("--browser-fallback")
         {
-            Description = "When a host blocks the plain HTTP fetch, read that host's pages in a headless browser instead. Not JavaScript rendering."
+            Description = "When a host blocks the plain HTTP fetch, read that host's pages in a browser instead: the headless one first, then this computer's Chrome or Edge, as itself, in a window kept out of sight. Not JavaScript rendering."
+        };
+        var solveChallenges = new Option<bool>("--solve-challenges")
+        {
+            Description = "With --browser-fallback: when a site asks to check you're human, show the browser window on that page and wait for you to complete the check."
+        };
+        var challengeWait = new Option<int>("--challenge-wait")
+        {
+            Description = $"With --solve-challenges: how many seconds to wait for you (default {CrawlOptions.DEFAULT_CHALLENGE_WAIT_SECONDS}).",
+            DefaultValueFactory = _ => CrawlOptions.DEFAULT_CHALLENGE_WAIT_SECONDS
+        };
+        var noInstalledBrowser = new Option<bool>("--no-installed-browser")
+        {
+            Description = "With --browser-fallback: never open this computer's Chrome or Edge. Only the headless browser is used."
         };
         var auth = new Option<string[]>("--auth") { Description = "HTTP Basic and Digest sign-in: user:password for the site, or host=user:password. Repeatable. Not stored in the crawl file." };
         var cookie = new Option<string[]>("--cookie") { Description = "A cookie to send from the start: name=value, or name=value@domain. Repeatable. Not stored in the crawl file." };
@@ -66,17 +80,20 @@ internal static class CrawlCommand
         {
             url, database, resume, maxUrls, maxDepth, concurrency, rate, userAgent, userAgentString, headers, proxy, signatureFiles, timeout,
             ignoreRobots, crawlDelay, noResources, noExternal, noSitemaps, subdomains, anyFolder, followNofollow, storeHtml,
-            render, renderUrls, include, exclude, extract, list, browserFallback,
+            render, renderUrls, include, exclude, extract, list, browserFallback, solveChallenges, challengeWait, noInstalledBrowser,
             auth, cookie, formUrl, formUser, formPassword, formUserField, formPasswordField, formSubmit,
             noAnalyze, quiet, verbose
         };
 
         // A resumed crawl keeps the scope and rules it started with; only how it talks to the site can change.
         Option[] fixedOnResume = [maxUrls, maxDepth, userAgent, userAgentString, ignoreRobots, crawlDelay, noResources, noExternal,
-            noSitemaps, subdomains, anyFolder, followNofollow, storeHtml, render, renderUrls, include, exclude, extract, list, browserFallback];
+            noSitemaps, subdomains, anyFolder, followNofollow, storeHtml, render, renderUrls, include, exclude, extract, list, browserFallback,
+            solveChallenges, challengeWait, noInstalledBrowser];
 
         command.SetAction((parse, cancellationToken) => CommandErrors.RunAsync(async () =>
         {
+            // The browser a blocked host is read in keeps its profile here, so a check passed in one crawl holds for the next.
+            BrowserProfile.Folder ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ShoutingIguana", "cli-browser-profile");
             var databasePath = parse.GetValue(database);
             var isResume = parse.GetValue(resume);
             if (!TryParseHeaders(parse.GetValue(headers) ?? [], out var extraHeaders, out var headerError))
@@ -218,6 +235,9 @@ internal static class CrawlCommand
                     ExtractionRules = extractionRules,
                     ListUrls = listUrls,
                     BrowserFallback = parse.GetValue(browserFallback),
+                    UseInstalledBrowser = !parse.GetValue(noInstalledBrowser),
+                    SolveChallenges = parse.GetValue(solveChallenges),
+                    ChallengeWaitSeconds = Math.Clamp(parse.GetValue(challengeWait), 1, 3600),
                     HttpLogins = logins,
                     Cookies = cookies,
                     FormLogin = form

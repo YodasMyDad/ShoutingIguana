@@ -218,7 +218,7 @@ internal sealed class PageProcessor(
             return response;
         }
 
-        var viaBrowser = await renderer.LoadAsync(uri, host, cancellationToken).ConfigureAwait(false);
+        var viaBrowser = await renderer.LoadAsync(uri, host, cancellationToken, response.BlockReason).ConfigureAwait(false);
         if (viaBrowser is not { FromBrowser: true } || viaBrowser.Outcome == FetchOutcome.Blocked || viaBrowser.IsRateLimited)
         {
             return response;
@@ -230,7 +230,9 @@ internal sealed class PageProcessor(
             observer.OnNotice(new CrawlNotice(
                 CrawlNoticeLevel.Info,
                 "browser-fallback",
-                $"{name} blocked plain HTTP ({response.BlockReason}), so its pages are being read in a browser.")
+                viaBrowser.Outcome != FetchOutcome.Blocked && renderer.ReadsInInstalledBrowser(host) && renderer.InstalledBrowserName is { } browser
+                    ? $"{name} blocked plain HTTP ({response.BlockReason}), so its pages are being read in {browser}, as itself: it sends its own user agent, not the crawler's."
+                    : $"{name} blocked plain HTTP ({response.BlockReason}), so its pages are being read in a browser.")
             {
                 Data = new CrawlNoticeData(Host: name, Reason: response.BlockReason)
             });
@@ -239,15 +241,41 @@ internal sealed class PageProcessor(
         return viaBrowser;
     }
 
+    /// <summary>What the site's owner can do, in the words of the firewall most sites have. The same in every blocked alert.</summary>
+    internal const string OWNER_ADVICE =
+        "Or ask the site's owner to let the crawler in, with a firewall rule that allows the crawler's user agent or this computer's IP address. " +
+        "In Cloudflare that is a custom rule in the firewall that skips the check: its \"verified bots\" setting does not cover this crawler.";
+
     /// <summary>
     /// What to do about a host that blocks the crawler. With the browser fallback off, turning it on comes first: it
-    /// is the one thing here that needs nobody else, though it only gets past a block that lets a browser through.
+    /// is the one thing here that needs nobody else. With it on, the advice is for what stopped the browser too.
     /// </summary>
-    private string BlockedAdvice(string host, string reason) => options.BrowserFallback
-        ? $"{host} is blocking the crawler ({reason}). Try a slower crawl rate or a different user agent, or ask the site owner to allowlist the crawler."
-        : $"{host} is blocking the crawler ({reason}). In the crawl's settings, turn on \"If a site blocks the check\" (\"Browser fallback\" in Advanced) and crawl again: " +
-          "some sites let a browser in where they refuse a crawler. If it is still blocked, try a slower crawl rate or a different user agent, " +
-          "or ask the site owner to allowlist the crawler.";
+    private string BlockedAdvice(Uri uri, string host, string reason)
+    {
+        if (!options.BrowserFallback)
+        {
+            return $"{host} is blocking the crawler ({reason}). In the crawl's settings, turn on \"If a site blocks the check\" (\"Browser fallback\" in Advanced) and crawl again: " +
+                   $"the site is then read in a real browser, which most checks let through. {OWNER_ADVICE}";
+        }
+
+        var what = renderer.VerdictFor(HostKey(uri)) switch
+        {
+            FallbackVerdict.NeedsPerson =>
+                $"{host} is asking to check you're human ({reason}), and that needs a person. Crawl again with \"Ask me to complete a site's human check\" on: " +
+                "a browser window opens on the page, you complete the check, and the crawl carries on.",
+            FallbackVerdict.PersonDidNotFinish =>
+                $"{host} asked to check you're human ({reason}), and the check was not completed in the browser window, so its pages are recorded as blocked. Crawl again to be asked once more.",
+            FallbackVerdict.NoDisplay =>
+                $"{host} is blocking the crawler ({reason}). Getting past it needs a browser window, and this computer has no screen to show one on. Crawl from a desktop computer.",
+            FallbackVerdict.NoBrowser =>
+                $"{host} is blocking the crawler ({reason}). Getting past it needs Chrome or Edge, and none could be started on this computer. Install one and crawl again.",
+            FallbackVerdict.InstalledBrowserOff =>
+                $"{host} is blocking the crawler ({reason}), and the browser the crawler downloads was blocked too. This crawl was told not to use the computer's own Chrome or Edge, which most checks let through.",
+            FallbackVerdict.StillBlocked => $"{host} is blocking the crawler ({reason}), and it refused a real browser too. Try a slower crawl rate.",
+            _ => $"{host} is blocking the crawler ({reason}). Try a slower crawl rate."
+        };
+        return $"{what} {OWNER_ADVICE}";
+    }
 
     /// <summary>Internal pages only. A status check is not parsed into page facts, and a 429 is not a firewall block.</summary>
     private bool FallsBack(FrontierItem item) =>
@@ -571,13 +599,14 @@ internal sealed class PageProcessor(
         else if (response is { Outcome: FetchOutcome.Blocked, BlockReason: { } reason } && !response.IsRateLimited)
         {
             // Once per host: the first blocked response raises it, and the file counts the rest when it's read back.
+            // A host a browser is reading is not blocking the crawl: what was refused is a check of another version of it.
             var host = scope.HostName(UrlNormalizer.GetHost(uri));
-            if (_blockedHostsReported.TryAdd(host, true))
+            if (!(_browserHosts.ContainsKey(HostKey(uri)) && renderer.VerdictFor(HostKey(uri)) == FallbackVerdict.None) && _blockedHostsReported.TryAdd(host, true))
             {
                 observer.OnNotice(new CrawlNotice(
                     CrawlNoticeLevel.Warning,
                     "blocked",
-                    BlockedAdvice(host, reason))
+                    BlockedAdvice(uri, host, reason))
                 {
                     Data = new CrawlNoticeData(Host: host, Reason: reason, Count: 1)
                 });

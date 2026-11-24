@@ -134,6 +134,26 @@ public sealed record CrawlOptions
     /// </summary>
     public bool BrowserFallback { get; init; }
 
+    /// <summary>
+    /// With <see cref="BrowserFallback"/>: a host the headless browser can't read either is read in the Chrome or
+    /// Edge this computer has, opened as a person would open it, in a window kept out of sight. A site's automatic
+    /// check clears in that where it never does in a headless browser. On unless turned off. Needs a display.
+    /// </summary>
+    public bool UseInstalledBrowser { get; init; } = true;
+
+    /// <summary>
+    /// With <see cref="UseInstalledBrowser"/>: when a site's check needs a person (a box to tick, a puzzle), show the
+    /// browser window on that page and wait for the person to complete it, for up to
+    /// <see cref="ChallengeWaitSeconds"/>. Off, the default, records the page as blocked. A crawl file from before
+    /// this reads as off: the property is absent.
+    /// </summary>
+    public bool SolveChallenges { get; init; }
+
+    /// <summary>How long <see cref="SolveChallenges"/> waits for a person before the page is recorded as blocked.</summary>
+    public int ChallengeWaitSeconds { get; init; } = DEFAULT_CHALLENGE_WAIT_SECONDS;
+
+    public const int DEFAULT_CHALLENGE_WAIT_SECONDS = 300;
+
     /// <summary>How many addresses a list may name. Past this, the crawl is refused rather than started half-read.</summary>
     public const int MAX_LIST_URLS = 100_000;
 
