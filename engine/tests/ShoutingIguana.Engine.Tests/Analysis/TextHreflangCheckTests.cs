@@ -51,6 +51,8 @@ public sealed class TextHreflangCheckTests
         Assert.Null(Detail("<h6>Your cart</h6><h1>Main</h1><h2>Part</h2>", IssueCatalog.HEADING_LEVELS_SKIPPED));
         Assert.Equal("The H1 is an image: \"Store logo\"", Detail("<h1><img src=\"/l.png\" alt=\"Store logo\"></h1>", IssueCatalog.H1_IMAGE_ONLY));
         Assert.Null(Detail("<h1><img src=\"/l.png\" alt=\"Store logo\"> Sofas</h1>", IssueCatalog.H1_IMAGE_ONLY));
+        // An image with an empty alt gives the H1 no text at all: h1-missing says so, and there's no alt to quote here.
+        Assert.Null(Detail("<h1><img src=\"/l.png\" alt=\"\"></h1>", IssueCatalog.H1_IMAGE_ONLY));
         Assert.Equal($"H2 of 72 characters, over 70: \"{new string('a', 72)}\"", Detail($"<h1>Short</h1><h2>{new string('a', 72)}</h2>", IssueCatalog.HEADING_TOO_LONG));
         Assert.Null(Detail($"<h1>Short</h1><h3>{new string('a', 90)}</h3>", IssueCatalog.HEADING_TOO_LONG));
         var words = string.Join(' ', Enumerable.Repeat("word", 520));
@@ -122,12 +124,17 @@ public sealed class TextHreflangCheckTests
             headers: [new ResponseHeader("link", $"<{site.Site}/a>; rel=\"alternate\"; hreflang=\"en\", <{site.Site}/b>; rel=\"alternate\"; hreflang=\"de\"")]);
         var lang = site.Page($"{site.Site}/c", RuleHarness.Html(Set(("en", "/c"), ("fr", "/d")), lang: " lang=\"fr\""));
         var region = site.Page($"{site.Site}/e", RuleHarness.Html(Set(("en-GB", "/e"), ("fr", "/d")), lang: " lang=\"en-US\""));
+        // Norwegian is "no" in hreflang and usually "nb" in lang, and Filipino "tl" and "fil": one language, two codes.
+        var norwegian = site.Page($"{site.Site}/g", RuleHarness.Html(Set(("no", "/g"), ("en", "/a")), lang: " lang=\"nb-NO\""));
+        var filipino = site.Page($"{site.Site}/h", RuleHarness.Html(Set(("tl", "/h"), ("en", "/a")), lang: " lang=\"fil\""));
         var self = site.Page($"{site.Site}/f", RuleHarness.Html(Set(("en", "/f"), ("x-default", "/f"))));
         var rules = new HreflangRules(site.Table());
 
         Assert.Equal("The HTML names 3 versions, the header 2; only in the HTML: x-default", Detail(rules.Check(header), IssueCatalog.HREFLANG_HEADER_MISMATCH));
         Assert.Equal("hreflang en, lang fr", Detail(rules.Check(lang), IssueCatalog.HREFLANG_LANG_MISMATCH));
         Assert.Null(Detail(rules.Check(region), IssueCatalog.HREFLANG_LANG_MISMATCH));
+        Assert.Null(Detail(rules.Check(norwegian), IssueCatalog.HREFLANG_LANG_MISMATCH));
+        Assert.Null(Detail(rules.Check(filipino), IssueCatalog.HREFLANG_LANG_MISMATCH));
         Assert.Contains(rules.Check(self), hit => hit.Issue == IssueCatalog.HREFLANG_SELF_ONLY);
         Assert.DoesNotContain(rules.Check(lang), hit => hit.Issue == IssueCatalog.HREFLANG_SELF_ONLY);
     }

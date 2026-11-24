@@ -20,6 +20,12 @@ internal sealed class SecurityRules(UrlTable urls, HstsPolicy? hsts = null) : IP
     /// <summary>Parts of a session or login cookie's name (sessionid, PHPSESSID, auth_token, jwt…).</summary>
     private static readonly string[] SESSION_NAMES = ["sess", "sid", "auth", "token", "login", "jwt"];
 
+    /// <summary>
+    /// Parts of a CSRF token cookie's name (XSRF-TOKEN, csrftoken, _csrf): the page's own script reads it and sends it back
+    /// in a header, so it can't be HttpOnly, and it's no session.
+    /// </summary>
+    private static readonly string[] CSRF_NAMES = ["csrf", "xsrf"];
+
     public IEnumerable<IssueHit> Check(AnalyzedPage page)
     {
         var isHttps = page.Uri.Scheme == Uri.UriSchemeHttps;
@@ -66,7 +72,9 @@ internal sealed class SecurityRules(UrlTable urls, HstsPolicy? hsts = null) : IP
             yield return ProtocolRelative(page, relative);
         }
 
-        if (!isHttps)
+        // With upgrade-insecure-requests the browser asks for every http:// resource over HTTPS, so none loads insecurely.
+        if (!isHttps || page.Headers.Any(header => header.Name == "content-security-policy" &&
+                                                   header.Value.Contains("upgrade-insecure-requests", StringComparison.OrdinalIgnoreCase)))
         {
             yield break;
         }
@@ -189,7 +197,8 @@ internal sealed class SecurityRules(UrlTable urls, HstsPolicy? hsts = null) : IP
                 lacking.Add(sameSiteNone ? "SameSite=None without Secure" : "no Secure");
             }
 
-            if (!Has("HttpOnly") && SESSION_NAMES.Any(part => name.Contains(part, StringComparison.OrdinalIgnoreCase)))
+            if (!Has("HttpOnly") && SESSION_NAMES.Any(part => name.Contains(part, StringComparison.OrdinalIgnoreCase)) &&
+                !CSRF_NAMES.Any(part => name.Contains(part, StringComparison.OrdinalIgnoreCase)))
             {
                 lacking.Add("no HttpOnly");
             }

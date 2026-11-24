@@ -38,7 +38,8 @@ internal sealed class TextStructureRules(AnalysisSettings settings) : IPageRule
                 : $"{skipped.Step}: {RuleText.Quote(skipped.Heading.Text, SKIPPED_HEADING_MAX)}");
         }
 
-        if (h1 is { FromImageAlt: true })
+        // An H1 whose image has an empty alt has no text at all, which h1-missing says.
+        if (h1 is { FromImageAlt: true } && !string.IsNullOrWhiteSpace(h1.Text))
         {
             yield return new IssueHit(IssueCatalog.H1_IMAGE_ONLY, page.UrlId, RuleText.Fit($"The H1 is an image: {RuleText.Quote(h1.Text, 60)}"));
         }

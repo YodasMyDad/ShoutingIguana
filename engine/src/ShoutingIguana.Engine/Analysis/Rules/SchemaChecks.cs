@@ -76,7 +76,7 @@ internal static class SchemaChecks
                 if (type == "Product" && entity.TryGetProperty("offers", out var offers))
                 {
                     var each = offers.ValueKind == JsonValueKind.Array ? offers.EnumerateArray().ToList() : [offers];
-                    absent.AddRange(each.Where(IsOffer).SelectMany(offer => OFFER_RECOMMENDED.Where(property => !RichResultRequirements.HasValue(offer, property)))
+                    absent.AddRange(each.Where(IsOffer).SelectMany(offer => OFFER_RECOMMENDED.Where(property => !OfferHas(offer, property)))
                         .Distinct(StringComparer.Ordinal).Select(property => $"offers.{property}"));
                 }
 
@@ -207,6 +207,15 @@ internal static class SchemaChecks
 
     private static bool IsSchemaOrgUrl(string? url) =>
         url?.Trim().TrimEnd('/').ToLowerInvariant() is "https://schema.org" or "http://schema.org" or "https://www.schema.org" or "http://www.schema.org";
+
+    /// <summary>
+    /// An offer's recommended property, as Google reads it: the currency may be the offer's own or its priceSpecification's
+    /// (one, or the first of a list that has it), which is where shops that give a unit or sale price write it.
+    /// </summary>
+    private static bool OfferHas(JsonElement offer, string property) =>
+        RichResultRequirements.HasValue(offer, property) ||
+        (property == "priceCurrency" && offer.TryGetProperty("priceSpecification", out var specification) &&
+         Children(specification).Any(each => RichResultRequirements.HasValue(each, property)));
 
     private static bool IsOffer(JsonElement offer) => offer.ValueKind == JsonValueKind.Object &&
                                                       (!offer.TryGetProperty("@type", out _) || RichResultRequirements.Types(offer).Contains("Offer"));

@@ -190,10 +190,18 @@ internal sealed class HtmlRules : IPageRule
         static bool SameEncoding(string one, string other) => string.Equals(Label(one), Label(other), StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>The 2-letter codes ISO 639 renamed (to he, id, yi, jv), which BCP 47's registry keeps as deprecated, not invalid.</summary>
+    private static readonly string[] RENAMED_LANGUAGES = ["iw", "in", "ji", "jw"];
+
+    /// <summary>BCP 47 allows up to three extended language subtags after the language (RFC 5646, 2.2.2).</summary>
+    private const int MAX_EXTENDED_LANGUAGES = 3;
+
     /// <summary>
-    /// A well-formed BCP 47 language tag, as HTML's lang takes: a 2-letter ISO 639-1 language or a 3-letter one, an optional
-    /// 4-letter script, an optional ISO 3166-1 region or 3-digit area, then variants (5 to 8 characters, or 4 from a digit)
-    /// and extensions or private use (a single character and the subtags after it), all separated by hyphens.
+    /// A well-formed BCP 47 language tag, as HTML's lang takes: a 2-letter ISO 639-1 language (or one of the four ISO
+    /// renamed, which the registry still has: iw, in, ji, jw) or a 3-letter one, up to three 3-letter extended language
+    /// subtags (zh-cmn-Hans, zh-yue), an optional 4-letter script, an optional ISO 3166-1 region or 3-digit area, then
+    /// variants (5 to 8 characters, or 4 from a digit) and extensions or private use (a single character and the subtags
+    /// after it), all separated by hyphens.
     /// </summary>
     internal static bool IsLanguageTag(string value)
     {
@@ -204,12 +212,18 @@ internal sealed class HtmlRules : IPageRule
         }
 
         var primary = parts[0];
-        if (!(primary.Length == 2 && HreflangCodes.IsLanguage(primary)) && !(primary.Length == 3 && primary.All(char.IsAsciiLetter)))
+        if (!(primary.Length == 2 && (HreflangCodes.IsLanguage(primary) || RENAMED_LANGUAGES.Contains(primary, StringComparer.OrdinalIgnoreCase))) &&
+            !(primary.Length == 3 && primary.All(char.IsAsciiLetter)))
         {
             return false;
         }
 
         var next = 1;
+        for (var extended = 0; extended < MAX_EXTENDED_LANGUAGES && next < parts.Length && parts[next].Length == 3 && parts[next].All(char.IsAsciiLetter); extended++)
+        {
+            next++;
+        }
+
         if (next < parts.Length && parts[next].Length == 4 && parts[next].All(char.IsAsciiLetter))
         {
             next++;

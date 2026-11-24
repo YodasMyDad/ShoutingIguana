@@ -25,7 +25,13 @@ internal sealed partial class ImageRules(AnalysisSettings settings, UrlTable url
     private static readonly string[] CDN_HOSTS =
     [
         "cdn.shopify.com", "*.cloudfront.net", "*.akamaized.net", "*.fastly.net", "res.cloudinary.com", "*.imgix.net", "i0.wp.com", "i1.wp.com",
-        "i2.wp.com", "i3.wp.com", "*.wixstatic.com", "images.squarespace-cdn.com", "images.ctfassets.net", "*.bigcommerce.com", "*.googleusercontent.com"
+        "i2.wp.com", "i3.wp.com", "*.wixstatic.com", "images.squarespace-cdn.com", "images.ctfassets.net", "*.bigcommerce.com", "*.googleusercontent.com",
+        // The hosts of other site builders' images, which a site on them can't serve from its own domain, and storage
+        // buckets and image services a site rents: copying an image "to your own site" is no fix for any of these.
+        "*.website-files.com", "*.squarespace.com", "*.wsimg.com", "*.cdn-website.com", "*.hubspotusercontent-na1.net", "*.hubspotusercontent-eu1.net",
+        "*.hubspotusercontent00.net", "*.hubspotusercontent10.net", "*.hubspotusercontent20.net", "*.hubspotusercontent30.net", "*.hubspotusercontent40.net",
+        "*.amazonaws.com", "storage.googleapis.com", "*.storage.googleapis.com", "*.blob.core.windows.net", "*.azureedge.net", "*.b-cdn.net",
+        "imagedelivery.net", "ik.imagekit.io", "cdn.sanity.io", "*.cdninstagram.com", "*.kxcdn.com", "*.r2.dev", "*.digitaloceanspaces.com"
     ];
 
     /// <summary>Second-level public suffixes under which a registrable domain takes three labels (example.co.uk).</summary>
@@ -57,7 +63,7 @@ internal sealed partial class ImageRules(AnalysisSettings settings, UrlTable url
                         largestInline = image;
                     }
                 }
-                else if (!image.IsDataUri && !image.HasSrcset && !IsTrackingPixel(image))
+                else if (!image.IsDataUri && !image.HasSrcset && !image.InPicture && !IsTrackingPixel(image))
                 {
                     missingSource++;
                     firstMissing ??= image;
@@ -331,7 +337,8 @@ internal sealed partial class ImageRules(AnalysisSettings settings, UrlTable url
             return true;
         }
 
-        if (RuleText.Length(text) <= 2 && !text.Any(IsIdeographic))
+        // A name in capitals is one, short as it is: X's logo, "TV", "4K", "HP".
+        if (RuleText.Length(text) <= 2 && !text.Any(IsIdeographic) && !(text.Any(char.IsUpper) && text.All(character => char.IsUpper(character) || char.IsDigit(character))))
         {
             return true;
         }

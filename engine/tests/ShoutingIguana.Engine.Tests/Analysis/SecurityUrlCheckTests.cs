@@ -118,6 +118,9 @@ public sealed class SecurityUrlCheckTests
             Cookies("https://example.com", "sessionid=x; Path=/", "theme=dark; Path=/", "auth_token=y; Secure; HttpOnly"));
         Assert.Equal("PHPSESSID: no HttpOnly; pref: SameSite=None without Secure",
             Cookies("http://example.com", "PHPSESSID=x; path=/", "pref=1; SameSite = None", "theme=dark"));
+
+        // A CSRF token cookie is read by the page's own script, which sends it back in a header: HttpOnly would break it.
+        Assert.Null(Cookies("https://example.com", "XSRF-TOKEN=x; Path=/; Secure; SameSite=Lax", "csrftoken=y; Secure", "_csrf_token=z; Secure"));
         Assert.Null(Cookies("https://example.com", "sid=1; Secure; HttpOnly; SameSite=Lax"));
     }
 
@@ -290,6 +293,8 @@ public sealed class SecurityUrlCheckTests
     [InlineData("/x/a/x/b/x", true)]
     [InlineData("/Shop/shop", true)]
     [InlineData("/blog/2024/blog-post", false)]
+    [InlineData("/2025/11/11/singles-day/", false)]
+    [InlineData("/archive/2024/12/12/12-days-of-offers/", false)]
     [InlineData("/a/b/c/d/", false)]
     [InlineData("/", false)]
     public void APathThatRepeatsItselfIsRepetitive(string path, bool repetitive)
@@ -304,13 +309,20 @@ public sealed class SecurityUrlCheckTests
         var home = site.Ok($"{site.Site}/");
         var tagged = site.Ok($"{site.Site}/a?utm_source=news&utm_medium=email&id=4");
         var unlinked = site.Ok($"{site.Site}/b?gclid=1");
+        var newer = site.Ok($"{site.Site}/c?utm_source_platform=app&UTM_Creative_Format=banner");
         var urls = site.Table();
-        urls.CountInlinks(site.Page($"{site.Site}/", RuleHarness.Html(body: "<a href=\"/a?utm_source=news&utm_medium=email&id=4\">A</a>")));
+        urls.CountInlinks(site.Page($"{site.Site}/", RuleHarness.Html(body:
+            "<a href=\"/a?utm_source=news&utm_medium=email&id=4\">A</a><a href=\"/c?utm_source_platform=app&UTM_Creative_Format=banner\">C</a>")));
 
-        var hits = new UrlTextRules(urls, [(home, $"{site.Site}/"), (tagged, $"{site.Site}/a?utm_source=news&utm_medium=email&id=4"), (unlinked, $"{site.Site}/b?gclid=1")])
-            .Finish().ToList();
-        var hit = Assert.Single(hits, hit => hit.Issue == IssueCatalog.URL_TRACKING_PARAMETERS);
-        Assert.Equal((tagged, "utm_source, utm_medium"), (hit.UrlId, hit.Detail));
+        var hits = new UrlTextRules(urls,
+            [
+                (home, $"{site.Site}/"), (tagged, $"{site.Site}/a?utm_source=news&utm_medium=email&id=4"), (unlinked, $"{site.Site}/b?gclid=1"),
+                (newer, $"{site.Site}/c?utm_source_platform=app&UTM_Creative_Format=banner")
+            ])
+            .Finish().Where(hit => hit.Issue == IssueCatalog.URL_TRACKING_PARAMETERS).ToList();
+
+        // Every utm_ parameter is Google Analytics', the newer ones (GA4's) too.
+        Assert.Equal([(tagged, "utm_source, utm_medium"), (newer, "utm_source_platform, UTM_Creative_Format")], hits.Select(hit => (hit.UrlId, hit.Detail)));
     }
 
     private static string? Detail(IEnumerable<IssueHit> hits, IssueDefinition check) =>

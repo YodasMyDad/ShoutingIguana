@@ -9,9 +9,16 @@ namespace ShoutingIguana.Engine.Analysis;
 /// </summary>
 internal static class ResourceTypes
 {
-    /// <summary>The JavaScript media types browsers run a script sent as (the HTML standard's, less the legacy oddities).</summary>
+    /// <summary>
+    /// The JavaScript media types browsers run a script sent as: all sixteen of the HTML standard's (a "JavaScript MIME type
+    /// essence match"), the legacy ones too, as nosniff refuses only a script sent as none of them.
+    /// </summary>
     private static readonly HashSet<string> SCRIPT_TYPES = new(
-        ["text/javascript", "application/javascript", "application/x-javascript", "application/ecmascript", "text/ecmascript"], StringComparer.Ordinal);
+    [
+        "application/ecmascript", "application/javascript", "application/x-ecmascript", "application/x-javascript", "text/ecmascript", "text/javascript",
+        "text/javascript1.0", "text/javascript1.1", "text/javascript1.2", "text/javascript1.3", "text/javascript1.4", "text/javascript1.5", "text/jscript",
+        "text/livescript", "text/x-ecmascript", "text/x-javascript"
+    ], StringComparer.Ordinal);
 
     /// <summary>What a successful response's media type (as stored, lowercase, without parameters) says it is.</summary>
     public static ContentClass ClassOf(string? mediaType) => mediaType switch

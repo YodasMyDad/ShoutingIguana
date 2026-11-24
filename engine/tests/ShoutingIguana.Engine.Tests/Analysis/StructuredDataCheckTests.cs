@@ -15,6 +15,25 @@ public sealed class StructuredDataCheckTests
 {
     private const string NOINDEX = "<meta name=\"robots\" content=\"noindex\">";
 
+    /// <summary>Google reads an offer's currency from priceCurrency or from its priceSpecification's (WooCommerce writes the second).</summary>
+    [Fact]
+    public void AnOffersCurrencyInItsPriceSpecificationIsACurrency()
+    {
+        List<string> Lacking(string offer)
+        {
+            using var json = System.Text.Json.JsonDocument.Parse(
+                $$"""{"@context":"https://schema.org","@type":"Product","name":"Sofa","image":"https://example.com/sofa.jpg","offers":{{offer}}}""");
+            List<string> lacking = [];
+            SchemaChecks.Recommended(json.RootElement, lacking);
+            return lacking;
+        }
+
+        Assert.Empty(Lacking("""{"@type":"Offer","availability":"https://schema.org/InStock","priceSpecification":[{"@type":"UnitPriceSpecification","price":"10","priceCurrency":"GBP"}]}"""));
+        Assert.Empty(Lacking("""{"@type":"Offer","availability":"https://schema.org/InStock","priceSpecification":{"@type":"PriceSpecification","price":"10","priceCurrency":"GBP"}}"""));
+        Assert.Equal(["Product: lacks offers.priceCurrency"],
+            Lacking("""{"@type":"Offer","availability":"https://schema.org/InStock","priceSpecification":{"@type":"PriceSpecification","price":"10"}}"""));
+    }
+
     [Fact]
     public void TheBundledVocabularyKnowsSchemaOrgsTypesPropertiesDatesAndCurrencies()
     {
