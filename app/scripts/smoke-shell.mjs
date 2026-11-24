@@ -21,6 +21,7 @@ import { createInterface } from 'node:readline';
 import { chromium } from '@playwright/test';
 import { appRoot, buildCli, copyCrawl, makeSyntheticCrawl } from './lib/engine.mjs';
 import {
+  UPDATE_ANSWERS,
   VIRTUAL_KEYS,
   Walk,
   advancedSettings,
@@ -29,7 +30,7 @@ import {
   parseOptions,
   shellEnvironment,
   shellMemory,
-  updateWordsProblem,
+  updateTruth,
   verdict,
 } from './lib/shell.mjs';
 
@@ -620,23 +621,19 @@ try {
     return `Go to URL "/" opened ${found}`;
   });
 
-  // The releases publish no update information, so the in-app check isn't offered: the section says so.
-  await walk.step(
-    'Settings › Updates says this version doesn’t update itself, and offers the releases page',
-    async () => {
-      await visit('/settings/updates');
-      // Seen, not pressed: it opens the system's browser.
-      await page.getByRole('button', { name: 'Open the releases page' }).waitFor({ timeout: 30_000 });
-      await main
-        .getByText(/^\d+\.\d+\.\d+/)
-        .first()
-        .waitFor({ timeout: 30_000 });
-      const wrong = updateWordsProblem((await main.innerText()).replace(/\s+/g, ' '));
-      expectThat(wrong === null, `Settings › Updates: ${wrong}`);
-      await picture('07b-updates');
-      return 'no check offered, the releases page is a button away';
-    },
-  );
+  // Round 5's polish: GitHub answering 404 (no release with update information yet) said to check the connection.
+  await walk.step('Settings › Updates says which case GitHub’s answer is, in plain words', async () => {
+    const truth = await updateTruth();
+    await visit('/settings/updates');
+    await page.getByRole('button', { name: 'Check for updates' }).click();
+    await page.getByText(UPDATE_ANSWERS).first().waitFor({ timeout: 30_000 });
+    const words = (await main.innerText()).split('\n').filter((line) => /version|GitHub|update|connection/i.test(line));
+    const said = words.join('\n');
+    expectThat(truth.words.test(said), `GitHub ${truth.said}, and the app said: ${words.join(' | ')}`);
+    if (truth.not) expectThat(!truth.not.test(said), `GitHub ${truth.said}, and the app said: ${words.join(' | ')}`);
+    await picture('07b-updates');
+    return `GitHub ${truth.said}: "${words.slice(-2).join(' ')}"`;
+  });
 
   if (options.skip.has('keys')) walk.skip('the browser’s own keys are off', 'left out with --skip');
   else {

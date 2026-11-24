@@ -21,6 +21,7 @@ import { Sidebar } from './Sidebar';
 import { StoppingOverlay } from './StoppingOverlay';
 import { TopBar } from './TopBar';
 import { useShellIntegration } from './useShellIntegration';
+import { useUpdateChecks } from '../updates/useUpdateChecks';
 import { useDocumentTitle } from './documentTitle';
 
 /**
@@ -37,6 +38,7 @@ import { useDocumentTitle } from './documentTitle';
 export function AppShell() {
   useAppCommands();
   useShellIntegration();
+  useUpdateChecks();
   useDocumentTitle();
   useFocusAfterNavigation();
   useScrollMemory();

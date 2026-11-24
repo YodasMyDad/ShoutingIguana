@@ -38,6 +38,29 @@ export interface ShellInfo {
   platform: 'windows' | 'macos' | 'linux';
   debug: boolean;
   logDir: string;
+  /**
+   * How a new version arrives in this copy (src-tauri/src/updates.rs, `Arrival`): `inApp`, the app installs it; or
+   * `download`, the user does (a Linux `.deb` install, which the package manager owns).
+   */
+  updates: 'inApp' | 'download';
+  /** The version the run before this one tried to install and couldn't; null when there's nothing to say. */
+  updateFailed: string | null;
+  /** The app may ask for a newer version by itself: not in a test run of the built app. */
+  updateChecks: boolean;
+}
+
+/** Reads the shell's details at the boundary: an older shell's answer has no word on updates. */
+export function parseShellInfo(value: unknown): ShellInfo {
+  const v = (typeof value === 'object' && value !== null ? value : {}) as Record<string, unknown>;
+  return {
+    appVersion: typeof v.appVersion === 'string' ? v.appVersion : '',
+    platform: v.platform === 'macos' || v.platform === 'linux' ? v.platform : 'windows',
+    debug: v.debug === true,
+    logDir: typeof v.logDir === 'string' ? v.logDir : '',
+    updates: v.updates === 'download' ? 'download' : 'inApp',
+    updateFailed: typeof v.updateFailed === 'string' && v.updateFailed !== '' ? v.updateFailed : null,
+    updateChecks: v.updateChecks === true,
+  };
 }
 
 /** Validates a payload from the shell; anything malformed gives null rather than a half-read state. */
@@ -111,7 +134,7 @@ export const ipc = {
     }),
   restartSidecar: (): Promise<void> => invoke('restart_sidecar'),
   requestQuit: (): Promise<void> => invoke('request_quit'),
-  shellInfo: (): Promise<ShellInfo> => invoke<ShellInfo>('shell_info'),
+  shellInfo: async (): Promise<ShellInfo> => parseShellInfo(await invoke<unknown>('shell_info')),
   /** The `.sicrawl` files waiting to be opened, each handed over once. */
   takePendingOpenFiles: async (): Promise<string[]> => {
     const paths = await invoke<unknown>('take_pending_open_files');
@@ -133,8 +156,12 @@ export const ipc = {
   openLogsFolder: (which: 'app' | 'engine'): Promise<void> => invoke('open_logs_folder', { which }),
   /** Asks the release feed whether there's a newer version, and what's new in it. */
   updateCheck: async (): Promise<UpdateCheck> => parseUpdateCheck(await invoke<unknown>('update_check')),
-  /** Installs the version the last check found: the app closes and the installer runs. */
-  updateInstall: (version: string): Promise<void> => invoke('update_install', { version }),
+  /**
+   * Installs the version the last check found: the app closes and the installer runs, so this never answers. While
+   * something runs, the shell downloads the update, keeps it and answers `waiting`: asked again, it installs.
+   */
+  updateInstall: async (version: string): Promise<UpdateInstallOutcome> =>
+    (await invoke<unknown>('update_install', { version })) === 'waiting' ? 'waiting' : null,
   /** The update's download, as it goes. */
   onUpdateProgress: (handler: (progress: UpdateProgress) => void): Promise<UnlistenFn> =>
     listen<unknown>('shell://update-progress', (event) => {
@@ -173,8 +200,11 @@ export const ipc = {
 export interface UpdateCheck {
   currentVersion: string;
   /** The newer version, or null when this one is the newest. */
-  available: { version: string; date: string | null; notes: string | null } | null;
+  available: { version: string; date: string | null; notes: string | null; downloaded: boolean } | null;
 }
+
+/** What Install answers when it answers at all: `waiting`, downloaded and held while something runs. */
+export type UpdateInstallOutcome = 'waiting' | null;
 
 export interface UpdateProgress {
   downloaded: number;
@@ -206,7 +236,12 @@ export function parseUpdateCheck(value: unknown): UpdateCheck {
     currentVersion: textOrNull(v.currentVersion) ?? '',
     available:
       available && typeof available.version === 'string'
-        ? { version: available.version, date: textOrNull(available.date), notes: textOrNull(available.notes) }
+        ? {
+            version: available.version,
+            date: textOrNull(available.date),
+            notes: textOrNull(available.notes),
+            downloaded: available.downloaded === true,
+          }
         : null,
   };
 }

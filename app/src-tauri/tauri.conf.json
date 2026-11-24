@@ -74,6 +74,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEY3QTU3QjNCNDYyQTU4MUUKUldRZVdDcEdPM3VsOTlHa1duRjU4bC9WVzVMbzdpSFJ4NkxBTTJnSzJsMjBrT29WeUNHU014aWoK",
       "endpoints": ["https://github.com/YodasMyDad/ShoutingIguana/releases/latest/download/latest.json"],
+      "requireSignedVersion": true,
       "windows": { "installMode": "passive" }
     }
   }

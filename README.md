@@ -81,7 +81,23 @@ Each file has a SHA256 checksum (`SHA256SUMS-*.txt` on the release). The engine 
 
 Pages a script builds are rendered in a headless Chromium, which is not in the installer. The first crawl that needs it downloads it once, a few hundred MB on disk, into your user folder, so that crawl needs the internet. The crawl says it is downloading, and goes on when it is done. If the download fails, or the browser can't start, the crawl says so in an alert and reads every page as it was sent. The download does not use the proxy set in the app: behind a proxy, set `HTTPS_PROXY` before starting the app.
 
-The app does not update itself yet. **Settings › Updates** shows the version you have and opens the releases page. For a new version, download its installer and run it over the old one.
+### Updates
+
+From version 2.1.1 the app updates itself. It looks for a new version when it starts and a few times a day, and tells you when there is one. **Settings › Updates** shows what's new, and **Install and restart** downloads it, checks it was signed by us, installs it and opens the app again. Your crawls and settings stay as they are.
+
+- It asks first. Nothing is downloaded or installed until you say so.
+- It never stops a crawl. While one runs you can download the update, and install it when the crawl has finished.
+- A download that isn't signed with our key is thrown away.
+- **Settings › Updates** also has **Check for updates**, and a switch to stop the app looking by itself.
+
+| Installed from | A new version |
+| --- | --- |
+| The Windows installer | The app runs the new installer for you |
+| The macOS disk image | The app replaces itself where it is. Move it to Applications first: it can't replace itself on the disk image |
+| The Linux AppImage | The app replaces the AppImage file where it is, so it has to be somewhere you can write |
+| The Linux `.deb` | The app tells you a new version is out. Download the new `.deb` and install it over the old one |
+
+Versions 2.1.0 and older don't update themselves. Download the newest installer once and run it over the old one; from then on the app does it.
 
 ## Opening it the first time
 

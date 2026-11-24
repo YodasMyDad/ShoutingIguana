@@ -356,10 +356,21 @@ impl Sidecar {
         if let Some(folder) = self.extraction_folder() {
             environment.push((EXTRACT_DIR_VARIABLE, folder.into_os_string()));
         }
+        // A build under another identifier than the released app's never opens the user's library and crawls.
+        let own =
+            launch::own_folders(&self.app.config().identifier, crate::profile::local_data_folder(&self.app).as_deref());
+        for folder in own.iter().flat_map(|(data, state)| [data, state]) {
+            if let Err(error) = std::fs::create_dir_all(folder) {
+                log::warn!("Couldn't make {}: {error}", folder.display());
+            }
+        }
+        let (own_data, own_state) = own.unzip();
         // The environment's folder (tests, development) first, then the one the user chose (data_folder.rs).
         let data_dir = launch::folder_override(DATA_DIR_OVERRIDE)
-            .or_else(|| crate::data_folder::for_engine(&self.app).map(PathBuf::into_os_string));
-        let arguments = launch::arguments(data_dir, launch::folder_override(STATE_DIR_OVERRIDE));
+            .or_else(|| crate::data_folder::for_engine(&self.app).map(PathBuf::into_os_string))
+            .or_else(|| own_data.map(PathBuf::into_os_string));
+        let state_dir = launch::folder_override(STATE_DIR_OVERRIDE).or_else(|| own_state.map(PathBuf::into_os_string));
+        let arguments = launch::arguments(data_dir, state_dir);
         let (process, stdout, stderr) = match SidecarProcess::spawn(&binary, &arguments, &environment) {
             Ok(spawned) => spawned,
             Err(error) if error.kind() == io::ErrorKind::NotFound => {

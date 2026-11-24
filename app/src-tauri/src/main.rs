@@ -90,6 +90,7 @@ fn main() {
                 let sidecar = shell.sidecar.clone();
                 live::start(handle.clone(), &shell);
                 app.manage(shell);
+                updates::start(handle);
                 // The engine starts on a thread of its own while the window and the page load.
                 sidecar.start();
                 log::info!("Shouting Iguana {} started", handle.package_info().version);

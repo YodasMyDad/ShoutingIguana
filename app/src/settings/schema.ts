@@ -59,6 +59,11 @@ export interface Settings {
    * severity or by category), and the order within each part of Simple's What to fix (fix first, by points or by count).
    */
   checkSort: { advanced: CheckSort; simple: PlainCheckSort };
+  /**
+   * The app asks GitHub for a newer version when it starts and a few times a day (updates/useUpdateChecks.ts). Off,
+   * it asks only when Check for updates is pressed. Nothing is ever installed without being asked for.
+   */
+  checkForUpdates: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -81,6 +86,7 @@ export const DEFAULT_SETTINGS: Settings = {
   hiddenChecksByCrawl: {},
   compareWithByCrawl: {},
   checkSort: { advanced: 'fixFirst', simple: 'fixFirst' },
+  checkForUpdates: true,
 };
 
 export const INSPECTOR_WIDTH_RANGE = { min: 320, max: 960 } as const;
@@ -211,5 +217,7 @@ export function readSettings(value: unknown): Settings {
     hiddenChecksByCrawl: readHiddenByCrawl(stored.hiddenChecksByCrawl),
     compareWithByCrawl: readCompareWith(stored.compareWithByCrawl),
     checkSort: readCheckSort(stored.checkSort),
+    checkForUpdates:
+      typeof stored.checkForUpdates === 'boolean' ? stored.checkForUpdates : DEFAULT_SETTINGS.checkForUpdates,
   };
 }

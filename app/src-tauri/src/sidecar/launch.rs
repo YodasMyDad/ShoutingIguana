@@ -77,6 +77,21 @@ pub fn folder_override(variable: &str) -> Option<OsString> {
     std::env::var_os(variable).filter(|value| !value.is_empty())
 }
 
+/// The released app's identifier (tauri.conf.json). Only it uses the engine's default folders: the user's library and
+/// their crawls.
+pub const RELEASED_IDENTIFIER: &str = "uk.co.aptitude.shoutingiguana";
+
+/// The engine's data and state folders for a build under another identifier (a test product name, the update
+/// proof): folders of its own, in its own local data folder, so it never opens the installed app's library or
+/// crawls, however it was started. None for the released app, whose engine uses its defaults.
+pub fn own_folders(identifier: &str, local_data: Option<&Path>) -> Option<(PathBuf, PathBuf)> {
+    if identifier == RELEASED_IDENTIFIER {
+        return None;
+    }
+    let root = local_data?;
+    Some((root.join("data"), root.join("state")))
+}
+
 /// Makes `root/<version>` for this version's engine to unpack into, and removes the folders other versions left in
 /// `root`: only one copy of the app runs (single instance), so no engine is using them.
 pub fn prepare_extraction_folder(root: &Path, version: &str) -> io::Result<PathBuf> {
@@ -97,6 +112,21 @@ pub fn prepare_extraction_folder(root: &Path, version: &str) -> io::Result<PathB
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The update proof installs a build under a test identifier beside the user's own app, and its installer starts
+    /// it again with none of the test's environment: it must not open the user's library.
+    #[test]
+    fn only_the_released_app_uses_the_engines_default_folders() {
+        let local = Path::new("local");
+        assert_eq!(own_folders(RELEASED_IDENTIFIER, Some(local)), None);
+        assert_eq!(
+            own_folders("uk.co.aptitude.shoutingiguana.updatetest", Some(local)),
+            Some((local.join("data"), local.join("state")))
+        );
+        assert_eq!(own_folders("uk.co.aptitude.shoutingiguana.updatetest", None), None);
+        let conf: serde_json::Value = serde_json::from_str(include_str!("../../tauri.conf.json")).unwrap();
+        assert_eq!(conf["identifier"], RELEASED_IDENTIFIER);
+    }
 
     #[test]
     fn tokens_are_64_hex_characters_and_never_repeat() {
