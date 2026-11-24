@@ -151,4 +151,35 @@ describe('the update store', () => {
     expect(shell.check).toHaveBeenCalledOnce();
     expect(store.getState()).toEqual({ step: 'ready', update: downloaded, held: false });
   });
+
+  // The app's own check runs behind whatever Settings › Updates shows: it adds news, and takes nothing away.
+  it('takes nothing off the page when the app checks by itself', async () => {
+    let answer: () => Promise<{ currentVersion: string; available: typeof NEWER | null }> = () =>
+      Promise.resolve({ currentVersion: '2.1.1', available: NEWER });
+    const { shell } = updater({ check: () => answer() });
+    const store = createUpdateStore(shell);
+    const steps: string[] = [];
+    store.subscribe(() => steps.push(store.getState().step));
+    await store.check({ quiet: true });
+    expect(steps).toEqual(['available']);
+
+    // Offline six hours later: the version found is still offered.
+    answer = () => rejected({ problem: 'noConnection', message: 'No answer.', currentVersion: '2.1.1' });
+    await store.check({ quiet: true });
+    expect(store.getState()).toEqual({ step: 'available', update: NEWER });
+    // Asked by the user, the same failure is said.
+    await store.check();
+    expect(store.getState()).toMatchObject({ step: 'failed', failure: { problem: 'noConnection' } });
+
+    // A download the user started while the app's check was out is left alone when the check comes back.
+    let release: (check: { currentVersion: string; available: typeof NEWER }) => void = () => undefined;
+    answer = () => new Promise((resolve) => (release = resolve));
+    const busy = createUpdateStore(updater({ check: () => answer() }).shell, { step: 'available', update: NEWER });
+    const checking = busy.check({ quiet: true });
+    void busy.install();
+    expect(busy.getState().step).toBe('downloading');
+    release({ currentVersion: '2.1.1', available: NEWER });
+    await checking;
+    expect(busy.getState().step).toBe('downloading');
+  });
 });

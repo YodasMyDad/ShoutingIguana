@@ -145,9 +145,12 @@ export function createUpdateStore(updater: Updater, initial: UpdateState = { ste
     },
     check: async ({ quiet = false } = {}) => {
       if (working() || (quiet && state.step === 'ready')) return;
-      dispatch({ type: 'check' });
+      // The app's own check takes nothing off the page: no "Checking…" in place of what the last check found, and
+      // nothing at all once the user has started a check, a download or an install of their own meanwhile.
+      if (!quiet) dispatch({ type: 'check' });
       try {
         const result = await updater.check();
+        if (quiet && (working() || state.step === 'ready')) return;
         dispatch({ type: 'checked', result, at: new Date().toISOString() });
         if (quiet) return;
         announce(
@@ -156,6 +159,8 @@ export function createUpdateStore(updater: Updater, initial: UpdateState = { ste
             : `You have the newest version, ${result.currentVersion}.`,
         );
       } catch (error) {
+        // Going offline doesn't take back a version already found, or the newest version already confirmed.
+        if (quiet && state.step !== 'idle') return;
         const failure = parseUpdateCheckFailure(error) ?? undefined;
         const words = failure ? CHECK_WORDS[failure.problem] : null;
         const message = words && failure ? words.text(failure.currentVersion) : messageOf(error);

@@ -67,12 +67,15 @@ pub enum Arrival {
 
 /// How a new version arrives in this copy: by what it was packaged as, which Tauri's bundler writes into the program.
 pub fn arrival() -> Arrival {
-    arrival_of(cfg!(target_os = "linux"), tauri::utils::platform::bundle_type())
+    let running_as_appimage = std::env::var_os("APPIMAGE").is_some_and(|path| !path.is_empty());
+    arrival_of(cfg!(target_os = "linux"), tauri::utils::platform::bundle_type(), running_as_appimage)
 }
 
-/// On Linux only the AppImage is one file the app can replace. Windows' installer and the macOS app update in place.
-fn arrival_of(linux: bool, bundle: Option<BundleType>) -> Arrival {
-    if linux && !matches!(bundle, Some(BundleType::AppImage)) {
+/// On Linux only the AppImage is one file the app can replace, and only while it runs as one (the AppImage runtime
+/// says where the file is in `APPIMAGE`; the program unpacked from it has no file to replace). Windows' installer
+/// and the macOS app update in place.
+fn arrival_of(linux: bool, bundle: Option<BundleType>, running_as_appimage: bool) -> Arrival {
+    if linux && !(running_as_appimage && matches!(bundle, Some(BundleType::AppImage))) {
         Arrival::Download
     } else {
         Arrival::InApp
@@ -450,13 +453,16 @@ mod tests {
     /// manager's: it is told of a newer version, and never offered an install it can't do.
     #[test]
     fn only_a_copy_the_app_can_replace_installs_updates_itself() {
-        assert_eq!(arrival_of(false, Some(BundleType::Nsis)), Arrival::InApp);
-        assert_eq!(arrival_of(false, Some(BundleType::App)), Arrival::InApp);
-        assert_eq!(arrival_of(true, Some(BundleType::AppImage)), Arrival::InApp);
-        assert_eq!(arrival_of(true, Some(BundleType::Deb)), Arrival::Download);
-        assert_eq!(arrival_of(true, Some(BundleType::Rpm)), Arrival::Download);
-        // A bare Linux build, not packaged at all.
-        assert_eq!(arrival_of(true, None), Arrival::Download);
+        assert_eq!(arrival_of(false, Some(BundleType::Nsis), false), Arrival::InApp);
+        assert_eq!(arrival_of(false, Some(BundleType::App), false), Arrival::InApp);
+        assert_eq!(arrival_of(true, Some(BundleType::AppImage), true), Arrival::InApp);
+        assert_eq!(arrival_of(true, Some(BundleType::Deb), false), Arrival::Download);
+        assert_eq!(arrival_of(true, Some(BundleType::Rpm), false), Arrival::Download);
+        // A bare Linux build, not packaged at all, and the AppImage's program run unpacked: no file to replace.
+        assert_eq!(arrival_of(true, None, false), Arrival::Download);
+        assert_eq!(arrival_of(true, Some(BundleType::AppImage), false), Arrival::Download);
+        // A .deb install started from a shell an AppImage set APPIMAGE in is still the package manager's.
+        assert_eq!(arrival_of(true, Some(BundleType::Deb), true), Arrival::Download);
         assert_eq!(serde_json::to_value(Arrival::InApp).unwrap(), serde_json::json!("inApp"));
         assert_eq!(serde_json::to_value(Arrival::Download).unwrap(), serde_json::json!("download"));
         assert_eq!(serde_json::to_value(InstallOutcome::Waiting).unwrap(), serde_json::json!("waiting"));
