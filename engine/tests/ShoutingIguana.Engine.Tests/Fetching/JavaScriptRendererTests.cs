@@ -8,6 +8,7 @@ using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Crawling.Models;
 using ShoutingIguana.Engine.Fetching;
+using ShoutingIguana.Engine.Fetching.Models;
 using ShoutingIguana.Engine.Robots;
 using ShoutingIguana.Engine.Urls;
 
@@ -467,6 +468,56 @@ public sealed class JavaScriptRendererTests
         Assert.Equal(CrawlNoticeLevel.Error, notice.Level);
         Assert.DoesNotContain("rendered", notice.Message, StringComparison.Ordinal);
         Assert.Contains("A host that blocks plain HTTP stays blocked", notice.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The computer's own Chrome or Edge needs no driver, so the fallback still has it when the headless browser can't
+    /// start: the alert must not say a blocked host stays blocked.
+    /// </summary>
+    [Theory]
+    [InlineData(JavaScriptRendering.JavaScript, "Chrome", "No page of this crawl is rendered: every page is read as it was sent. A host that blocks plain HTTP is tried in the computer's own Chrome.")]
+    [InlineData(JavaScriptRendering.Off, "Edge", "A host that blocks plain HTTP is tried in the computer's own Edge.")]
+    [InlineData(JavaScriptRendering.Off, InstalledBrowsers.NAMED, "A host that blocks plain HTTP is tried in the computer's own browser.")]
+    public async Task ABrowserThatCannotStartLeavesTheFallbackTheComputersOwnBrowser(JavaScriptRendering rendering, string browser, string lost)
+    {
+        await using var site = await LoopbackServer.StartAsync(ServeAsync);
+        var observer = new Notices();
+        await using var renderer = Renderer(site.BaseUri, observer, edit: options => options with
+        {
+            Rendering = rendering, BrowserFallback = true, UseInstalledBrowser = true
+        });
+        renderer.CreatePlaywright = () => throw new PlaywrightException("Driver not found");
+        // Found, and not there to start: what the alert says is settled before it is tried.
+        renderer.FindInstalledBrowser = () => new InstalledBrowser(browser, Path.Combine(Path.GetTempPath(), "no-such-browser"));
+        renderer.HasDisplay = () => true;
+
+        Assert.Null(await renderer.LoadAsync(site.Url("/plain"), "127.0.0.1", CancellationToken.None));
+
+        var notice = Assert.Single(observer.Seen);
+        Assert.Equal(CrawlNoticeLevel.Error, notice.Level);
+        Assert.Equal($"The browser couldn't start. {lost} Driver not found", notice.Message);
+        Assert.DoesNotContain("stays blocked", notice.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>With no browser of its own to open, or no display to show one on, the host does stay blocked.</summary>
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public async Task ABrowserThatCannotStartLeavesTheFallbackNothingWithoutABrowserToOpen(bool found, bool display)
+    {
+        await using var site = await LoopbackServer.StartAsync(ServeAsync);
+        var observer = new Notices();
+        await using var renderer = Renderer(site.BaseUri, observer, edit: options => options with
+        {
+            Rendering = JavaScriptRendering.Off, BrowserFallback = true, UseInstalledBrowser = true
+        });
+        renderer.CreatePlaywright = () => throw new PlaywrightException("Driver not found");
+        renderer.FindInstalledBrowser = () => found ? new InstalledBrowser("Chrome", Path.Combine(Path.GetTempPath(), "no-such-browser")) : null;
+        renderer.HasDisplay = () => display;
+
+        Assert.Null(await renderer.LoadAsync(site.Url("/plain"), "127.0.0.1", CancellationToken.None));
+
+        Assert.Equal("The browser couldn't start. A host that blocks plain HTTP stays blocked. Driver not found", Assert.Single(observer.Seen).Message);
     }
 
     [Fact]

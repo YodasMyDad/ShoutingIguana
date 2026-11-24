@@ -828,6 +828,9 @@ internal sealed partial class JavaScriptRenderer(
     /// <summary>
     /// The browser can't be used for the rest of the crawl. Said once, as an error the crawl keeps: what this crawl
     /// asked of the browser and is not getting, and why. A crawl that was to be rendered must not read as one that was.
+    /// The fallback is not lost with it where the computer has a browser of its own: that one needs no driver, and a
+    /// host that blocks plain HTTP is tried in it (<see cref="LoadAsync"/>), so the alert says that and not that the
+    /// host stays blocked.
     /// </summary>
     private IBrowser? Unavailable(string why)
     {
@@ -836,11 +839,14 @@ internal sealed partial class JavaScriptRenderer(
         why = PlainReason(why);
         _unavailableReason = why;
         var renders = options.Rendering != JavaScriptRendering.Off;
+        var own = options.BrowserFallback && CanUseInstalled ? FindInstalledBrowser() : null;
+        var tried = own is null ? null : $"A host that blocks plain HTTP is tried in the computer's own {(own.Name == InstalledBrowsers.NAMED ? "browser" : own.Name)}.";
         var lost = (renders, options.BrowserFallback) switch
         {
+            (true, true) when tried is not null => $"No page of this crawl is rendered: every page is read as it was sent. {tried}",
             (true, true) => "No page of this crawl is rendered: every page is read as it was sent, and a host that blocks plain HTTP stays blocked.",
             (true, false) => "No page of this crawl is rendered: every page is read as it was sent.",
-            (false, true) => "A host that blocks plain HTTP stays blocked.",
+            (false, true) => tried ?? "A host that blocks plain HTTP stays blocked.",
             _ => "Nothing is read in it."
         };
         observer.OnNotice(new CrawlNotice(

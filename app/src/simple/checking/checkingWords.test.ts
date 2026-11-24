@@ -112,6 +112,19 @@ describe('what’s in the way', () => {
     expect(blocked?.text).toBe(
       'The browser that gets past a site’s block couldn’t start, so a site that blocks the check stays blocked. The reason is in Advanced.',
     );
+    // The computer's own browser is still there for a blocked site: nothing is in the way, and Advanced has the alert.
+    expect(
+      say(
+        'error',
+        "The browser couldn't start. A host that blocks plain HTTP is tried in the computer's own Chrome. Driver not found: C:/app/node.exe",
+      ),
+    ).toEqual([]);
+    // Pages that were to be rendered are still not, whichever browser a blocked site is tried in.
+    const [ownBrowser] = say(
+      'error',
+      "The browser couldn't start. No page of this crawl is rendered: every page is read as it was sent. A host that blocks plain HTTP is tried in the computer's own Edge. Driver not found: C:/app/node.exe",
+    );
+    expect(ownBrowser?.text).toMatch(/^The browser that reads pages built by JavaScript couldn’t start/);
   });
 
   it('says a Shopify shop turns away checks without a signature, in plain words, once', () => {

@@ -222,6 +222,9 @@ function words(
       const lost = [
         rendering.pagesNotRendered ? 'No page of this crawl is rendered: every page is read as it was sent.' : '',
         rendering.blocksStay ? 'A host that blocks plain HTTP stays blocked.' : '',
+        rendering.ownBrowser
+          ? `A host that blocks plain HTTP is tried in the computer’s own ${rendering.ownBrowser}.`
+          : '',
       ].filter(Boolean);
       return {
         title: 'The browser couldn’t start',

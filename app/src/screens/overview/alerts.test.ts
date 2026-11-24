@@ -163,6 +163,35 @@ describe('alerts', () => {
     });
     expect(libraries?.recorded).toBeUndefined();
 
+    // With Chrome or Edge on the computer the fallback is not lost: the engine says which browser a blocked host is
+    // tried in, and nothing says the host stays blocked.
+    const [ownBrowser] = alertEntries([
+      alert({
+        code: 'javascript-rendering',
+        level: 'error',
+        message:
+          "The browser couldn't start. No page of this crawl is rendered: every page is read as it was sent. A host that blocks plain HTTP is tried in the computer's own Chrome. Driver not found: C:/app/node.exe",
+      }),
+    ]);
+    expect(ownBrowser).toMatchObject({
+      detail:
+        'No page of this crawl is rendered: every page is read as it was sent. A host that blocks plain HTTP is tried in the computer’s own Chrome.',
+      recorded: 'Driver not found: C:/app/node.exe',
+    });
+    const [fallbackOnly] = alertEntries([
+      alert({
+        code: 'javascript-rendering',
+        level: 'error',
+        message:
+          "The browser couldn't start. A host that blocks plain HTTP is tried in the computer's own browser. The browser couldn't be downloaded. Check the connection, then start the crawl again.",
+      }),
+    ]);
+    expect(fallbackOnly).toMatchObject({
+      detail: 'A host that blocks plain HTTP is tried in the computer’s own browser.',
+      advice: "The browser couldn't be downloaded. Check the connection, then start the crawl again.",
+    });
+    expect(fallbackOnly?.recorded).toBeUndefined();
+
     // A crawl file of 2.0.3 holds the older sentence.
     const [older] = alertEntries([
       alert({

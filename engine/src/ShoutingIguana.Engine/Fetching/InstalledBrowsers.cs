@@ -12,11 +12,14 @@ internal static class InstalledBrowsers
     /// <summary>Names a browser's program file, for a computer that keeps it somewhere else. Empty looks in the usual places.</summary>
     public const string PATH_VARIABLE = "SHOUTINGIGUANA_BROWSER";
 
+    /// <summary>What a browser named by <see cref="PATH_VARIABLE"/> is called: which one it is isn't known.</summary>
+    public const string NAMED = "the browser";
+
     public static InstalledBrowser? Find()
     {
         if (Environment.GetEnvironmentVariable(PATH_VARIABLE) is { Length: > 0 } named && File.Exists(named))
         {
-            return new InstalledBrowser("the browser", named);
+            return new InstalledBrowser(NAMED, named);
         }
 
         return Candidates().FirstOrDefault(candidate => File.Exists(candidate.Path));

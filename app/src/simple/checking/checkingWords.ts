@@ -195,6 +195,9 @@ function alertWords(
         };
       }
       // A check that only had the browser as its way past a block lost that, not its reading of pages.
+      // With the computer's own browser to try a blocked site in, a check that renders nothing has lost nothing a
+      // person would notice here: Advanced has the alert.
+      if (rendering.ownBrowser && !rendering.pagesNotRendered) return null;
       const text =
         rendering.blocksStay && !rendering.pagesNotRendered
           ? 'The browser that gets past a site’s block couldn’t start, so a site that blocks the check stays blocked. The reason is in Advanced.'
