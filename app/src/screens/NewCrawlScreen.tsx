@@ -35,7 +35,7 @@ import { siteName } from '../simple/home/sites';
 import { useCommands } from '../keyboard/registry';
 import clsx from 'clsx';
 import { useMode, type Mode } from '../mode/mode';
-import { pageWords, type Again } from './newCrawlWords';
+import { pageWords, renderingNote, type Again } from './newCrawlWords';
 import { switchMode } from '../mode/switchMode';
 import { showAdvancedFor } from '../mode/useModeGuard';
 import type { SettingFocus } from '../routing/search';
@@ -478,10 +478,7 @@ function NewCrawlForm({
           />
         ) : (
           <span className="ml-auto max-w-(--measure-text) text-12 text-text-muted">
-            {/* What the crawl reads, said once where it's started (H-09): the engine fetches each page's HTML and runs
-                no script, so nothing here could turn rendering on. */}
-            Pages are read as the server sends them: their JavaScript isn’t run, so what a page adds with scripts isn’t
-            seen.
+            {renderingNote(form.javaScriptRendering)}
           </span>
         )}
       </div>
