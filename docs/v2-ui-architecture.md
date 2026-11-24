@@ -1817,48 +1817,85 @@ folders (gap 31). The shell's modules: `updates.rs`, `secrets.rs`, `data_folder.
   `parseShellDragDrop`), opens the crawl files as a launch's are (`openCrawlPaths`) and says why for any other file.
   Because the shell takes the drop, HTML5 drag and drop events don't reach the page in the app: anything dragged
   inside the page (a column, say) uses pointer events.
-- **Updates** (`updates.rs`, `UpdatePanel`). **Not offered since 2026-11-24**: the releases publish no `latest.json`,
-  so a check could only say there was no update information, which reads as "nothing newer" once a newer release
-  exists. Settings › Updates (`sections/Updates.tsx`) says "This version doesn't update itself", shows the version
-  and has **Open the releases page** (the repository's newest release, in the system's browser). Nothing checks in
-  the background. The plugin, its config, the commands and `UpdatePanel` (its stories and tests) stay, for the day
-  the release workflow publishes update information; what follows describes them. `tauri-plugin-updater`, driven by the shell's own
-  commands only (`update_check`, `update_install`; the webview isn't granted the plugin's): Check for updates reads
-  `latest.json` from this repository's newest GitHub release
+- **Updates** (`updates.rs`; `src/updates/`; Settings › Updates' `UpdatePanel`). The app updates itself from 2.1.1.
+  `tauri-plugin-updater`, driven by the shell's own commands only (`update_check`, `update_install`; the webview
+  isn't granted the plugin's). A check reads `latest.json` from this repository's newest GitHub release
   (`https://github.com/YodasMyDad/ShoutingIguana/releases/latest/download/latest.json`, in `tauri.conf.json`'s
-  `plugins.updater.endpoints`), and says the newer version, its date and what's new (the release's notes), or "You
-  have the newest version". Install and restart, on the user's word only, never while a crawl, an analysis or an
-  export runs ("A file is being exported. Install the update once it has been saved."; the shell knows the exports
-  running from the event stream's `hello` and `export` events, `LiveView::exporting`): the shell downloads the
-  installer (progress as `shell://update-progress`, `{ downloaded, total }`, at most four a second), checks its
-  minisign signature against `plugins.updater.pubkey`, asks again whether anything runs, under the quit lock (a crawl
-  started during a slow download: "Something started while the update downloaded. Install it once that has
-  finished.", and nothing is stopped; round 5's review, R2-3), stops the engine as quitting does, and runs
-  the NSIS installer passively; it closes the app and starts the new version. A download whose signature doesn't
-  match is never run. Nothing is checked on its own: the user asks.
+  `plugins.updater.endpoints`), and says the newer version, its date and what's new (the release's notes, when it
+  has any), or "You have the newest version".
+  - **One state, shown in one place.** `updates/updateStore.ts` holds the update's state for the whole app (idle,
+    checking, up to date, available, downloading, ready, installing, failed), so a check made in the background is
+    what Settings › Updates shows, and a download goes on while the user is elsewhere. `UpdatePanel` draws it.
+  - **The app looks by itself** (`updates/useUpdateChecks.ts`, mounted in `AppShell`): 15 seconds after it starts,
+    then every six hours. Quiet: no newer version, no connection and GitHub's 404 say nothing outside Settings ›
+    Updates. A newer version is said once per run, in a toast ("Version 2.1.2 is available", **See what's new**)
+    that opens Settings › Updates. The `checkForUpdates` preference (the switch in Settings › Updates, on by default)
+    turns it off; Check for updates still works. A test run of the built app (`SI_APP_PROFILE_DIR`) never looks by
+    itself (`ShellInfo.updateChecks`).
+  - **Install and restart, on the user's word only.** The shell downloads the file `latest.json` names for this
+    platform (progress as `shell://update-progress`, `{ downloaded, total }`, at most four a second) and checks its
+    minisign signature against `plugins.updater.pubkey`. The signature must also be for the version announced
+    (`requireSignedVersion`: `tauri build` writes the version into the signature's trusted comment), so a changed
+    `latest.json` can't pass an older signed installer off as a new one. A download that fails either check is thrown
+    away, and the page says "The download's signature didn't match this app's, so it was thrown away. Nothing was
+    installed."
+  - **An update never stops anything.** Under the quit lock the shell asks whether a crawl, an analysis or an export
+    runs (`LiveView`; round 5's review, R2-3 and R2-10). If one does, the download is kept in memory
+    (`Updates::ready`), `update_install` answers `waiting`, and the panel says "Version 2.1.2 is downloaded" with
+    **Restart and install**, disabled until nothing runs; asked again, the shell installs the kept download without
+    downloading it again. While a crawl runs the first button reads **Download the update**, not Install and
+    restart.
+  - **The engine stops first.** With nothing running, the shell stops the engine as quitting does (Windows'
+    installer can't replace a program that is running), then installs: on Windows it runs the NSIS installer
+    passively and exits, and the installer starts the app again; on macOS and Linux the plugin swaps the app bundle
+    or the AppImage in place and the shell starts again. The engine's job object (Windows) and stdin lifeline end
+    it with the shell in any case, so none is left behind. If the install fails after the engine stopped, the app
+    starts again as it was and says so once ("Version 2.1.2 couldn't be installed"; a note in the settings folder,
+    `update-failed.txt`, carries the version across the restart).
+  - **How a new version arrives depends on the copy** (`updates::Arrival`, `ShellInfo.updates`). The Windows
+    installer, the macOS app and the Linux AppImage are replaced by the app (`inApp`). A Linux copy that isn't the
+    AppImage (the `.deb`, by the bundle type Tauri writes into the program) belongs to the package manager
+    (`download`): it is told "Version 2.1.2 is out", with **Open the download page** (the releases page) in place of
+    an install, and `update_install` refuses. Settings › Updates says which in a sentence true of the copy
+    (`updates/updateWords.ts`).
+  - **A build under another identifier keeps its engine's folders to itself** (`sidecar/launch.rs`, `own_folders`):
+    its data and state folders are in its own local data folder, never the released app's library. The update
+    proof installs such a build beside the user's own app, and its installer starts it again with none of the
+    proof's environment.
 
-  **What the release workflow needs.** The key pair was made with `npx tauri signer generate`; its public key is in
-  `tauri.conf.json`, its private key and that key's password are kept off the repository (on the owner's machine:
-  `%USERPROFILE%\.shouting-iguana\updater.key` and `updater.key.password`). The workflow that builds a release:
-  1. has two repository secrets, **`TAURI_SIGNING_PRIVATE_KEY`** (the private key file's contents) and
-     **`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`** (its password), in its environment for the build;
-  2. builds with the updater's artifacts on: `npm run tauri build -- --bundles nsis --config
-     '{"bundle":{"createUpdaterArtifacts":true}}'` (left off in `tauri.conf.json`, so a build without the key, on a
-     developer's machine or in CI's checks, still builds). That writes, beside the installer,
-     `Shouting Iguana_<version>_x64-setup.exe.sig`;
-  3. writes `latest.json` and uploads it with the installer to the GitHub release, which must be the repository's
-     **latest** (not a draft or a pre-release, which `releases/latest` skips; the WPF app's releases must not be
-     marked latest after v2's):
+  **The release** (`.github/workflows/app-release.yml`). The key pair was made with `npx tauri signer generate`; its
+  public key is in `tauri.conf.json`, its private key and that key's password are the repository secrets
+  **`TAURI_SIGNING_PRIVATE_KEY`** and **`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`** (and on the owner's machine:
+  `%USERPROFILE%\.shouting-iguana\updater.key` and `updater.key.password`). The workflow:
+  1. checks, before any installer is built, that both secrets are there and sign a file the public key accepts
+     (the `preflight` job);
+  2. builds every leg with `--config src-tauri/tauri.updater.conf.json` (`bundle.createUpdaterArtifacts`; left off
+     in `tauri.conf.json`, so a build without the key, on a developer's machine or in CI's checks, still builds).
+     That writes a `.sig` beside the Windows installer and the AppImage, and on macOS `Shouting Iguana.app.tar.gz`
+     and its `.sig`, which the workflow renames with the disk image's arch (both Macs name it the same). macOS
+     builds the `app` bundle as well as the `dmg`, because the archive is made from it; after the `--no-sign`
+     fallback, which skips the updater's signature too, the archive is signed by hand (`tauri signer sign
+     --app-version`). Each leg checks its signature as the app does (`scripts/updater-manifest.mjs verify`);
+  3. writes `latest.json` (`scripts/updater-manifest.mjs write`), checks it (`check`: every platform there, every
+     URL a file of this release, every signature the key's over the file it names and for this version), publishes
+     it with the installers in one `gh release create`, and checks it again against the published assets:
 
      ```json
-     { "version": "2.1.0", "notes": "What's new, as the Updates screen shows it.", "pub_date": "2026-11-20T10:00:00Z",
-       "platforms": { "windows-x86_64": { "signature": "<the .sig file's contents>",
-         "url": "https://github.com/YodasMyDad/ShoutingIguana/releases/download/v2.1.0/Shouting.Iguana_2.1.0_x64-setup.exe" } } }
+     { "version": "2.1.1", "notes": "What's new, as the Updates screen shows it.", "pub_date": "2026-11-25T10:00:00.000Z",
+       "platforms": {
+         "windows-x86_64": { "signature": "<the .sig file's contents>", "url": "https://github.com/YodasMyDad/ShoutingIguana/releases/download/app-v2.1.1/Shouting.Iguana_2.1.1_x64-setup.exe" },
+         "darwin-aarch64": { "signature": "…", "url": "…/Shouting.Iguana_2.1.1_aarch64.app.tar.gz" },
+         "darwin-x86_64": { "signature": "…", "url": "…/Shouting.Iguana_2.1.1_x64.app.tar.gz" },
+         "linux-x86_64": { "signature": "…", "url": "…/Shouting.Iguana_2.1.1_amd64.AppImage" } } }
      ```
 
-     (`url` is the uploaded installer's download address; GitHub replaces spaces in asset names with dots.)
-  `version` must be higher than the installed one by semver, or the app says it has the newest. A test run of the
-  built app (`SI_APP_PROFILE_DIR` set) may point the updater elsewhere with `SI_UPDATER_ENDPOINT`; a user's never can.
+     (GitHub replaces spaces in asset names with dots. `notes` is `app/release-notes/<version>.md`, when there is
+     one.)
+  The release must be the repository's **latest** (not a draft or a pre-release, which `releases/latest` skips; the
+  WPF app's releases must not be marked latest after v2's). `version` must be higher than the installed one by
+  semver, or the app says it has the newest. A test run of the built app (`SI_APP_PROFILE_DIR` set) may point the
+  updater elsewhere with `SI_UPDATER_ENDPOINT`; a user's never can. `node scripts/prove-update.mjs` proves the whole
+  of it on Windows with two builds under a test product name (app/README.md, "Updates").
 - **Secrets in the OS credential store** (`secrets.rs`, `crawl/secrets.ts`). The engine keeps a proxy without its
   password and headers without their values, and the page used to keep them only while it ran. Now the shell keeps
   them in Windows' Credential Manager (macOS's Keychain, the Secret Service on Linux), through `keyring`, service
@@ -2355,7 +2392,7 @@ Ten things the gallery found in the release shell, each fixed and walked by `smo
   (`noUpdateInformation`, which the plugin reports as `ReleaseNotFound`), a manifest this version can't read
   (`unreadable`), a signature or signed version that doesn't match (`untrusted`), an updater that can't be set up
   (`unavailable`). `update_check` rejects with `{ problem, message, currentVersion }`; the panel words each case in
-  both modes, no update information yet as information ("you have 2.0.0"), the others as errors.
+  both modes, no update information yet and no answer as information ("you have 2.0.0"), the others as errors.
 - **A tab strip too wide for its room** (`ui/Tabs.tsx`) ends in a button, "5 more", named for the tabs out of view,
   which lists them as it opened (counts arriving while it's open don't move its items). Tab reaches it from the strip;
   a tab chosen there is chosen, scrolled into view and focused (`DropdownMenu`'s optional `closeFocus`).

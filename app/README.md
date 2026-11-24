@@ -116,6 +116,50 @@ or with a test product name.
 given `libssl.so.3` from the build machine (`/usr/lib/x86_64-linux-gnu`, so an AppImage is built on Debian or Ubuntu,
 x64) to go with the `libcrypto` it already carries.
 
+## Updates
+
+From 2.1.1 the app updates itself (`src-tauri/src/updates.rs`, `src/updates/`, Settings › Updates). It asks
+`https://github.com/YodasMyDad/ShoutingIguana/releases/latest/download/latest.json` for a newer version 15 seconds
+after it starts and every six hours (Settings › Updates has the switch, and Check for updates), says so in a toast,
+and on **Install and restart** downloads the file `latest.json` names for its platform, checks its signature against
+`plugins.updater.pubkey` in `tauri.conf.json`, stops the engine and installs it. Versions 2.1.0 and older have no
+check: they need one download by hand.
+
+| Installed from | How it updates |
+| --- | --- |
+| Windows installer (NSIS) | The app downloads the new installer and runs it passively; the installer starts the app again |
+| macOS `.app` (from the disk image) | The app downloads `.app.tar.gz` and swaps the bundle in place, then starts again |
+| Linux AppImage | The app downloads the new AppImage over its own file, then starts again |
+| Linux `.deb` | The app only says a newer version is out, and links to the releases page: the package manager owns the files |
+
+- **An update never stops a crawl.** While a crawl, an analysis or an export runs, the update is downloaded and kept,
+  and installs when the user asks again with nothing running.
+- **Nothing unsigned is installed.** A file whose signature isn't the key's, or was signed as another version than
+  `latest.json` announces (`requireSignedVersion`), is thrown away, and the page says so.
+- **No answer is not a fault.** Offline, or GitHub answering 404 (no release with a `latest.json`, or the repository
+  private), says "Couldn't reach GitHub" or "No update information yet" in Settings › Updates, and nothing anywhere
+  else.
+
+**The key.** The updater's own minisign key pair (not a code-signing certificate). The public half is in
+`tauri.conf.json`. The private half and its password are the repository secrets `TAURI_SIGNING_PRIVATE_KEY` and
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, and on the owner's machine `%USERPROFILE%\.shouting-iguana\updater.key` and
+`updater.key.password`. Lose them and no installed copy can be updated again: every user would have to download a
+build with a new public key by hand.
+
+**The release.** `tauri.conf.json` leaves the updater's artifacts off, so `npm run tauri build` needs no key. The
+release workflow adds `--config src-tauri/tauri.updater.conf.json` (`bundle.createUpdaterArtifacts`) and the key, and
+each leg then has what the app installs and its `.sig`. The release job writes `latest.json` with
+`scripts/updater-manifest.mjs`, checks every signature in it against the file it names, and publishes it with the
+installers. `app/release-notes/<version>.md`, when there is one, is "What's new" in the app and the top of the
+release's notes: write it before tagging. Only a release GitHub marks **latest** updates anyone, so a pre-release
+(a version with a `-`) doesn't.
+
+**Proving it.** `node scripts/prove-update.mjs` (Windows, a desktop session, the key on this machine, about half an
+hour): it builds two versions under a test product name, installs the older beside your own app, serves the newer
+from `127.0.0.1` and watches the installed app find it, refuse four bad downloads, wait for a crawl, install and open
+again as the newer version. It uninstalls the test app, and checks your own install and library are as they were.
+`node scripts/updater-manifest.mjs verify <file>` checks one file against its `.sig` as the app does.
+
 ## Environment variables
 
 | Variable | Used by | Does |
@@ -124,6 +168,8 @@ x64) to go with the `libcrypto` it already carries.
 | `VITE_SIDECAR_PORT`, `VITE_SIDECAR_TOKEN` | The UI in a browser | Where the development sidecar is. Set by `npm run dev` and the e2e setup; the shell passes them over IPC instead |
 | `SI_APP_DATA_DIR`, `SI_APP_STATE_DIR` | The shell | Give its sidecar other data and state folders, for tests |
 | `SI_APP_PROFILE_DIR` | The shell | A test run's own folder for preferences, window state, the WebView2 profile, the engine's unpacked files and the log; it also keeps the run out of single instance |
+| `SI_UPDATER_ENDPOINT` | The shell, in a test run only (`SI_APP_PROFILE_DIR` set) | Ask this URL for `latest.json` instead of GitHub's. Still https, and the signature is still checked |
+| `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | `tauri build` with `tauri.updater.conf.json` | The updater's signing key and its password: the release workflow's secrets (see Updates) |
 | `SI_SIGN_CERT_THUMBPRINT` | `scripts/sign.mjs` | Sign with this certificate from the Windows certificate store |
 | `SI_SIGN_PFX_BASE64`, `SI_SIGN_PFX_PASSWORD` | `scripts/sign.mjs` | Sign with this PFX (base64) instead: for CI secrets |
 | `SI_SIGN_TIMESTAMP_URL` | `scripts/sign.mjs` | The RFC 3161 timestamp server (DigiCert's by default) |
