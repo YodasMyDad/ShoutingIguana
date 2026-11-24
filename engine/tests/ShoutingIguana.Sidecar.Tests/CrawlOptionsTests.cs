@@ -75,6 +75,33 @@ public sealed class CrawlOptionsTests : IAsyncLifetime
         }
     }
 
+    /// <summary>
+    /// An extraction rule's selector type goes by name too. Every rule the app's form added was refused ("This value
+    /// isn't valid here"), since the form sends css, xPath or regex and only the number was read.
+    /// </summary>
+    [Fact]
+    public async Task AnExtractionRulesSelectorTypeIsANameAndASavedNumberIsStillRead()
+    {
+        var saved = await _sidecar.SendAsync(HttpMethod.Put, "api/crawl-options/defaults", JsonNode.Parse("""
+            {"extractionRules":[{"name":"Heading","selectorType":"css","selector":"h1","enabled":true},
+             {"name":"Title","selectorType":"xPath","selector":"//title","enabled":true},
+             {"name":"Price","selectorType":"regex","selector":"£([0-9]+)","enabled":false}]}
+            """));
+        Assert.Equal(HttpStatusCode.OK, saved.Status);
+        Assert.Equal(["css", "xPath", "regex"],
+            saved.Body!["options"]!["extractionRules"]!.AsArray().Select(rule => (string?)rule!["selectorType"]));
+
+        // As 2.0.3 and before saved it: XPath is 1.
+        await File.WriteAllTextAsync(Path.Combine(_sidecar.Options.StateDirectory, "defaults.json"),
+            """{"extractionRules":[{"name":"Title","selectorType":1,"selector":"//title","enabled":true}]}""");
+        var old = (await _sidecar.GetJsonAsync("api/crawl-options/defaults"))["options"]!;
+        Assert.Equal("xPath", (string?)old["extractionRules"]![0]!["selectorType"]);
+
+        var wrong = await _sidecar.PostAsync("api/crawl-options/validate", JsonNode.Parse(
+            """{"startUrl":"https://example.com/","extractionRules":[{"name":"A","selectorType":"jsonPath","selector":"$.a","enabled":true}]}"""));
+        Assert.Equal(["extractionRules"], wrong.Body!["errors"]!.AsObject().Select(field => field.Key));
+    }
+
     [Fact]
     public async Task SavedDefaultsNeverKeepTheStartUrlHeaderValuesOrProxyPassword()
     {

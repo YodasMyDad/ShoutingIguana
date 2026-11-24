@@ -35,7 +35,8 @@ namespace ShoutingIguana.Sidecar.Serialization;
         typeof(CamelCaseEnumConverter<IssueSeverity>),
         typeof(CamelCaseEnumConverter<OutOfDateReason>),
         typeof(CamelCaseEnumConverter<UserAgentPreset>),
-        typeof(JavaScriptRenderingConverter),
+        typeof(NamedOrNumberedEnumConverter<JavaScriptRendering>),
+        typeof(NamedOrNumberedEnumConverter<ExtractionSelector>),
 
         // The grids (E3a).
         typeof(CamelCaseEnumConverter<SummaryUnavailableReason>),
