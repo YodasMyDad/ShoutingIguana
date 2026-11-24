@@ -117,8 +117,7 @@ test('the Summary says the engine’s score, word and counts, and passes axe in 
     expect(score.band).toBe('good');
     expect([found('error'), found('warning'), found('notice')]).toEqual([2, 3, 23]);
     // The sentence counts the jobs: a problem another's fix clears is folded under it.
-    const five = analysis.fixFirst.filter((id) => byId.get(id)?.severity !== 'notice').slice(0, 5);
-    const numbered = fixJobs(five, analysis, byId).rows.filter((job) => !job.nested).length;
+    const numbered = summaryJobs(analysis, byId).filter((job) => !job.nested).length;
     const these = ['this one', 'these two', 'these three', 'these four', 'these five'][numbered - 1] ?? '';
     await expect(main(page).getByText(`Fixing ${these} takes the score from 87 to 100.`)).toBeVisible();
   }
@@ -171,7 +170,7 @@ function fixJobs(
   analysis: Analysis,
   byId: ReadonlyMap<string, Check>,
   severities: readonly Check['severity'][] = ['error', 'warning'],
-): { rows: { id: string; points: number; nested: boolean; alsoPages: number }[]; merged: string[] } {
+): { rows: { id: string; points: number; nested: boolean; alsoPages: number; job: string[] }[]; merged: string[] } {
   const pointsOf = (id: string) => analysis.score?.lines.find((line) => line.checkId === id)?.points ?? 0;
   const found = (id: string) => analysis.counts.find((count) => count.checkId === id)?.count ?? 0;
   const under = new Map<string, string[]>();
@@ -201,13 +200,26 @@ function fixJobs(
           points: [id, ...all].reduce((sum, each) => sum + pointsOf(each), 0),
           nested: false,
           alsoPages: merged.reduce((most, each) => Math.max(most, found(each)), 0),
+          job: [id, ...all],
         },
         ...all
           .filter((each) => !merged.includes(each))
-          .map((each) => ({ id: each, points: 0, nested: true, alsoPages: 0 })),
+          .map((each) => ({ id: each, points: 0, nested: true, alsoPages: 0, job: [id, ...all] })),
       ];
     });
   return { rows, merged: [...under].flatMap(([id, all]) => all.filter((other) => mirrors(id, other))) };
+}
+
+/**
+ * The Summary's five as jobs: What to fix's own rows, folded over every problem of the severity, for the jobs one of
+ * the five is part of. So a row says the points it says on What to fix, and lists under it what its fix clears, among
+ * the five or not. It pinned the five folded among themselves; changed in the audit of 2026-11-24, where a row said +4
+ * on the Summary and +8 on What to fix and on its own page.
+ */
+function summaryJobs(analysis: Analysis, byId: ReadonlyMap<string, Check>) {
+  const problems = analysis.fixFirst.filter((id) => byId.get(id)?.severity !== 'notice');
+  const five = problems.slice(0, 5);
+  return fixJobs(problems, analysis, byId).rows.filter((row) => row.job.some((id) => five.includes(id)));
 }
 
 /** The rows a list shows, with each one's link and count. */
@@ -266,10 +278,10 @@ test('the sweep: every figure of the Summary, What to fix and one problem lands 
   }
 
   // Fix these first: the engine's first five errors and warnings, in its order, each count the engine's; a problem
-  // another's fix clears entirely is folded under it, as What to fix folds it, the points of both on the row above.
+  // another's fix clears entirely is folded under it, as What to fix folds it (among the five or not), the points of
+  // both on the row above.
   await openSummary(page, crawl.id);
-  const fixFirst = analysis.fixFirst.filter((id) => byId.get(id)?.severity !== 'notice').slice(0, 5);
-  const jobs = fixJobs(fixFirst, analysis, byId).rows;
+  const jobs = summaryJobs(analysis, byId);
   const firstRows = await rowsOf(main(page).getByRole('region', { name: 'Fix these first' }).getByRole('list'));
   expect(firstRows.map((row) => row.href.split('/').pop())).toEqual(jobs.map((job) => job.id));
   for (const [index, row] of firstRows.entries()) {
