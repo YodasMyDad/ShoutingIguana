@@ -1,4 +1,5 @@
 import type { ExtractionSelector } from '../../api/types';
+import { Plus } from 'lucide-react';
 import { Button } from '../../ui/Button';
 import { Select } from '../../ui/Select';
 import { Switch } from '../../ui/Switch';
@@ -83,7 +84,7 @@ export function ExtractionRulesField({
         </div>
       ))}
       <div>
-        <Button type="button" variant="secondary" size="sm" onClick={() => update([...rules, extractionRow()])}>
+        <Button type="button" size="sm" icon={Plus} onClick={() => update([...rules, extractionRow()])}>
           Add a rule
         </Button>
       </div>

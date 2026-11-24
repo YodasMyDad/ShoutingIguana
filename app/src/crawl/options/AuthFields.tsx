@@ -1,3 +1,4 @@
+import { Plus } from 'lucide-react';
 import { Button } from '../../ui/Button';
 import { TextField } from '../../ui/TextField';
 import { cookieRow, type CrawlForm } from './form';
@@ -32,7 +33,9 @@ export function AuthFields({
     <div className="flex flex-col gap-4">
       {mode === 'simple' ? <p className="text-13">{SIMPLE_WORDS.auth.help}</p> : null}
       <TextField
-        label={mode === 'simple' ? 'User name' : FIELD_WORDS.httpLogins.label}
+        // In Advanced the section holds two sign-ins, so each field says whose it is: the first was named only
+        // "HTTP sign-in", with nothing to say it took the user name.
+        label={mode === 'simple' ? 'User name' : `${FIELD_WORDS.httpLogins.label} user name`}
         description={mode === 'advanced' ? FIELD_WORDS.httpLogins.help : undefined}
         value={login.username}
         autoComplete="off"
@@ -43,7 +46,7 @@ export function AuthFields({
         onBlur={onTouch}
       />
       <TextField
-        label="Password"
+        label={mode === 'simple' ? 'Password' : `${FIELD_WORDS.httpLogins.label} password`}
         type="password"
         value={login.password}
         autoComplete="off"
@@ -124,7 +127,10 @@ export function AuthFields({
             onBlur={onTouch}
           />
           <div className="flex flex-col gap-3">
-            <p className="text-13 text-text-secondary">{FIELD_WORDS.cookies.help}</p>
+            <div>
+              <p className="si-field-label">{FIELD_WORDS.cookies.label}</p>
+              <p className="si-field-description">{FIELD_WORDS.cookies.help}</p>
+            </div>
             {form.cookies.map((row) => (
               <div key={row.key} className="flex flex-wrap items-end gap-2">
                 <TextField
@@ -188,14 +194,16 @@ export function AuthFields({
                 </Button>
               </div>
             ))}
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => onChange({ ...form, cookies: [...form.cookies, cookieRow()] })}
-            >
-              Add a cookie
-            </Button>
+            <div>
+              <Button
+                type="button"
+                size="sm"
+                icon={Plus}
+                onClick={() => onChange({ ...form, cookies: [...form.cookies, cookieRow()] })}
+              >
+                Add a cookie
+              </Button>
+            </div>
           </div>
         </>
       ) : null}

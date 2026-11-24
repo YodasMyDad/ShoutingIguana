@@ -30,12 +30,13 @@ export function ListUrlsField({
         <label htmlFor={id} className="si-field-label">
           {FIELD_WORDS.listUrls.label}
         </label>
-        <div className="si-field">
+        {/* `h-auto`: the field's own height is one control's, which cut the four rows to one line. */}
+        <div className="si-field si-field--mono h-auto py-1.5" data-invalid={shown ? '' : undefined}>
           <textarea
             id={id}
             rows={4}
             spellCheck={false}
-            className="si-field__input resize-y font-mono"
+            className="si-field__input resize-y"
             aria-invalid={shown ? true : undefined}
             aria-describedby={shown ? `${id}-error` : undefined}
             placeholder={'https://example.com/a\nhttps://example.com/b'}

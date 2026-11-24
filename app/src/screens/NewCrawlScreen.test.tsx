@@ -536,6 +536,23 @@ describe('New crawl, the audit of 2026-11-19 (H-09, H-21)', () => {
     expect(renderingNote('matching')).toMatch(/^Only the URLs listed/);
   });
 
+  // The audit of 2026-11-24. The first Sign in field was named "HTTP sign-in" alone, the cookies had no name, and
+  // the boxes that take a line each (the list, the patterns) were one line tall whatever their rows.
+  it('names each Sign in field by what it takes, and gives the list and pattern boxes their rows', async () => {
+    sidecar();
+    await open('/new', 'advanced');
+    fireEvent.click(await screen.findByRole('button', { name: /^Sign in/ }));
+    expect(screen.getByRole('textbox', { name: 'HTTP sign-in user name' })).toBeVisible();
+    expect(screen.getByLabelText('HTTP sign-in password')).toBeVisible();
+    expect(screen.getByText('Cookies to send')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Add a cookie' })).toHaveClass('si-btn--secondary');
+    fireEvent.click(screen.getByRole('button', { name: /^List mode/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^JavaScript and filters/ }));
+    for (const name of ['Addresses to crawl', 'Only crawl', 'Don’t crawl']) {
+      expect(screen.getByRole('textbox', { name }).parentElement).toHaveClass('si-field', 'h-auto');
+    }
+  });
+
   it('keeps Start crawl in view: its row sticks to the foot of the pane in Advanced, not in Simple’s short form', async () => {
     sidecar();
     await open('/new', 'advanced');

@@ -627,6 +627,8 @@ function RenderingFields({
         legend={words.label}
         description={mode === 'advanced' ? words.help : undefined}
         options={RENDERING_CHOICES}
+        // Four choices: two rows of two, not three and one left over.
+        columns={2}
         value={form.javaScriptRendering}
         onValueChange={(value) => {
           onChange({ ...form, javaScriptRendering: value as JavaScriptRendering });
@@ -694,13 +696,14 @@ function PatternBox({
       <label htmlFor={id} className="si-field-label">
         {FIELD_WORDS[field].label}
       </label>
-      <div className="si-field">
+      {/* `h-auto`: the field's own height is one control's, which cut the three rows to one line. */}
+      <div className="si-field si-field--mono h-auto py-1.5" data-invalid={error ? '' : undefined}>
         <textarea
           id={id}
           rows={3}
           spellCheck={false}
           data-setting={field}
-          className="si-field__input resize-y font-mono"
+          className="si-field__input resize-y"
           aria-invalid={error ? true : undefined}
           aria-describedby={`${error ? `${id}-error ` : ''}${id}-help`}
           placeholder={placeholder}
