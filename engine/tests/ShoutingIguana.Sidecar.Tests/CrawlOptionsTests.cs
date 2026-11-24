@@ -37,6 +37,44 @@ public sealed class CrawlOptionsTests : IAsyncLifetime
             defaults["speedPresets"]!.ToJsonString());
     }
 
+    /// <summary>
+    /// The rendering mode goes out and comes in by name, as the contract says and as the app's form sends it. It went
+    /// out as the enum's number and a name was refused, so choosing a mode in the form made the crawl unstartable.
+    /// A number is still read: a defaults.json saved before holds one.
+    /// </summary>
+    [Fact]
+    public async Task TheRenderingModeIsANameAndASavedNumberIsStillRead()
+    {
+        var defaults = (await _sidecar.GetJsonAsync("api/crawl-options/defaults"))["options"]!;
+        Assert.Equal("automatic", (string?)defaults["javaScriptRendering"]);
+
+        foreach (var mode in new[] { "off", "automatic", "matching", "javaScript" })
+        {
+            var named = await _sidecar.PostAsync("api/crawl-options/validate", new JsonObject
+            {
+                ["startUrl"] = "https://example.com/",
+                ["javaScriptRendering"] = mode,
+                ["renderPatterns"] = new JsonArray("catalogue"),
+            });
+            Assert.Equal("""{"errors":{}}""", named.Body!.ToJsonString());
+        }
+
+        var saved = await _sidecar.SendAsync(HttpMethod.Put, "api/crawl-options/defaults", JsonNode.Parse("""{"javaScriptRendering":"javaScript"}"""));
+        Assert.Equal("javaScript", (string?)saved.Body!["options"]!["javaScriptRendering"]);
+
+        // As 2.0.3 and before saved it: Off is 0.
+        await File.WriteAllTextAsync(Path.Combine(_sidecar.Options.StateDirectory, "defaults.json"), """{"javaScriptRendering":0,"concurrency":3}""");
+        var old = (await _sidecar.GetJsonAsync("api/crawl-options/defaults"))["options"]!;
+        Assert.Equal("off", (string?)old["javaScriptRendering"]);
+        Assert.Equal(3, (int?)old["concurrency"]);
+
+        foreach (var wrong in new[] { """{"javaScriptRendering":9}""", """{"javaScriptRendering":"always"}""" })
+        {
+            Assert.Equal(["javaScriptRendering"], (await _sidecar.PostAsync("api/crawl-options/validate", JsonNode.Parse(wrong)))
+                .Body!["errors"]!.AsObject().Select(field => field.Key));
+        }
+    }
+
     [Fact]
     public async Task SavedDefaultsNeverKeepTheStartUrlHeaderValuesOrProxyPassword()
     {
