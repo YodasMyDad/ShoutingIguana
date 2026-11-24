@@ -15,6 +15,13 @@ internal static class BlockDetector
     /// <summary>Starts the reason of a 429 that no firewall's challenge came with: the host asked the crawler to slow down.</summary>
     public const string RATE_LIMITED = "Rate limited";
 
+    /// <summary>
+    /// Whether a block is a check that a person's browser, or a person, can pass: a challenge page or a CAPTCHA. A
+    /// flat refusal (Cloudflare's "you have been blocked", Akamai's "Access Denied") is not.
+    /// </summary>
+    public static bool IsCheck(string reason) =>
+        reason is "Cloudflare challenge" or "DataDome" or "Imperva" or "HUMAN (PerimeterX)" or "CAPTCHA challenge" or "AWS WAF challenge" or "AWS WAF captcha";
+
     public static string? Detect(int statusCode, IReadOnlyList<ResponseHeader> headers, string? body)
     {
         if (GetHeader(headers, "cf-mitigated")?.Contains("challenge", StringComparison.OrdinalIgnoreCase) == true)

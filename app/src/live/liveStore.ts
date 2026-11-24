@@ -456,6 +456,7 @@ const WAIT_REASONS: readonly CrawlWaitReason[] = [
   'siteDown',
   'robotsTxtCoolDown',
   'sectionLimited',
+  'humanCheck',
 ];
 /** Shared, so a progress event without waits (most of them) keeps the same value from one event to the next. */
 const NO_WAITS: readonly CrawlWait[] = [];

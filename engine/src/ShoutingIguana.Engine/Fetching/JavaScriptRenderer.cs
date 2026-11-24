@@ -590,7 +590,7 @@ internal sealed partial class JavaScriptRenderer(
                 CrawlNoticeLevel.Info,
                 "javascript-rendering",
                 "Downloading the browser that renders pages. This happens once, and the crawl goes on when it is done."));
-            var code = await Task.Run(InstallBrowser).ConfigureAwait(false);
+            var code = await Task.Run(() => InstallBrowser(shellOnly: true)).ConfigureAwait(false);
             if (code != 0)
             {
                 return Unavailable("The browser couldn't be downloaded. Check the connection, then start the crawl again.");
@@ -612,17 +612,17 @@ internal sealed partial class JavaScriptRenderer(
     }
 
     /// <summary>
-    /// Downloads the headless Chromium this version of Playwright drives, and nothing else: not the windowed browser.
-    /// The installer writes its progress to standard output, which the sidecar keeps for its ready line, so it is
+    /// Downloads the headless Chromium this version of Playwright drives, and nothing else. The windowed browser is
+    /// only downloaded for a computer with no Chrome or Edge, when a host has to be read in one. The installer writes its progress to standard output, which the sidecar keeps for its ready line, so it is
     /// sent to standard error while the download runs.
     /// </summary>
-    private static int InstallBrowser()
+    private static int InstallBrowser(bool shellOnly)
     {
         var standardOutput = Console.Out;
         Console.SetOut(Console.Error);
         try
         {
-            return Program.Main(["install", "--only-shell", "chromium"]);
+            return Program.Main(shellOnly ? ["install", "--only-shell", "chromium"] : ["install", "chromium"]);
         }
         finally
         {

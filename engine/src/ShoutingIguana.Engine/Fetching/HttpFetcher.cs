@@ -22,6 +22,9 @@ internal sealed class HttpFetcher : IDisposable
     private const int BLOCK_SAMPLE_BYTES = 64 * 1024;
     private const int MEASURE_BUFFER_BYTES = 64 * 1024;
     private const long MAX_MEASURED_IMAGE_BYTES = 10 * 1024 * 1024;
+
+    /// <summary>A script or stylesheet is counted up to here, eight times what Google reads of one. Past it, it is this big at least.</summary>
+    private const long MAX_MEASURED_RESOURCE_BYTES = 16 * 1024 * 1024;
     private const int MAX_HEADERS = 200;
     /// <summary>Marks a request that carries the crawl's signature, so its response can say so.</summary>
     private static readonly HttpRequestOptionsKey<bool> SIGNED = new("ShoutingIguana.Signed");
@@ -37,7 +40,11 @@ internal sealed class HttpFetcher : IDisposable
     private readonly TimeProvider _timeProvider;
     private readonly SignatureBook _signatures;
     private readonly string _userAgent;
+    /// <summary>A connection that isn't made in this long is not going to be, however long the request may take.</summary>
+    private const int MAX_CONNECT_SECONDS = 10;
+
     private readonly TimeSpan _timeout;
+    private readonly TimeSpan _connectTimeout;
 
     /// <summary>The proxy's address has a user name and password, which a SOCKS5 proxy's refusal is told against.</summary>
     private readonly bool _proxyHasLogin;
@@ -51,6 +58,7 @@ internal sealed class HttpFetcher : IDisposable
         _signatures = new SignatureBook(options.Signatures, timeProvider);
         _userAgent = userAgent.Header;
         _timeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds);
+        _connectTimeout = TimeSpan.FromSeconds(Math.Min(MAX_CONNECT_SECONDS, options.RequestTimeoutSeconds));
         Guard = new PrivateNetworkGuard(options.StartUrl);
         var proxy = ProxyFactory.Create(options.ProxyUrl);
         _proxyHasLogin = proxy?.Credentials is not null;
@@ -63,7 +71,7 @@ internal sealed class HttpFetcher : IDisposable
             CookieContainer = _cookies,
             Credentials = SiteCredentials.Cache(options),
             PreAuthenticate = true,
-            ConnectTimeout = TimeSpan.FromSeconds(Math.Min(10, options.RequestTimeoutSeconds)),
+            ConnectTimeout = _connectTimeout,
             PooledConnectionLifetime = TimeSpan.FromMinutes(5),
             PooledConnectionIdleTimeout = TimeSpan.FromMinutes(1),
             MaxConnectionsPerServer = 64,
@@ -171,6 +179,14 @@ internal sealed class HttpFetcher : IDisposable
                 }
             }
 
+            else if (isSuccess && body == FetchBody.None && IsScriptOrStylesheet(contentType))
+            {
+                // A script or stylesheet is not parsed, but how big it is once decompressed is what a search engine's
+                // limit on a file is about, and a CDN that sends it in chunks gives no length at all. So it is read to
+                // the end and counted, and not kept.
+                (transferBytes, bodyBytes) = await MeasureAsync(response, timeout.Token).ConfigureAwait(false);
+            }
+
             var blockReason = BlockDetector.Detect(statusCode, headers, isSuccess ? null : text);
             return new FetchResponse
             {
@@ -199,7 +215,7 @@ internal sealed class HttpFetcher : IDisposable
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return Failed(uri, FetchOutcome.Timeout, $"No response within {_timeout.TotalSeconds:0} seconds", true, stopwatch);
+            return Failed(uri, FetchOutcome.Timeout, TimeoutError(timeout.IsCancellationRequested, _timeout, _connectTimeout), true, stopwatch);
         }
         catch (HttpRequestException exception) when (exception.InnerException is PrivateNetworkAddressException)
         {
@@ -329,6 +345,42 @@ internal sealed class HttpFetcher : IDisposable
     {
         headers.Remove(name);
         headers.TryAddWithoutValidation(name, value);
+    }
+
+    private static bool IsScriptOrStylesheet(string? contentType) =>
+        contentType is "text/css" or "text/javascript" or "application/javascript" or "application/x-javascript" or "application/ecmascript"
+            or "text/ecmascript";
+
+    /// <summary>
+    /// How many bytes the body was sent as, and how many it is once decompressed, up to
+    /// <see cref="MAX_MEASURED_RESOURCE_BYTES"/> of them. A body cut off there has no sent size: the header's stands.
+    /// </summary>
+    private static async Task<(long? Transfer, long Decoded)> MeasureAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        var raw = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        var counting = new CountingStream(raw);
+        await using var stream = Decompress(counting, response.Content.Headers.ContentEncoding);
+        var scratch = ArrayPool<byte>.Shared.Rent(MEASURE_BUFFER_BYTES);
+        try
+        {
+            long decoded = 0;
+            while (decoded < MAX_MEASURED_RESOURCE_BYTES)
+            {
+                var read = await stream.ReadAsync(scratch.AsMemory(0, MEASURE_BUFFER_BYTES), cancellationToken).ConfigureAwait(false);
+                if (read == 0)
+                {
+                    return (counting.BytesRead, decoded);
+                }
+
+                decoded += read;
+            }
+
+            return (null, decoded);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(scratch);
+        }
     }
 
     private static async Task<PooledBuffer> ReadBodyAsync(HttpResponseMessage response, int limit, CancellationToken cancellationToken)
@@ -498,6 +550,13 @@ internal sealed class HttpFetcher : IDisposable
 
         return null;
     }
+
+    /// <summary>
+    /// What a timeout says: the limit that was hit. A connection that couldn't be made gives up at the connect limit,
+    /// before the request's own time is up, and the message must not name the longer one.
+    /// </summary>
+    internal static string TimeoutError(bool requestTimeUp, TimeSpan request, TimeSpan connect) =>
+        $"No response within {(requestTimeUp ? request : connect).TotalSeconds:0} seconds";
 
     internal static FetchOutcome Classify(int statusCode, string? blockReason) =>
         blockReason is not null

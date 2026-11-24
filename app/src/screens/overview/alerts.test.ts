@@ -320,6 +320,19 @@ describe('waits', () => {
     ]);
   });
 
+  it('say a site’s check is waiting for the person, where the window is, and for how long', () => {
+    const { entries, more } = waitEntries([{ reason: 'humanCheck', host: 'example.com', durationMs: 240_000 }], {
+      humanCheck: 1,
+    });
+    expect(entries.map((entry) => [entry.title, entry.detail])).toEqual([
+      [
+        'Waiting for you',
+        'example.com is asking to check you’re human. A browser window is open on its page: complete the check there and the crawl carries on. It waits 4 min more, then records the site’s pages as blocked. Closing the window does the same.',
+      ],
+    ]);
+    expect(more).toBe('and 1 more check');
+  });
+
   it('has nothing to say when nothing waits', () => {
     expect(waitEntries([], {})).toEqual({ entries: [], more: null });
   });

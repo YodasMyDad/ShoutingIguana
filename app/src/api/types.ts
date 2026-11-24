@@ -284,6 +284,11 @@ export interface CrawlOptions {
    * This is not JavaScript rendering. Off leaves a block as a block.
    */
   browserFallback?: boolean | null;
+  /**
+   * With `browserFallback`: when a site's check needs a person, show the browser window on that page and wait for
+   * them. The app asks for it whenever the fallback is on. Left out, the page is recorded as blocked.
+   */
+  solveChallenges?: boolean | null;
   proxyUrl?: string | null;
   requestTimeoutSeconds?: number | null;
   maxRetries?: number | null;
@@ -941,7 +946,8 @@ export interface SiteVersionCounts {
 
 /**
  * E4: `robotsTxt`, `otherSitesRobotsTxt`, `crawlDelay`, `backoff`, `heldBack`, `siteDown` or `robotsTxtCoolDown`; 3b:
- * `sectionLimited`.
+ * `sectionLimited`; 2.2: `humanCheck`, a browser window is open for the person to complete a site's check, `host` the
+ * site's host and `durationMs` how long the crawl still waits for them.
  */
 export type CrawlWaitReason =
   | 'robotsTxt'
@@ -951,7 +957,8 @@ export type CrawlWaitReason =
   | 'heldBack'
   | 'siteDown'
   | 'robotsTxtCoolDown'
-  | 'sectionLimited';
+  | 'sectionLimited'
+  | 'humanCheck';
 
 /** E4: something holding part of the crawl up now. Fields that don't apply to its reason are left out. */
 export interface CrawlWait {

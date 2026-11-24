@@ -426,7 +426,9 @@ public sealed class JavaScriptRendererTests
         await using var renderer = Renderer(site.BaseUri, observer, edit: options => options with
         {
             Rendering = JavaScriptRendering.JavaScript,
-            BrowserFallback = true
+            BrowserFallback = true,
+            // The computer's own browser needs no driver. Without it, the headless one is all the fallback has.
+            UseInstalledBrowser = false
         });
         renderer.CreatePlaywright = () => throw new PlaywrightException("Driver not found: /.playwright/node/linux-x64/node");
 
@@ -453,7 +455,9 @@ public sealed class JavaScriptRendererTests
         await using var renderer = Renderer(site.BaseUri, observer, edit: options => options with
         {
             Rendering = JavaScriptRendering.Off,
-            BrowserFallback = true
+            BrowserFallback = true,
+            // The computer's own browser needs no driver. Without it, the headless one is all the fallback has.
+            UseInstalledBrowser = false
         });
         renderer.CreatePlaywright = () => throw new PlaywrightException("Driver not found");
 

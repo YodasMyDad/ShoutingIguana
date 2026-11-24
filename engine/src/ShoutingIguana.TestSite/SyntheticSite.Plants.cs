@@ -1159,6 +1159,41 @@ public sealed partial class SyntheticSite
         Content = $"<p>{Text("browser-fallback-next", PLANT_WORDS)}</p>"
     }));
 
+    /// <summary>The challenge every request without the pass gets: a 403 with Cloudflare's header and title, and the script that sets the pass.</summary>
+    /// <param name="ask">The pass is set by a person pressing the button, not by the page itself.</param>
+    internal static SyntheticResponse HumanCheckChallenge(bool ask, string clearance)
+    {
+        var cookie = ask ? HUMAN_CHECK_ASK_COOKIE : HUMAN_CHECK_COOKIE;
+        var pass = $"document.cookie = '{cookie}={clearance}; path=/'; location.reload();";
+        var script = ask
+            ? $"const pass = () => {{ {pass} }};" +
+              "document.getElementById('verify').addEventListener('click', pass);" +
+              "if (new URLSearchParams(location.search).has('shown')) {" +
+              "  const timer = setInterval(() => {" +
+              "    if (document.visibilityState === 'visible' && window.screenX > -10000 && window.outerWidth > 0) { clearInterval(timer); pass(); }" +
+              "  }, 200);" +
+              "}"
+            : $"if (!navigator.webdriver) setTimeout(() => {{ {pass} }}, 800);";
+        var body = ask
+            ? "<h1>Verify you are human</h1><p>Press the button to go on to the site.</p><button id=\"verify\" type=\"button\">Verify you are human</button>"
+            : "<h1>Checking your browser</h1><p>This takes a moment.</p>";
+        return new SyntheticResponse(403, HTML,
+            $"<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>Just a moment...</title></head><body>{body}<script>{script}</script></body></html>",
+            null, null, new Dictionary<string, string> { ["cf-mitigated"] = "challenge", ["Cache-Control"] = "no-store" });
+    }
+
+    /// <summary>What a browser with the pass is served behind the check: a page with a title, and a link to the next.</summary>
+    internal SyntheticResponse HumanCheckDocument(string path) => Html(Render(new PageSpec
+    {
+        Path = path,
+        Title = $"Human check passed{(path == HUMAN_CHECK_LAST_PATH ? ", last page" : string.Empty)} | Synthetic Store planted page",
+        Description = "A page behind a check that tells a person's browser from a crawler, part of the Synthetic Store crawler tests.",
+        H1 = "Human check passed",
+        Chrome = false,
+        Content = $"<p>{Text("human-check" + path, PLANT_WORDS)}</p>" +
+                  (path == HUMAN_CHECK_LAST_PATH ? string.Empty : $"<p><a href=\"{HUMAN_CHECK_NEXT_PATH}\">The next page behind the check</a></p>")
+    }));
+
     /// <summary>The raw HTML: the document's head, an empty mount, and the address of the script that fills it in.</summary>
     private static string ClientShell(string renderedDocument, string script)
     {

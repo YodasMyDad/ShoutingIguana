@@ -14,103 +14,155 @@ internal sealed partial class JavaScriptRenderer
     private readonly ConcurrentDictionary<string, FallbackHost> _fallbackHosts = new(StringComparer.Ordinal);
 
     /// <summary>
-    /// The page a headless browser got for <paramref name="uri"/>, after a host blocked plain HTTP. The same browser
-    /// as rendering, started the first time it's needed. One context per <paramref name="hostKey"/>, kept for the
-    /// crawl. Null when the browser can't run, the navigation fails, or the page leaves this URL: the caller keeps
-    /// the HTTP response. The HTML is the page. The caller parses it once. This is not JavaScript rendering.
+    /// The page a browser got for <paramref name="uri"/>, after a host blocked plain HTTP. Which browser depends on
+    /// the block. A check (<see cref="BlockDetector.IsCheck"/>: a challenge page, a CAPTCHA) goes to the computer's own
+    /// Chrome or Edge (<see cref="LoadInstalledAsync"/>): the headless browser has never passed one, and trying it
+    /// first only makes the site warier of this address. Any other block goes to the headless browser, the same one as
+    /// rendering, and to the installed one if that is refused too. A host stays with the browser that read it. One
+    /// page of a <paramref name="hostKey"/> at a time. Null when no browser can run, the navigation fails, or the page
+    /// leaves this URL: the caller keeps the HTTP response. A page still refused comes back as the block, never as
+    /// the site's page. The HTML is the page. The caller parses it once. This is not JavaScript rendering.
     /// </summary>
-    public async Task<FetchResponse?> LoadAsync(Uri uri, string hostKey, CancellationToken cancellationToken)
+    /// <param name="blockReason">What plain HTTP was refused with. Null for a host a browser already reads.</param>
+    public async Task<FetchResponse?> LoadAsync(Uri uri, string hostKey, CancellationToken cancellationToken, string? blockReason = null)
+    {
+        var session = _fallbackHosts.GetOrAdd(hostKey, static _ => new FallbackHost());
+        await session.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (session.GaveUp)
+            {
+                return null;
+            }
+
+            FetchResponse? headless = null;
+            var installedFirst = blockReason is not null && BlockDetector.IsCheck(blockReason) && CanUseInstalled;
+            if (session.Headless || (!session.Installed && !installedFirst))
+            {
+                headless = await LoadHeadlessAsync(uri, session, cancellationToken).ConfigureAwait(false);
+                if (session.Headless || headless is { Outcome: not FetchOutcome.Blocked } || headless?.IsRateLimited == true)
+                {
+                    session.Headless |= headless is not null;
+                    return headless;
+                }
+            }
+
+            var installed = await LoadInstalledAsync(uri, session, cancellationToken).ConfigureAwait(false);
+            if (installed is { Outcome: not FetchOutcome.Blocked })
+            {
+                session.Installed = true;
+                return installed;
+            }
+
+            if (installed is null && installedFirst && !session.Installed && !CanUseInstalled)
+            {
+                // The computer's browser couldn't be started after all. The headless one is all there is.
+                headless = await LoadHeadlessAsync(uri, session, cancellationToken).ConfigureAwait(false);
+                if (headless is { Outcome: not FetchOutcome.Blocked })
+                {
+                    session.Headless = true;
+                    return headless;
+                }
+            }
+
+            // A check that could not be passed is not tried on every page after it: the host stays blocked.
+            if (!session.Installed || (installed?.BlockReason is { } reason && BlockDetector.IsCheck(reason)))
+            {
+                session.GaveUp = true;
+            }
+
+            return installed ?? headless;
+        }
+        finally
+        {
+            session.Gate.Release();
+        }
+    }
+
+    /// <summary>The page the headless browser got. Null when it can't run, the navigation fails, or the page leaves this URL.</summary>
+    private async Task<FetchResponse?> LoadHeadlessAsync(Uri uri, FallbackHost session, CancellationToken cancellationToken)
     {
         if (Volatile.Read(ref _unavailable) == 1)
         {
             return null;
         }
 
-        var session = _fallbackHosts.GetOrAdd(hostKey, static _ => new FallbackHost());
-        await session.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await _slots.WaitAsync(cancellationToken).ConfigureAwait(false);
+        IPage? page = null;
         try
         {
-            await _slots.WaitAsync(cancellationToken).ConfigureAwait(false);
-            IPage? page = null;
-            try
+            var browser = await BrowserAsync().ConfigureAwait(false);
+            if (browser is null)
             {
-                var browser = await BrowserAsync().ConfigureAwait(false);
-                if (browser is null)
-                {
-                    return null;
-                }
-
-                session.Context ??= await OpenContextAsync(browser, session.Held).ConfigureAwait(false);
-
-                var started = Stopwatch.StartNew();
-                page = await session.Context.NewPageAsync().ConfigureAwait(false);
-                using var _ = cancellationToken.Register(() => page.CloseAsync());
-                IResponse? navigation;
-                try
-                {
-                    navigation = await page.GotoAsync(uri.AbsoluteUri, new PageGotoOptions
-                    {
-                        WaitUntil = WaitUntilState.DOMContentLoaded,
-                        Timeout = options.RequestTimeoutSeconds * 1000f
-                    }).ConfigureAwait(false);
-                }
-                catch (TimeoutException)
-                {
-                    return null;
-                }
-                catch (PlaywrightException ex) when (ex.Message.Contains("Timeout", StringComparison.OrdinalIgnoreCase))
-                {
-                    return null;
-                }
-
-                try
-                {
-                    await page.WaitForLoadStateAsync(LoadState.NetworkIdle, new PageWaitForLoadStateOptions { Timeout = SETTLE_MS })
-                        .ConfigureAwait(false);
-                }
-                catch (TimeoutException)
-                {
-                    // The document is parsed. A challenge that already cleared doesn't need a quiet network.
-                }
-                catch (PlaywrightException ex) when (ex.Message.Contains("Timeout", StringComparison.OrdinalIgnoreCase))
-                {
-                }
-
-                if (navigation is null || !StayedForFallback(page.Url, uri))
-                {
-                    logger.LogDebug("Browser fallback for {Url} landed on {Final}; keeping the HTTP response", uri, page.Url);
-                    return null;
-                }
-
-                return await DocumentAsync(uri, navigation, page, (int)started.ElapsedMilliseconds).ConfigureAwait(false);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                // A crawl that is stopping closed the page: the URL is not read, rather than kept as the block.
-                cancellationToken.ThrowIfCancellationRequested();
-                logger.LogDebug(ex, "Browser fallback for {Url} failed; keeping the HTTP response", uri);
                 return null;
             }
-            finally
-            {
-                if (page is not null)
-                {
-                    try
-                    {
-                        await page.CloseAsync().ConfigureAwait(false);
-                    }
-                    catch (Exception ex) when (ex is not OperationCanceledException)
-                    {
-                        logger.LogDebug(ex, "Closing the fallback page for {Url} failed", uri);
-                    }
-                }
 
-                _slots.Release();
+            session.Context ??= await OpenContextAsync(browser, session.Held).ConfigureAwait(false);
+
+            var started = Stopwatch.StartNew();
+            page = await session.Context.NewPageAsync().ConfigureAwait(false);
+            using var _ = cancellationToken.Register(() => page.CloseAsync());
+            IResponse? navigation;
+            try
+            {
+                navigation = await page.GotoAsync(uri.AbsoluteUri, new PageGotoOptions
+                {
+                    WaitUntil = WaitUntilState.DOMContentLoaded,
+                    Timeout = options.RequestTimeoutSeconds * 1000f
+                }).ConfigureAwait(false);
             }
+            catch (TimeoutException)
+            {
+                return null;
+            }
+            catch (PlaywrightException ex) when (ex.Message.Contains("Timeout", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            try
+            {
+                await page.WaitForLoadStateAsync(LoadState.NetworkIdle, new PageWaitForLoadStateOptions { Timeout = SETTLE_MS })
+                    .ConfigureAwait(false);
+            }
+            catch (TimeoutException)
+            {
+                // The document is parsed. A challenge that already cleared doesn't need a quiet network.
+            }
+            catch (PlaywrightException ex) when (ex.Message.Contains("Timeout", StringComparison.OrdinalIgnoreCase))
+            {
+            }
+
+            if (navigation is null || !StayedForFallback(page.Url, uri))
+            {
+                logger.LogDebug("Browser fallback for {Url} landed on {Final}; keeping the HTTP response", uri, page.Url);
+                return null;
+            }
+
+            return await DocumentAsync(uri, navigation, page, (int)started.ElapsedMilliseconds).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // A crawl that is stopping closed the page: the URL is not read, rather than kept as the block.
+            cancellationToken.ThrowIfCancellationRequested();
+            logger.LogDebug(ex, "Browser fallback for {Url} failed; keeping the HTTP response", uri);
+            return null;
         }
         finally
         {
-            session.Gate.Release();
+            if (page is not null)
+            {
+                try
+                {
+                    await page.CloseAsync().ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogDebug(ex, "Closing the fallback page for {Url} failed", uri);
+                }
+            }
+
+            _slots.Release();
         }
     }
 
@@ -134,6 +186,7 @@ internal sealed partial class JavaScriptRenderer
         }
 
         _fallbackHosts.Clear();
+        await CloseInstalledAsync().ConfigureAwait(false);
     }
 
     private async Task<FetchResponse> DocumentAsync(Uri uri, IResponse navigation, IPage page, int elapsedMs)
@@ -144,7 +197,13 @@ internal sealed partial class JavaScriptRenderer
             headers.Add(new ResponseHeader(name.ToLowerInvariant(), value));
         }
 
-        var status = navigation.Status;
+        var html = await page.ContentAsync().ConfigureAwait(false);
+        return BrowserDocument(uri, navigation.Status, headers, html, elapsedMs, elapsedMs);
+    }
+
+    /// <summary>A document a browser was answered with, as the crawl stores a fetch: its HTML only when it is the site's page.</summary>
+    private FetchResponse BrowserDocument(Uri uri, int status, List<ResponseHeader> headers, string html, int timeToFirstByteMs, int totalMs)
+    {
         var rawType = headers.FirstOrDefault(header => header.Name == "content-type").Value;
         var mediaType = ContentTypeHeader.MediaTypeOf(rawType);
         var isHtml = mediaType is "text/html" or "application/xhtml+xml" or null;
@@ -158,7 +217,7 @@ internal sealed partial class JavaScriptRenderer
         var truncated = false;
         if (isHtml)
         {
-            body = await page.ContentAsync().ConfigureAwait(false);
+            body = html;
             bodyBytes = Encoding.UTF8.GetByteCount(body);
             if (bodyBytes > options.MaxHtmlBytes)
             {
@@ -180,8 +239,8 @@ internal sealed partial class JavaScriptRenderer
             Body = blockReason is null && isHtml ? body : null,
             BodyBytes = bodyBytes,
             BodyTruncated = truncated,
-            TimeToFirstByteMs = elapsedMs,
-            TotalMs = elapsedMs,
+            TimeToFirstByteMs = timeToFirstByteMs,
+            TotalMs = totalMs,
             BlockReason = blockReason,
             FromBrowser = true
         };
@@ -213,5 +272,19 @@ internal sealed partial class JavaScriptRenderer
         public IBrowserContext? Context { get; set; }
 
         public HeldRequests Held { get; } = new();
+
+        /// <summary>The headless browser reads this host.</summary>
+        public bool Headless { get; set; }
+
+        /// <summary>The headless browser was refused, and the computer's own browser reads this host.</summary>
+        public bool Installed { get; set; }
+
+        /// <summary>No browser got past the host's block. It is not tried again in this crawl.</summary>
+        public bool GaveUp { get; set; }
+
+        /// <summary>How many times a person has been asked to complete this host's check.</summary>
+        public int PersonChecks { get; set; }
+
+        public FallbackVerdict Verdict { get; set; }
     }
 }

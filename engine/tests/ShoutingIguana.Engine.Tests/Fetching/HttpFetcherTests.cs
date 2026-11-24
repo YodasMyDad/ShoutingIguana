@@ -171,6 +171,39 @@ public sealed class HttpFetcherTests : IAsyncLifetime
         Assert.Equal("No response within 1 seconds", response.Error);
     }
 
+    /// <summary>A connection that can't be made gives up after 10 seconds of a 20-second request, and was said to have waited 20.</summary>
+    [Fact]
+    public void ATimeoutNamesTheLimitThatWasHit()
+    {
+        var request = TimeSpan.FromSeconds(20);
+        var connect = TimeSpan.FromSeconds(10);
+        Assert.Equal("No response within 10 seconds", HttpFetcher.TimeoutError(requestTimeUp: false, request, connect));
+        Assert.Equal("No response within 20 seconds", HttpFetcher.TimeoutError(requestTimeUp: true, request, connect));
+    }
+
+    /// <summary>
+    /// A script or stylesheet is checked, not parsed, but its size is what Google's 2 MB limit is about, and that is
+    /// its size once decompressed. The bytes sent are counted too, when no header says how many there are.
+    /// </summary>
+    [Fact]
+    public async Task MeasuresAScriptAsItIsOnceDecompressed()
+    {
+        using var fetcher = Fetcher(Options());
+
+        var script = await fetcher.FetchAsync(_server.Url("/script"), FetchBody.None, CancellationToken.None);
+
+        Assert.Equal(FetchOutcome.Success, script.Outcome);
+        Assert.Null(script.Body);
+        Assert.Null(script.ContentLength);
+        Assert.Equal(COMPRESSIBLE_BYTES.Length, script.BodyBytes);
+        Assert.Equal(GZIPPED.Length, script.TransferBytes);
+        Assert.True(script.BodyBytes > script.TransferBytes * 2);
+
+        var styles = await fetcher.FetchAsync(_server.Url("/styles"), FetchBody.None, CancellationToken.None);
+        Assert.Equal("body { color: black; }p { margin: 0; }".Length, styles.BodyBytes);
+        Assert.Equal(styles.BodyBytes, styles.TransferBytes);
+    }
+
     [Fact]
     public async Task ReadsRetryAfterInSeconds()
     {
@@ -303,11 +336,11 @@ public sealed class HttpFetcherTests : IAsyncLifetime
         Assert.Null(chunked.Body);
         Assert.Equal(MEASURE_CAP_BYTES, huge.TransferBytes);
 
-        // With a Content-Length, or for anything but an image, nothing is read.
+        // With a Content-Length, an image is not read. A stylesheet is, to count it as it is once decompressed.
         Assert.Equal(IMAGE_BYTES, sized.ContentLength);
         Assert.Null(sized.TransferBytes);
         Assert.Null(styles.ContentLength);
-        Assert.Null(styles.TransferBytes);
+        Assert.Equal(38, styles.TransferBytes);
     }
 
     private HttpFetcher Fetcher(CrawlOptions? options = null, TimeProvider? time = null)
@@ -389,6 +422,14 @@ public sealed class HttpFetcherTests : IAsyncLifetime
                 break;
             case "/image":
                 await WriteImageAsync(response, int.Parse(request.Query["bytes"]!, CultureInfo.InvariantCulture), request.Query.ContainsKey("chunked"));
+                break;
+            case "/script":
+                // A script as a CDN sends one: compressed, and in chunks, so no header says how long it is.
+                response.Headers.ContentType = "application/javascript";
+                response.Headers.ContentEncoding = "gzip";
+                await response.Body.WriteAsync(GZIPPED.AsMemory(0, GZIPPED.Length / 2));
+                await response.Body.FlushAsync();
+                await response.Body.WriteAsync(GZIPPED.AsMemory(GZIPPED.Length / 2));
                 break;
             case "/styles":
                 response.ContentType = "text/css";

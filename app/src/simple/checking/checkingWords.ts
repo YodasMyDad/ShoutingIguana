@@ -34,7 +34,18 @@ export interface SimpleAlert {
 
 /** What gives a site's alert its kind: a wait and an alert of one kind say the same thing, so it's said once. */
 type Kind =
-  'blocked' | 'away' | 'robots' | 'down' | 'stopped' | 'sitemaps' | 'slow' | 'section' | 'delay' | 'shopify' | 'note';
+  | 'blocked'
+  | 'away'
+  | 'robots'
+  | 'down'
+  | 'stopped'
+  | 'sitemaps'
+  | 'slow'
+  | 'section'
+  | 'delay'
+  | 'shopify'
+  | 'human'
+  | 'note';
 
 const SLOW = 'The site asked the check to slow down, so it has. It will take longer.';
 const SECTION_SLOW =
@@ -42,6 +53,9 @@ const SECTION_SLOW =
 const DELAY = 'The site asks visitors like this one to go slowly, so the check waits between pages.';
 const ROBOTS =
   'The site’s rules file for search engines isn’t answering, so the check can’t tell where it may go. It’s waiting, and will try again.';
+/** Asks something of the person, so it is said first and as a warning. */
+const HUMAN =
+  'The site wants to see that you’re a person. A browser window has opened on its page: do what it asks there, and reading the site carries on by itself. Closing the window leaves the site’s pages unread.';
 const DOWN = 'The site has stopped answering. The check is waiting, and will carry on by itself when it’s back.';
 const STOP: SimpleAlertAction = { kind: 'stop', label: 'Stop' };
 
@@ -165,6 +179,9 @@ function alertWords(
     case 'sitemaps':
       // Good news, not something in the way.
       return null;
+    case 'human-check':
+      // The window is said while it is open, by the wait. Once it has closed there is nothing left to do.
+      return null;
     case 'javascript-rendering': {
       // The engine's words end in the fault as the browser's driver gave it ("Driver not found" and a path),
       // which is Advanced's to read.
@@ -198,6 +215,8 @@ function waitWords(wait: CrawlWait): { kind: Kind; text: string; actions: Simple
     // Its own kind: the site slowing the whole check down is another thing, said beside it.
     case 'sectionLimited':
       return { kind: 'section', text: SECTION_SLOW, actions: [] };
+    case 'humanCheck':
+      return { kind: 'human', text: HUMAN, actions: [] };
     case 'crawlDelay':
       return { kind: 'delay', text: DELAY, actions: [] };
     case 'siteDown':
@@ -263,6 +282,11 @@ export function inTheWay({
   // Its kind kept the others to one, but a note is listed each time, so it was shown twice, under one key.
   const said = new Set<string>();
   const entries: SimpleAlert[] = [];
+  // What waits for the person comes before everything the check is only telling them.
+  if (waits.some((wait) => wait.reason === 'humanCheck')) {
+    seen.add('human');
+    entries.push({ key: 'wait:human', level: 'warning', text: HUMAN, actions: [] });
+  }
   const newestFirst = [...alerts]
     .filter((alert) => from === null || instant(alert.at) >= from)
     .sort((a, b) => instant(b.at) - instant(a.at) || (b.id ?? 0) - (a.id ?? 0));

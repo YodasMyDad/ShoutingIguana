@@ -343,6 +343,11 @@ internal sealed class CrawlSession
             waits.Add(coolDown);
         }
 
+        foreach (var (host, left) in _renderer.HumanChecks)
+        {
+            waits.Add(new CrawlWait(CrawlWaitReason.HumanCheck, host, Duration: left));
+        }
+
         waits.AddRange(_trickle.Waits());
         return waits;
     }
