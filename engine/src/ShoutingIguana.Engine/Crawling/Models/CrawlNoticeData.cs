@@ -14,7 +14,7 @@ namespace ShoutingIguana.Engine.Crawling.Models;
 /// <item><c>robots-unreachable</c>: Origin, Reason (the status or error), Duration (until robots.txt is asked again).</item>
 /// <item><c>site-unreachable</c>: Origin, Reason (the last error), Duration (the pause between tries).</item>
 /// <item><c>site-down</c>: Origin, Duration (how long it hadn't answered).</item>
-/// <item><c>sitemaps</c>: Count (the sitemaps read), UrlCount (the URLs they list).</item>
+/// <item><c>sitemaps</c>: Count (the sitemaps read), UrlCount (the URLs they list, each once).</item>
 /// <item><c>sitemaps-not-read</c>: Url (the sitemap left out), Reason.</item>
 /// <item><c>sitemaps-failed</c>: Reason (the error).</item>
 /// </list>

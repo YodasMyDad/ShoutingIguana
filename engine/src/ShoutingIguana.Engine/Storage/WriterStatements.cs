@@ -35,6 +35,7 @@ internal sealed class WriterStatements : IDisposable
     private readonly SqliteCommand _insertSitemapUrl;
     private readonly SqliteCommand _updateCrawlStatus;
     private readonly SqliteCommand _markSitemapsDone;
+    private readonly SqliteCommand _countSitemapUrls;
     private readonly SqliteCommand _insertNotice;
     private readonly SqliteCommand _insertExtraction;
 
@@ -136,6 +137,7 @@ internal sealed class WriterStatements : IDisposable
             WHERE id = 1
             """, "$status", "$now", "$finished");
         _markSitemapsDone = Prepare(connection, "UPDATE crawl SET sitemaps_done = 1 WHERE id = 1");
+        _countSitemapUrls = Prepare(connection, "SELECT COUNT(DISTINCT url_id) FROM sitemap_urls");
         _insertExtraction = Prepare(connection, """
             INSERT INTO extractions (url_id, name, selector_type, selector, value, count, error)
             VALUES ($urlId, $name, $type, $selector, $value, $count, $error)
@@ -290,6 +292,9 @@ internal sealed class WriterStatements : IDisposable
         Run(_updateCrawlStatus, (int)status, now, isFinished);
 
     public void MarkSitemapsDone() => Run(_markSitemapsDone);
+
+    /// <summary>The URLs the sitemaps list, each once however many sitemaps list it: what the Sitemaps screen and the stats count.</summary>
+    public long CountSitemapUrls() => Convert.ToInt64(_countSitemapUrls.ExecuteScalar(), CultureInfo.InvariantCulture);
 
     public void Dispose()
     {

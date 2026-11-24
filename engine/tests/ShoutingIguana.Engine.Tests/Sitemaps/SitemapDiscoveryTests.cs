@@ -60,6 +60,26 @@ public sealed class SitemapDiscoveryTests : IAsyncLifetime
         Assert.Equal(0, Assert.Single(SitemapListReader.Read(path).Sitemaps).ListedSitemaps);
     }
 
+    /// <summary>
+    /// The notice counts URLs as the Sitemaps screen and the stats do: a URL two sitemaps list, or one lists twice, once.
+    /// It summed the sitemaps' entries, and Overview said "596 URLs" where Sitemaps said 595.
+    /// </summary>
+    [Fact]
+    public async Task TheNoticeCountsAUrlListedTwiceOnce()
+    {
+        Serve("/robots.txt", "text/plain", $"User-agent: *\nDisallow:\nSitemap: {_server.Url("/one.xml")}\nSitemap: {_server.Url("/two.xml")}");
+        Serve("/one.xml", "application/xml", $"{URLSET}{Loc("/a")}{Loc("/b")}{Loc("/b")}</urlset>");
+        Serve("/two.xml", "application/xml", $"{URLSET}{Loc("/a")}{Loc("/c")}</urlset>");
+        var observer = new RecordingObserver();
+
+        var path = await CrawlAsync(observer);
+
+        var notice = Assert.Single(observer.Notices, notice => notice.Code == "sitemaps");
+        Assert.Equal((2L, 3L), (notice.Data?.Count, notice.Data?.UrlCount));
+        Assert.Equal("Read 2 sitemap(s) listing 3 URLs.", notice.Message);
+        Assert.Equal(3, CrawlStatsReader.Read(path).SitemapUrlCount);
+    }
+
     [Fact]
     public async Task XmlServedAsTextIsStillRead()
     {

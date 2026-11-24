@@ -242,6 +242,17 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
     public ValueTask MarkSitemapsDoneAsync(CancellationToken cancellationToken) =>
         _commands.Writer.WriteAsync(new MarkSitemapsDoneCommand(), cancellationToken);
 
+    /// <summary>
+    /// The URLs the sitemaps read so far list, each once: a URL two sitemaps list, or one lists twice, is one URL. Asked
+    /// after the sitemaps' own writes, it counts them all.
+    /// </summary>
+    public async Task<long> CountSitemapUrlsAsync(CancellationToken cancellationToken)
+    {
+        var reply = new TaskCompletionSource<long>(TaskCreationOptions.RunContinuationsAsynchronously);
+        await _commands.Writer.WriteAsync(new CountSitemapUrlsCommand(reply), cancellationToken).ConfigureAwait(false);
+        return await reply.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     /// <param name="requests">For a recheck's run, the requests it sent the site, which its record keeps.</param>
     public ValueTask UpdateStatusAsync(CrawlStatus status, bool isFinished, CancellationToken cancellationToken, long requests = 0) =>
         _commands.Writer.WriteAsync(new UpdateCrawlStatusCommand(status, isFinished) { Requests = requests }, cancellationToken);
@@ -442,6 +453,9 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
                     break;
                 case CompleteSitemapCommand complete:
                     _statements.UpdateSitemap(complete.Record);
+                    break;
+                case CountSitemapUrlsCommand count:
+                    count.Reply.TrySetResult(_statements.CountSitemapUrls());
                     break;
                 case MarkSitemapsDoneCommand when _recheck is not null:
                     DropSitemapsNotReadAgain();
@@ -1478,6 +1492,9 @@ internal sealed partial class CrawlWriter : IAsyncDisposable
                 break;
             case NextRecheckPhaseCommand next:
                 next.Reply.TrySetException(exception);
+                break;
+            case CountSitemapUrlsCommand count:
+                count.Reply.TrySetException(exception);
                 break;
         }
     }

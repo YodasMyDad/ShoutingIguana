@@ -116,13 +116,16 @@ internal sealed class SitemapDiscoverer(
                 $"the crawler reads at most {MAX_SITEMAPS.ToString("N0", CultureInfo.InvariantCulture)} sitemaps", cancellationToken).ConfigureAwait(false);
         }
 
+        // The notice counts URLs as the Sitemaps screen and the stats do: each once, however many sitemaps list it. The
+        // sum of the sitemaps' own entries said "596 URLs" of a site whose sitemaps list 595, one of them twice.
+        var listedUrls = urlCount > 0 ? await writer.CountSitemapUrlsAsync(cancellationToken).ConfigureAwait(false) : 0;
         await writer.MarkSitemapsDoneAsync(cancellationToken).ConfigureAwait(false);
         observer.OnNotice(new CrawlNotice(
             CrawlNoticeLevel.Info,
             "sitemaps",
-            urlCount > 0 ? $"Read {sitemapCount} sitemap(s) listing {urlCount:N0} URLs." : "No sitemap URLs found.")
+            listedUrls > 0 ? $"Read {sitemapCount} sitemap(s) listing {listedUrls:N0} URLs." : "No sitemap URLs found.")
         {
-            Data = new CrawlNoticeData(Count: sitemapCount, UrlCount: urlCount)
+            Data = new CrawlNoticeData(Count: sitemapCount, UrlCount: listedUrls)
         });
     }
 
