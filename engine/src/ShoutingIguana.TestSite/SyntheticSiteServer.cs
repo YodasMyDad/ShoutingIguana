@@ -403,6 +403,14 @@ public sealed class SyntheticSiteServer : IAsyncDisposable
             return SyntheticSite.HumanCheckChallenge(ask, clearance);
         }
 
+        // The first page with the pass is answered once with a redirect to itself, as a firewall does when it sets
+        // its cookie: the browser asks again, and a crawl that reads one request at a time must not wait on its own first ask.
+        if (path == SyntheticSite.HUMAN_CHECK_PATH && request.Cookies[SyntheticSite.HUMAN_CHECK_HOP_COOKIE] != "1")
+        {
+            return new SyntheticResponse(302, "text/html; charset=utf-8", null, null, SyntheticSite.HUMAN_CHECK_PATH,
+                new Dictionary<string, string> { ["Set-Cookie"] = SyntheticSite.HUMAN_CHECK_HOP_COOKIE + "=1; Path=/" });
+        }
+
         return path == SyntheticSite.HUMAN_CHECK_NEXT_PATH
             ? new SyntheticResponse(301, "text/html; charset=utf-8", null, null, SyntheticSite.HUMAN_CHECK_LAST_PATH)
             : site.HumanCheckDocument(path);

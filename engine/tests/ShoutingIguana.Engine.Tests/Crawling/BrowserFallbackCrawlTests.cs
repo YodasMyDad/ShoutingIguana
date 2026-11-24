@@ -121,7 +121,9 @@ public sealed class BrowserFallbackCrawlTests : IAsyncLifetime
         var last = new Uri(_server.BaseUri, SyntheticSite.HUMAN_CHECK_LAST_PATH).AbsoluteUri;
         var hits = _server.Requests.WatchHits();
 
-        var summary = await RunAsync(path, start, browserFallback: true, useInstalledBrowser: true);
+        // One request at a time: the page answers the pass with a redirect to itself, and that second ask must not
+        // wait for the first one's turn on the host.
+        var summary = await RunAsync(path, start, browserFallback: true, useInstalledBrowser: true, concurrency: 1);
         Assert.Equal(CrawlStatus.Completed, summary.Status);
 
         Assert.Equal("200", Scalar(path, start, "r.status_code"));
@@ -245,12 +247,12 @@ public sealed class BrowserFallbackCrawlTests : IAsyncLifetime
     private static bool CanOpenABrowser() => InstalledBrowsers.Find() is not null && InstalledBrowsers.HasDisplay();
 
     private async Task<CrawlSummary> RunAsync(string path, string start, bool browserFallback, bool useInstalledBrowser = false,
-        bool solveChallenges = false, int challengeWaitSeconds = 60, ICrawlObserver? observer = null)
+        bool solveChallenges = false, int challengeWaitSeconds = 60, ICrawlObserver? observer = null, int concurrency = 2)
     {
         var options = new CrawlOptions
         {
             StartUrl = start,
-            Concurrency = 2,
+            Concurrency = concurrency,
             Rendering = JavaScriptRendering.Off,
             DiscoverSitemaps = false,
             CheckResources = false,

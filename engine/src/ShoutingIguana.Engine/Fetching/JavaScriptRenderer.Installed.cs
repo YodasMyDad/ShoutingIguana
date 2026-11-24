@@ -111,7 +111,7 @@ internal sealed partial class JavaScriptRenderer
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            logger.LogDebug(ex, "Reading {Url} in the installed browser failed", uri);
+            logger.LogWarning(ex, "Reading {Url} in the installed browser failed", uri);
             return null;
         }
         finally
@@ -292,7 +292,7 @@ internal sealed partial class JavaScriptRenderer
                 {
                     if (began.Elapsed >= answerBy)
                     {
-                        logger.LogDebug("The installed browser got no answer for {Url}", uri);
+                        logger.LogInformation("The installed browser got no answer for {Url}", uri);
                         return null;
                     }
 
@@ -606,6 +606,10 @@ internal sealed partial class JavaScriptRenderer
             }
 
             var key = parameters.TryGetProperty("networkId", out var network) && network.GetString() is { } networkId ? networkId : requestId;
+
+            // A redirect's next hop is the same request paused again. The hop before it has been answered, so its slot
+            // is given back first: on a host read one request at a time, the next would wait for it for good.
+            load.Release(key);
             HostGateLease lease;
             load.Waiting(1);
             try

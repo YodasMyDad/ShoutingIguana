@@ -61,6 +61,9 @@ public sealed partial class SyntheticSite
     /// <summary>The cookie that carries the pass for <see cref="HUMAN_CHECK_ASK_PATH"/>.</summary>
     public const string HUMAN_CHECK_ASK_COOKIE = "si_clearance_ask";
 
+    /// <summary>Set by the redirect to itself that <see cref="HUMAN_CHECK_PATH"/> answers a browser with once it has the pass.</summary>
+    public const string HUMAN_CHECK_HOP_COOKIE = "si_hop";
+
     /// <summary>The pass for a browser with this user agent. Another browser's pass is not this one's.</summary>
     public static string Clearance(string userAgent) =>
         Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes("synthetic-clearance:" + userAgent)))[..32].ToLowerInvariant();
