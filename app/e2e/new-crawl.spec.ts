@@ -11,6 +11,9 @@ import { env, expectNoViolations, read, sidecar } from './support';
 let seeded: string[] = [];
 test.beforeAll(async () => {
   seeded = await libraryIds();
+  // Other files save defaults of their own (the browser fallback off, for the test site's planted blocks): this file
+  // starts from the engine's.
+  await sidecar('/api/crawl-options/defaults', { method: 'PUT', body: JSON.stringify({}) });
 });
 test.afterEach(async () => {
   await removeCrawlsNotIn(seeded);
