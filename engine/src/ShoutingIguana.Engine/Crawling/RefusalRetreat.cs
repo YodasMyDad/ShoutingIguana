@@ -83,6 +83,18 @@ internal sealed class RefusalRetreat(
     }
 
     /// <summary>
+    /// What the browser had done about the host when it last refused a page (a page read since may have changed what it
+    /// says now), for the <c>blocked</c> alert; null when it had done nothing.
+    /// </summary>
+    public FallbackVerdict? VerdictAtRefusal(Uri uri)
+    {
+        lock (_sync)
+        {
+            return _hosts.TryGetValue(KeyOf(uri), out var pace) && pace.Verdict != FallbackVerdict.None ? pace.Verdict : null;
+        }
+    }
+
+    /// <summary>
     /// The page's turn on its host: at once on a host asked at its own pace; on one slowed down, once the page before it
     /// has ended and the wait after it is over. Dispose it as the page ends.
     /// </summary>
@@ -249,6 +261,11 @@ internal sealed class RefusalRetreat(
                 return false;
             }
 
+            if (renderer.VerdictFor(key) is not FallbackVerdict.None and var verdict)
+            {
+                pace.Verdict = verdict;
+            }
+
             if (PersonSaidNo(key))
             {
                 // A person was asked to complete the host's check and it didn't let the crawl in: waiting won't either.
@@ -282,7 +299,7 @@ internal sealed class RefusalRetreat(
             held = tries < MAX_RETRIES && (retry is not null || Volatile.Read(ref _held) < MAX_HELD);
             if (held)
             {
-                Hold(new HeldUrl(key, item, record, tries), pace);
+                Hold(new HeldUrl(key, item, record, tries) { PersonAsked = retry?.PersonAsked ?? false }, pace);
             }
         }
 
@@ -329,11 +346,22 @@ internal sealed class RefusalRetreat(
                 }
 
                 // Once the rest is over, a run of refusals that never slowed the host down is over too: the pages' own answers.
-                if (held.Released || pace.GaveUp || (_restOverAt is not null && !pace.IsSlow))
+                if (held.Released || pace.GaveUp || (_restOverAt is not null && !pace.IsSlow && !held.PersonAsked))
                 {
-                    _line.Remove(node);
-                    Count(held.Item, pace, -1);
-                    done.Add(held.Last);
+                    if (!pace.GaveUp && MayAskAPerson(held, pace))
+                    {
+                        // The page's own check, which doesn't clear by itself: shown to a person once, as it was before
+                        // the browser had read the host's pages, rather than recorded blocked.
+                        held.Released = false;
+                        held.PersonAsked = true;
+                        renderer.AskAPersonNext(held.Key);
+                    }
+                    else
+                    {
+                        _line.Remove(node);
+                        Count(held.Item, pace, -1);
+                        done.Add(held.Last);
+                    }
                 }
 
                 node = next;
@@ -351,7 +379,7 @@ internal sealed class RefusalRetreat(
             for (var node = _line.First; node is not null; node = node.Next)
             {
                 var pace = _hosts[node.Value.Key];
-                if (!pace.IsSlow || node.Value.Released)
+                if (!(pace.IsSlow || node.Value.PersonAsked) || node.Value.Released)
                 {
                     continue;
                 }
@@ -369,6 +397,10 @@ internal sealed class RefusalRetreat(
             return null;
         }
     }
+
+    /// <summary>A held-back URL's check needs a person, who may be asked, and hasn't been for it. Under the lock.</summary>
+    private bool MayAskAPerson(HeldUrl held, RefusalPace pace) =>
+        !held.PersonAsked && pace.Verdict == FallbackVerdict.NeedsPerson && renderer.MayAskAPerson(held.Key);
 
     private bool IsGivenUp(string key)
     {
@@ -483,8 +515,11 @@ internal sealed class RefusalRetreat(
         });
     }
 
-    /// <summary>The site's own URLs, not a probe of another version of it, which never holds up a crawl.</summary>
-    private static bool Applies(FrontierItem item) => item.IsInternal && item.Source != DiscoverySource.SiteVersion;
+    /// <summary>
+    /// The site's own pages: not a probe of another version of it, which never holds up a crawl, and not a file's status
+    /// check, which plain HTTP asks for even of a host the browser reads.
+    /// </summary>
+    private static bool Applies(FrontierItem item) => item is { IsInternal: true, Mode: FetchMode.Crawl } && item.Source != DiscoverySource.SiteVersion;
 
     /// <summary>A firewall's or bot check's answer. A 429 is the site asking for less, which the host's pace deals with.</summary>
     private static bool IsRefusal(PageRecord record) =>
@@ -507,5 +542,8 @@ internal sealed class RefusalRetreat(
 
         /// <summary>Done with: to be recorded as it ended.</summary>
         public bool Released { get; set; }
+
+        /// <summary>Its check is to be shown to a person, once, as it is asked again.</summary>
+        public bool PersonAsked { get; set; }
     }
 }

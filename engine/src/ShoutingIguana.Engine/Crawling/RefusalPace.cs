@@ -1,3 +1,5 @@
+using ShoutingIguana.Engine.Fetching.Models;
+
 namespace ShoutingIguana.Engine.Crawling;
 
 /// <summary>
@@ -68,6 +70,9 @@ internal sealed class RefusalPace(string host)
 
     /// <summary>Its refused URLs waiting to be asked again.</summary>
     public int Waiting { get; set; }
+
+    /// <summary>What the browser had done about the host at its last refusal that it had done anything about.</summary>
+    public FallbackVerdict Verdict { get; set; }
 
     /// <summary>Its refused URLs asked again, each counted once.</summary>
     public int Retried { get; set; }

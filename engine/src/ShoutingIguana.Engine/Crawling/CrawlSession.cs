@@ -1043,11 +1043,13 @@ internal sealed class CrawlSession
             }
         }
 
-        // A refused URL of a host some of whose pages were read: its alert says what the crawl did about it first.
-        if (item is { IsInternal: true, Source: not DiscoverySource.SiteVersion } && record.Response.Outcome == FetchOutcome.Blocked &&
+        // A refused URL of a host some of whose pages were read: its alert says what the crawl did about it first. With the
+        // browser fallback on, a file's status check refused over plain HTTP is no block of the site (PageProcessor).
+        if (item is { IsInternal: true, Source: not DiscoverySource.SiteVersion } && (item.Mode == FetchMode.Crawl || !_options.BrowserFallback) &&
+            record.Response.Outcome == FetchOutcome.Blocked &&
             _retreat.WasRead(new Uri(item.Url)))
         {
-            _processor.SayBlocked(record, _retreat.FactsFor(new Uri(item.Url)));
+            _processor.SayBlocked(record, _retreat.FactsFor(new Uri(item.Url)), _retreat.VerdictAtRefusal(new Uri(item.Url)));
         }
 
         await _writer.RecordAsync(record, cancellationToken).ConfigureAwait(false);

@@ -297,7 +297,8 @@ curl -H "Authorization: Bearer <token>" http://127.0.0.1:53123/api/health
      host it had read is shown to a person (`--solve-challenges`) only once the crawl is at one page every 30 s and the
      check still doesn't clear by itself. They are recorded blocked when their tries are over, when the host refuses three in a row at one
      every 30 s (giving up there takes about two minutes), when a person asked didn't let the crawl in, or ten minutes
-     after the rest of the crawl is over. The crawl says it slowed down (`blocked-slowdown`), and the host's `blocked`
+     after the rest of the crawl is over. A refused page among pages that get through is recorded as it was, except
+     that a check of its own that needs a person is shown to one once first (`--solve-challenges`). The crawl says it slowed down (`blocked-slowdown`), and the host's `blocked`
      alert says what it did first. A host refused from its first page goes the way it always has.
    - It recovers additively: every 30 s without a slowdown, a tenth of the pace it slowed from and one more request at
      once; and for ten minutes after a host asked to slow down, never above nine tenths of the pace that tripped it.

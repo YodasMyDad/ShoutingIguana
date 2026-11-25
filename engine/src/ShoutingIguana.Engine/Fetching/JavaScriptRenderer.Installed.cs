@@ -91,15 +91,22 @@ internal sealed partial class JavaScriptRenderer
     /// </summary>
     public bool AskAPersonNext(string hostKey)
     {
-        if (!options.SolveChallenges || !_fallbackHosts.TryGetValue(hostKey, out var session) || !session.Installed || session.AskPerson ||
-            session.PersonChecks >= MAX_PERSON_CHECKS)
+        if (!MayAskAPerson(hostKey) || _fallbackHosts[hostKey].AskPerson)
         {
             return false;
         }
 
-        session.AskPerson = true;
+        _fallbackHosts[hostKey].AskPerson = true;
         return true;
     }
+
+    /// <summary>
+    /// Whether a check this browser meets on <paramref name="hostKey"/>, whose pages it has read, may still be shown to a
+    /// person in this crawl: it may ask one, and the host hasn't had its asks.
+    /// </summary>
+    public bool MayAskAPerson(string hostKey) =>
+        options.SolveChallenges && _fallbackHosts.TryGetValue(hostKey, out var session) && session.Installed && !session.GaveUp &&
+        session.PersonChecks < MAX_PERSON_CHECKS;
 
     /// <summary>What the installed browser is called, once it has been started: "Chrome", "Edge".</summary>
     public string? InstalledBrowserName => _installed?.Browser.Name;
