@@ -95,6 +95,31 @@ describe('a quick start of a Shopify store whose signature is remembered (lane s
   });
 });
 
+describe('a quick start asks a person when a site needs one, as the full form does', () => {
+  const sentFor = async (options: Partial<CrawlOptions>) => {
+    const sidecar = fakeSidecar([
+      ['GET', /^\/api\/crawl-options\/defaults$/, () => json({ options, speedPresets: [] })],
+      ['POST', /^\/api\/crawls$/, () => json(testCrawlItem())],
+    ]);
+    setTransport(sidecar);
+    await startCrawl('https://example.com/');
+    const post = sidecar.requests.find((request) => request.method === 'POST');
+    return (post?.body as { options: CrawlOptions }).options;
+  };
+
+  it('sends solveChallenges with the browser fallback on, though the engine keeps it off for the command line', async () => {
+    expect((await sentFor({ browserFallback: true, solveChallenges: false })).solveChallenges).toBe(true);
+  });
+
+  it('asks nobody when the browser fallback is off', async () => {
+    expect((await sentFor({ browserFallback: false, solveChallenges: false })).solveChallenges).toBe(false);
+  });
+
+  it('follows the app’s default, on, when the saved defaults leave the fallback out', async () => {
+    expect((await sentFor({})).solveChallenges).toBe(true);
+  });
+});
+
 describe('round 5: a crawl analysed since it was stopped refuses Continue, Remove and Delete as busy', () => {
   const refused = () =>
     problem({

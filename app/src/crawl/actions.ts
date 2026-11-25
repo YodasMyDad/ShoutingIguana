@@ -8,6 +8,7 @@ import { crawlToast, notifyError, notifyResult } from '../feedback/notify';
 import { liveStore } from '../live/liveStore';
 import { getMode } from '../mode/mode';
 import { siteName } from '../simple/home/sites';
+import { ENGINE_DEFAULTS } from './options/engineDefaults';
 import { sendableHeaders, withScheme } from './options/form';
 import { startHostOf } from './options/shopifySignature';
 import { savedShopifySignature } from './secrets';
@@ -188,7 +189,13 @@ async function defaultsToSend(): Promise<CrawlOptions> {
   const saved = { ...(await api.crawlOptionDefaults()).options };
   // A response's own fact, not an option to send.
   delete saved.hasRedactedProxyCredentials;
-  return { ...saved, extraHeaders: sendableHeaders(saved.extraHeaders) };
+  // The app can show the person what to do, so a check that needs them is shown, as the full form sends it: the
+  // engine's own default is off, for the command line.
+  return {
+    ...saved,
+    extraHeaders: sendableHeaders(saved.extraHeaders),
+    solveChallenges: saved.browserFallback ?? ENGINE_DEFAULTS.browserFallback,
+  };
 }
 
 /**
