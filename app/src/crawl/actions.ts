@@ -189,13 +189,7 @@ async function defaultsToSend(): Promise<CrawlOptions> {
   const saved = { ...(await api.crawlOptionDefaults()).options };
   // A response's own fact, not an option to send.
   delete saved.hasRedactedProxyCredentials;
-  // The app can show the person what to do, so a check that needs them is shown, as the full form sends it: the
-  // engine's own default is off, for the command line.
-  return {
-    ...saved,
-    extraHeaders: sendableHeaders(saved.extraHeaders),
-    solveChallenges: saved.browserFallback ?? ENGINE_DEFAULTS.browserFallback,
-  };
+  return { ...saved, extraHeaders: sendableHeaders(saved.extraHeaders) };
 }
 
 /**
@@ -225,7 +219,10 @@ export async function startCrawl(
   startUrl: string,
 ): Promise<{ ok: true; item: CrawlListItem } | { ok: false; fieldErrors: Record<string, string[]> }> {
   try {
-    const defaults = await defaultsToSend();
+    const saved = await defaultsToSend();
+    // The app can show the person what to do, so a check that needs them is shown, as the full form sends it: the
+    // engine's own default is off, for the command line.
+    const defaults = { ...saved, solveChallenges: saved.browserFallback ?? ENGINE_DEFAULTS.browserFallback };
     const signatures = await signaturesFor(startUrl, defaults.signatures);
     return {
       ok: true,
