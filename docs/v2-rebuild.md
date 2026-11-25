@@ -80,12 +80,66 @@ person-check flow after the owner's live test, merged on `master`. This block is
   status-checked (`--crawl-hreflang`, `--crawl-pagination` read them as pages); resources judged decompressed; a
   `charset=unicode` page read as UTF-8; the timeout message. `AnalysisFreshness.VERSION` is **28**. Detail in
   [v2-check-audit.md](v2-check-audit.md), third audit and fourth pass.
-- **Open:** `HttpFetcher.Classify` for a 1xx or a 3xx without `Location` (needs a new outcome); `hreflang-unlinked`
-  unproven; two Storybook stories fail (git-ignored gallery fixtures, one contrast at 2.51:1), not a gate.
-  `CrawlComparability` counts `browserFallback` as a fetching difference, so an old crawl compared with a new one
-  reads Partial. Owner decisions waiting: `redirect-broken` on the crawler's own www probe, `canonical-multiple`,
-  `url-repetitive-path` ignoring sitemap-only URLs, the 2 MB limit, `soft-404` passing error pages of 300+ words,
-  checks worth adding (`notranslate`, sitemap blocked by robots.txt, missing URL redirecting home, relative hreflang).
+- **Released:** run 45588612313, green on all four legs plus the preflight and the release job; every asset,
+  `.sig` and `latest.json` published. The owner's install upgraded to 2.1.1. Checked on the released tree
+  (`31485a14`): engine 2,640, sidecar 341, CLI 46; bench 100k (2,077 pages/s, peak 219 MB, flat); typecheck, lint,
+  format; Vitest 6,464; e2e 299; cargo 145 + 3; `tauri build`; `smoke-sidecar --render`, `smoke:tauri`,
+  `check:orphans`, `smoke-engine.ps1`, `smoke:shell`.
+
+### Next version: start here (2026-11-25)
+
+**Ask the owner first, in one go.** Each is theirs to decide; nothing here is decided yet.
+
+1. **Make the repo public?** Until it is, testers need repo access to download, and the updater finds nothing
+   (`latest.json` 404s; the app says "No update information yet"). A real GitHub update has never been proven.
+2. **Code signing.** Builds are unsigned: Windows SmartScreen warns, macOS needs right-click › Open. An open talk:
+   the cheapest way that also covers other apps they may build.
+3. **The person check on a host already read in Chrome** now opens only after slowing down hasn't helped (about 1.5
+   to 2 minutes). Before 2.1.1 it opened at the first challenge. Keep, or open at once?
+4. **The slow-down's scope and numbers.** Only firewall or bot-check refusals slow a host; a run of plain 403s doesn't
+   (so a real 403 section isn't retried). 1 s start, doubling to 30 s, 3 retries a URL, 10 minutes after the rest
+   (`Crawling/RefusalPace.cs`, `RefusalRetreat.cs`). Keep?
+5. **A host read in a browser is read one page at a time** for the rest of the crawl. Default-on makes that common
+   on protected sites. Allow two or more browser pages at once?
+6. **Comparing crawls:** `Analysis/CrawlComparability.cs:48` counts `browserFallback` as a fetching difference, so a
+   crawl from before 2.1.1 compared with a new one reads Partial. Ignore that option there?
+7. **Saved defaults from before 2.1.1** keep an explicit `browserFallback: false` if the user pressed "Save as my
+   defaults" then. Kept as their choice; or switch them on once?
+8. **Checks the audit queried** (detail in [v2-check-audit.md](v2-check-audit.md), third audit and fourth pass):
+   `redirect-broken` raised on the crawler's own www probe (kept for now); `canonical-multiple` (vlm.be `/nl` is a
+   real case); `url-repetitive-path` ignores sitemap-only URLs; the 2 MB HTML limit is 2,097,152 bytes; `soft-404`
+   passes error pages of 300+ words; `url-multiple-slashes` reports only indexable `//` pages.
+9. **Checks worth adding:** `notranslate`; a sitemap blocked by robots.txt; a missing URL that redirects to the home
+   page; relative hreflang URLs; `blocked-by-robots` saying when Googlebot itself is allowed.
+10. **`.deb` installs** are told of an update and given the link; installing it in place would need `pkexec`. Worth it?
+11. **Step 5** (Search Console, then GA4, Bing Webmaster, Google Ads, Microsoft Advertising) starts only at their word.
+12. **Sponsorship.** The owner wants to earn from the app on GitHub (2026-11-25). Once their GitHub Sponsors profile
+    is approved, add `.github/FUNDING.yml` (`github: YodasMyDad`, plus any Ko-fi or Buy Me a Coffee link they give)
+    and ask whether the app should show a "Support Shouting Iguana" link (Settings › About, the report's footer).
+    The Sponsor button shows only once the repo is public.
+
+**Engineering left, no decision needed:**
+
+- `HttpFetcher.Classify`: a 1xx, or a 3xx without `Location`, has no outcome of its own (needs a new outcome value).
+- `hreflang-unlinked` is the one check never seen firing on a real page.
+- Two Storybook stories fail `test:stories` (git-ignored gallery fixtures for `screens-overview--mock-crawl`; contrast
+  2.51:1 on `screens-new-crawl--advanced-shopify`'s disabled checkbox text), and the new blocked-alert stories have
+  not been through it. Not a gate.
+- `WindowPlacementTests` opens a real window on the desktop and failed once under load; passes alone.
+- `npm run tauri build` printed "Number of errors: 1" on Windows and still bundled; not looked into.
+- On a machine without Playwright's Chromium, a non-check block downloads the headless shell even when Chrome is
+  installed (the crawl says so).
+
+**Unproven, needs a machine or a real case:** a macOS or AppImage update at runtime; the `.deb` update notice at
+runtime; the person-check window on macOS and Linux desktops; the full-Chromium download with no Chrome or Edge; a
+proxy sign-in in the installed browser; the slow-down on a real site (uk.indeed.com never refused generally); the
+person path on a host already read in Chrome; the ~0.3 s at Chrome's start when it holds the keyboard.
+
+**Gotchas:** `npm run tauri build` does not rebuild the sidecar: run `npm run build:sidecar` first, or the app and
+e2e run a stale engine. `cargo test --release` panics in `tauri-build` while an app run from `target/release` holds
+`si-sidecar.exe`; close it or use `cargo test`. A live person-check test needs the owner at the desktop: open the
+built exe with `SI_APP_PROFILE_DIR` set to a temp folder, tell them when, and read
+`%LOCALAPPDATA%\ShoutingIguana\logs\sidecar-<date>.log` (lines starting `Human check:`) to confirm.
 
 **2026-11-24, the pre-launch audit: `2.1.0`.** The owner asked for a full audit before showing the repo publicly:
 both modes of the UI, every SEO check, JavaScript rendering and browser crawling, and installers that work on every

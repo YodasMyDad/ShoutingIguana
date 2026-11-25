@@ -8,7 +8,7 @@ Guidance for agents working in this repo. Read this before making changes.
 
 - `engine/` — headless .NET 10 crawl engine, the `si` CLI, and the localhost sidecar. One SQLite file per crawl.
 - `app/` — React and TypeScript UI in a Tauri 2 shell. The shell starts the engine as a sidecar.
-- `docs/` — the rebuild plan and the UI notes. **Where step 4 stands** in [`docs/v2-rebuild.md`](docs/v2-rebuild.md) is the only status. Update that section before you stop, and commit it.
+- `docs/` — the rebuild plan and the UI notes. **Where step 4 stands** in [`docs/v2-rebuild.md`](docs/v2-rebuild.md) is the only status. Update that section before you stop, and commit it. Starting new work: read its "Next version: start here" first and put its owner questions to the owner.
 
 All work is on `master`. Steps 1 to 4 of the rebuild are shipped; step 5 (integrations) starts only at the owner's word.
 
