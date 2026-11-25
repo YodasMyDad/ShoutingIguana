@@ -90,8 +90,8 @@ person-check flow after the owner's live test, merged on `master`. This block is
 
 **Ask the owner first, in one go.** Each is theirs to decide; nothing here is decided yet.
 
-1. **Make the repo public?** Until it is, testers need repo access to download, and the updater finds nothing
-   (`latest.json` 404s; the app says "No update information yet"). A real GitHub update has never been proven.
+1. **The repo went public on 2026-11-25**, so `latest.json` now downloads (200). Not yet proven: an installed
+   copy updating itself from GitHub; the first chance is 2.1.1 to the next version. Nothing to ask; prove it then.
 2. **Code signing.** Builds are unsigned: Windows SmartScreen warns, macOS needs right-click › Open. An open talk:
    the cheapest way that also covers other apps they may build.
 3. **The person check on a host already read in Chrome** now opens only after slowing down hasn't helped (about 1.5
@@ -113,10 +113,10 @@ person-check flow after the owner's live test, merged on `master`. This block is
    page; relative hreflang URLs; `blocked-by-robots` saying when Googlebot itself is allowed.
 10. **`.deb` installs** are told of an update and given the link; installing it in place would need `pkexec`. Worth it?
 11. **Step 5** (Search Console, then GA4, Bing Webmaster, Google Ads, Microsoft Advertising) starts only at their word.
-12. **Sponsorship.** The owner wants to earn from the app on GitHub (2026-11-25). Once their GitHub Sponsors profile
-    is approved, add `.github/FUNDING.yml` (`github: YodasMyDad`, plus any Ko-fi or Buy Me a Coffee link they give)
-    and ask whether the app should show a "Support Shouting Iguana" link (Settings › About, the report's footer).
-    The Sponsor button shows only once the repo is public.
+12. **Sponsorship.** The owner wants to earn from the app (2026-11-25). Their GitHub Sponsors profile is live
+    (github.com/sponsors/YodasMyDad); `.github/FUNDING.yml` and a README "Support the project" section are in. Ask:
+    should the app show a "Support Shouting Iguana" link (Settings › About, the report's footer)? Any Ko-fi or Buy Me
+    a Coffee link to add? Other income ideas raised: paid support for agencies, signed builds, step 5 as a paid tier.
 
 **Engineering left, no decision needed:**
 

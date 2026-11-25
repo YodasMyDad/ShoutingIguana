@@ -195,6 +195,10 @@ npm run tauri build    # a release build and the installer for this OS
 
 The `ShoutingIguana.PluginSdk` NuGet package is no longer used. v2 has no plugin system. The package stays published.
 
+## Support the project
+
+Shouting Iguana is free and stays free. If it saves you time or money, [sponsoring on GitHub](https://github.com/sponsors/YodasMyDad) buys more time for fixes and new features, here and in my other open source projects.
+
 ## Licence
 
 [MIT](LICENSE).
