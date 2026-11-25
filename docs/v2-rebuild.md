@@ -62,7 +62,7 @@ person-check flow after the owner's live test, merged on `master`. This block is
   the reload or redirect after the tick is followed in the same browser. No stealth libraries, CAPTCHA services or
   proxy rotation; it never switches to a search engine's identity itself. 9 of 11 blocked real hosts read unattended
   (before: 0); indeed.com and glassdoor need a person. Proven live with the owner on 2026-11-25: a quick start of
-  www.glassdoor.co.uk showed the window in front 13 s in, the owner ticked in 4 s, the 308 was followed and the site
+  `www.glassdoor.co.uk` showed the window in front 13 s in, the owner ticked in 4 s, the 308 was followed and the site
   was read in Chrome; uk.indeed.com read 20+ pages in Chrome with no person. `--no-browser-fallback` turns it off; a crawl file from before
   reads as off. An ordinary crawl starts no browser. **Unproven:** macOS and Linux desktops, the full-Chromium
   download with no Chrome or Edge, a proxy sign-in in the installed browser.
