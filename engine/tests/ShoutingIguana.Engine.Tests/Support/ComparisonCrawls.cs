@@ -90,7 +90,7 @@ public sealed class ComparisonCrawls : IAsyncLifetime
 
     private async Task<(string Then, string Now)> CrawlBothAsync(SyntheticSiteServer server, System.Security.Cryptography.X509Certificates.X509Certificate2? certificate)
     {
-        var options = new CrawlOptions { StartUrl = server.BaseUri.AbsoluteUri, Concurrency = 8, TrustedCertificate = certificate };
+        var options = new CrawlOptions { StartUrl = server.BaseUri.AbsoluteUri, Concurrency = 8, TrustedCertificate = certificate, BrowserFallback = false };
         var then = await CrawlAsync(options);
         server.Revision = 1;
         var now = await CrawlAsync(options);

@@ -371,7 +371,7 @@ internal sealed class AnalysisReader : IDisposable
     {
         var json = CrawlDatabase.Scalar(_connection, "SELECT options_json FROM crawl WHERE id = 1") as string
                    ?? throw new InvalidOperationException("This file is not a crawl database.");
-        return StoredJson.Deserialize(json, EngineJsonContext.Default.CrawlOptions, new CrawlOptions { StartUrl = string.Empty })
+        return StoredCrawlOptions.Deserialize(json)
                ?? throw new InvalidOperationException("The crawl options can't be read.");
     }
 

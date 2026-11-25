@@ -165,7 +165,8 @@ try {
       // Saved defaults: Fast and a limit, so the check ends while the window is in the tray.
       const saved = await engine('/api/crawl-options/defaults', {
         method: 'PUT',
-        body: JSON.stringify({ concurrency: 8, maxRequestsPerSecond: 0, maxUrls: 1_500 }),
+        // The synthetic site plants pages that block: no browser is opened for them here.
+        body: JSON.stringify({ concurrency: 8, maxRequestsPerSecond: 0, maxUrls: 1_500, browserFallback: false }),
       });
       expectThat(saved.ok, `the defaults weren't saved (${saved.status})`);
       const address = page.getByRole('main').getByRole('textbox', { name: 'Web address' });
@@ -295,7 +296,9 @@ try {
     async () => {
       const started = await engine('/api/crawls', {
         method: 'POST',
-        body: JSON.stringify({ options: { startUrl: url, concurrency: 1, maxRequestsPerSecond: 1 } }),
+        body: JSON.stringify({
+          options: { startUrl: url, concurrency: 1, maxRequestsPerSecond: 1, browserFallback: false },
+        }),
       });
       expectThat(started.ok, `the second check didn't start (${started.status})`);
       const second = (await started.json()).id;

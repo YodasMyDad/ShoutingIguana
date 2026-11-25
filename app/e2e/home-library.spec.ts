@@ -43,7 +43,7 @@ test('a running crawl is a card above the library, with its live figures and its
   test.setTimeout(120_000);
   await page.setViewportSize({ width: 1280, height: 720 });
   const started = await read<{ id: string }>('/api/crawls', {
-    options: { startUrl: env('SI_E2E_TESTSITE'), concurrency: 2, maxRequestsPerSecond: 20 },
+    options: { browserFallback: false, startUrl: env('SI_E2E_TESTSITE'), concurrency: 2, maxRequestsPerSecond: 20 },
   });
   await page.goto('/');
   // Named by its heading, which says what the crawls do as the sidebar's does: "1 crawling", "1 paused".
@@ -105,7 +105,7 @@ for (const size of [
       requestAnimationFrame(frame);
     });
     await read<{ id: string }>('/api/crawls', {
-      options: { startUrl: env('SI_E2E_TESTSITE'), concurrency: 2, maxRequestsPerSecond: 20 },
+      options: { browserFallback: false, startUrl: env('SI_E2E_TESTSITE'), concurrency: 2, maxRequestsPerSecond: 20 },
     });
     const crawled = page.locator('main article .si-stat__value').first();
     await expect.poll(async () => countOf(await crawled.innerText()), { timeout: 30_000 }).toBeGreaterThan(5);
@@ -158,7 +158,13 @@ test('the library at 1280x720 and at 200% zoom, older crawls folded under their 
   // A second crawl of the seeded crawl's site: the site's row shows the newest, the seeded one folded under it.
   const crawl = await seededCrawl();
   const again = await read<{ id: string }>('/api/crawls', {
-    options: { startUrl: env('SI_E2E_TESTSITE'), concurrency: 4, maxRequestsPerSecond: 0, maxUrls: 50 },
+    options: {
+      browserFallback: false,
+      startUrl: env('SI_E2E_TESTSITE'),
+      concurrency: 4,
+      maxRequestsPerSecond: 0,
+      maxUrls: 50,
+    },
   });
   for (;;) {
     const item = await read<{ status: string }>(`/api/crawls/${again.id}`);
@@ -193,13 +199,13 @@ test('a site whose newer crawl is paused keeps its address readable beside the b
   const startUrl = env('SI_E2E_TESTSITE');
   // The site's crawl at rest, then a newer one of it, paused: the row is the first, with the second's badge.
   const done = await read<{ id: string }>('/api/crawls', {
-    options: { startUrl, concurrency: 4, maxRequestsPerSecond: 0, maxUrls: 20 },
+    options: { browserFallback: false, startUrl, concurrency: 4, maxRequestsPerSecond: 0, maxUrls: 20 },
   });
   await expect
     .poll(async () => (await read<{ status: string }>(`/api/crawls/${done.id}`)).status, { timeout: 60_000 })
     .not.toMatch(/^(running|paused|stopping|analyzing)$/);
   const newer = await read<{ id: string }>('/api/crawls', {
-    options: { startUrl, concurrency: 2, maxRequestsPerSecond: 20 },
+    options: { browserFallback: false, startUrl, concurrency: 2, maxRequestsPerSecond: 20 },
   });
   expect((await sidecar(`/api/crawls/${newer.id}/pause`, { method: 'POST' })).ok).toBe(true);
   await page.setViewportSize({ width: 1280, height: 720 });

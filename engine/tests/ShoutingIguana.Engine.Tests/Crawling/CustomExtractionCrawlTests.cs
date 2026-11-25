@@ -47,7 +47,8 @@ public sealed class CustomExtractionCrawlTests : IAsyncLifetime
                 new() { Name = "Sku", SelectorType = ExtractionSelector.XPath, Selector = "//span[@id='plant-sku']" },
                 new() { Name = "Code", SelectorType = ExtractionSelector.Regex, Selector = @"extract-code:\s*(\S+)" },
                 new() { Name = "Missing", SelectorType = ExtractionSelector.Css, Selector = ".not-on-the-page" }
-            ]
+            ],
+            BrowserFallback = false
         };
 
         await using var job = new CrawlEngine(NullLoggerFactory.Instance).Start(new CrawlRequest(options, path));

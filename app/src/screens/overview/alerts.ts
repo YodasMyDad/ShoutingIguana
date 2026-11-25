@@ -3,6 +3,7 @@
 // code this app doesn't know. Pure.
 import type { AlertEvent, AlertLevel } from '../../api/types';
 import type { SettingFocus } from '../../routing/search';
+import { aWindow, blockedWords, type BlockedWords } from '../../lib/blockedAlert';
 import { failureOf } from '../../lib/failure';
 import { renderingAlert } from '../../lib/renderingAlert';
 import { formatCount, formatCountOf, formatDuration } from '../../lib/format';
@@ -70,22 +71,81 @@ const BLOCKED_MORE: AlertAction[] = [
 const BLOCKED_ADVICE =
   'Stop the crawl and continue it more slowly, add the headers the site expects, or crawl as another user agent.';
 
+/** What a blocked crawl offers, by what the browser fallback did: asked again, started from where the page went, or the three ways on. */
+function blockedActions(browser: BlockedWords): Pick<AlertEntry, 'action' | 'more'> {
+  switch (browser.next) {
+    case 'from':
+      return { action: { kind: 'newCrawl', label: 'Crawl from there', ...(browser.url ? { url: browser.url } : {}) } };
+    case 'again':
+    case 'turnOnFallback':
+      return { action: { kind: 'newCrawl', label: 'Crawl again', again: true } };
+    case 'otherWays':
+      return { action: SLOWER, more: BLOCKED_MORE };
+  }
+}
+
 function words(
   alert: AlertEvent,
 ): Pick<AlertEntry, 'title' | 'detail' | 'advice' | 'action' | 'more'> & { tally?: string; recorded?: string } {
   const data = alert.data ?? {};
   const where = data.host ?? data.origin ?? 'The site';
   switch (alert.code) {
-    case 'blocked':
+    case 'blocked': {
+      const answered = `${where} answered with ${data.reason ? withArticle(data.reason) : 'a block page'}.`;
+      const tally =
+        data.count !== undefined && data.count > 1
+          ? { tally: `${formatCountOf(data.count, 'response')} blocked.` }
+          : {};
+      // What the browser fallback did about it, where the crawl says: tried or not, a person asked or not, how it ended.
+      const browser = blockedWords(data);
+      if (browser) {
+        return {
+          title:
+            browser.tried === 'notCompleted' || browser.tried === 'windowClosed'
+              ? 'The site’s human check wasn’t completed'
+              : 'The site is blocking the crawl',
+          detail: `${answered} ${browser.what}`,
+          ...tally,
+          advice: browser.advice,
+          ...blockedActions(browser),
+        };
+      }
       return {
         title: 'The site is blocking the crawl',
-        detail: `${where} answered with ${data.reason ? withArticle(data.reason) : 'a block page'}.`,
-        ...(data.count !== undefined && data.count > 1
-          ? { tally: `${formatCountOf(data.count, 'response')} blocked.` }
-          : {}),
+        detail: answered,
+        ...tally,
         advice: BLOCKED_ADVICE,
         action: SLOWER,
         more: BLOCKED_MORE,
+      };
+    }
+    case 'human-check':
+      return {
+        title: 'A site asked to check you’re human',
+        detail: `${where} showed a check${data.reason ? ` (${withArticle(data.reason)})` : ''}. ${aWindow(data.browser)} was opened on its page, in front, for you to complete it.`,
+        advice: null,
+        action: null,
+      };
+    case 'human-check-passed':
+      return {
+        title: 'The human check was completed',
+        detail: `${where}’s check was completed${
+          data.durationMs !== undefined ? ` after ${formatDuration(data.durationMs)}` : ''
+        }. The crawl went on reading the site in ${data.browser ?? 'the browser'}.`,
+        advice: null,
+        action: null,
+      };
+    case 'browser-fallback':
+      return {
+        title: 'A site that blocked the crawl is being read in a browser',
+        detail: [
+          `${where} blocked plain HTTP${data.reason ? ` (${withArticle(data.reason)})` : ''}, so its pages are read in ${
+            data.browser ? `${data.browser}, as itself: it sends its own user agent, not the crawler’s` : 'a browser'
+          }.`,
+          'They’re read one at a time there, so the site takes longer.',
+        ].join(' '),
+        advice: null,
+        action: null,
       };
     case 'mostly-forbidden':
       return {

@@ -230,7 +230,7 @@ public sealed class ScoreStorageTests : IAsyncLifetime
         Assert.Equal(((SiteScore?)null, (NoScoreReason?)NoScoreReason.NotScored), (results.Score, results.NoScoreReason));
     }
 
-    private CrawlOptions Options() => new() { StartUrl = _server.BaseUri.AbsoluteUri, Concurrency = 8 };
+    private CrawlOptions Options() => new() { StartUrl = _server.BaseUri.AbsoluteUri, Concurrency = 8, BrowserFallback = false };
 
     private async Task<string> CrawlAsync(CrawlOptions options)
     {

@@ -27,7 +27,7 @@ test.beforeAll(async () => {
   idle = (await seededCrawl()).id;
   // A crawl of the engine's synthetic site, slow enough to stay running for the whole spec.
   const started = await read<{ id: string }>('/api/crawls', {
-    options: { startUrl: env('SI_E2E_TESTSITE'), concurrency: 1, maxRequestsPerSecond: 1 },
+    options: { browserFallback: false, startUrl: env('SI_E2E_TESTSITE'), concurrency: 1, maxRequestsPerSecond: 1 },
   });
   running = started.id;
 });

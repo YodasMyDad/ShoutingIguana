@@ -1,7 +1,8 @@
 // A crawl that read no pages: why, from how its start URL answered, and what to do next (docs/v2-ui-brief.md, "Every
 // view has every state": Empty explains why, with the next action). Pure.
 import type { UrlRow } from '../../api/grids';
-import type { CrawlListItem } from '../../api/types';
+import type { AlertData, CrawlListItem } from '../../api/types';
+import { blockedWords } from '../../lib/blockedAlert';
 import type { StartRobots } from '../../simple/nothingRead';
 
 export type EmptyCrawlAction = 'continue' | 'crawlAgain' | 'crawlFrom' | 'crawlSettings';
@@ -40,11 +41,14 @@ export function isEmptyCrawl(item: Pick<CrawlListItem, 'pageCount' | 'status'>):
  * while it isn't known (still loading, or it couldn't be read), which says only what the library knows. `robots` is
  * how the start URL's robots.txt answered, for a start URL robots.txt kept the crawl from: rules that refuse it, an
  * error and no answer are three sentences, as Simple's "No pages could be read" says them (round 5's gap 1).
+ * `blocked` is the facts of the crawl's `blocked` alert, for a start URL a firewall or a check answered: whether a
+ * browser was tried, whether a person was asked to complete the check, and how that ended.
  */
 export function emptyCrawl(
   item: Pick<CrawlListItem, 'status' | 'fetchedUrlCount'>,
   start: UrlRow | null | undefined,
   robots?: StartRobots,
+  blocked?: AlertData | null,
 ): EmptyCrawl {
   const unfinished = item.status === 'stopped' || item.status === 'interrupted';
   const title = 'This crawl didn’t read any pages';
@@ -59,12 +63,23 @@ export function emptyCrawl(
   }
   const code = start?.statusCode ?? null;
   switch (start?.outcome) {
-    case 'blocked':
+    case 'blocked': {
+      const answered = `A firewall or bot challenge answered the start URL${code === null ? '' : ` (${statusWords(code)})`}, so the crawl got no further.`;
+      const browser = blockedWords(blocked);
+      if (browser) {
+        return {
+          title,
+          why: `${answered} ${browser.what} ${browser.advice}`,
+          action: browser.next === 'from' ? 'crawlFrom' : browser.next === 'otherWays' ? 'crawlSettings' : 'crawlAgain',
+          ...(browser.url ? { url: browser.url } : {}),
+        };
+      }
       return {
         title,
-        why: `A firewall or bot challenge answered the start URL${code === null ? '' : ` (${statusWords(code)})`}, so the crawl got no further. Crawl more slowly, add the headers the site expects, or crawl as another user agent.`,
+        why: `${answered} Crawl more slowly, add the headers the site expects, or crawl as another user agent.`,
         action: 'crawlSettings',
       };
+    }
     case 'clientError':
       return {
         title,

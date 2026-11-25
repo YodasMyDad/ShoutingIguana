@@ -7,7 +7,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { colourTweensEnd } from './colourTweens';
 import { libraryIds, removeCrawlsNotIn } from './startedCrawls';
-import { chooseTab, siteRow } from './support';
+import { chooseTab, sidecar, siteRow } from './support';
 
 const env = (name: string) => {
   const value = process.env[name];
@@ -69,7 +69,10 @@ const shownIn = (url: string) => {
 };
 
 /** The crawl the live test starts is stopped and its file deleted: the library is the seeded crawl again. */
-test.afterEach(() => removeCrawlsNotIn(seeded));
+test.afterEach(async () => {
+  await removeCrawlsNotIn(seeded);
+  await sidecar('/api/crawl-options/defaults', { method: 'PUT', body: JSON.stringify({}) });
+});
 
 const links = (filters: Filter[], more: Record<string, unknown> = {}) =>
   api<LinksPage>(`/api/crawls/${crawl}/links`, { filters, sort: [], limit: 50, ...more });
@@ -625,6 +628,9 @@ test('while a crawl runs, links arrive in place: the count moves, the grid is ne
   page,
 }) => {
   // A crawl of the engine's test site, started as a user starts one. Never a real site.
+  // The test site plants pages that block. The browser fallback, on by default, would open a browser for them and
+  // show its window: the saved defaults a crawl started here takes turn it off.
+  await sidecar('/api/crawl-options/defaults', { method: 'PUT', body: JSON.stringify({ browserFallback: false }) });
   await page.goto('/');
   await page.getByPlaceholder('Paste a URL, then press Enter').fill(env('SI_E2E_TESTSITE'));
   await page.keyboard.press('Enter');

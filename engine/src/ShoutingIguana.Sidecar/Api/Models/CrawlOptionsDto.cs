@@ -76,8 +76,9 @@ internal sealed record CrawlOptionsDto
     public IReadOnlyList<string>? ListUrls { get; init; }
 
     /// <summary>
-    /// When a host blocks plain HTTP, read that host's pages in a browser. Left out, a new crawl leaves a block as a
-    /// block. This is not JavaScript rendering.
+    /// When a host blocks plain HTTP, read that host's pages in a browser. Left out, a new crawl does: no browser is
+    /// started until a host blocks. False leaves a block as a block. A stored crawl from before this gives false.
+    /// This is not JavaScript rendering.
     /// </summary>
     public bool? BrowserFallback { get; init; }
 

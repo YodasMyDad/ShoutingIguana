@@ -19,8 +19,11 @@ namespace ShoutingIguana.Engine.Fetching;
 /// </summary>
 internal sealed partial class JavaScriptRenderer
 {
-    /// <summary>How long an automatic check is given to clear by itself. Cloudflare's takes five to eleven seconds.</summary>
-    internal const int UNATTENDED_CHECK_MS = 20_000;
+    /// <summary>
+    /// How long an automatic check is given to clear by itself before a person is shown the window. Cloudflare's takes
+    /// five to eleven seconds; a person left looking at nothing for longer takes the crawl to have stuck.
+    /// </summary>
+    internal const int UNATTENDED_CHECK_MS = 12_000;
 
     /// <summary>How long a refusal with no check in it is watched, in case the page loads itself again.</summary>
     private const int REFUSAL_GRACE_MS = 3_000;
@@ -30,6 +33,9 @@ internal sealed partial class JavaScriptRenderer
 
     /// <summary>How long a page that has answered is given to be parsed before it is read as it stands.</summary>
     private const int LOADED_MS = 10_000;
+
+    /// <summary>How many of a host's pages read in the installed browser are logged one by one.</summary>
+    private const int SAID_PAGES = 5;
 
     private const string PAGE_HTML =
         "(() => { const t = document.doctype ? '<!DOCTYPE ' + document.doctype.name + '>' : ''; return t + document.documentElement.outerHTML; })()";
@@ -72,6 +78,9 @@ internal sealed partial class JavaScriptRenderer
     public FallbackVerdict VerdictFor(string hostKey) =>
         _fallbackHosts.TryGetValue(hostKey, out var session) ? session.Verdict : FallbackVerdict.None;
 
+    /// <summary>For <see cref="FallbackVerdict.WentElsewhere"/>: where <paramref name="hostKey"/>'s page went once its check had passed.</summary>
+    public string? LandedOn(string hostKey) => _fallbackHosts.TryGetValue(hostKey, out var session) ? session.LandedOn : null;
+
     /// <summary>Whether <paramref name="hostKey"/> is being read in the computer's own browser, not the headless one.</summary>
     public bool ReadsInInstalledBrowser(string hostKey) => _fallbackHosts.TryGetValue(hostKey, out var session) && session.Installed;
 
@@ -82,11 +91,19 @@ internal sealed partial class JavaScriptRenderer
     /// The page the installed browser got for <paramref name="uri"/>. Null when no such browser can be used, or the
     /// page didn't load: <paramref name="session"/> then says why. A page still refused comes back as the block.
     /// </summary>
-    private async Task<FetchResponse?> LoadInstalledAsync(Uri uri, FallbackHost session, CancellationToken cancellationToken)
+    /// <param name="mayAsk">
+    /// False for a check of another version of the site: nobody is asked to complete a check for one, and what
+    /// happens to it says nothing of the host's pages, so it leaves the host's verdict alone.
+    /// </param>
+    private async Task<FetchResponse?> LoadInstalledAsync(Uri uri, FallbackHost session, bool mayAsk, CancellationToken cancellationToken)
     {
         if (!options.UseInstalledBrowser)
         {
-            session.Verdict = FallbackVerdict.InstalledBrowserOff;
+            if (mayAsk)
+            {
+                session.Verdict = FallbackVerdict.InstalledBrowserOff;
+            }
+
             return null;
         }
 
@@ -96,14 +113,26 @@ internal sealed partial class JavaScriptRenderer
             var browser = await InstalledAsync(cancellationToken).ConfigureAwait(false);
             if (browser is null)
             {
-                session.Verdict = _installedMissing;
+                if (mayAsk)
+                {
+                    session.Verdict = _installedMissing;
+                }
+
                 return null;
             }
 
-            var response = await NavigateInstalledAsync(browser, uri, session, cancellationToken).ConfigureAwait(false);
-            if (response is { Outcome: FetchOutcome.Blocked } && session.Verdict == FallbackVerdict.None)
+            var response = await NavigateInstalledAsync(browser, uri, session, mayAsk, cancellationToken).ConfigureAwait(false);
+            if (mayAsk && response is { Outcome: FetchOutcome.Blocked } && session.Verdict == FallbackVerdict.None)
             {
                 session.Verdict = FallbackVerdict.StillBlocked;
+            }
+
+            if (response is { Outcome: not FetchOutcome.Blocked })
+            {
+                // The first few are said, so a log shows the crawl going on in the browser after a check; then the count, at the end.
+                var read = ++session.ReadInInstalled;
+                logger.Log(read <= SAID_PAGES ? LogLevel.Information : LogLevel.Debug,
+                    "Read {Url} in {Browser}: {Status} (page {Count} of this host read there)", uri, browser.Browser.Name, response.StatusCode, read);
             }
 
             return response;
@@ -210,18 +239,26 @@ internal sealed partial class JavaScriptRenderer
         }
     }
 
-    private async Task<FetchResponse?> NavigateInstalledAsync(InstalledBrowserProcess browser, Uri uri, FallbackHost session,
+    private async Task<FetchResponse?> NavigateInstalledAsync(InstalledBrowserProcess browser, Uri uri, FallbackHost session, bool mayAsk,
         CancellationToken cancellationToken)
     {
         var connection = browser.Connection;
-        var created = await connection.SendAsync("Target.createTarget", new { url = "about:blank" }, cancellationToken: cancellationToken)
-            .ConfigureAwait(false);
-        var targetId = created.GetProperty("targetId").GetString()!;
+        var front = InstalledBrowserProcess.WindowInFront();
+        var targetId = await browser.OpenTabAsync(cancellationToken).ConfigureAwait(false);
         var load = new InstalledLoad(targetId);
         Action<string?, string, JsonElement> onEvent = (sessionId, method, parameters) => OnInstalledEvent(connection, load, sessionId, method, parameters);
         connection.Event += onEvent;
         var asking = false;
+        var shown = false;
         var hostName = scope.HostName(UrlNormalizer.GetHost(uri));
+        void Decide(FallbackVerdict verdict)
+        {
+            if (mayAsk)
+            {
+                session.Verdict = verdict;
+            }
+        }
+
         try
         {
             await connection.SendAsync("Target.setDiscoverTargets", new { discover = true }, cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -250,10 +287,34 @@ internal sealed partial class JavaScriptRenderer
             // Answered once the document's request has gone, which waits its turn on the host's gate.
             await connection.SendAsync("Page.navigate", new { url = uri.AbsoluteUri }, sessionId, cancellationToken, answerBy).ConfigureAwait(false);
 
+            // The tab that has just come to the top of its window can take the keyboard a moment after it opened.
+            browser.KeepKeyboardWith(front);
+
             InstalledDocument? judged = null;
             string? reason = null;
             TimeSpan? refusedAt = null;
             TimeSpan? personUntil = null;
+            TimeSpan askedAt = default;
+
+            // The person completed the check: said once, in the log and to the crawl.
+            void Passed()
+            {
+                if (!asking)
+                {
+                    return;
+                }
+
+                asking = false;
+                var took = began.Elapsed - askedAt;
+                logger.LogInformation("Human check: {Host}'s check was completed after {Seconds:F0} s", hostName, took.TotalSeconds);
+                observer.OnNotice(new CrawlNotice(
+                    CrawlNoticeLevel.Info,
+                    "human-check-passed",
+                    $"{hostName}'s check was completed. The crawl is reading the site in {browser.Browser.Name}.")
+                {
+                    Data = new CrawlNoticeData(Host: hostName, Url: uri.AbsoluteUri, Duration: took, Browser: browser.Browser.Name)
+                });
+            }
 
             // How long the site's check has had to clear by itself. Time one of its requests spent waiting for the
             // crawl's own pace is not the check's, as it is not a rendered page's.
@@ -274,17 +335,33 @@ internal sealed partial class JavaScriptRenderer
                     // The person closed the window, or the browser stopped: the check was not completed.
                     if (asking)
                     {
-                        session.Verdict = FallbackVerdict.PersonDidNotFinish;
+                        Decide(FallbackVerdict.PersonClosedWindow);
+                        logger.LogInformation("Human check: the {Browser} window was closed before {Host}'s check was completed, after {Seconds:F0} s",
+                            browser.Browser.Name, hostName, (began.Elapsed - askedAt).TotalSeconds);
                     }
 
                     return judged is not null && reason is not null ? Refused(uri, judged, reason) : null;
                 }
 
-                if (load.Redirect is { } redirect && refusedAt is null)
+                if (load.Redirect is { } redirect)
                 {
-                    logger.LogDebug("The installed browser was redirected from {Url} with {Status}: {Headers}", redirect.Url, redirect.Status,
-                        string.Join("; ", redirect.Headers.Select(header => header.Name + "=" + header.Value)));
-                    return Redirected(uri, redirect);
+                    // Before any check, or after one: a site that lets the browser in can answer its reload with a redirect
+                    // (to its site for the visitor's country, say). That is the address's answer, and the crawl follows it.
+                    Passed();
+                    var answer = Redirected(uri, redirect);
+                    if (refusedAt is not null)
+                    {
+                        Decide(FallbackVerdict.None);
+                        logger.LogInformation("{Host}'s check cleared, and {Url} answered {Status}, a redirect to {Location}", hostName, uri,
+                            redirect.Status, answer.Location);
+                    }
+                    else
+                    {
+                        logger.LogDebug("The installed browser was redirected from {Url} with {Status} to {Location}", redirect.Url, redirect.Status,
+                            answer.Location);
+                    }
+
+                    return answer;
                 }
 
                 var document = load.Document;
@@ -340,17 +417,42 @@ internal sealed partial class JavaScriptRenderer
 
                     if (html is null || !StayedForFallback(document.Url, uri))
                     {
-                        logger.LogDebug("The installed browser landed on {Final} for {Url}; keeping the HTTP response", document.Url, uri);
+                        if (html is not null && refusedAt is not null)
+                        {
+                            // The check passed, and the page's own script then left for another address: no redirect of
+                            // the site's to store. The alert names where it went.
+                            Passed();
+                            session.LandedOn = document.Url;
+                            Decide(FallbackVerdict.WentElsewhere);
+                        }
+
+                        logger.LogInformation("The installed browser landed on {Final} for {Url}; keeping the HTTP response", document.Url, uri);
                         return null;
                     }
 
-                    session.Verdict = FallbackVerdict.None;
+                    Passed();
+                    Decide(FallbackVerdict.None);
+                    if (refusedAt is not null)
+                    {
+                        logger.LogInformation("{Host}'s check cleared after {Seconds:F0} s, and {Url} was read: {Status}", hostName,
+                            (began.Elapsed - refusedAt.Value).TotalSeconds, uri, document.Status);
+                    }
+
                     return BrowserDocument(uri, document.Status, document.Headers, html, document.TimeToFirstByteMs,
                         document.TimeToFirstByteMs + (int)(began.Elapsed - document.At).TotalMilliseconds);
                 }
 
                 var isCheck = BlockDetector.IsCheck(reason);
                 var patience = TimeSpan.FromMilliseconds(isCheck ? UNATTENDED_CHECK_MS : REFUSAL_GRACE_MS);
+                if (asking && !isCheck && now - document.At >= patience)
+                {
+                    // The check was completed, and what the site then answered is a plain refusal.
+                    asking = false;
+                    Decide(FallbackVerdict.RefusedAfterCheck);
+                    logger.LogInformation("Human check: {Host}'s check was completed, and the site then refused {Url} ({Reason})", hostName, uri, reason);
+                    return Refused(uri, document, reason);
+                }
+
                 if (personUntil is null && (checking >= patience || now - refusedAt!.Value >= patience * HELD_PATIENCE))
                 {
                     if (!isCheck)
@@ -358,31 +460,43 @@ internal sealed partial class JavaScriptRenderer
                         return Refused(uri, document, reason);
                     }
 
-                    if (!options.SolveChallenges || session.PersonChecks >= MAX_PERSON_CHECKS)
+                    if (!mayAsk || !options.SolveChallenges || session.PersonChecks >= MAX_PERSON_CHECKS)
                     {
-                        session.Verdict = options.SolveChallenges ? FallbackVerdict.PersonDidNotFinish : FallbackVerdict.NeedsPerson;
+                        Decide(options.SolveChallenges ? FallbackVerdict.PersonDidNotFinish : FallbackVerdict.NeedsPerson);
+                        logger.LogInformation("{Host}'s check ({Reason}) did not clear by itself for {Url}, and nobody is asked: {Why}", hostName, reason, uri,
+                            !mayAsk ? "it is a check of another version of the site"
+                            : options.SolveChallenges ? "a person was already asked for this host" : "this crawl was not told to ask a person");
                         return Refused(uri, document, reason);
                     }
 
                     session.PersonChecks++;
                     asking = true;
+                    shown = true;
+                    askedAt = began.Elapsed;
                     var wait = TimeSpan.FromSeconds(Math.Max(1, options.ChallengeWaitSeconds));
                     personUntil = began.Elapsed + wait;
                     _humanChecks[hostName] = timeProvider.GetUtcNow() + wait;
-                    await browser.ShowAsync(targetId, cancellationToken).ConfigureAwait(false);
-                    logger.LogInformation("Showing {Browser} for a person to complete {Host}'s check ({Reason})", browser.Browser.Name, hostName, reason);
+                    logger.LogInformation("Human check: {Host} asks for a person ({Reason}) at {Url}; waiting up to {Seconds} s", hostName, reason, uri,
+                        (int)wait.TotalSeconds);
+                    var window = await browser.ShowAsync(targetId, cancellationToken).ConfigureAwait(false);
+                    logger.Log(window.IsOnScreen ? LogLevel.Information : LogLevel.Warning,
+                        "Human check: the {Browser} window is shown at {Left},{Top}, {Width} by {Height}, {State}, on a screen of {ScreenWidth} by {ScreenHeight}; whole on the screen: {OnScreen}; in front: {InFront}",
+                        browser.Browser.Name, window.Bounds.Left, window.Bounds.Top, window.Bounds.Width, window.Bounds.Height, window.Bounds.State,
+                        window.Screen.Width, window.Screen.Height, window.IsOnScreen, window.InFront?.ToString() ?? "not known");
                     observer.OnNotice(new CrawlNotice(
                         CrawlNoticeLevel.Info,
                         "human-check",
-                        $"{hostName} asked to check you're human ({reason}). A {browser.Browser.Name} window opened on the page for you to complete the check.")
+                        $"{hostName} asked to check you're human ({reason}). {InstalledBrowsers.WithArticle(browser.Browser.Name)} window opened on the page for you to complete the check.")
                     {
-                        Data = new CrawlNoticeData(Host: hostName, Url: uri.AbsoluteUri, Reason: reason)
+                        Data = new CrawlNoticeData(Host: hostName, Url: uri.AbsoluteUri, Reason: reason, Browser: browser.Browser.Name)
                     });
                 }
 
                 if (personUntil is { } until && began.Elapsed >= until)
                 {
-                    session.Verdict = FallbackVerdict.PersonDidNotFinish;
+                    Decide(FallbackVerdict.PersonDidNotFinish);
+                    logger.LogInformation("Human check: nobody completed {Host}'s check in the {Seconds:F0} s it was given; its pages are recorded as blocked",
+                        hostName, (began.Elapsed - askedAt).TotalSeconds);
                     return Refused(uri, document, reason);
                 }
 
@@ -394,7 +508,7 @@ internal sealed partial class JavaScriptRenderer
             connection.Event -= onEvent;
             load.Finish();
             _humanChecks.TryRemove(hostName, out _);
-            await CloseInstalledTabAsync(browser, targetId, hide: asking).ConfigureAwait(false);
+            await CloseInstalledTabAsync(browser, targetId, hide: shown).ConfigureAwait(false);
         }
     }
 
@@ -500,7 +614,8 @@ internal sealed partial class JavaScriptRenderer
         {
             case "Network.requestWillBeSent" when IsTopDocument(load, parameters):
                 load.DocumentAsked = Stopwatch.GetTimestamp();
-                if (parameters.TryGetProperty("redirectResponse", out var redirected) && load.Redirect is null && load.Document is null)
+                // The address's first answer, or its first once a check has let the browser in and loaded the page again.
+                if (parameters.TryGetProperty("redirectResponse", out var redirected) && load.Redirect is null && (load.Document is null || load.Refused))
                 {
                     var headers = InstalledBrowserProcess.Headers(redirected.GetProperty("headers"));
 
@@ -581,10 +696,11 @@ internal sealed partial class JavaScriptRenderer
             var isTop = resourceType == "Document" && parameters.TryGetProperty("frameId", out var frame) && frame.GetString() == load.FrameId;
             var sent = request.GetProperty("headers");
             var refuse = await guard.RefusesAsync(uri).ConfigureAwait(false) || await ResolvesOnlyPrivatelyAsync(uri).ConfigureAwait(false);
+            // Where a redirect leads is the crawl's to ask for, as its own URL.
+            refuse |= isTop && load.Redirect is not null;
             if (!refuse && !load.Refused)
             {
                 refuse = resourceType is "Image" or "Media" or "Font" or "WebSocket" || IsAskedAhead(sent) ||
-                         (isTop && load.Redirect is not null) ||
                          (!isTop && await RobotsTxtRefusesAsync(uri).ConfigureAwait(false));
             }
 

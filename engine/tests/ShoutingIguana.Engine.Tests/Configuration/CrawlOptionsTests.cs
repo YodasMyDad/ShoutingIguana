@@ -154,6 +154,23 @@ public sealed class CrawlOptionsTests
         Assert.Empty(new CrawlOptions { StartUrl = "https://example.com/" }.ValidateFields());
     }
 
+    /// <summary>
+    /// A new crawl reads a host that blocks plain HTTP in a browser, the computer's own if that is what it takes, and
+    /// asks nobody: a check that needs a person is a block unless the crawl was told to wait for one, so a crawl run
+    /// from a script never waits.
+    /// </summary>
+    [Fact]
+    public void ANewCrawlHasTheBrowserFallbackOnAndWaitsForNobody()
+    {
+        var options = new CrawlOptions { StartUrl = "https://example.com/" };
+
+        Assert.True(options.BrowserFallback);
+        Assert.True(options.UseInstalledBrowser);
+        Assert.False(options.SolveChallenges);
+        Assert.Equal(CrawlOptions.DEFAULT_CHALLENGE_WAIT_SECONDS, options.ChallengeWaitSeconds);
+        Assert.Empty(options.Validate());
+    }
+
     [Fact]
     public void AcceptsAShopifySignatureForAHost() =>
         Assert.Empty(WithSignatures(FakeSignatures.For("shop.example")).Validate());

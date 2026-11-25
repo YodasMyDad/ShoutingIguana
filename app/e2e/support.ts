@@ -74,7 +74,7 @@ async function settled(id: string, timeoutMs: number): Promise<SeededCrawl & { a
  */
 export async function crawlTestSite(startUrl: string = env('SI_E2E_TESTSITE')): Promise<SeededCrawl> {
   const started = await read<SeededCrawl>('/api/crawls', {
-    options: { startUrl, concurrency: 16, maxRequestsPerSecond: 0 },
+    options: { browserFallback: false, startUrl, concurrency: 16, maxRequestsPerSecond: 0 },
   });
   const crawled = await settled(started.id, 120_000);
   if (crawled.status !== 'completed') throw new Error(`The test site's crawl ended ${crawled.status}`);

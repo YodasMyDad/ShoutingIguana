@@ -39,7 +39,7 @@ public sealed class CollectedFactsTests : IAsyncLifetime
     public async Task ChecksNeedingNewerFactsAreSkippedWhenAPageWasParsedBeforeThem()
     {
         await using var server = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = 60 });
-        await using (var job = new CrawlEngine(NullLoggerFactory.Instance).Start(new CrawlRequest(new CrawlOptions { StartUrl = server.BaseUri.AbsoluteUri, Concurrency = 8 }, _path)))
+        await using (var job = new CrawlEngine(NullLoggerFactory.Instance).Start(new CrawlRequest(new CrawlOptions { StartUrl = server.BaseUri.AbsoluteUri, Concurrency = 8, BrowserFallback = false }, _path)))
         {
             Assert.Equal(CrawlStatus.Completed, (await job.Completion.WaitAsync(TimeSpan.FromMinutes(1))).Status);
         }
@@ -103,7 +103,7 @@ public sealed class CollectedFactsTests : IAsyncLifetime
     public async Task ACrawlAnEarlierVersionMadeHasOneNoteForEveryCheckItCouldntRun()
     {
         await using var server = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = 60 });
-        await using (var job = new CrawlEngine(NullLoggerFactory.Instance).Start(new CrawlRequest(new CrawlOptions { StartUrl = server.BaseUri.AbsoluteUri, Concurrency = 8 }, _path)))
+        await using (var job = new CrawlEngine(NullLoggerFactory.Instance).Start(new CrawlRequest(new CrawlOptions { StartUrl = server.BaseUri.AbsoluteUri, Concurrency = 8, BrowserFallback = false }, _path)))
         {
             Assert.Equal(CrawlStatus.Completed, (await job.Completion.WaitAsync(TimeSpan.FromMinutes(1))).Status);
         }

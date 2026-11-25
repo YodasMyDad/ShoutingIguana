@@ -356,7 +356,7 @@ describe('waits', () => {
     expect(entries.map((entry) => [entry.title, entry.detail])).toEqual([
       [
         'Waiting for you',
-        'example.com is asking to check you’re human. A browser window is open on its page: complete the check there and the crawl carries on. It waits 4 min more, then records the site’s pages as blocked. Closing the window does the same.',
+        'example.com is asking to check you’re human. A browser window has opened on its page, in front of this one: complete the check there and the crawl carries on by itself. If you can’t see it, look for the browser on the taskbar or the Dock. It waits 4 min more, then records the site’s pages as blocked. Closing the window does the same.',
       ],
     ]);
     expect(more).toBe('and 1 more check');

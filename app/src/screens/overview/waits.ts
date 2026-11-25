@@ -58,7 +58,7 @@ function words(wait: CrawlWait): Omit<WaitEntry, 'key'> {
     case 'humanCheck':
       return {
         title: 'Waiting for you',
-        detail: `${host} is asking to check you’re human. A browser window is open on its page: complete the check there and the crawl carries on. It waits ${time(wait.durationMs)} more, then records the site’s pages as blocked. Closing the window does the same.`,
+        detail: `${host} is asking to check you’re human. A browser window has opened on its page, in front of this one: complete the check there and the crawl carries on by itself. If you can’t see it, look for the browser on the taskbar or the Dock. It waits ${time(wait.durationMs)} more, then records the site’s pages as blocked. Closing the window does the same.`,
       };
     case 'sectionLimited':
       return {

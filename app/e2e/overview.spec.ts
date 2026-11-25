@@ -5,7 +5,7 @@
 // expect it.
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { libraryIds, removeCrawlsNotIn } from './startedCrawls';
-import { expectNoViolations, read, siteRow } from './support';
+import { expectNoViolations, read, sidecar, siteRow } from './support';
 
 const env = (name: string) => {
   const value = process.env[name];
@@ -19,7 +19,10 @@ test.beforeAll(async () => {
 });
 
 /** Stops and deletes every crawl the tests started: the library is the one seeded crawl again. */
-test.afterEach(() => removeCrawlsNotIn(seeded));
+test.afterEach(async () => {
+  await removeCrawlsNotIn(seeded);
+  await sidecar('/api/crawl-options/defaults', { method: 'PUT', body: JSON.stringify({}) });
+});
 
 // axe, with the wait for a theme's colours to settle (`colourTweensEnd`), is the specs' own: e2e/support.ts.
 
@@ -39,6 +42,9 @@ async function openOverview(page: Page) {
 
 /** Pastes the test site's URL on Home and presses Enter: flow 1, which lands on the crawl's Overview, live. */
 async function startCrawl(page: Page) {
+  // The test site plants pages that block. The browser fallback, on by default, would open a browser for them and
+  // show its window: the saved defaults a crawl started here takes turn it off.
+  await sidecar('/api/crawl-options/defaults', { method: 'PUT', body: JSON.stringify({ browserFallback: false }) });
   await page.goto('/');
   await page.getByPlaceholder('Paste a URL, then press Enter').fill(env('SI_E2E_TESTSITE'));
   await page.keyboard.press('Enter');

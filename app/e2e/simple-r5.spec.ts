@@ -63,7 +63,8 @@ test('a stopped check has its results so far, and its toast keeps a readable mea
   test.setTimeout(180_000);
   await sidecar('/api/crawl-options/defaults', {
     method: 'PUT',
-    body: JSON.stringify({ concurrency: 2, maxRequestsPerSecond: 20 }),
+    // No browser for the test site's planted blocks: the browser fallback is on by default.
+    body: JSON.stringify({ concurrency: 2, maxRequestsPerSecond: 20, browserFallback: false }),
   });
   await page.goto('/');
   const address = main(page).getByRole('textbox', { name: 'Web address' });

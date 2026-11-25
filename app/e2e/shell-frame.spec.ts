@@ -23,7 +23,7 @@ test.beforeAll(async () => {
   // A crawl of the engine's synthetic site, slow enough to stay running for the whole spec.
   running = (
     await read<{ id: string }>('/api/crawls', {
-      options: { startUrl: env('SI_E2E_TESTSITE'), concurrency: 1, maxRequestsPerSecond: 1 },
+      options: { browserFallback: false, startUrl: env('SI_E2E_TESTSITE'), concurrency: 1, maxRequestsPerSecond: 1 },
     })
   ).id;
 });
@@ -80,7 +80,7 @@ test.describe('G1: the switch is never cut', () => {
   test('Advanced at 1280: a crawl started from the app leaves the switch whole', async ({ page }) => {
     await openIn(page, 'advanced', '/', { width: 1280, height: 720 });
     const started = await read<{ id: string }>('/api/crawls', {
-      options: { startUrl: env('SI_E2E_TESTSITE'), concurrency: 1, maxRequestsPerSecond: 1 },
+      options: { browserFallback: false, startUrl: env('SI_E2E_TESTSITE'), concurrency: 1, maxRequestsPerSecond: 1 },
     });
     await page.goto(`/crawls/${started.id}/overview`);
     await expect(page.getByRole('banner').getByText(/^Running/)).toBeVisible();
@@ -192,7 +192,7 @@ test.describe('the sidebar with its live sections keeps Settings whole', () => {
     // Two more crawls of the test site, paused: with the running one, three live crawls.
     for (let index = 0; index < 2; index++) {
       const { id } = await read<{ id: string }>('/api/crawls', {
-        options: { startUrl: env('SI_E2E_TESTSITE'), concurrency: 1, maxRequestsPerSecond: 1 },
+        options: { browserFallback: false, startUrl: env('SI_E2E_TESTSITE'), concurrency: 1, maxRequestsPerSecond: 1 },
       });
       expect((await sidecar(`/api/crawls/${id}/pause`, { method: 'POST' })).ok).toBe(true);
       paused.push(id);

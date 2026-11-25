@@ -325,7 +325,7 @@ public sealed class ShopifyCrawlTests : IDisposable
         var path = _files.NewPath();
         var time = new FakeTimeProvider();
 
-        await CrawlAsync(new CrawlOptions { StartUrl = server.BaseUri.AbsoluteUri, Concurrency = 8 }, path, time, new RecordingObserver(time));
+        await CrawlAsync(new CrawlOptions { StartUrl = server.BaseUri.AbsoluteUri, Concurrency = 8, BrowserFallback = false }, path, time, new RecordingObserver(time));
 
         Assert.Null(SitePlatformReader.Read(path));
         Assert.Null(ShopifyAccessReader.Read(path));
@@ -340,7 +340,7 @@ public sealed class ShopifyCrawlTests : IDisposable
     });
 
     private static CrawlOptions Options(SyntheticSiteServer server) =>
-        new() { StartUrl = server.BaseUri.AbsoluteUri, Concurrency = 8, TrustedCertificate = server.Certificate };
+        new() { StartUrl = server.BaseUri.AbsoluteUri, Concurrency = 8, TrustedCertificate = server.Certificate, BrowserFallback = false };
 
     /// <summary>The store's signature, for its own host and port.</summary>
     private static CrawlOptions Signed(CrawlOptions options, SyntheticSiteServer server) => options with

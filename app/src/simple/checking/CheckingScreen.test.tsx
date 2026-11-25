@@ -167,7 +167,7 @@ describe.skipIf(TABLE_STUBBED)('checking a site, in Simple', () => {
     await heard(progress(40, { waits: [{ reason: 'humanCheck', host: 'example.com', durationMs: 240_000 }] }));
     expect(
       await main().findByText(
-        'The site wants to see that you’re a person. A browser window has opened on its page: do what it asks there, and reading the site carries on by itself. Closing the window leaves the site’s pages unread.',
+        'The site wants to see that you’re a person. A browser window has opened on its page, in front of this one: do what it asks there, and reading the site carries on by itself. If you can’t see it, look for the browser on the taskbar or the Dock. Closing the window leaves the site’s pages unread.',
       ),
     ).toBeVisible();
   });

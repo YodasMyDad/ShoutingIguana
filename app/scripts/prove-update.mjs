@@ -433,7 +433,9 @@ try {
     });
     const started = await engineApi('/api/crawls', {
       method: 'POST',
-      body: JSON.stringify({ options: { startUrl: url, concurrency: 1, maxRequestsPerSecond: 1 } }),
+      body: JSON.stringify({
+        options: { startUrl: url, concurrency: 1, maxRequestsPerSecond: 1, browserFallback: false },
+      }),
     });
     expectThat(started.ok, `the crawl didn’t start (${started.status})`);
     const crawlId = (await started.json()).id;

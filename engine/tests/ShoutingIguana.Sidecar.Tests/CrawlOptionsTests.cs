@@ -38,6 +38,38 @@ public sealed class CrawlOptionsTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// The browser fallback is on in the engine's defaults, and in a crawl whose request leaves it out. Nobody is asked
+    /// to complete a check unless the request says so. Saved off, it stays off: that is the user's choice. Defaults saved
+    /// before the option have no value for it, and take the engine's, since they only ever start new crawls.
+    /// </summary>
+    [Fact]
+    public async Task TheBrowserFallbackIsOnByDefaultAndSavedOffStaysOff()
+    {
+        var engine = (await _sidecar.GetJsonAsync("api/crawl-options/defaults"))["options"]!;
+        Assert.True((bool?)engine["browserFallback"]);
+        Assert.True((bool?)engine["useInstalledBrowser"]);
+        Assert.False((bool?)engine["solveChallenges"]);
+
+        static CrawlOptions Requested(string json) =>
+            JsonSerializer.Deserialize(json, Serialization.SidecarJsonContext.Default.CrawlOptionsDto)!.ToCrawlOptions(out _);
+        Assert.True(Requested("""{"startUrl":"https://example.com/"}""").BrowserFallback);
+        Assert.False(Requested("""{"startUrl":"https://example.com/"}""").SolveChallenges);
+        Assert.False(Requested("""{"startUrl":"https://example.com/","browserFallback":false}""").BrowserFallback);
+        Assert.True(Requested("""{"startUrl":"https://example.com/","browserFallback":true}""").BrowserFallback);
+
+        var saved = await _sidecar.SendAsync(HttpMethod.Put, "api/crawl-options/defaults", JsonNode.Parse("""{"browserFallback":false,"concurrency":3}"""));
+        Assert.Equal(HttpStatusCode.OK, saved.Status);
+        var file = Path.Combine(_sidecar.Options.StateDirectory, "defaults.json");
+        Assert.False((bool?)JsonNode.Parse(await File.ReadAllTextAsync(file))!["browserFallback"]);
+        Assert.False((bool?)(await _sidecar.GetJsonAsync("api/crawl-options/defaults"))["options"]!["browserFallback"]);
+
+        await File.WriteAllTextAsync(file, """{"concurrency":3}""");
+        var before = (await _sidecar.GetJsonAsync("api/crawl-options/defaults"))["options"]!;
+        Assert.Equal(3, (int?)before["concurrency"]);
+        Assert.True((bool?)before["browserFallback"]);
+    }
+
+    /// <summary>
     /// The rendering mode goes out and comes in by name, as the contract says and as the app's form sends it. It went
     /// out as the enum's number and a name was refused, so choosing a mode in the form made the crawl unstartable.
     /// A number is still read: a defaults.json saved before holds one.

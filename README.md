@@ -12,7 +12,7 @@ Hand the report to a client. Or fix it yourself, then recheck just those pages a
 
 **[Download 2.1.0](https://github.com/YodasMyDad/ShoutingIguana/releases/tag/app-v2.1.0)**
 
-This release is the full v2 app. It renders pages a script builds, can retry a blocked host in a real browser, crawls a list of addresses, pulls out text you name, and signs in over HTTP, with a cookie, or through a form.
+This release is the full v2 app. It renders pages a script builds, retries a blocked host in a real browser, crawls a list of addresses, pulls out text you name, and signs in over HTTP, with a cookie, or through a form.
 
 ## Why people download it
 
@@ -21,7 +21,7 @@ This release is the full v2 app. It renders pages a script builds, can retry a b
 - **Prove the fix.** Recheck the pages you changed. The score and the issue list update, and each page says fixed or still there. Crawl the site again later and the new crawl is compared with the last one.
 - **Yours, offline.** One `.sicrawl` file per crawl. Nothing is uploaded.
 - **Pages a script builds.** The default renders a page only when its HTML is an empty shell. Render every HTML page, only the URLs that match a pattern you give, or none. When every page is rendered, a link that was only in the raw HTML is still followed.
-- **A blocked host, read in a real browser.** Off by default. Turned on, a site that blocks the crawler is read in the Chrome or Edge on your computer instead, in a window kept out of sight. That gets past the automatic checks most protected sites use (Cloudflare's "Just a moment", DataDome). If the site wants a person, to tick a box or solve a puzzle, the window opens for you to do it and the crawl carries on. It does not solve a CAPTCHA for you, and a site that refuses even a real browser stays marked as blocked, with what its owner can do to let the crawler in.
+- **A blocked host, read in a real browser.** On by default. A site that answers the crawler never starts a browser. One that blocks it is read in the Chrome or Edge on your computer instead, in a window kept out of sight. A browser the crawl needs and the computer doesn't have (a Chromium, when there is no Chrome or Edge) is downloaded then, once, and the crawl says so. That gets past the automatic checks most protected sites use (Cloudflare's "Just a moment", DataDome). If the site wants a person, to tick a box or solve a puzzle, the window opens for you to do it and the crawl carries on. It does not solve a CAPTCHA for you, and a site that refuses even a real browser stays marked as blocked, with what its owner can do to let the crawler in. To turn it off: "If a site blocks the check" in the crawl's settings, or `si crawl --no-browser-fallback`.
 - **A list, not the whole site.** Paste addresses, or a CSV with a Url column. Those pages are read. Links on them are recorded and not followed, and sitemaps are not read.
 - **Text you define.** Name a rule and give it a CSS selector, an XPath expression, or a regular expression. The crawl reads each page once and keeps what matches. Simple and Advanced both list the values.
 

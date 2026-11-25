@@ -16,7 +16,7 @@ internal static class TestCrawlFiles
         CrawlOptions? options = null)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        options ??= new CrawlOptions { StartUrl = site.BaseUri.AbsoluteUri, MaxUrls = maxUrls };
+        options ??= new CrawlOptions { StartUrl = site.BaseUri.AbsoluteUri, MaxUrls = maxUrls, BrowserFallback = false };
         await using (var job = new CrawlEngine(NullLoggerFactory.Instance).Start(new CrawlRequest(options, path)))
         {
             Assert.Equal(CrawlStatus.Completed, (await job.Completion.WaitAsync(EventStreamReader.TIMEOUT)).Status);
@@ -89,6 +89,10 @@ internal static class TestCrawlFiles
     /// <summary>The crawl as one that sent a header: its stored options keep the name, never the value.</summary>
     public static void SetHeaderNames(string path, string name) =>
         Assert.Equal(1, Execute(path, $"UPDATE crawl SET options_json = json_set(options_json, '$.extraHeaders', json('{{\"{name}\":\"\"}}'))"));
+
+    /// <summary>The crawl as a file from before an option existed: its stored options don't have it.</summary>
+    public static void RemoveOption(string path, string name) =>
+        Assert.Equal(1, Execute(path, $"UPDATE crawl SET options_json = json_remove(options_json, '$.{name}')"));
 
     /// <summary>What a crawl never analysed has: no analysis.</summary>
     public static void DropAnalysis(string path) => Execute(path, "DROP TABLE analysis");

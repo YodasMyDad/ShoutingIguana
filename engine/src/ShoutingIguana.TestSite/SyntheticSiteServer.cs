@@ -369,8 +369,8 @@ public sealed class SyntheticSiteServer : IAsyncDisposable
             return site.BrowserFallbackNextDocument();
         }
 
-        if (path is SyntheticSite.HUMAN_CHECK_PATH or SyntheticSite.HUMAN_CHECK_ASK_PATH or SyntheticSite.HUMAN_CHECK_NEXT_PATH or
-            SyntheticSite.HUMAN_CHECK_LAST_PATH)
+        if (path is SyntheticSite.HUMAN_CHECK_PATH or SyntheticSite.HUMAN_CHECK_ASK_PATH or SyntheticSite.HUMAN_CHECK_MOVED_PATH or
+            SyntheticSite.HUMAN_CHECK_NEXT_PATH or SyntheticSite.HUMAN_CHECK_LAST_PATH)
         {
             return HumanCheck(site, request, path);
         }
@@ -391,11 +391,11 @@ public sealed class SyntheticSiteServer : IAsyncDisposable
     private static SyntheticResponse HumanCheck(SyntheticSite site, HttpRequest request, string path)
     {
         var clearance = SyntheticSite.Clearance(request.Headers.UserAgent.ToString());
-        var ask = path == SyntheticSite.HUMAN_CHECK_ASK_PATH;
+        var ask = path is SyntheticSite.HUMAN_CHECK_ASK_PATH or SyntheticSite.HUMAN_CHECK_MOVED_PATH;
         var passed = path switch
         {
             SyntheticSite.HUMAN_CHECK_PATH => request.Cookies[SyntheticSite.HUMAN_CHECK_COOKIE] == clearance,
-            SyntheticSite.HUMAN_CHECK_ASK_PATH => request.Cookies[SyntheticSite.HUMAN_CHECK_ASK_COOKIE] == clearance,
+            SyntheticSite.HUMAN_CHECK_ASK_PATH or SyntheticSite.HUMAN_CHECK_MOVED_PATH => request.Cookies[SyntheticSite.HUMAN_CHECK_ASK_COOKIE] == clearance,
             _ => request.Cookies[SyntheticSite.HUMAN_CHECK_COOKIE] == clearance || request.Cookies[SyntheticSite.HUMAN_CHECK_ASK_COOKIE] == clearance
         };
         if (!passed)
@@ -409,6 +409,16 @@ public sealed class SyntheticSiteServer : IAsyncDisposable
         {
             return new SyntheticResponse(302, "text/html; charset=utf-8", null, null, SyntheticSite.HUMAN_CHECK_PATH,
                 new Dictionary<string, string> { ["Set-Cookie"] = SyntheticSite.HUMAN_CHECK_HOP_COOKIE + "=1; Path=/" });
+        }
+
+        if (path == SyntheticSite.HUMAN_CHECK_MOVED_PATH)
+        {
+            // The page the check let through loads again, and this time the site sends the visitor on.
+            var away = request.Query.ContainsKey("away");
+            var target = away
+                ? $"http://localhost:{request.Host.Port}{SyntheticSite.HUMAN_CHECK_LAST_PATH}"
+                : SyntheticSite.HUMAN_CHECK_NEXT_PATH;
+            return new SyntheticResponse(302, "text/html; charset=utf-8", null, null, target);
         }
 
         return path == SyntheticSite.HUMAN_CHECK_NEXT_PATH

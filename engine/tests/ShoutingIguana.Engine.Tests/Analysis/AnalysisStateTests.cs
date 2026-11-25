@@ -40,7 +40,7 @@ public sealed class AnalysisStateTests : IAsyncLifetime
     {
         var path = await CrawlAsync(new CrawlOptions
         {
-            StartUrl = _server.BaseUri.AbsoluteUri, Concurrency = 8, MaxDepth = 1, CheckExternalLinks = false, CheckResources = false, DiscoverSitemaps = false
+            StartUrl = _server.BaseUri.AbsoluteUri, Concurrency = 8, MaxDepth = 1, CheckExternalLinks = false, CheckResources = false, DiscoverSitemaps = false, BrowserFallback = false
         });
 
         var analysis = await AnalyseAsync(path);
@@ -91,7 +91,7 @@ public sealed class AnalysisStateTests : IAsyncLifetime
     [Fact]
     public async Task AFileAnalysedByAnEarlierEngineHasNoSummaryAndNeedsAnalysingAgain()
     {
-        var path = await CrawlAsync(new CrawlOptions { StartUrl = _server.BaseUri.AbsoluteUri, MaxUrls = 30 });
+        var path = await CrawlAsync(new CrawlOptions { StartUrl = _server.BaseUri.AbsoluteUri, MaxUrls = 30, BrowserFallback = false });
         await AnalyseAsync(path);
         var counts = IssueReader.ReadCounts(path);
         Change(path, """
@@ -154,7 +154,7 @@ public sealed class AnalysisStateTests : IAsyncLifetime
     [Fact]
     public async Task AnEarlierEngineAnalysingAgainLeavesNothingOfThisOneToRead()
     {
-        var path = await CrawlAsync(new CrawlOptions { StartUrl = _server.BaseUri.AbsoluteUri, MaxUrls = 30 });
+        var path = await CrawlAsync(new CrawlOptions { StartUrl = _server.BaseUri.AbsoluteUri, MaxUrls = 30, BrowserFallback = false });
         await AnalyseAsync(path);
         Assert.NotEmpty(IssueReader.ReadSkippedChecks(path));
 
@@ -181,7 +181,7 @@ public sealed class AnalysisStateTests : IAsyncLifetime
     [Fact]
     public async Task TheAnalysisIsOutOfDateWhenTheCrawlOrItsSettingsChange()
     {
-        var path = await CrawlAsync(new CrawlOptions { StartUrl = _server.BaseUri.AbsoluteUri, MaxUrls = 20 });
+        var path = await CrawlAsync(new CrawlOptions { StartUrl = _server.BaseUri.AbsoluteUri, MaxUrls = 20, BrowserFallback = false });
         await AnalyseAsync(path);
         Assert.Empty(CrawlSummaryReader.Read(path).OutOfDate(new AnalysisSettings()));
         Assert.Equal(CrawlSummaryReader.Read(path).UpdatedAt, IssueReader.ReadAnalysis(path)!.CrawlUpdatedAt);
@@ -209,7 +209,7 @@ public sealed class AnalysisStateTests : IAsyncLifetime
     [Fact]
     public async Task TheCrawlsStampOnlyMovesForwardWhateverTheClockDoes()
     {
-        var path = await CrawlAsync(new CrawlOptions { StartUrl = _server.BaseUri.AbsoluteUri, MaxUrls = 20 });
+        var path = await CrawlAsync(new CrawlOptions { StartUrl = _server.BaseUri.AbsoluteUri, MaxUrls = 20, BrowserFallback = false });
         await AnalyseAsync(path);
         var ahead = DateTimeOffset.UtcNow.AddDays(1).ToUnixTimeMilliseconds();
         Change(path, $"UPDATE crawl SET updated_at = {ahead}; UPDATE analysis SET crawl_updated_at = {ahead};");
@@ -225,7 +225,7 @@ public sealed class AnalysisStateTests : IAsyncLifetime
     [Fact]
     public async Task ASitemapLeftUnreadWithoutAReasonDoesNotStopTheAnalysis()
     {
-        var path = await CrawlAsync(new CrawlOptions { StartUrl = _server.BaseUri.AbsoluteUri });
+        var path = await CrawlAsync(new CrawlOptions { StartUrl = _server.BaseUri.AbsoluteUri, BrowserFallback = false });
         var sitemap = TestCrawls.Rows(path, "SELECT url FROM sitemaps WHERE error IS NULL AND status_code = 200 AND is_probe = 0 ORDER BY id").First();
         Assert.True(TestCrawls.Count(path, "SELECT COUNT(*) FROM sitemaps WHERE error IS NULL AND status_code = 200") > 1);
         Change(path, $"UPDATE sitemaps SET error = 'Not read: ' WHERE url = '{sitemap}'");
@@ -245,7 +245,7 @@ public sealed class AnalysisStateTests : IAsyncLifetime
     [Fact]
     public async Task ASiteRuleThatFailsLeavesItsChecksSkippedSayingWhy()
     {
-        var path = await CrawlAsync(new CrawlOptions { StartUrl = _server.BaseUri.AbsoluteUri });
+        var path = await CrawlAsync(new CrawlOptions { StartUrl = _server.BaseUri.AbsoluteUri, BrowserFallback = false });
         await AnalyseAsync(path);
         var counts = IssueReader.ReadCounts(path);
         string[] duplicates =
@@ -293,7 +293,7 @@ public sealed class AnalysisStateTests : IAsyncLifetime
     [InlineData(1, false)]
     public async Task ACheckTheAnalysisDidntKnowIsNewerThanItUnlessItsEngineIsNewer(int versionsAway, bool newerThanAnalysis)
     {
-        var path = await CrawlAsync(new CrawlOptions { StartUrl = _server.BaseUri.AbsoluteUri });
+        var path = await CrawlAsync(new CrawlOptions { StartUrl = _server.BaseUri.AbsoluteUri, BrowserFallback = false });
         await AnalyseAsync(path);
         Assert.Empty(IssueReader.ReadSkippedChecks(path));
         Change(path, $"""
@@ -315,7 +315,7 @@ public sealed class AnalysisStateTests : IAsyncLifetime
     [Fact]
     public async Task AnAnalysisMeetingAReaderOnAClosedCrawlSaysTheFileIsBusy()
     {
-        var path = await CrawlAsync(new CrawlOptions { StartUrl = _server.BaseUri.AbsoluteUri, MaxUrls = 20 });
+        var path = await CrawlAsync(new CrawlOptions { StartUrl = _server.BaseUri.AbsoluteUri, MaxUrls = 20, BrowserFallback = false });
         var analyzer = new CrawlAnalyzer(NullLoggerFactory.Instance);
         await analyzer.AnalyzeAsync(path);
         var analysed = IssueReader.ReadAnalysis(path)!;

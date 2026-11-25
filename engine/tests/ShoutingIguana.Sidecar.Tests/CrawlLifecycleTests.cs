@@ -41,7 +41,7 @@ public sealed class CrawlLifecycleTests : IAsyncLifetime
         await using var events = await EventStreamReader.ConnectAsync(_sidecar.Client);
         Assert.Empty((await events.NextAsync("hello"))["live"]!.AsArray());
 
-        var started = await StartAsync(new JsonObject { ["startUrl"] = _site.BaseUri.AbsoluteUri, ["concurrency"] = 8 });
+        var started = await StartAsync(new JsonObject { ["startUrl"] = _site.BaseUri.AbsoluteUri, ["browserFallback"] = false, ["concurrency"] = 8 });
         var id = (string)started["id"]!;
         var path = (string)started["path"]!;
         Assert.Equal("running", (string?)started["status"]);
@@ -278,7 +278,8 @@ public sealed class CrawlLifecycleTests : IAsyncLifetime
         {
             StartUrl = _site.BaseUri.AbsoluteUri,
             MaxUrls = 5,
-            ProxyUrl = $"http://crawler:pa55word@127.0.0.1:{_site.BaseUri.Port}/"
+            ProxyUrl = $"http://crawler:pa55word@127.0.0.1:{_site.BaseUri.Port}/",
+            BrowserFallback = false
         });
         var id = Library.CrawlIds.For(path);
         TestCrawlFiles.SetStoredStatus(path, CrawlStatus.Stopped);
@@ -299,13 +300,49 @@ public sealed class CrawlLifecycleTests : IAsyncLifetime
         Assert.True((bool?)roundTripped["proxyCredentials"]);
     }
 
+    /// <summary>
+    /// A crawl started without saying has the browser fallback on, and its file says so. A crawl file from before the
+    /// option says nothing, and is given back as off: "crawl again with these settings" then asks for what that crawl
+    /// did, not for what a new crawl does. The page crawled is a 404 that links nowhere, so no browser is started.
+    /// </summary>
+    [Fact]
+    public async Task ACrawlStartedWithoutSayingHasTheBrowserFallbackOnAndAnOlderFileGivesItOff()
+    {
+        await using var events = await EventStreamReader.ConnectAsync(_sidecar.Client);
+        var started = await _sidecar.PostAsync("api/crawls", new JsonObject
+        {
+            ["options"] = new JsonObject { ["startUrl"] = new Uri(_site.BaseUri, "/broken/1").AbsoluteUri, ["discoverSitemaps"] = false },
+            ["analyzeWhenDone"] = false
+        });
+        Assert.Equal(HttpStatusCode.Created, started.Status);
+        var id = (string)started.Body!["id"]!;
+        var path = (string)started.Body!["path"]!;
+        await events.CrawlStatusAsync(id, "completed");
+
+        var stored = await _sidecar.GetJsonAsync($"api/crawls/{id}/options");
+        Assert.True((bool?)stored["browserFallback"]);
+        Assert.True((bool?)stored["useInstalledBrowser"]);
+        Assert.False((bool?)stored["solveChallenges"]);
+        Assert.True(CrawlDatabase.ReadOptions(path).BrowserFallback);
+
+        TestCrawlFiles.RemoveOption(path, "browserFallback");
+        Assert.False((bool?)(await _sidecar.GetJsonAsync($"api/crawls/{id}/options"))["browserFallback"]);
+
+        // One that says off stays off.
+        var off = await TestCrawlFiles.CrawlAsync(_site, Path.Combine(_sidecar.DataDirectory, "fallback-off.sicrawl"), options: new CrawlOptions
+        {
+            StartUrl = new Uri(_site.BaseUri, "/broken/1").AbsoluteUri, DiscoverSitemaps = false, BrowserFallback = false
+        });
+        Assert.False((bool?)(await _sidecar.GetJsonAsync($"api/crawls/{Library.CrawlIds.For(off)}/options"))["browserFallback"]);
+    }
+
     [Fact]
     public async Task ACrawlStartedWithoutAnalysisIsAnalysedOnlyWhenAsked()
     {
         await using var events = await EventStreamReader.ConnectAsync(_sidecar.Client);
         var started = await _sidecar.PostAsync("api/crawls", new JsonObject
         {
-            ["options"] = new JsonObject { ["startUrl"] = _site.BaseUri.AbsoluteUri, ["maxUrls"] = 10 },
+            ["options"] = new JsonObject { ["startUrl"] = _site.BaseUri.AbsoluteUri, ["browserFallback"] = false, ["maxUrls"] = 10 },
             ["analyzeWhenDone"] = false
         });
         Assert.Equal(HttpStatusCode.Created, started.Status);
@@ -462,7 +499,7 @@ public sealed class CrawlLifecycleTests : IAsyncLifetime
 
         try
         {
-            await StartAsync(new JsonObject { ["startUrl"] = _site.BaseUri.AbsoluteUri, ["maxUrls"] = 5 });
+            await StartAsync(new JsonObject { ["startUrl"] = _site.BaseUri.AbsoluteUri, ["browserFallback"] = false, ["maxUrls"] = 5 });
             using var timeout = new CancellationTokenSource(EventStreamReader.TIMEOUT);
             while (Volatile.Read(ref acted) == 0)
             {
@@ -556,7 +593,7 @@ public sealed class CrawlLifecycleTests : IAsyncLifetime
     private int CrawlFileCount() => Directory.Exists(_sidecar.DataDirectory) ? Directory.GetFiles(_sidecar.DataDirectory).Length : 0;
 
     /// <summary>Slow enough to pause, stop or shut down part-way: the 60-page site has a few hundred URLs.</summary>
-    private JsonObject SlowCrawl() => new() { ["startUrl"] = _site.BaseUri.AbsoluteUri, ["maxRequestsPerSecond"] = 5, ["concurrency"] = 2 };
+    private JsonObject SlowCrawl() => new() { ["startUrl"] = _site.BaseUri.AbsoluteUri, ["browserFallback"] = false, ["maxRequestsPerSecond"] = 5, ["concurrency"] = 2 };
 
     private async Task<JsonNode> StartAsync(JsonObject options)
     {

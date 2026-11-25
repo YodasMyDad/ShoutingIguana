@@ -176,7 +176,7 @@ public sealed class CrawlChangedExportTests : IDisposable
         Assert.Equal([target], Directory.GetFiles(_folder));
     }
 
-    private static CrawlOptions Options(SyntheticSiteServer site) => new() { StartUrl = site.BaseUri.AbsoluteUri, Concurrency = 4, MaxRequestsPerSecond = 80 };
+    private static CrawlOptions Options(SyntheticSiteServer site) => new() { StartUrl = site.BaseUri.AbsoluteUri, Concurrency = 4, MaxRequestsPerSecond = 80, BrowserFallback = false };
 
     private sealed class Heard(Action<ExportProgress> heard) : IProgress<ExportProgress>
     {

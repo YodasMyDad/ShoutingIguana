@@ -44,7 +44,7 @@ public sealed class RecheckRefusedTests : IDisposable
             : Pages(path));
 
         var path = _files.NewPath();
-        Assert.Equal(CrawlStatus.Completed, (await TestCrawls.RunAsync(new CrawlOptions { StartUrl = site.BaseUri.AbsoluteUri, Concurrency = 2 }, path)).Status);
+        Assert.Equal(CrawlStatus.Completed, (await TestCrawls.RunAsync(new CrawlOptions { StartUrl = site.BaseUri.AbsoluteUri, Concurrency = 2, BrowserFallback = false }, path)).Status);
         await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path);
         var flagged = IssueReader.ReadAll(path, CHECK).Select(issue => issue.Url).Order(StringComparer.Ordinal).ToList();
         Assert.Equal(2, flagged.Count);

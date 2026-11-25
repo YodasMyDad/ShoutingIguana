@@ -100,7 +100,7 @@ public static class CrawlSummaryReader
         var defaults = new CrawlOptions { StartUrl = startUrl };
         try
         {
-            return command.ExecuteScalar() is string json ? StoredJson.Deserialize(json, EngineJsonContext.Default.CrawlOptions, defaults) ?? defaults : defaults;
+            return command.ExecuteScalar() is string json ? StoredCrawlOptions.Deserialize(json, startUrl) ?? defaults : defaults;
         }
         catch (JsonException)
         {

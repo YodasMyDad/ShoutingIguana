@@ -3,7 +3,7 @@
 
 For each address it runs `si crawl` three ways and reads the crawl file:
 
-  plain     no fallback: what plain HTTP gets
+  plain     --no-browser-fallback: what plain HTTP gets (the fallback is on by default since 2.1.0)
   headless  --browser-fallback --no-installed-browser: the headless browser only, which is the fallback as 2.1.0 had it
   browser   --browser-fallback: the computer's own Chrome or Edge for a check
 
@@ -21,7 +21,7 @@ import sys
 import tempfile
 
 MODES = {
-    "plain": [],
+    "plain": ["--no-browser-fallback"],
     "headless": ["--browser-fallback", "--no-installed-browser"],
     "browser": ["--browser-fallback"],
 }

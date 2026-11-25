@@ -780,7 +780,7 @@ public sealed class CrawlEngineTests : IAsyncLifetime
 
     private CrawlOptions Options() => Options(_server);
 
-    private static CrawlOptions Options(SyntheticSiteServer server) => new() { StartUrl = server.BaseUri.AbsoluteUri, Concurrency = 8 };
+    private static CrawlOptions Options(SyntheticSiteServer server) => new() { StartUrl = server.BaseUri.AbsoluteUri, Concurrency = 8, BrowserFallback = false };
 
     private static async Task<CrawlSummary> CrawlAsync(CrawlOptions options, string path, bool resume = false, ICrawlObserver? observer = null)
     {

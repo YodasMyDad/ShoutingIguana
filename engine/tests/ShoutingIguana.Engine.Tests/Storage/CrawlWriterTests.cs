@@ -490,5 +490,5 @@ public sealed class CrawlWriterTests : IAsyncLifetime
         return writer.RecordAsync(new PageRecord(item, response, links, false, null, null), CancellationToken.None);
     }
 
-    private CrawlOptions Options() => new() { StartUrl = _server.BaseUri.AbsoluteUri, Concurrency = 4 };
+    private CrawlOptions Options() => new() { StartUrl = _server.BaseUri.AbsoluteUri, Concurrency = 4, BrowserFallback = false };
 }

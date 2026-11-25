@@ -28,7 +28,7 @@ public sealed class AnalysisProgressTests : IAsyncLifetime
     public async Task AnAnalysisReportsEveryPhaseInOrderFromNothingDoneToAllOfIt()
     {
         var path = _files.NewPath();
-        Assert.Equal(CrawlStatus.Completed, (await TestCrawls.RunAsync(new CrawlOptions { StartUrl = _site.BaseUri.AbsoluteUri }, path)).Status);
+        Assert.Equal(CrawlStatus.Completed, (await TestCrawls.RunAsync(new CrawlOptions { StartUrl = _site.BaseUri.AbsoluteUri, BrowserFallback = false }, path)).Status);
         var reports = new RecordingProgress();
 
         var summary = await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(path, null, reports);

@@ -47,7 +47,8 @@ public sealed class ListModeCrawlTests : IAsyncLifetime
             DiscoverSitemaps = true,
             CheckResources = true,
             CheckExternalLinks = true,
-            ListUrls = [start]
+            ListUrls = [start],
+            BrowserFallback = false
         };
 
         await using var job = new CrawlEngine(NullLoggerFactory.Instance).Start(new CrawlRequest(options, path));

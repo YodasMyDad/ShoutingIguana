@@ -125,7 +125,7 @@ public sealed class RecheckKindsTests(RecheckCrawls crawls, RecheckKindsTests.Ht
         {
             Server = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = 120, Https = true });
             _then = _files.NewPath();
-            var options = new CrawlOptions { StartUrl = Server.BaseUri.AbsoluteUri, Concurrency = 8, TrustedCertificate = Server.Certificate };
+            var options = new CrawlOptions { StartUrl = Server.BaseUri.AbsoluteUri, Concurrency = 8, TrustedCertificate = Server.Certificate, BrowserFallback = false };
             Assert.Equal(CrawlStatus.Completed, (await TestCrawls.RunAsync(options, _then)).Status);
             await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(_then);
             Server.Revision = 1;

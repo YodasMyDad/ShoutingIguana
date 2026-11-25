@@ -383,7 +383,7 @@ public sealed class SiteVersionCrawlTests(ITestOutputHelper output) : IAsyncLife
             _ => Redirect(context, 301, $"{WWW}/")
         });
 
-        var summary = await TestCrawls.RunAsync(Options(site) with { StartUrl = $"{WWW}/" }, path);
+        var summary = await TestCrawls.RunAsync(Options(site) with { StartUrl = $"{WWW}/", BrowserFallback = false }, path);
 
         Assert.Equal(CrawlStatus.Completed, summary.Status);
         var blocked = Assert.Single(CrawlNoticeReader.Read(path), notice => notice.Code == "blocked");

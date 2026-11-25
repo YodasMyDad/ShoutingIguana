@@ -389,7 +389,7 @@ public sealed class LiveProgressTests : IAsyncLifetime
     {
         await using var site = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = 4_000 });
         await using var job = new CrawlEngine(NullLoggerFactory.Instance).Start(new CrawlRequest(
-            new CrawlOptions { StartUrl = site.BaseUri.AbsoluteUri, Concurrency = 16 }, _files.NewPath()));
+            new CrawlOptions { StartUrl = site.BaseUri.AbsoluteUri, Concurrency = 16, BrowserFallback = false }, _files.NewPath()));
         long reports = 0;
         ConcurrentQueue<string> disagreements = new();
         var reader = Task.Run(() =>

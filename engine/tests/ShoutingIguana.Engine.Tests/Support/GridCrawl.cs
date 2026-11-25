@@ -39,7 +39,7 @@ public sealed class GridCrawl : IAsyncLifetime
     {
         Server = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = PAGES });
         Path = _files.NewPath();
-        var crawl = await TestCrawls.RunAsync(new CrawlOptions { StartUrl = Server.BaseUri.AbsoluteUri, Concurrency = 8, StoreHtml = true }, Path);
+        var crawl = await TestCrawls.RunAsync(new CrawlOptions { StartUrl = Server.BaseUri.AbsoluteUri, Concurrency = 8, StoreHtml = true, BrowserFallback = false }, Path);
         Assert.Equal(CrawlStatus.Completed, crawl.Status);
         await new CrawlAnalyzer(NullLoggerFactory.Instance).AnalyzeAsync(Path);
         Reference = GridReference.Load(Path);

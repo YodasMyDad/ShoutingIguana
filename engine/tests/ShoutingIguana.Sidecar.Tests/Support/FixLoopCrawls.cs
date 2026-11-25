@@ -67,7 +67,7 @@ public sealed class FixLoopCrawls : IAsyncLifetime
     private async Task<string> CrawlAsync(string name)
     {
         var path = Path.Combine(_folder, name + ".sicrawl");
-        await using (var job = new CrawlEngine(NullLoggerFactory.Instance).Start(new CrawlRequest(new CrawlOptions { StartUrl = Server.BaseUri.AbsoluteUri, Concurrency = 8 }, path)))
+        await using (var job = new CrawlEngine(NullLoggerFactory.Instance).Start(new CrawlRequest(new CrawlOptions { StartUrl = Server.BaseUri.AbsoluteUri, Concurrency = 8, BrowserFallback = false }, path)))
         {
             Assert.Equal(CrawlStatus.Completed, (await job.Completion.WaitAsync(EventStreamReader.TIMEOUT)).Status);
         }

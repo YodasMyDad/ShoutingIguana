@@ -144,7 +144,8 @@ test('a check started from Home with Enter goes through its three steps to the S
   // Saved defaults: Fast, and a limit, so the check ends soon; Home's line says so.
   await sidecar('/api/crawl-options/defaults', {
     method: 'PUT',
-    body: JSON.stringify({ concurrency: 16, maxRequestsPerSecond: 0, maxUrls: 1_500 }),
+    // No browser for the test site's planted blocks: the browser fallback is on by default.
+    body: JSON.stringify({ concurrency: 16, maxRequestsPerSecond: 0, maxUrls: 1_500, browserFallback: false }),
   });
   await page.goto('/');
   await expect(main(page).getByText('Uses your saved settings: Fast speed and up to 1,500 addresses.')).toBeVisible();
@@ -257,7 +258,13 @@ test('the finished toast in Advanced keeps its words', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('si.settings', JSON.stringify({ mode: 'advanced' })));
   await page.goto('/');
   const started = await read<{ id: string }>('/api/crawls', {
-    options: { startUrl: env('SI_E2E_TESTSITE'), concurrency: 16, maxRequestsPerSecond: 0, maxUrls: 300 },
+    options: {
+      browserFallback: false,
+      startUrl: env('SI_E2E_TESTSITE'),
+      concurrency: 16,
+      maxRequestsPerSecond: 0,
+      maxUrls: 300,
+    },
   });
   await page.goto(`/crawls/${started.id}/overview`);
   const toast = page.locator('.si-toast').filter({ hasText: 'Crawl finished' });

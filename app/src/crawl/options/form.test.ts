@@ -40,7 +40,17 @@ describe('the crawl settings form', () => {
       startUrl: 'https://example.com/',
       extraSitemaps: ['https://example.com/a.xml'],
     };
-    expect(optionsFromForm(formFromOptions(options))).toEqual({ ...options, extraHeaders: {} });
+    // A person is asked to complete a site's check whenever the browser fallback is on, which it is by default.
+    expect(optionsFromForm(formFromOptions(options))).toEqual({ ...options, extraHeaders: {}, solveChallenges: true });
+    const off = { ...options, browserFallback: false };
+    expect(optionsFromForm(formFromOptions(off))).toEqual({ ...off, extraHeaders: {} });
+  });
+
+  it('has the browser fallback on unless the options it is filled from say off', () => {
+    expect(ENGINE_DEFAULTS.browserFallback).toBe(true);
+    expect(formFromOptions({ startUrl: 'https://example.com/' }).browserFallback).toBe(true);
+    // A choice someone made, or what an older crawl did, is kept.
+    expect(formFromOptions({ startUrl: 'https://example.com/', browserFallback: false }).browserFallback).toBe(false);
   });
 
   it('reads an older sidecar’s rendering number as the same mode the name is', () => {

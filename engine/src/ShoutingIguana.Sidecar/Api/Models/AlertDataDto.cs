@@ -15,6 +15,8 @@ namespace ShoutingIguana.Sidecar.Api.Models;
 /// </param>
 /// <param name="Sampled"><c>mostly-forbidden</c>: of how many of the site's first URLs.</param>
 /// <param name="UrlCount"><c>sitemaps</c>: the URLs they list.</param>
+/// <param name="Browser"><c>human-check</c>, <c>human-check-passed</c>, <c>blocked</c>: the browser a person was shown, "Chrome".</param>
+/// <param name="Tried"><c>blocked</c>: what the browser fallback did about it, as one stable word (see the API document).</param>
 /// <param name="DurationMs">
 /// <c>site-down</c>: how long it hadn't answered. <c>site-unreachable</c>: the pause between tries. <c>robots-unreachable</c>:
 /// until robots.txt is asked again.
@@ -27,8 +29,10 @@ internal sealed record AlertDataDto(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? Count,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? Sampled,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? UrlCount,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? DurationMs)
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? DurationMs,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Browser = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Tried = null)
 {
     public static AlertDataDto From(CrawlNoticeData data) => new(data.Host, data.Origin, data.Url, data.Reason, data.Count, data.Sampled,
-        data.UrlCount, data.Duration is { } duration ? (long)duration.TotalMilliseconds : null);
+        data.UrlCount, data.Duration is { } duration ? (long)duration.TotalMilliseconds : null, data.Browser, data.Tried);
 }

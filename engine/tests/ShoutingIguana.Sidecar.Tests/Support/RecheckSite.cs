@@ -27,7 +27,7 @@ public sealed class RecheckSite : IAsyncLifetime
         Directory.CreateDirectory(_folder);
         Server = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = FixLoopCrawls.PAGES });
         Then = Path.Combine(_folder, "then.sicrawl");
-        await using (var job = new CrawlEngine(NullLoggerFactory.Instance).Start(new CrawlRequest(new CrawlOptions { StartUrl = Server.BaseUri.AbsoluteUri, Concurrency = 8 }, Then)))
+        await using (var job = new CrawlEngine(NullLoggerFactory.Instance).Start(new CrawlRequest(new CrawlOptions { StartUrl = Server.BaseUri.AbsoluteUri, Concurrency = 8, BrowserFallback = false }, Then)))
         {
             Assert.Equal(CrawlStatus.Completed, (await job.Completion.WaitAsync(EventStreamReader.TIMEOUT)).Status);
         }

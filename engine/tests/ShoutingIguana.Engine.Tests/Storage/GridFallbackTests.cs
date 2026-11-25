@@ -35,7 +35,7 @@ public sealed class GridFallbackTests : IDisposable
         });
         site.Hold("/held");
         var path = _files.NewPath();
-        await using var job = TestCrawls.Start(new CrawlOptions { StartUrl = site.BaseUri.AbsoluteUri, Concurrency = 2 }, path);
+        await using var job = TestCrawls.Start(new CrawlOptions { StartUrl = site.BaseUri.AbsoluteUri, Concurrency = 2, BrowserFallback = false }, path);
         await TestCrawls.WaitUntilAsync(path, "SELECT COUNT(*) FROM responses r JOIN urls u ON u.id = r.url_id WHERE u.url LIKE '%/c'");
 
         // The crawl is waiting on /held: the grid reads what it has so far, and keeps its counts, which change as it goes,
@@ -108,7 +108,7 @@ public sealed class GridFallbackTests : IDisposable
     {
         await using var site = await SyntheticSiteServer.StartAsync(new SyntheticSiteOptions { PageCount = 60 });
         var path = _files.NewPath();
-        await using (var job = TestCrawls.Start(new CrawlOptions { StartUrl = site.BaseUri.AbsoluteUri, Concurrency = 2, MaxRequestsPerSecond = 50 }, path))
+        await using (var job = TestCrawls.Start(new CrawlOptions { StartUrl = site.BaseUri.AbsoluteUri, Concurrency = 2, MaxRequestsPerSecond = 50, BrowserFallback = false }, path))
         {
             var deadline = DateTime.UtcNow + TestCrawls.TIMEOUT;
             while (job.Progress.Fetched < 20 && DateTime.UtcNow < deadline)

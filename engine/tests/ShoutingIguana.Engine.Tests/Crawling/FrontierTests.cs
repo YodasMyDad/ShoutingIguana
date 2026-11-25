@@ -250,7 +250,7 @@ public sealed class FrontierTests : IAsyncLifetime
         Assert.Contains(Row("/page/2/more", FetchMode.Crawl, 2), read);
     }
 
-    private CrawlOptions Options() => new() { StartUrl = _synthetic.BaseUri.AbsoluteUri, Concurrency = 8 };
+    private CrawlOptions Options() => new() { StartUrl = _synthetic.BaseUri.AbsoluteUri, Concurrency = 8, BrowserFallback = false };
 
     private static CrawlOptions Options(TestWebHost site) => new() { StartUrl = site.BaseUri.AbsoluteUri, Concurrency = 4 };
 
