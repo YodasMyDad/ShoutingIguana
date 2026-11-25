@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using ShoutingIguana.Engine.Configuration.Models;
 using ShoutingIguana.Engine.Crawling;
 using ShoutingIguana.Engine.Crawling.Models;
@@ -70,8 +71,9 @@ public sealed class CrawlNoticeTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// A firewall blocks every page but the home page: one notice says so, as the first block is met, and read back from
-    /// the file it counts every response the host blocked.
+    /// A firewall blocks every page but the home page: one notice says so, once the crawl has slowed down for the host and
+    /// asked the pages again in vain (on the fake clock), and read back from the file it counts every response the host
+    /// blocked.
     /// </summary>
     [Fact]
     public async Task ABlockedNoticeReadBackCountsEveryResponseTheHostBlocked()
@@ -95,15 +97,17 @@ public sealed class CrawlNoticeTests : IAsyncLifetime
         });
         var path = _files.NewPath();
         var observer = new RecordingObserver();
-        await using (var job = new CrawlEngine(NullLoggerFactory.Instance)
+        var time = new FakeTimeProvider();
+        await using (var job = new CrawlEngine(NullLoggerFactory.Instance, time)
                          .Start(new CrawlRequest(new CrawlOptions { StartUrl = server.BaseUri.AbsoluteUri, MaxRetries = 0, BrowserFallback = false }, path), observer))
         {
-            Assert.Equal(CrawlStatus.Completed, (await job.Completion.WaitAsync(TestCrawls.TIMEOUT)).Status);
+            Assert.Equal(CrawlStatus.Completed, (await FakeClock.PumpAsync(time, job.Completion, TimeSpan.FromMilliseconds(100), TimeSpan.FromMinutes(2))).Status);
         }
 
         var live = Assert.Single(observer.Notices, notice => notice.Code == "blocked");
         var stored = Assert.Single(CrawlNoticeReader.Read(path), notice => notice.Code == "blocked");
-        Assert.Equal(new CrawlNoticeData(Host: "127.0.0.1", Reason: "Cloudflare challenge", Count: 1, Tried: "off"), live.Data);
+        Assert.Equal(new CrawlNoticeData(Host: "127.0.0.1", Reason: "Cloudflare challenge", Count: 1, Tried: "off", Duration: RefusalPace.MAX_INTERVAL, Retried: 3),
+            live.Data);
         Assert.Equal(live.Data! with { Count = 3 }, stored.Data);
         Assert.Equal(3, TestCrawls.Count(path, $"SELECT COUNT(*) FROM responses WHERE outcome = {(int)FetchOutcome.Blocked}"));
     }

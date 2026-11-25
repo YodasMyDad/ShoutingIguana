@@ -76,8 +76,11 @@ internal sealed partial class JavaScriptRenderer
                 }
             }
 
-            // A check that could not be passed is not tried on every page after it: the host stays blocked.
-            if (!session.Installed || (installed?.BlockReason is { } reason && BlockDetector.IsCheck(reason)))
+            // A check that could not be passed is not tried on every page after it: the host stays blocked. Unless this
+            // browser has read the host's pages and nobody was asked about this one: the crawl slows down for a host that
+            // starts checking it (Crawling.RefusalRetreat), asks again here, and gives it up (GiveUp) if that's no use.
+            if (!session.Installed || (installed?.BlockReason is { } reason && BlockDetector.IsCheck(reason) &&
+                                       session.Verdict is not (FallbackVerdict.None or FallbackVerdict.NeedsPerson or FallbackVerdict.StillBlocked)))
             {
                 session.GaveUp = true;
             }
@@ -87,6 +90,18 @@ internal sealed partial class JavaScriptRenderer
         finally
         {
             session.Gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// The crawl has given up on <paramref name="hostKey"/>, which kept refusing it however slowly it was asked: no browser
+    /// tries its pages again in this crawl, so the rest are recorded as plain HTTP finds them.
+    /// </summary>
+    public void GiveUp(string hostKey)
+    {
+        if (_fallbackHosts.TryGetValue(hostKey, out var session))
+        {
+            session.GaveUp = true;
         }
     }
 
@@ -300,6 +315,12 @@ internal sealed partial class JavaScriptRenderer
 
         /// <summary>How many times a person has been asked to complete this host's check.</summary>
         public int PersonChecks { get; set; }
+
+        /// <summary>
+        /// The crawl slowed down for the host after this browser had read its pages, and that didn't get past its check: the
+        /// next page that meets it is shown to a person.
+        /// </summary>
+        public bool AskPerson { get; set; }
 
         public FallbackVerdict Verdict { get; set; }
 
