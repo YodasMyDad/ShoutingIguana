@@ -61,9 +61,20 @@ person-check flow after the owner's live test, merged on `master`. This block is
   skip the host's rate gate. A check that needs a person shows the window in front after 12 s and waits up to 300 s;
   the reload or redirect after the tick is followed in the same browser. No stealth libraries, CAPTCHA services or
   proxy rotation; it never switches to a search engine's identity itself. 9 of 11 blocked real hosts read unattended
-  (before: 0); indeed.com and glassdoor need a person. `--no-browser-fallback` turns it off; a crawl file from before
+  (before: 0); indeed.com and glassdoor need a person. Proven live with the owner on 2026-11-25: a quick start of
+  www.glassdoor.co.uk showed the window in front 13 s in, the owner ticked in 4 s, the 308 was followed and the site
+  was read in Chrome; uk.indeed.com read 20+ pages in Chrome with no person. `--no-browser-fallback` turns it off; a crawl file from before
   reads as off. An ordinary crawl starts no browser. **Unproven:** macOS and Linux desktops, the full-Chromium
   download with no Chrome or Edge, a proxy sign-in in the installed browser.
+- **Slowing down by itself** (owner: "It should auto continue more politely, this is supposed to be a smart app").
+  Once a host has had a page read, a firewall or bot-check refusal is held back, not recorded; three in a row with
+  none getting through slow the host to one page at a time, 1 s apart, doubling per refusal to 30 s and halving per
+  5 pages through (`Crawling/RefusalRetreat.cs`, `RefusalPace.cs`). Refused URLs are asked again up to 3 times; the
+  host is given up after three refusals in a row at 30 s, a person who didn't let it in, or 10 minutes once the rest
+  is done. Alert `blocked-slowdown`; `blocked` gains `retried`, and neither mode then says "go slower". A host refused
+  from its first page goes the old way; a lone refused page among good ones is that page's answer. Plain 403s don't
+  slow anything. On a host already read in Chrome, a person is asked only once slowing down hasn't helped (about
+  1.5 to 2 minutes). Proven on test servers; uk.indeed.com never refused generally, so not on a real site.
 - **Checks on real pages.** 169 of 170 fired on a real page (before: 42); only `hreflang-unlinked` has not. Fixes
   from what the pages showed: sitemaps in RSS or Atom are read; URLs named only by hreflang or rel next/prev are
   status-checked (`--crawl-hreflang`, `--crawl-pagination` read them as pages); resources judged decompressed; a
