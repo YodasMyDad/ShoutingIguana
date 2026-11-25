@@ -8,9 +8,9 @@ Shouting Iguana is a desktop SEO crawler. It crawls every URL it can reach, scor
 
 Hand the report to a client. Or fix it yourself, then recheck just those pages and watch the score move.
 
-**2.1.0** for Windows, macOS and Linux. Your crawl stays on your machine. No account. No plugin to install.
+**2.1.1** for Windows, macOS and Linux. Your crawl stays on your machine. No account. No plugin to install.
 
-**[Download 2.1.0](https://github.com/YodasMyDad/ShoutingIguana/releases/tag/app-v2.1.0)**
+**[Download 2.1.1](https://github.com/YodasMyDad/ShoutingIguana/releases/tag/app-v2.1.1)**
 
 This release is the full v2 app. It renders pages a script builds, retries a blocked host in a real browser, crawls a list of addresses, pulls out text you name, and signs in over HTTP, with a cookie, or through a form.
 
@@ -69,7 +69,7 @@ The audit as a document: the score, what to fix first, and how the score was cal
 
 ## Downloads
 
-Installers are on the GitHub release [app-v2.1.0](https://github.com/YodasMyDad/ShoutingIguana/releases/tag/app-v2.1.0).
+Installers are on the GitHub release [app-v2.1.1](https://github.com/YodasMyDad/ShoutingIguana/releases/tag/app-v2.1.1).
 
 | System | File | Needs |
 | --- | --- | --- |

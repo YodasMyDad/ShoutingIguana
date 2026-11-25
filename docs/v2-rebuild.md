@@ -42,10 +42,44 @@ v2 is a fresh solution that ports the useful logic.
 
 ## Where step 4 stands (2026-11-20)
 
+**2026-11-25: `2.1.1`, the app updates itself, blocked sites are read, the checks are held to real pages.** The owner
+asked for three things after 2.1.0: the app updating itself, a browser fallback that gets past real Cloudflare and
+DataDome, and the checks that had never fired on a real site. Three lanes in worktrees, then a fix for the
+person-check flow after the owner's live test, merged on `master`. This block is the current status.
+
+- **Updater.** `tauri-plugin-updater` with a minisign key (`~/.shouting-iguana/updater.key`, never copied anywhere);
+  the release workflow signs every leg, writes `latest.json`, and a `preflight` job refuses a tag whose version
+  differs from the four version places or whose key the app's public key would not accept. Settings › Updates checks,
+  shows what's new, installs; a crawl is never stopped; a switch stops the automatic check. `.deb` installs are told
+  and given the link. Proven end to end on Windows only (`app/scripts/prove-update.mjs`, 13 of 13, including four
+  kinds of bad download refused). **Unproven:** a macOS or AppImage update at runtime, a real GitHub download.
+  **The repo is private, so `latest.json` 404s and the app says "No update information yet" until it is public.**
+  2.1.0 and older need one manual download.
+- **Browser fallback, on by default.** A blocked host is tried in the headless shell, then in the computer's own
+  Chrome or Edge, started plainly with a debugging port and driven over raw DevTools (not Playwright, so
+  `navigator.webdriver` is false), out of sight, with a kept profile and the browser's own user agent. Check requests
+  skip the host's rate gate. A check that needs a person shows the window in front after 12 s and waits up to 300 s;
+  the reload or redirect after the tick is followed in the same browser. No stealth libraries, CAPTCHA services or
+  proxy rotation; it never switches to a search engine's identity itself. 9 of 11 blocked real hosts read unattended
+  (before: 0); indeed.com and glassdoor need a person. `--no-browser-fallback` turns it off; a crawl file from before
+  reads as off. An ordinary crawl starts no browser. **Unproven:** macOS and Linux desktops, the full-Chromium
+  download with no Chrome or Edge, a proxy sign-in in the installed browser.
+- **Checks on real pages.** 169 of 170 fired on a real page (before: 42); only `hreflang-unlinked` has not. Fixes
+  from what the pages showed: sitemaps in RSS or Atom are read; URLs named only by hreflang or rel next/prev are
+  status-checked (`--crawl-hreflang`, `--crawl-pagination` read them as pages); resources judged decompressed; a
+  `charset=unicode` page read as UTF-8; the timeout message. `AnalysisFreshness.VERSION` is **28**. Detail in
+  [v2-check-audit.md](v2-check-audit.md), third audit and fourth pass.
+- **Open:** `HttpFetcher.Classify` for a 1xx or a 3xx without `Location` (needs a new outcome); `hreflang-unlinked`
+  unproven; two Storybook stories fail (git-ignored gallery fixtures, one contrast at 2.51:1), not a gate.
+  `CrawlComparability` counts `browserFallback` as a fetching difference, so an old crawl compared with a new one
+  reads Partial. Owner decisions waiting: `redirect-broken` on the crawler's own www probe, `canonical-multiple`,
+  `url-repetitive-path` ignoring sitemap-only URLs, the 2 MB limit, `soft-404` passing error pages of 300+ words,
+  checks worth adding (`notranslate`, sitemap blocked by robots.txt, missing URL redirecting home, relative hreflang).
+
 **2026-11-24, the pre-launch audit: `2.1.0`.** The owner asked for a full audit before showing the repo publicly:
 both modes of the UI, every SEO check, JavaScript rendering and browser crawling, and installers that work on every
 OS. Five lanes ran in their own worktrees, were merged, and every check passed on the merged result before the
-version was set to `2.1.0`. This block is the current status.
+version was set to `2.1.0`.
 
 *What was wrong in `2.0.0` to `2.0.3` and is fixed:*
 
