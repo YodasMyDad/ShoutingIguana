@@ -1,7 +1,8 @@
 // What the browser fallback did about a host that blocks the crawl, read from the `blocked` alert's facts (its
 // `tried`, docs/v2-sidecar-api.md, Alerts) and said in each mode's words. A blocked crawl that only says "blocked"
 // leaves its reader guessing whether a browser was tried, whether they were asked to complete a check, and how that
-// ended. A crawl file from before 2.2 has no `tried`: nothing is said of the browser then. Pure.
+// ended. A crawl file from before 2.2 has no `tried`: nothing is said of the browser then. A host the crawl already
+// slowed down for by itself (`retried`) isn't told to go more slowly again. Pure.
 import type { AlertData, AlertEvent } from '../api/types';
 
 export const BLOCK_TRIED = [
@@ -33,6 +34,15 @@ export interface BlockedWords {
   url?: string;
 }
 
+/**
+ * Whether the crawl had already slowed down for the host by itself and asked its refused URLs again, so going more
+ * slowly is no way on: the `blocked` alert's `retried`, which a crawl file from before 2.2 and a host refused from its
+ * first page don't have.
+ */
+export function slowedDown(data: AlertData | null | undefined): boolean {
+  return data?.retried !== undefined;
+}
+
 export function triedOf(data: AlertData | null | undefined): BlockTried | null {
   return BLOCK_TRIED.find((tried) => tried === data?.tried) ?? null;
 }
@@ -50,6 +60,8 @@ export function latestBlocked(alerts: readonly AlertEvent[] | undefined): AlertD
 const OWNER =
   'Or ask the site’s owner to let the crawler in: a firewall rule that allows its user agent or this computer’s IP address.';
 const OWNER_SIMPLE = 'Or ask whoever runs the site to let the check through its security.';
+/** OWNER as the only advice. */
+const ASK_OWNER = OWNER.replace(/^Or ask/, 'Ask');
 
 /** "A Chrome window", "An Edge window". */
 export function aWindow(browser: string | null | undefined): string {
@@ -61,6 +73,8 @@ export function aWindow(browser: string | null | undefined): string {
 export function blockedWords(data: AlertData | null | undefined): BlockedWords | null {
   const tried = triedOf(data);
   const browser = data?.browser ?? 'browser';
+  // Going more slowly is advised only where the crawl didn't already do it by itself.
+  const slowed = slowedDown(data);
   switch (tried) {
     case 'off':
       return {
@@ -94,7 +108,7 @@ export function blockedWords(data: AlertData | null | undefined): BlockedWords |
       return {
         tried,
         what: `The check was completed in the ${browser} window, and the site then refused the page all the same.`,
-        advice: `Stop the crawl and continue it more slowly. ${OWNER}`,
+        advice: slowed ? ASK_OWNER : `Stop the crawl and continue it more slowly. ${OWNER}`,
         next: 'otherWays',
       };
     case 'wentElsewhere':
@@ -123,14 +137,16 @@ export function blockedWords(data: AlertData | null | undefined): BlockedWords |
       return {
         tried,
         what: 'The browser the crawler downloads was blocked too, and this crawl was told not to use the computer’s own Chrome or Edge, which most checks let through.',
-        advice: `Stop the crawl and continue it more slowly. ${OWNER}`,
+        advice: slowed ? ASK_OWNER : `Stop the crawl and continue it more slowly. ${OWNER}`,
         next: 'otherWays',
       };
     case 'refused':
       return {
         tried,
         what: 'It was tried in a real browser too, and the site refused that as well.',
-        advice: `Stop the crawl and continue it more slowly, add the headers the site expects, or crawl as another user agent. ${OWNER}`,
+        advice: slowed
+          ? `Add the headers the site expects, or crawl as another user agent. ${OWNER}`
+          : `Stop the crawl and continue it more slowly, add the headers the site expects, or crawl as another user agent. ${OWNER}`,
         next: 'otherWays',
       };
     default:

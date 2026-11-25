@@ -2,7 +2,7 @@
 // view has every state": Empty explains why, with the next action). Pure.
 import type { UrlRow } from '../../api/grids';
 import type { AlertData, CrawlListItem } from '../../api/types';
-import { blockedWords } from '../../lib/blockedAlert';
+import { blockedWords, slowedDown } from '../../lib/blockedAlert';
 import type { StartRobots } from '../../simple/nothingRead';
 
 export type EmptyCrawlAction = 'continue' | 'crawlAgain' | 'crawlFrom' | 'crawlSettings';
@@ -76,7 +76,10 @@ export function emptyCrawl(
       }
       return {
         title,
-        why: `${answered} Crawl more slowly, add the headers the site expects, or crawl as another user agent.`,
+        why: `${answered} ${
+          // A host the crawl already slowed down for by itself: going more slowly is no way on.
+          slowedDown(blocked) ? 'Add' : 'Crawl more slowly, add'
+        } the headers the site expects, or crawl as another user agent.`,
         action: 'crawlSettings',
       };
     }

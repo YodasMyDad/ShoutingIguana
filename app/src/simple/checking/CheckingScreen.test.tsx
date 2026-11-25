@@ -113,6 +113,46 @@ describe.skipIf(TABLE_STUBBED)('checking a site, in Simple', () => {
     expect(main().queryByText(/Nothing so far\./)).toBeNull();
   });
 
+  // The owner's quick start of a Cloudflare site, 2026-11-25: the check now slows down by itself, so a block heard
+  // after that offers no Polite; a site that wants a person is checked again, to be asked this time.
+  it('offers Check again, not Polite, for a site still turning it away after it went slowly by itself', async () => {
+    await open();
+    await heard(
+      progress(100),
+      message(
+        'alert',
+        alert({
+          id: 2,
+          code: 'blocked',
+          level: 'error',
+          at: '2026-11-01T10:17:00.000Z',
+          data: {
+            host: 'example.com',
+            reason: 'Cloudflare challenge',
+            count: 9,
+            durationMs: 30_000,
+            retried: 9,
+            browser: 'Chrome',
+            tried: 'needsPerson',
+          },
+        }),
+      ),
+    );
+    // Heard live, its browser words are said: the live alert keeps what the browser did.
+    expect(
+      await main().findByText(
+        /already went more slowly by itself and asked those pages again.*wants to see that you’re a person/,
+      ),
+    ).toBeVisible();
+    const again = main().getByRole('link', { name: 'Check again…' });
+    const href = new URL((again as HTMLAnchorElement).href);
+    expect(href.pathname).toBe('/new');
+    expect(href.searchParams.get('url')).toContain('https://example.com/');
+    expect(href.searchParams.get('from')).toContain(TEST_CRAWL_ID);
+    expect(main().queryByRole('link', { name: 'Continue more gently (Polite), in Advanced' })).toBeNull();
+    expect(main().getByRole('link', { name: 'More ways in Advanced' })).toBeVisible();
+  });
+
   it('says the pages read before the site turned the check away as they were then, not as they grow', async () => {
     await open();
     await heard(

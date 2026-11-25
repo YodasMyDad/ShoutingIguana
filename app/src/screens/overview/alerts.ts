@@ -3,7 +3,7 @@
 // code this app doesn't know. Pure.
 import type { AlertEvent, AlertLevel } from '../../api/types';
 import type { SettingFocus } from '../../routing/search';
-import { aWindow, blockedWords, type BlockedWords } from '../../lib/blockedAlert';
+import { aWindow, blockedWords, slowedDown, type BlockedWords } from '../../lib/blockedAlert';
 import { failureOf } from '../../lib/failure';
 import { renderingAlert } from '../../lib/renderingAlert';
 import { formatCount, formatCountOf, formatDuration } from '../../lib/format';
@@ -70,9 +70,17 @@ const BLOCKED_MORE: AlertAction[] = [
 
 const BLOCKED_ADVICE =
   'Stop the crawl and continue it more slowly, add the headers the site expects, or crawl as another user agent.';
+/** For a host the crawl already slowed down for by itself: going more slowly is no way on. */
+const SLOWED_ADVICE = 'Add the headers the site expects, or crawl as another user agent.';
 
-/** What a blocked crawl offers, by what the browser fallback did: asked again, started from where the page went, or the three ways on. */
-function blockedActions(browser: BlockedWords): Pick<AlertEntry, 'action' | 'more'> {
+/** The ways on for a blocked host: more slowly first, unless the crawl already slowed down for it by itself. */
+function otherWays(slowed: boolean): Pick<AlertEntry, 'action' | 'more'> {
+  const [headers, ...rest] = BLOCKED_MORE;
+  return slowed && headers ? { action: headers, more: rest } : { action: SLOWER, more: BLOCKED_MORE };
+}
+
+/** What a blocked crawl offers, by what the browser fallback did: asked again, started from where the page went, or the ways on. */
+function blockedActions(browser: BlockedWords, slowed: boolean): Pick<AlertEntry, 'action' | 'more'> {
   switch (browser.next) {
     case 'from':
       return { action: { kind: 'newCrawl', label: 'Crawl from there', ...(browser.url ? { url: browser.url } : {}) } };
@@ -80,8 +88,13 @@ function blockedActions(browser: BlockedWords): Pick<AlertEntry, 'action' | 'mor
     case 'turnOnFallback':
       return { action: { kind: 'newCrawl', label: 'Crawl again', again: true } };
     case 'otherWays':
-      return { action: SLOWER, more: BLOCKED_MORE };
+      return otherWays(slowed);
   }
+}
+
+/** "2 s", "500 ms": the time between pages, where under a second isn't "0 s". */
+function interval(ms: number): string {
+  return ms < 1000 ? `${formatCount(ms)} ms` : formatDuration(ms);
 }
 
 function words(
@@ -92,6 +105,15 @@ function words(
   switch (alert.code) {
     case 'blocked': {
       const answered = `${where} answered with ${data.reason ? withArticle(data.reason) : 'a block page'}.`;
+      // The crawl had already slowed down for the host by itself and asked its refused URLs again (2.2's `retried`).
+      const slowed = slowedDown(data);
+      const retried = slowed
+        ? ` The crawl had slowed down by itself${
+            data.durationMs !== undefined ? ` to one page every ${interval(data.durationMs)}` : ''
+          } and asked ${formatCountOf(data.retried ?? 0, 'refused URL')} again, and the site still refused ${
+            data.retried === 1 ? 'it' : 'them'
+          }.`
+        : '';
       const tally =
         data.count !== undefined && data.count > 1
           ? { tally: `${formatCountOf(data.count, 'response')} blocked.` }
@@ -104,21 +126,35 @@ function words(
             browser.tried === 'notCompleted' || browser.tried === 'windowClosed'
               ? 'The site’s human check wasn’t completed'
               : 'The site is blocking the crawl',
-          detail: `${answered} ${browser.what}`,
+          detail: `${answered}${retried} ${browser.what}`,
           ...tally,
           advice: browser.advice,
-          ...blockedActions(browser),
+          ...blockedActions(browser, slowed),
         };
       }
       return {
         title: 'The site is blocking the crawl',
-        detail: answered,
+        detail: `${answered}${retried}`,
         ...tally,
-        advice: BLOCKED_ADVICE,
-        action: SLOWER,
-        more: BLOCKED_MORE,
+        advice: slowed ? SLOWED_ADVICE : BLOCKED_ADVICE,
+        ...otherWays(slowed),
       };
     }
+    case 'blocked-slowdown':
+      return {
+        title: 'The site started blocking the crawl, so it slowed down',
+        detail: [
+          `${where} refused ${
+            data.count !== undefined ? `${formatCountOf(data.count, 'URL')} in a row` : 'URLs'
+          }${data.reason ? ` with ${withArticle(data.reason)}` : ''} after some of its pages had been read.`,
+          `The crawl now reads its pages one at a time${
+            data.durationMs !== undefined ? `, starting at one every ${interval(data.durationMs)}` : ''
+          }: further apart while the site keeps refusing, closer as pages get through.`,
+          'The refused URLs are asked again. Those still refused at one page every 30 s are recorded as blocked.',
+        ].join(' '),
+        advice: null,
+        action: null,
+      };
     case 'human-check':
       return {
         title: 'A site asked to check you’re human',

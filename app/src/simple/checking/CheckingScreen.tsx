@@ -296,6 +296,7 @@ export function CheckingScreen({
           </h2>
           <Obstacles
             crawlId={crawlId}
+            startUrl={item?.startUrl ?? null}
             entries={obstacles}
             canContinue={status === 'stopped' || status === 'interrupted'}
             onStop={onStop}
@@ -379,12 +380,15 @@ function WorkingItOut({
  */
 const Obstacles = memo(function Obstacles({
   crawlId,
+  startUrl,
   entries,
   canContinue,
   onStop,
   onContinue,
 }: {
   crawlId: string;
+  /** The check's address, for Check again. */
+  startUrl: string | null;
   entries: readonly SimpleAlert[];
   canContinue: boolean;
   onStop: () => void;
@@ -406,6 +410,7 @@ const Obstacles = memo(function Obstacles({
                         <ObstacleAction
                           key={action.label}
                           crawlId={crawlId}
+                          startUrl={startUrl}
                           action={action}
                           canContinue={canContinue}
                           onStop={onStop}
@@ -432,12 +437,14 @@ const Obstacles = memo(function Obstacles({
 
 function ObstacleAction({
   crawlId,
+  startUrl,
   action,
   canContinue,
   onStop,
   onContinue,
 }: {
   crawlId: string;
+  startUrl: string | null;
   action: SimpleAlertAction;
   canContinue: boolean;
   onStop: () => void;
@@ -456,6 +463,13 @@ function ObstacleAction({
           {action.label}
         </TextLink>
       );
+    case 'checkAgain':
+      // Summary's Check again: Check a website on this address, with this check's settings.
+      return startUrl ? (
+        <TextLink to="/new" search={{ url: startUrl, from: crawlId }}>
+          {action.label}
+        </TextLink>
+      ) : null;
     case 'sitemaps':
       return (
         <TextLink
