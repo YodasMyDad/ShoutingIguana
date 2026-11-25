@@ -3,7 +3,8 @@ namespace ShoutingIguana.Engine.Crawling.Models;
 /// <summary>
 /// What a notice is about, for a UI to offer its action. Which facts are set depends on the code:
 /// <list type="bullet">
-/// <item><c>blocked</c>: Host, Reason (the firewall or challenge), Count (the host's responses blocked: 1 as raised, so far when read from the file), Tried (what the browser fallback did about it), Browser (the browser a person was shown, when one was), Url (where the page went after its check, for Tried <c>wentElsewhere</c>).</item>
+/// <item><c>blocked</c>: Host, Reason (the firewall or challenge), Count (the host's responses blocked: 1 as raised, so far when read from the file), Tried (what the browser fallback did about it), Browser (the browser a person was shown, when one was), Url (where the page went after its check, for Tried <c>wentElsewhere</c>), and, when the crawl slowed down by itself for a host that started refusing it after pages were read, Retried (its refused URLs asked again) and Duration (the longest wait between its pages).</item>
+/// <item><c>blocked-slowdown</c>: Host, Reason (the refusal), Count (the URLs refused in a row that slowed it down), Duration (the wait between its pages to start).</item>
 /// <item><c>human-check</c>: Host, Url (the page the check is on), Reason (the check), Browser (whose window was shown).</item>
 /// <item><c>human-check-passed</c>: Host, Url, Browser, Duration (how long the person took).</item>
 /// <item><c>browser-fallback</c>: Host, Reason (the block the plain HTTP fetch got, before the browser got past it), Browser (the computer's own browser, when that is what reads the host).</item>
@@ -33,6 +34,10 @@ namespace ShoutingIguana.Engine.Crawling.Models;
 /// (the crawl was told not to use the computer's own browser), <c>refused</c> (a real browser was refused too), and
 /// <c>notTried</c> (no browser was tried for what was blocked).
 /// </param>
+/// <param name="Retried">
+/// For <c>blocked</c>, set only when the crawl slowed down by itself for the host: how many of its refused URLs it asked
+/// again, more slowly, before it recorded them blocked.
+/// </param>
 public sealed record CrawlNoticeData(
     string? Host = null,
     string? Origin = null,
@@ -43,4 +48,5 @@ public sealed record CrawlNoticeData(
     long? UrlCount = null,
     TimeSpan? Duration = null,
     string? Browser = null,
-    string? Tried = null);
+    string? Tried = null,
+    long? Retried = null);

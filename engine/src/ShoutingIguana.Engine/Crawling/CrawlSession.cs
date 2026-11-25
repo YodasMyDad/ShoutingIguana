@@ -75,6 +75,7 @@ internal sealed class CrawlSession
     private readonly SitemapDiscoverer _sitemaps;
     private readonly FaviconFetcher _favicon;
     private readonly SectionTrickle _trickle;
+    private readonly RefusalRetreat _retreat;
     private readonly HostGateRegistry _gates;
     private readonly CrawlScope _scope;
     private readonly Channel<FrontierItem> _internalQueue;
@@ -159,6 +160,8 @@ internal sealed class CrawlSession
         _processor = new PageProcessor(_options, userAgent, fetcher, _robots, _links, _observer, scope, _gates, _favicon, _renderer, timeProvider);
         _trickle = new SectionTrickle(_gates, _processor, scope, _observer, _pause, timeProvider, loggerFactory.CreateLogger<SectionTrickle>(),
             () => TimeSpan.FromMilliseconds(_crawling.ElapsedMs));
+        _retreat = new RefusalRetreat(_processor, _renderer, scope, _observer, _pause, timeProvider, loggerFactory.CreateLogger<RefusalRetreat>());
+        _processor.Retreat = _retreat;
         _sitemaps = new SitemapDiscoverer(_options, _fetcher, _gates, _robots, _writer, _links, _observer, _pause, timeProvider,
             loggerFactory.CreateLogger<SitemapDiscoverer>());
         _internalQueue = Channel.CreateBounded<FrontierItem>(new BoundedChannelOptions(_options.Concurrency * 2) { SingleWriter = true });
@@ -413,7 +416,8 @@ internal sealed class CrawlSession
             [
                 .. StartWorkers(_internalQueue.Reader, _options.Concurrency),
                 .. StartWorkers(_externalQueue.Reader, _options.ExternalConcurrency),
-                Task.Run(() => TrickleAsync(trickleStop.Token))
+                Task.Run(() => TrickleAsync(trickleStop.Token)),
+                Task.Run(() => RetreatAsync(trickleStop.Token))
             ];
 
             var exhausted = await DispatchAsync(sitemaps, _stop.Token).ConfigureAwait(false);
@@ -753,7 +757,8 @@ internal sealed class CrawlSession
             // Read before claiming: sitemap batches are queued to the writer before the task completes,
             // so a claim issued after this point is guaranteed to see every sitemap URL.
             var producersDone = sitemaps.IsCompleted;
-            var claim = await _writer.ClaimAsync(Math.Max(0, wantInternal), Math.Max(0, wantExternal), cancellationToken, _trickle.HeldLinked)
+            var claim = await _writer.ClaimAsync(Math.Max(0, wantInternal), Math.Max(0, wantExternal), cancellationToken,
+                    _trickle.HeldLinked + _retreat.HeldLinked)
                 .ConfigureAwait(false);
 
             // Said before the URLs are handed out, so none is fetched under the phase it ends.
@@ -789,7 +794,7 @@ internal sealed class CrawlSession
                 // Read after claiming: workers only ever add to the held-back URLs, so if everything in flight at the
                 // claim is held back now, nothing else is still being fetched.
                 var deferred = _deferred.Count;
-                var held = _trickle.Held;
+                var held = _trickle.Held + _retreat.Held;
                 if (claim.InFlight == deferred + held && !producersDone && _phase == CrawlPhase.Crawling)
                 {
                     _phase = CrawlPhase.ReadingSitemaps;
@@ -804,9 +809,11 @@ internal sealed class CrawlSession
 
                     if (deferred == 0)
                     {
-                        // Only sections the site limits are left: they go on at their pace, for a while yet.
+                        // Only sections the site limits, and refused URLs of a host slowed down for, are left: they go on at
+                        // their pace, for a while yet.
                         _phase = CrawlPhase.Retrying;
                         _trickle.RestIsOver(_timeProvider.GetUtcNow());
+                        _retreat.RestIsOver(_timeProvider.GetUtcNow());
                         await Task.Delay(IDLE_DELAY, _timeProvider, cancellationToken).ConfigureAwait(false);
                         continue;
                     }
@@ -959,9 +966,17 @@ internal sealed class CrawlSession
 
                 try
                 {
+                    // On a host that started refusing the crawler, one page at a time, and a refused one is held back to be
+                    // asked again more slowly.
+                    using var turn = await _retreat.TurnAsync(item, cancellationToken).ConfigureAwait(false);
                     record = await _processor.ProcessAsync(item, cancellationToken, isRetry).ConfigureAwait(false);
                     CountRefusal(record);
                     record = heldBack is null ? record : KeepTheRealError(record, heldBack);
+                    if (_retreat.TryHold(record, turn))
+                    {
+                        _retried.TryRemove(item.Id, out _);
+                        continue;
+                    }
                 }
                 catch (Exception exception) when (exception is not OperationCanceledException)
                 {
@@ -1028,6 +1043,15 @@ internal sealed class CrawlSession
             }
         }
 
+        // A refused URL of a host some of whose pages were read: its alert says what the crawl did about it first. With the
+        // browser fallback on, a file's status check refused over plain HTTP is no block of the site (PageProcessor).
+        if (item is { IsInternal: true, Source: not DiscoverySource.SiteVersion } && (item.Mode == FetchMode.Crawl || !_options.BrowserFallback) &&
+            record.Response.Outcome == FetchOutcome.Blocked &&
+            _retreat.WasRead(new Uri(item.Url)))
+        {
+            _processor.SayBlocked(record, _retreat.FactsFor(new Uri(item.Url)), _retreat.VerdictAtRefusal(new Uri(item.Url)));
+        }
+
         await _writer.RecordAsync(record, cancellationToken).ConfigureAwait(false);
     }
 
@@ -1046,6 +1070,23 @@ internal sealed class CrawlSession
         try
         {
             await _trickle.RunAsync(RecordAsync, CountRefusal, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // The crawl is over, or stopping: anything still held back is re-queued when it resumes.
+        }
+        catch (ChannelClosedException)
+        {
+            await _stop.CancelAsync().ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>The refused URLs of hosts slowed down for, at their pace, until the crawl ends or stops.</summary>
+    private async Task RetreatAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _retreat.RunAsync(RecordAsync, CountRefusal, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

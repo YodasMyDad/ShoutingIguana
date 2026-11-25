@@ -2,7 +2,7 @@
 // plainly with what to do about it; how long is left, as a floor; and the analysis's phases. Pure.
 import type { AlertEvent, AlertLevel, CrawlStatus, CrawlWait, HistoryPoint, ProgressEvent } from '../../api/types';
 import type { SettingFocus } from '../../routing/search';
-import { blockedPlainWords } from '../../lib/blockedAlert';
+import { blockedPlainWords, slowedDown } from '../../lib/blockedAlert';
 import { formatCount, formatCountOf } from '../../lib/format';
 import { renderingAlert } from '../../lib/renderingAlert';
 import { simpleReason } from '../../shopify/refusals';
@@ -13,6 +13,8 @@ export type SimpleAlertAction =
   | { kind: 'crawlSettings'; label: string; focus: SettingFocus }
   /** New crawl, from another address: in Simple it's Check a website. */
   | { kind: 'newCrawl'; label: string; url: string }
+  /** Check a website again, on this check's address and with its settings: Summary's "Check again…". */
+  | { kind: 'checkAgain'; label: string }
   /** Sitemaps (Advanced only), on the sitemap the alert is about. */
   | { kind: 'sitemaps'; label: string; url?: string }
   /** Text to copy: what to tell whoever runs the site. */
@@ -36,6 +38,7 @@ export interface SimpleAlert {
 /** What gives a site's alert its kind: a wait and an alert of one kind say the same thing, so it's said once. */
 type Kind =
   | 'blocked'
+  | 'slowedDown'
   | 'away'
   | 'robots'
   | 'down'
@@ -57,6 +60,8 @@ const ROBOTS =
 /** Asks something of the person, so it is said first and as a warning. */
 const HUMAN =
   'The site wants to see that you’re a person. A browser window has opened on its page, in front of this one: do what it asks there, and reading the site carries on by itself. If you can’t see it, look for the browser on the taskbar or the Dock. Closing the window leaves the site’s pages unread.';
+const SLOWED_DOWN =
+  'The site started turning the check away, so it’s going more slowly by itself: one page at a time, and it’s asking those pages again. It will take longer.';
 const DOWN = 'The site has stopped answering. The check is waiting, and will carry on by itself when it’s back.';
 const STOP: SimpleAlertAction = { kind: 'stop', label: 'Stop' };
 
@@ -69,11 +74,16 @@ export function hostOf(url: string): string {
   }
 }
 
-/** What to send whoever runs a site that turns the check away: what happened, and what would let it in. */
-export function blockedMessage(site: string, pages: number | null): string {
+/**
+ * What to send whoever runs a site that turns the check away: what happened, and what would let it in. `slowed`: the
+ * check had already gone more slowly by itself, and was still turned away.
+ */
+export function blockedMessage(site: string, pages: number | null, slowed = false): string {
   return [
     `I checked ${site} with Shouting Iguana, a site checker that reads pages the way a search engine does.`,
-    `The site’s security turned it away${pages === null ? '' : ` after ${formatCountOf(pages, 'page')}`}, taking it for a robot.`,
+    `The site’s security turned it away${pages === null ? '' : ` after ${formatCountOf(pages, 'page')}`}, taking it for a robot${
+      slowed ? ', even once it slowed down to one page at a time' : ''
+    }.`,
     'Could you let it through the firewall or rate limit while I check the site, or tell me what it needs to send to be let in?',
   ].join(' ');
 }
@@ -105,22 +115,37 @@ function alertWords(
     case 'mostly-forbidden': {
       // What the browser did about it, where the check says: tried or not, the person asked or not, how it ended.
       const browser = alert.code === 'blocked' ? blockedPlainWords(alert.data) : null;
+      // The check already went more slowly by itself and asked the pages again (2.2's `retried`): going gently is
+      // done, so it isn't offered; checking again is, where that's what gets past it (a person asked this time).
+      const slowed = alert.code === 'blocked' && slowedDown(alert.data);
+      const onFromHere: SimpleAlertAction[] = !slowed
+        ? [{ kind: 'crawlSettings', label: 'Continue more gently (Polite), in Advanced', focus: 'speed' }]
+        : browser?.next === 'again' || browser?.next === 'turnOnFallback'
+          ? [{ kind: 'checkAgain', label: 'Check again…' }]
+          : [];
       return {
         kind: 'blocked',
         level: 'error',
         text: `The site is turning the check away: its security takes it for a robot.${
           pages === null ? '' : ` ${formatCountOf(pages, 'page')} ${pages === 1 ? 'was' : 'were'} read first.`
+        }${
+          slowed
+            ? ' The check already went more slowly by itself and asked those pages again, and the site still turned them away.'
+            : ''
         }${browser ? ` ${browser.what} ${browser.advice}` : ''}`,
         actions: [
           ...(browser?.next === 'from' && browser.url
             ? [{ kind: 'newCrawl' as const, label: `Check ${hostOf(browser.url)} instead`, url: browser.url }]
             : []),
-          { kind: 'crawlSettings', label: 'Continue more gently (Polite), in Advanced', focus: 'speed' },
-          { kind: 'copy', label: 'What to tell whoever runs the site', text: blockedMessage(site, pages) },
+          ...onFromHere,
+          { kind: 'copy', label: 'What to tell whoever runs the site', text: blockedMessage(site, pages, slowed) },
           { kind: 'crawlSettings', label: 'More ways in Advanced', focus: 'headers' },
         ],
       };
     }
+    // The check slowing down by itself for a site that started turning it away: its own kind, not the site asking.
+    case 'blocked-slowdown':
+      return { kind: 'slowedDown', level: 'info', text: SLOWED_DOWN, actions: [] };
     case 'shopify-unsigned': {
       const count = alert.data?.count;
       const reason = alert.data?.reason;
@@ -301,6 +326,8 @@ export function inTheWay({
   // Its kind kept the others to one, but a note is listed each time, so it was shown twice, under one key.
   const said = new Set<string>();
   const entries: SimpleAlert[] = [];
+  // A block said after the check had gone slowly by itself, which says the slowdown's news too.
+  let blockedSlowed = false;
   // What waits for the person comes before everything the check is only telling them.
   if (waits.some((wait) => wait.reason === 'humanCheck')) {
     seen.add('human');
@@ -313,6 +340,9 @@ export function inTheWay({
     const words = alertWords(alert, { site, pages: pagesOf?.(alert) ?? pages });
     const key = `${words?.kind ?? ''}:${alertKey(alert)}`;
     if (!words || said.has(key) || (words.kind !== 'note' && seen.has(words.kind))) continue;
+    // Going slowly didn't get past it: the block, newer, says so, and that the check went slowly first.
+    if (words.kind === 'slowedDown' && blockedSlowed) continue;
+    if (alert.code === 'blocked' && slowedDown(alert.data)) blockedSlowed = true;
     seen.add(words.kind);
     said.add(key);
     entries.push({ key, ...words });

@@ -196,3 +196,142 @@ describe('a crawl that read nothing because it was blocked', () => {
     ).toEqual([]);
   });
 });
+
+// The owner's quick start of a Cloudflare site, 2026-11-25: 2 pages read in Chrome, then the site challenged, and Simple
+// offered "Continue more gently (Polite), in Advanced". The crawl now slows down by itself and asks those pages again;
+// a host still refused at its slowest is recorded blocked with `retried`, and slowing down is no longer offered.
+describe('a host the crawl slowed down for by itself', () => {
+  const slowdown = alert({
+    code: 'blocked-slowdown',
+    level: 'info',
+    at: '2026-11-25T10:00:00.000Z',
+    data: { host: 'www.example.com', reason: 'Cloudflare challenge', count: 3, durationMs: 2_000 },
+  });
+  const stillBlocked = (data: AlertData): AlertEvent => ({
+    ...blocked({ count: 9, durationMs: 30_000, retried: 9, ...data }),
+    id: 2,
+    level: 'error',
+    at: '2026-11-25T10:05:00.000Z',
+  });
+  const running = { waits: [], runStartedAt: null, site: 'example.com', pages: 2 };
+
+  it('never advises going more slowly, in either mode, once it has', () => {
+    for (const tried of BLOCK_TRIED.filter((word) => word !== 'notTried')) {
+      const data = { tried, browser: 'Chrome', url: 'https://uk.example.com/', retried: 4, durationMs: 30_000 };
+      for (const words of [blockedWords(data), blockedPlainWords(data)]) {
+        expect(words?.advice).not.toMatch(/slow|gentl|polite/i);
+        expect(words?.advice).toMatch(/\.$/);
+      }
+    }
+    // Without `retried` (a file from before, a host refused from its first page) the advice is as it was.
+    expect(blockedWords({ tried: 'refused' })?.advice).toMatch(/^Stop the crawl and continue it more slowly/);
+  });
+
+  it('says in Advanced that it slowed down, how far apart it starts, and that the refused URLs are asked again', () => {
+    const [entry] = alertEntries([slowdown]);
+    expect(entry).toMatchObject({
+      level: 'info',
+      title: 'The site started blocking the crawl, so it slowed down',
+      detail:
+        'www.example.com refused 3 URLs in a row with a Cloudflare challenge after some of its pages had been read. The crawl now reads its pages one at a time, starting at one every 2 s: further apart while the site keeps refusing, closer as pages get through. The refused URLs are asked again. Those still refused at one page every 30 s are recorded as blocked.',
+      advice: null,
+      action: null,
+    });
+    expect(entry?.more).toBeUndefined();
+  });
+
+  it('says in Advanced how far it slowed down and how many it asked again, without Continue more slowly', () => {
+    const [entry] = alertEntries([stillBlocked({})]);
+    expect(entry).toMatchObject({
+      title: 'The site is blocking the crawl',
+      detail:
+        'www.example.com answered with a Cloudflare challenge. The crawl had slowed down by itself to one page every 30 s and asked 9 refused URLs again, and the site still refused them.',
+      advice: 'Add the headers the site expects, or crawl as another user agent.',
+      action: { kind: 'crawlSettings', label: 'Add headers', focus: 'headers' },
+      more: [{ kind: 'newCrawl', label: 'Crawl as another user agent', again: true, focus: 'userAgent' }],
+    });
+    const refused = alertEntries([stillBlocked({ tried: 'refused', browser: 'Chrome' })])[0];
+    expect(refused?.detail).toContain('and the site still refused them. It was tried in a real browser too');
+    expect(refused?.advice).toMatch(/^Add the headers the site expects, or crawl as another user agent\. Or ask/);
+    expect(refused?.action?.label).toBe('Add headers');
+    expect(refused?.more?.map((action) => action.label)).toEqual(['Crawl as another user agent']);
+    // A check that needs a person: crawl again, to be asked.
+    const person = alertEntries([stillBlocked({ tried: 'needsPerson' })])[0];
+    expect(person?.action).toEqual({ kind: 'newCrawl', label: 'Crawl again', again: true });
+    // Every way on but slowing down.
+    for (const tried of BLOCK_TRIED) {
+      const each = alertEntries([stillBlocked({ tried, browser: 'Chrome' })])[0];
+      const labels = [each?.action, ...(each?.more ?? [])].map((action) => action?.label);
+      expect(labels).not.toContain('Continue more slowly');
+    }
+    // Without `retried`, as it was.
+    expect(alertEntries([blocked({ tried: 'refused' })])[0]?.action?.label).toBe('Continue more slowly');
+  });
+
+  it('says in Simple that it is going more slowly by itself, as its own line, with nothing to do', () => {
+    const entries = inTheWay({
+      ...running,
+      alerts: [slowdown],
+      waits: [{ reason: 'backoff', host: 'www.example.com' }],
+    });
+    expect(entries.map(({ level, text, actions }) => ({ level, text, actions }))).toEqual([
+      {
+        level: 'info',
+        text: 'The site started turning the check away, so it’s going more slowly by itself: one page at a time, and it’s asking those pages again. It will take longer.',
+        actions: [],
+      },
+      // The site asking it to slow down is another thing, said beside it.
+      {
+        level: 'info',
+        text: 'The site asked the check to slow down, so it has. It will take longer.',
+        actions: [],
+      },
+    ]);
+  });
+
+  it('says in Simple it already went slowly, offers Check again where a person is wanted, and no Polite', () => {
+    const entries = inTheWay({
+      ...running,
+      alerts: [slowdown, stillBlocked({ tried: 'needsPerson', browser: 'Chrome' })],
+    });
+    // The block says the slowdown's news too: it is said once.
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.text).toBe(
+      'The site is turning the check away: its security takes it for a robot. 2 pages were read first. The check already went more slowly by itself and asked those pages again, and the site still turned them away. The site wants to see that you’re a person, and this check wasn’t set to ask you. Check again: a browser window opens for you to do what the site asks. Or ask whoever runs the site to let the check through its security.',
+    );
+    expect(entries[0]?.text).not.toMatch(/crawl|user agent/i);
+    expect(entries[0]?.actions.map((action) => action.kind)).toEqual(['checkAgain', 'copy', 'crawlSettings']);
+    expect(entries[0]?.actions.map((action) => action.label)).toEqual([
+      'Check again…',
+      'What to tell whoever runs the site',
+      'More ways in Advanced',
+    ]);
+    const copy = entries[0]?.actions[1];
+    expect(copy?.kind === 'copy' ? copy.text : '').toContain('even once it slowed down to one page at a time');
+
+    // A real browser refused too: nothing to check again, and still no Polite.
+    const [refused] = inTheWay({ ...running, alerts: [stillBlocked({ tried: 'refused', browser: 'Chrome' })] });
+    expect(refused?.actions.map((action) => action.label)).toEqual([
+      'What to tell whoever runs the site',
+      'More ways in Advanced',
+    ]);
+
+    // Without `retried`, exactly as it was: Polite first.
+    const [before] = inTheWay({ ...running, alerts: [blocked({ tried: 'needsPerson' })] });
+    expect(before?.actions.map((action) => action.label)).toEqual([
+      'Continue more gently (Polite), in Advanced',
+      'What to tell whoever runs the site',
+      'More ways in Advanced',
+    ]);
+    expect(before?.text).not.toContain('already went more slowly');
+  });
+
+  it('keeps a crawl that read nothing as it was: no host refused from its first page was slowed down for', () => {
+    expect(emptyCrawl({ status: 'completed', fetchedUrlCount: 1 }, start).why).toContain('Crawl more slowly');
+    expect(nothingRead({ status: 'completed' }, start).action).toBe('blockedInAdvanced');
+    // Were one ever slowed down for, slowing down isn't advised again.
+    expect(emptyCrawl({ status: 'completed', fetchedUrlCount: 1 }, start, undefined, { retried: 2 }).why).toBe(
+      'A firewall or bot challenge answered the start URL (403 Forbidden), so the crawl got no further. Add the headers the site expects, or crawl as another user agent.',
+    );
+  });
+});

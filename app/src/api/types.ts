@@ -1058,6 +1058,11 @@ export interface AlertData {
   browser?: string;
   /** 2.2, `blocked`: what the browser fallback did about it, as one stable word (lib/blockedAlert). */
   tried?: string;
+  /**
+   * 2.2, `blocked`: how many of the host's refused URLs the crawl asked again, more slowly, by itself, before recording
+   * them blocked; `durationMs` is then the slowest interval it went to. Left out when it didn't slow down for the host.
+   */
+  retried?: number;
 }
 
 /** E4: `GET /api/crawls/{id}/history`, one point. File points leave out what the file can't say. */

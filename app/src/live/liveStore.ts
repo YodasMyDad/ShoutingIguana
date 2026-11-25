@@ -544,11 +544,11 @@ function siteVersionsOf(value: unknown): SiteVersionCounts | null {
 function alertData(value: unknown): AlertData | null {
   if (!isRecord(value)) return null;
   const data: AlertData = {};
-  for (const key of ['host', 'origin', 'url', 'reason'] as const) {
+  for (const key of ['host', 'origin', 'url', 'reason', 'browser', 'tried'] as const) {
     const text = value[key];
     if (typeof text === 'string') data[key] = text;
   }
-  for (const key of ['count', 'sampled', 'urlCount', 'durationMs'] as const) {
+  for (const key of ['count', 'sampled', 'urlCount', 'durationMs', 'retried'] as const) {
     const count = value[key];
     if (isCount(count)) data[key] = count;
   }

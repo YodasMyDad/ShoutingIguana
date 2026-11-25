@@ -287,6 +287,42 @@ export const DoneWithAlerts: Story = {
   render: () => <OverviewApp />,
 };
 
+/**
+ * A host that started blocking after some of its pages were read: the crawl slowed down by itself and asked the refused
+ * URLs again, and those still refused at the slowest pace were recorded blocked. No "Continue more slowly" then.
+ */
+export const SlowedDownThenBlocked: Story = {
+  loaders: [
+    () =>
+      own({
+        alerts: [
+          alert({
+            id: 1,
+            code: 'blocked-slowdown',
+            level: 'info',
+            at: '2026-11-01T10:12:05.000Z',
+            data: { host: 'example.com', reason: 'Cloudflare challenge', count: 3, durationMs: 2_000 },
+          }),
+          alert({
+            id: 2,
+            code: 'blocked',
+            at: '2026-11-01T10:17:30.000Z',
+            data: {
+              host: 'example.com',
+              reason: 'Cloudflare challenge',
+              count: 12,
+              durationMs: 30_000,
+              retried: 12,
+              browser: 'Chrome',
+              tried: 'refused',
+            },
+          }),
+        ],
+      }),
+  ],
+  render: () => <OverviewApp />,
+};
+
 // ------------------------------------------------------------------------------------------------- While it crawls
 
 /** The garden crawl's pace: 2 URLs a second, towards a 10,000-URL limit. */

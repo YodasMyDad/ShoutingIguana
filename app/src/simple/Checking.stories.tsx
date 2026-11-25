@@ -136,6 +136,64 @@ export const InTheWay: Story = {
   render: () => <ScreenApp path={OVERVIEW} mode="simple" />,
 };
 
+/** The site started turning the check away after some pages: the check goes more slowly by itself and asks again. */
+export const GoingSlowlyByItself: Story = {
+  loaders: [
+    () => {
+      running(1_346, POLITE);
+      liveStore.ingest(
+        message(
+          'alert',
+          alert({
+            id: 4,
+            code: 'blocked-slowdown',
+            level: 'info',
+            at: '2026-11-01T10:15:02.000Z',
+            data: { host: 'example.com', reason: 'Cloudflare challenge', count: 3, durationMs: 2_000 },
+          }),
+        ),
+      );
+    },
+  ],
+  render: () => <ScreenApp path={OVERVIEW} mode="simple" />,
+};
+
+/** Still turned away once the check had gone slowly by itself: Check again, for a site that wants a person. */
+export const TurnedAwayAfterGoingSlowly: Story = {
+  loaders: [
+    () => {
+      running(1_346, POLITE);
+      for (const heard of [
+        alert({
+          id: 4,
+          code: 'blocked-slowdown',
+          level: 'info',
+          at: '2026-11-01T10:15:02.000Z',
+          data: { host: 'example.com', reason: 'Cloudflare challenge', count: 3, durationMs: 2_000 },
+        }),
+        alert({
+          id: 5,
+          code: 'blocked',
+          level: 'error',
+          at: '2026-11-01T10:30:42.000Z',
+          data: {
+            host: 'example.com',
+            reason: 'Cloudflare challenge',
+            count: 9,
+            durationMs: 30_000,
+            retried: 9,
+            browser: 'Chrome',
+            tried: 'needsPerson',
+          },
+        }),
+      ]) {
+        liveStore.ingest(message('alert', heard));
+      }
+    },
+  ],
+  render: () => <ScreenApp path={OVERVIEW} mode="simple" />,
+};
+
 /** A Shopify shop turning away a check without a signature (lane shopify): said plainly as it happens. */
 export const ShopifyTurnsAway: Story = {
   loaders: [

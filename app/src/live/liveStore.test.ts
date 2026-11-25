@@ -331,6 +331,47 @@ describe('E4’s alerts and hello', () => {
     });
   });
 
+  it('keeps a blocked alert’s browser, what it tried and how many it asked again', () => {
+    const facts = {
+      host: 'www.example.com',
+      reason: 'Cloudflare challenge',
+      count: 4,
+      durationMs: 30_000,
+      browser: 'Chrome',
+      tried: 'needsPerson',
+      retried: 12,
+    };
+    const event = parseSidecarEvent({
+      event: 'alert',
+      id: '',
+      data: JSON.stringify({
+        crawlId: 'a',
+        level: 'warning',
+        code: 'blocked',
+        message: 'Blocked',
+        at: '2026-11-01T10:00:00Z',
+        data: { ...facts, extra: 'x' },
+      }),
+    });
+    if (event?.type !== 'alert') throw new Error('not an alert');
+    expect(event.data.data).toEqual(facts);
+    // Each of its own type: a word where a number goes, or a number where a word goes, is left out.
+    const wrong = parseSidecarEvent({
+      event: 'alert',
+      id: '',
+      data: JSON.stringify({
+        crawlId: 'a',
+        level: 'warning',
+        code: 'blocked',
+        message: 'Blocked',
+        at: '2026-11-01T10:00:00Z',
+        data: { host: 'www.example.com', browser: 1, tried: 2, retried: 'twelve' },
+      }),
+    });
+    if (wrong?.type !== 'alert') throw new Error('not an alert');
+    expect(wrong.data.data).toEqual({ host: 'www.example.com' });
+  });
+
   it('reads an alert without facts, or an id that isn’t a whole number, as having none', () => {
     const event = parseSidecarEvent({
       event: 'alert',

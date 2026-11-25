@@ -17,8 +17,12 @@ namespace ShoutingIguana.Sidecar.Api.Models;
 /// <param name="UrlCount"><c>sitemaps</c>: the URLs they list.</param>
 /// <param name="Browser"><c>human-check</c>, <c>human-check-passed</c>, <c>blocked</c>: the browser a person was shown, "Chrome".</param>
 /// <param name="Tried"><c>blocked</c>: what the browser fallback did about it, as one stable word (see the API document).</param>
+/// <param name="Retried">
+/// <c>blocked</c>, only when the crawl slowed down by itself for the host: its refused URLs asked again, more slowly.
+/// <c>DurationMs</c> is then the longest wait between its pages.
+/// </param>
 /// <param name="DurationMs">
-/// <c>site-down</c>: how long it hadn't answered. <c>site-unreachable</c>: the pause between tries. <c>robots-unreachable</c>:
+/// <c>site-down</c>: how long it hadn't answered. <c>blocked-slowdown</c>: the wait between the host's pages to start. <c>site-unreachable</c>: the pause between tries. <c>robots-unreachable</c>:
 /// until robots.txt is asked again.
 /// </param>
 internal sealed record AlertDataDto(
@@ -31,8 +35,9 @@ internal sealed record AlertDataDto(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? UrlCount,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? DurationMs,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Browser = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Tried = null)
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Tried = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? Retried = null)
 {
     public static AlertDataDto From(CrawlNoticeData data) => new(data.Host, data.Origin, data.Url, data.Reason, data.Count, data.Sampled,
-        data.UrlCount, data.Duration is { } duration ? (long)duration.TotalMilliseconds : null, data.Browser, data.Tried);
+        data.UrlCount, data.Duration is { } duration ? (long)duration.TotalMilliseconds : null, data.Browser, data.Tried, data.Retried);
 }

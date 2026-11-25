@@ -76,6 +76,13 @@ internal sealed class PageProcessor(
     private int _signatureRefusedReported;
     private readonly UrlPatterns _renderPatterns = CompilePatterns(options.RenderPatterns);
 
+    /// <summary>
+    /// The crawl slowing down for a host that starts refusing it after pages were read: such a host's <c>blocked</c> alert
+    /// is said as its refused URLs are recorded (<see cref="SayBlocked(PageRecord, RetreatFacts?, FallbackVerdict?)"/>), with what was done
+    /// about them first.
+    /// </summary>
+    public RefusalRetreat? Retreat { get; set; }
+
     /// <summary>The site's hosts found to be a Shopify store's this run, and whether the crawl can sign its requests to one.</summary>
     public ShopifyWatch Shopify { get; } = new(new SignatureBook(options.Signatures, timeProvider));
 
@@ -157,7 +164,7 @@ internal sealed class PageProcessor(
         if (item.IsInternal)
         {
             ObserveShopify(uri, shopifySignal);
-            WatchForBlocking(uri, response, isProbe);
+            WatchForBlocking(uri, response, isProbe, item.Mode == FetchMode.Crawl);
             if (response.IsRateLimited)
             {
                 refusalNote = NoteShopifyRefusal(item, uri, response);
@@ -302,17 +309,24 @@ internal sealed class PageProcessor(
 
     /// <summary>
     /// What to do about a host that blocks the crawler. With the browser fallback off, turning it on comes first: it
-    /// is the one thing here that needs nobody else. With it on, the advice is for what stopped the browser too.
+    /// is the one thing here that needs nobody else. With it on, the advice is for what stopped the browser too. A host
+    /// the crawl already slowed down for (<paramref name="retreat"/>) isn't told to go slower: it says what was done.
     /// </summary>
-    private string BlockedAdvice(Uri uri, string host, string reason)
+    /// <param name="verdict">What the browser did about the host when the page was refused.</param>
+    private string BlockedAdvice(Uri uri, string host, string reason, RetreatFacts? retreat, FallbackVerdict verdict)
     {
+        var slowed = retreat is null
+            ? null
+            : $"The crawl had slowed down by itself to one page every {HostPace.DescribeWait(retreat.Slowest)} and asked " +
+              $"{(retreat.Retried == 1 ? "1 refused URL" : $"{retreat.Retried:N0} refused URLs")} again, and the site still refused them. ";
         if (!options.BrowserFallback)
         {
-            return $"{host} is blocking the crawler ({reason}). In the crawl's settings, turn on \"If a site blocks the check\" (\"Browser fallback\" in Advanced) and crawl again: " +
+            return $"{host} is blocking the crawler ({reason}). {slowed}In the crawl's settings, turn on \"If a site blocks the check\" (\"Browser fallback\" in Advanced) and crawl again: " +
                    $"the site is then read in a real browser, which most checks let through. {OWNER_ADVICE}";
         }
 
-        var what = renderer.VerdictFor(HostKey(uri)) switch
+        var slower = retreat is null ? " Try a slower crawl rate." : string.Empty;
+        var what = verdict switch
         {
             FallbackVerdict.NeedsPerson =>
                 $"{host} is asking to check you're human ({reason}), and that needs a person, whom this crawl was not told to ask. From the command line, crawl again with --solve-challenges: " +
@@ -331,10 +345,10 @@ internal sealed class PageProcessor(
                 $"{host} is blocking the crawler ({reason}). Getting past it needs Chrome or Edge, and none could be started on this computer. Install one and crawl again.",
             FallbackVerdict.InstalledBrowserOff =>
                 $"{host} is blocking the crawler ({reason}), and the browser the crawler downloads was blocked too. This crawl was told not to use the computer's own Chrome or Edge, which most checks let through.",
-            FallbackVerdict.StillBlocked => $"{host} is blocking the crawler ({reason}), and it refused a real browser too. Try a slower crawl rate.",
-            _ => $"{host} is blocking the crawler ({reason}). Try a slower crawl rate."
+            FallbackVerdict.StillBlocked => $"{host} is blocking the crawler ({reason}), and it refused a real browser too.{slower}",
+            _ => $"{host} is blocking the crawler ({reason}).{slower}"
         };
-        return $"{what} {OWNER_ADVICE}";
+        return $"{what} {slowed}{OWNER_ADVICE}";
 
         // "A Chrome", "An Edge".
         string Browser() => InstalledBrowsers.WithArticle(renderer.InstalledBrowserName ?? "browser");
@@ -342,9 +356,9 @@ internal sealed class PageProcessor(
     }
 
     /// <summary>What the browser fallback did about a blocked host, as the one word the alert's facts carry (<see cref="CrawlNoticeData"/>).</summary>
-    private string TriedFor(Uri uri) => !options.BrowserFallback
+    private string TriedFor(FallbackVerdict verdict) => !options.BrowserFallback
         ? "off"
-        : renderer.VerdictFor(HostKey(uri)) switch
+        : verdict switch
         {
             FallbackVerdict.NeedsPerson => "needsPerson",
             FallbackVerdict.PersonDidNotFinish => "notCompleted",
@@ -652,10 +666,49 @@ internal sealed class PageProcessor(
     }
 
     /// <summary>
+    /// A refused URL of a host some of whose pages were read is being recorded: the host's <c>blocked</c> alert is said
+    /// now, once, with what the crawl did about it first (<paramref name="retreat"/>: it slowed down and asked again).
+    /// </summary>
+    /// <param name="verdict">
+    /// What the browser did about the host when the page was refused, which a page read since may have changed; null for
+    /// what it says now.
+    /// </param>
+    public void SayBlocked(PageRecord record, RetreatFacts? retreat, FallbackVerdict? verdict)
+    {
+        if (record.Response is { Outcome: FetchOutcome.Blocked, BlockReason: { } reason })
+        {
+            SayBlocked(new Uri(record.Item.Url), reason, retreat, verdict);
+        }
+    }
+
+    /// <summary>The host's <c>blocked</c> alert, once per host: the file counts the rest of its refusals when it's read back.</summary>
+    private void SayBlocked(Uri uri, string reason, RetreatFacts? retreat, FallbackVerdict? verdict = null)
+    {
+        var host = scope.HostName(UrlNormalizer.GetHost(uri));
+        if (!_blockedHostsReported.TryAdd(host, true))
+        {
+            return;
+        }
+
+        var said = verdict ?? renderer.VerdictFor(HostKey(uri));
+        var tried = TriedFor(said);
+        observer.OnNotice(new CrawlNotice(
+            CrawlNoticeLevel.Warning,
+            "blocked",
+            BlockedAdvice(uri, host, reason, retreat, said))
+        {
+            Data = new CrawlNoticeData(Host: host, Reason: reason, Count: 1, Tried: tried,
+                Browser: tried is "notCompleted" or "windowClosed" or "refusedAfterCheck" or "wentElsewhere" ? renderer.InstalledBrowserName : null,
+                Url: tried == "wentElsewhere" ? renderer.LandedOn(HostKey(uri)) : null,
+                Duration: retreat?.Slowest, Retried: retreat?.Retried)
+        });
+    }
+
+    /// <summary>
     /// The site's hosts are named as progress names them: the start URL's host for it and its www twin. A 429 is the
     /// site asking the crawler to slow down, which it does by itself, not a block: it is said once per host, with the pace.
     /// </summary>
-    private void WatchForBlocking(Uri uri, FetchResponse response, bool isProbe)
+    private void WatchForBlocking(Uri uri, FetchResponse response, bool isProbe, bool isPage)
     {
         // A 429 that limits one section is said by the section's own notice, as its URLs are held back.
         if (response.IsRateLimited && gates.For(uri).LimitedSectionOf(uri) is null)
@@ -679,25 +732,23 @@ internal sealed class PageProcessor(
         }
         else if (response is { Outcome: FetchOutcome.Blocked, BlockReason: { } reason } && !response.IsRateLimited)
         {
+            // A host some of whose pages were read is said as its refused URLs are recorded, once the crawl has done what
+            // it could about them; and its refusals are no sample of the site's first pages. With the browser fallback on,
+            // a file's status check refused over plain HTTP (an icon, a script) is no block of the site: its pages are read
+            // in the browser, and a page refused there says so itself.
+            if (!isProbe && (Retreat?.WasRead(uri) == true || (options.BrowserFallback && !isPage)))
+            {
+                return;
+            }
+
             // Once per host: the first blocked response raises it, and the file counts the rest when it's read back.
             // A host a browser is reading is not blocking the crawl: what was refused is a check of another version of it.
             // With the browser fallback on, such a check never raises the alert: it is answered while the browser is
             // still at the site's first page, before anyone can say what the browser did, and the host's alert is said once.
-            var host = scope.HostName(UrlNormalizer.GetHost(uri));
             if (!(isProbe && options.BrowserFallback) &&
-                !(_browserHosts.ContainsKey(HostKey(uri)) && renderer.VerdictFor(HostKey(uri)) == FallbackVerdict.None) &&
-                _blockedHostsReported.TryAdd(host, true))
+                !(_browserHosts.ContainsKey(HostKey(uri)) && renderer.VerdictFor(HostKey(uri)) == FallbackVerdict.None))
             {
-                var tried = TriedFor(uri);
-                observer.OnNotice(new CrawlNotice(
-                    CrawlNoticeLevel.Warning,
-                    "blocked",
-                    BlockedAdvice(uri, host, reason))
-                {
-                    Data = new CrawlNoticeData(Host: host, Reason: reason, Count: 1, Tried: tried,
-                        Browser: tried is "notCompleted" or "windowClosed" or "refusedAfterCheck" or "wentElsewhere" ? renderer.InstalledBrowserName : null,
-                        Url: tried == "wentElsewhere" ? renderer.LandedOn(HostKey(uri)) : null)
-                });
+                SayBlocked(uri, reason, null);
             }
         }
 

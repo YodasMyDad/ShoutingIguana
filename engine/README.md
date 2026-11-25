@@ -154,6 +154,9 @@ the whole synthetic site turn it off: the site plants pages that challenge plain
 - **Politeness is unchanged.** robots.txt is obeyed as the crawl's own user agent. Each request the browser makes takes
   its turn on the host's gate, and images, fonts and media are not asked for. The exception is the check itself: the
   dozen requests it makes of the firewall in a second or two go at the browser's pace, because held back it fails.
+- **A host that starts checking after it let the browser in** (pages read in Chrome, then a challenge that doesn't
+  clear) is not given up at once, nor shown to a person straight away: the crawl slows down for it, as for any host
+  that starts refusing (below), and asks again in the same browser. A person is asked only if that doesn't help.
 - **A challenge page is never stored as the page.** One that can't be passed is the block it was, and the alert says
   what stopped the browser and what the site's owner can do: allow the crawler's user agent or the computer's IP
   address in the firewall. In Cloudflare that is a custom rule; its "verified bots" setting does not cover this crawler.
@@ -285,6 +288,18 @@ curl -H "Authorization: Bearer <token>" http://127.0.0.1:53123/api/health
      most once every 30 s and never below one a second. A firewall's block page says nothing about pace, and nor does
      no answer at all: whether an origin is down is judged per origin (below), so a dead www twin never slows the
      site.
+   - A host that starts refusing after some of its pages were read (a firewall or bot check, over plain HTTP or in the
+     browser) is slowed down for (`Crawling/RefusalRetreat`, `RefusalPace`): one refused page among pages that get
+     through is that page's own answer, but three in a row with none through drop the host to one page at a time, 1 s
+     after the last ended to start (twice that each further time in a crawl), doubling after each refusal up to one
+     page every 30 s and halving after every five that get through, back to its own pace. The refused URLs are held
+     back, not recorded, and asked again at that pace, each up to three times. A check the installed browser meets on a
+     host it had read is shown to a person (`--solve-challenges`) only once the crawl is at one page every 30 s and the
+     check still doesn't clear by itself. They are recorded blocked when their tries are over, when the host refuses three in a row at one
+     every 30 s (giving up there takes about two minutes), when a person asked didn't let the crawl in, or ten minutes
+     after the rest of the crawl is over. A refused page among pages that get through is recorded as it was, except
+     that a check of its own that needs a person is shown to one once first (`--solve-challenges`). The crawl says it slowed down (`blocked-slowdown`), and the host's `blocked`
+     alert says what it did first. A host refused from its first page goes the way it always has.
    - It recovers additively: every 30 s without a slowdown, a tenth of the pace it slowed from and one more request at
      once; and for ten minutes after a host asked to slow down, never above nine tenths of the pace that tripped it.
 

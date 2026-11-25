@@ -84,6 +84,30 @@ internal sealed partial class JavaScriptRenderer
     /// <summary>Whether <paramref name="hostKey"/> is being read in the computer's own browser, not the headless one.</summary>
     public bool ReadsInInstalledBrowser(string hostKey) => _fallbackHosts.TryGetValue(hostKey, out var session) && session.Installed;
 
+    /// <summary>
+    /// The crawl has slowed down as far as it goes for <paramref name="hostKey"/>, whose pages this browser read before it
+    /// started checking it, and its check still doesn't clear by itself: the next of its pages that meets the check shows
+    /// the window to a person. False when this crawl may not ask one, the host has had its asks, or one is already due.
+    /// </summary>
+    public bool AskAPersonNext(string hostKey)
+    {
+        if (!MayAskAPerson(hostKey) || _fallbackHosts[hostKey].AskPerson)
+        {
+            return false;
+        }
+
+        _fallbackHosts[hostKey].AskPerson = true;
+        return true;
+    }
+
+    /// <summary>
+    /// Whether a check this browser meets on <paramref name="hostKey"/>, whose pages it has read, may still be shown to a
+    /// person in this crawl: it may ask one, and the host hasn't had its asks.
+    /// </summary>
+    public bool MayAskAPerson(string hostKey) =>
+        options.SolveChallenges && _fallbackHosts.TryGetValue(hostKey, out var session) && session.Installed && !session.GaveUp &&
+        session.PersonChecks < MAX_PERSON_CHECKS;
+
     /// <summary>What the installed browser is called, once it has been started: "Chrome", "Edge".</summary>
     public string? InstalledBrowserName => _installed?.Browser.Name;
 
@@ -469,6 +493,17 @@ internal sealed partial class JavaScriptRenderer
                         return Refused(uri, document, reason);
                     }
 
+                    if (session.ReadInInstalled > 0 && !session.AskPerson)
+                    {
+                        // The host let this browser read its pages, and has started checking it: the crawl slows down for it
+                        // first (Crawling.RefusalRetreat), and asks for a person only once that's no use (AskAPersonNext).
+                        Decide(FallbackVerdict.NeedsPerson);
+                        logger.LogInformation("{Host}'s check ({Reason}) did not clear by itself for {Url}, and nobody is asked yet: the crawl slows down for it first",
+                            hostName, reason, uri);
+                        return Refused(uri, document, reason);
+                    }
+
+                    session.AskPerson = false;
                     session.PersonChecks++;
                     asking = true;
                     shown = true;
