@@ -197,7 +197,7 @@ The `ShoutingIguana.PluginSdk` NuGet package is no longer used. v2 has no plugin
 
 ## Support the project
 
-Shouting Iguana is free and stays free. If it saves you time or money, [sponsoring on GitHub](https://github.com/sponsors/YodasMyDad) buys more time for fixes and new features, here and in my other open source projects.
+Shouting Iguana is free and stays free. If it saves you time or money, [sponsoring on GitHub](https://github.com/sponsors/YodasMyDad) or [buying me a coffee](https://buymeacoffee.com/yodasmydad) buys more time for fixes and new features, here and in my other open source projects.
 
 ## Licence
 
