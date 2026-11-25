@@ -22,10 +22,13 @@ export const FIELD_WORDS: Record<CrawlFormField, FieldWords> = {
     label: 'Crawl canonical targets',
     help: 'Fetch the URL a canonical names, even when nothing links to it.',
   },
-  crawlHreflang: { label: 'Crawl hreflang targets', help: 'Fetch URLs that only an hreflang link names.' },
+  crawlHreflang: {
+    label: 'Crawl hreflang targets',
+    help: 'A URL only an hreflang link names is always checked for how it answers. On, it is also read as a page and its links followed.',
+  },
   crawlPagination: {
     label: 'Crawl pagination targets',
-    help: 'Fetch URLs that only rel="next" or rel="prev" names.',
+    help: 'A URL only rel="next" or rel="prev" names is always checked for how it answers. On, it is also read as a page and its links followed.',
   },
   maxUrls: {
     label: 'URL limit',
